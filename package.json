@@ -7,7 +7,9 @@
   "scripts": {
     "start": "parcel index.html --open",
     "build": "parcel build index.html --dist-dir dist",
-    "clean": "rimraf dist .parcel-cache"
+    "clean": "rimraf dist .parcel-cache",
+    "deploy": "npm run build && firebase deploy",
+    "serve": "firebase emulators:start --only hosting"
   },
   "keywords": [
     "cityvue",
@@ -21,5 +23,10 @@
   "devDependencies": {
     "parcel": "^2.16.4",
     "rimraf": "^6.0.1"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.13.1",
+    "firebase": "^12.16.0"
   }
 }
