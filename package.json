@@ -1,0 +1,25 @@
+{
+  "name": "cityvue",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CityVUE - Citizen Engagement Platform",
+  "source": "index.html",
+  "scripts": {
+    "start": "parcel index.html --open",
+    "build": "parcel build index.html --dist-dir dist",
+    "clean": "rimraf dist .parcel-cache"
+  },
+  "keywords": [
+    "cityvue",
+    "municipal",
+    "javascript",
+    "firebase",
+    "parcel"
+  ],
+  "author": "Kyle Josephs",
+  "license": "ISC",
+  "devDependencies": {
+    "parcel": "^2.16.4",
+    "rimraf": "^6.0.1"
+  }
+}
