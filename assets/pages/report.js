@@ -1,4 +1,8 @@
+import "../js/app.js";
+
 import IssueService from "../services/IssueService.js";
+
+import { initializeTheme } from "../components/theme.js";
 
 import {
     initializeToast,
@@ -39,6 +43,7 @@ document.addEventListener("DOMContentLoaded", initialize);
 
 function initialize() {
 
+    initializeTheme();
     initializeToast();
 
     if (issueId) {
@@ -161,6 +166,6 @@ function handleSubmit(event) {
 
         window.location.href = "./issues.html";
 
-    }, 1200);
+    }, 2500);
 
 }

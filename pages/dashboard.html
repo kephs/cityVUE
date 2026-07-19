@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+
+<head>
+
+    <!-- ==================================================
+         Meta Information
+    =================================================== -->
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="description"
+        content="View CityVUE issue statistics, charts, priorities, statuses, categories, and recently reported community issues.">
+
+    <title>Dashboard | CityVUE</title>
+
+    <!-- Bootstrap Icons -->
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+
+    <!-- Custom CSS -->
+    <link
+        rel="stylesheet"
+        href="../assets/css/styles.css">
+
+</head>
+
+<body>
+
+    <!-- ==================================================
+         JavaScript Disabled Message
+    =================================================== -->
+
+    <noscript>
+
+        <div
+            class="alert alert-danger text-center rounded-0 m-0"
+            role="alert">
+
+            <strong>JavaScript Required:</strong>
+
+            CityVUE requires JavaScript to function correctly.
+            Please enable JavaScript in your browser.
+
+        </div>
+
+    </noscript>
+
+    <!-- ==================================================
+         Navigation
+    =================================================== -->
+
+    <nav
+        class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm"
+        aria-label="Main navigation">
+
+        <div class="container">
+
+            <a
+                class="navbar-brand fw-bold d-flex align-items-center"
+                href="../index.html">
+
+                <i
+                    class="bi bi-buildings-fill me-2"
+                    aria-hidden="true">
+                </i>
+
+                CityVUE
+
+            </a>
+
+            <button
+                class="navbar-toggler"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#navbarNav"
+                aria-controls="navbarNav"
+                aria-expanded="false"
+                aria-label="Toggle navigation">
+
+                <span class="navbar-toggler-icon"></span>
+
+            </button>
+
+            <div
+                class="collapse navbar-collapse"
+                id="navbarNav">
+
+                <ul class="navbar-nav ms-auto align-items-lg-center">
+
+                    <li class="nav-item">
+
+                        <a
+                            class="nav-link"
+                            href="../index.html">
+
+                            Home
+
+                        </a>
+
+                    </li>
+
+                    <li class="nav-item">
+
+                        <a
+                            class="nav-link"
+                            href="./report.html">
+
+                            Report Issue
+
+                        </a>
+
+                    </li>
+
+                    <li class="nav-item">
+
+                        <a
+                            class="nav-link"
+                            href="./issues.html">
+
+                            Issue List
+
+                        </a>
+
+                    </li>
+
+                    <li class="nav-item">
+
+                        <a
+                            class="nav-link active"
+                            aria-current="page"
+                            href="./dashboard.html">
+
+                            Dashboard
+
+                        </a>
+
+                    </li>
+
+                    <li class="nav-item ms-lg-3 mt-2 mt-lg-0">
+
+                        <button
+                            id="themeToggle"
+                            class="btn btn-outline-light btn-sm"
+                            type="button"
+                            aria-label="Toggle dark mode">
+
+                            <i
+                                class="bi bi-moon-stars-fill me-1"
+                                aria-hidden="true">
+                            </i>
+
+                            Dark Mode
+
+                        </button>
+
+                    </li>
+
+                </ul>
+
+            </div>
+
+        </div>
+
+    </nav>
+
+    <!-- ==================================================
+         Header
+    =================================================== -->
+
+    <header class="bg-body-tertiary border-bottom py-4 mb-4">
+
+        <div class="container">
+
+            <div
+                class="d-flex flex-column flex-md-row
+                       justify-content-between align-items-md-center gap-3">
+
+                <div>
+
+                    <span class="badge text-bg-primary mb-2">
+
+                        City Operations Overview
+
+                    </span>
+
+                    <h1 class="fw-bold mb-2">
+
+                        <i
+                            class="bi bi-speedometer2 me-2"
+                            aria-hidden="true">
+                        </i>
+
+                        Dashboard
+
+                    </h1>
+
+                    <p class="text-body-secondary mb-0">
+
+                        Overview of all reported city issues.
+
+                    </p>
+
+                </div>
+
+                <div class="d-flex flex-wrap gap-2">
+
+                    <a
+                        href="./report.html"
+                        class="btn btn-primary">
+
+                        <i
+                            class="bi bi-plus-circle me-2"
+                            aria-hidden="true">
+                        </i>
+
+                        Report Issue
+
+                    </a>
+
+                    <a
+                        href="./issues.html"
+                        class="btn btn-outline-primary">
+
+                        <i
+                            class="bi bi-list-check me-2"
+                            aria-hidden="true">
+                        </i>
+
+                        View All Issues
+
+                    </a>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </header>
+
+    <!-- ==================================================
+         Main Content
+    =================================================== -->
+
+    <main class="container mb-5">
+
+        <!-- ==================================================
+             Status Statistics
+        =================================================== -->
+
+        <section
+            class="mb-4"
+            aria-labelledby="statusStatisticsHeading">
+
+            <h2
+                id="statusStatisticsHeading"
+                class="visually-hidden">
+
+                Issue status statistics
+
+            </h2>
+
+            <div class="row g-4">
+
+                <!-- Total Issues -->
+
+                <div class="col-sm-6 col-xl-3">
+
+                    <a
+                        href="./issues.html"
+                        class="text-decoration-none d-block h-100"
+                        aria-label="View all reported issues">
+
+                        <article
+                            class="card shadow-sm h-100
+                                   dashboard-stat-card">
+
+                            <div class="card-body text-center">
+
+                                <div
+                                    class="d-inline-flex align-items-center
+                                           justify-content-center rounded-circle
+                                           bg-primary-subtle text-primary
+                                           fs-4 mb-3"
+                                    style="width: 3rem; height: 3rem;">
+
+                                    <i
+                                        class="bi bi-collection"
+                                        aria-hidden="true">
+                                    </i>
+
+                                </div>
+
+                                <h3 class="h6 text-body mb-2">
+
+                                    Total Issues
+
+                                </h3>
+
+                                <p
+                                    class="display-6 fw-semibold text-body mb-0"
+                                    id="totalIssues">
+
+                                    0
+
+                                </p>
+
+                            </div>
+
+                        </article>
+
+                    </a>
+
+                </div>
+
+                <!-- Open Issues -->
+
+                <div class="col-sm-6 col-xl-3">
+
+                    <a
+                        href="./issues.html#status=Open"
+                        class="text-decoration-none d-block h-100"
+                        aria-label="View open issues">
+
+                        <article
+                            class="card shadow-sm h-100
+                                   dashboard-stat-card">
+
+                            <div class="card-body text-center">
+
+                                <div
+                                    class="d-inline-flex align-items-center
+                                           justify-content-center rounded-circle
+                                           bg-success-subtle text-success
+                                           fs-4 mb-3"
+                                    style="width: 3rem; height: 3rem;">
+
+                                    <i
+                                        class="bi bi-folder2-open"
+                                        aria-hidden="true">
+                                    </i>
+
+                                </div>
+
+                                <h3 class="h6 text-body mb-2">
+
+                                    Open
+
+                                </h3>
+
+                                <p
+                                    class="display-6 fw-semibold
+                                           text-success mb-0"
+                                    id="openIssues">
+
+                                    0
+
+                                </p>
+
+                            </div>
+
+                        </article>
+
+                    </a>
+
+                </div>
+
+                <!-- In Progress Issues -->
+
+                <div class="col-sm-6 col-xl-3">
+
+                    <a
+                        href="./issues.html#status=In%20Progress"
+                        class="text-decoration-none d-block h-100"
+                        aria-label="View issues currently in progress">
+
+                        <article
+                            class="card shadow-sm h-100
+                                   dashboard-stat-card">
+
+                            <div class="card-body text-center">
+
+                                <div
+                                    class="d-inline-flex align-items-center
+                                           justify-content-center rounded-circle
+                                           bg-warning-subtle text-warning
+                                           fs-4 mb-3"
+                                    style="width: 3rem; height: 3rem;">
+
+                                    <i
+                                        class="bi bi-arrow-repeat"
+                                        aria-hidden="true">
+                                    </i>
+
+                                </div>
+
+                                <h3 class="h6 text-body mb-2">
+
+                                    In Progress
+
+                                </h3>
+
+                                <p
+                                    class="display-6 fw-semibold
+                                           text-warning mb-0"
+                                    id="inProgressIssues">
+
+                                    0
+
+                                </p>
+
+                            </div>
+
+                        </article>
+
+                    </a>
+
+                </div>
+
+                <!-- Closed Issues -->
+
+                <div class="col-sm-6 col-xl-3">
+
+                    <a
+                        href="./issues.html#status=Closed"
+                        class="text-decoration-none d-block h-100"
+                        aria-label="View closed issues">
+
+                        <article
+                            class="card shadow-sm h-100
+                                   dashboard-stat-card">
+
+                            <div class="card-body text-center">
+
+                                <div
+                                    class="d-inline-flex align-items-center
+                                           justify-content-center rounded-circle
+                                           bg-secondary-subtle text-secondary
+                                           fs-4 mb-3"
+                                    style="width: 3rem; height: 3rem;">
+
+                                    <i
+                                        class="bi bi-check-circle"
+                                        aria-hidden="true">
+                                    </i>
+
+                                </div>
+
+                                <h3 class="h6 text-body mb-2">
+
+                                    Closed
+
+                                </h3>
+
+                                <p
+                                    class="display-6 fw-semibold
+                                           text-secondary mb-0"
+                                    id="closedIssues">
+
+                                    0
+
+                                </p>
+
+                            </div>
+
+                        </article>
+
+                    </a>
+
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- ==================================================
+             Priority Statistics
+        =================================================== -->
+
+        <section
+            class="mb-5"
+            aria-labelledby="priorityStatisticsHeading">
+
+            <h2
+                id="priorityStatisticsHeading"
+                class="visually-hidden">
+
+                Issue priority statistics
+
+            </h2>
+
+            <div class="row g-4">
+
+                <!-- High Priority -->
+
+                <div class="col-md-4">
+
+                    <a
+                        href="./issues.html#priority=High"
+                        class="text-decoration-none d-block h-100"
+                        aria-label="View high-priority issues">
+
+                        <article
+                            class="card border-danger shadow-sm h-100
+                                   dashboard-stat-card">
+
+                            <div class="card-body text-center">
+
+                                <i
+                                    class="bi bi-exclamation-triangle-fill
+                                           text-danger fs-3 mb-2 d-block"
+                                    aria-hidden="true">
+                                </i>
+
+                                <h3 class="h6 text-body mb-2">
+
+                                    High Priority
+
+                                </h3>
+
+                                <p
+                                    class="display-6 fw-semibold
+                                           text-danger mb-0"
+                                    id="highPriority">
+
+                                    0
+
+                                </p>
+
+                            </div>
+
+                        </article>
+
+                    </a>
+
+                </div>
+
+                <!-- Medium Priority -->
+
+                <div class="col-md-4">
+
+                    <a
+                        href="./issues.html#priority=Medium"
+                        class="text-decoration-none d-block h-100"
+                        aria-label="View medium-priority issues">
+
+                        <article
+                            class="card border-warning shadow-sm h-100
+                                   dashboard-stat-card">
+
+                            <div class="card-body text-center">
+
+                                <i
+                                    class="bi bi-dash-circle-fill
+                                           text-warning fs-3 mb-2 d-block"
+                                    aria-hidden="true">
+                                </i>
+
+                                <h3 class="h6 text-body mb-2">
+
+                                    Medium Priority
+
+                                </h3>
+
+                                <p
+                                    class="display-6 fw-semibold
+                                           text-warning mb-0"
+                                    id="mediumPriority">
+
+                                    0
+
+                                </p>
+
+                            </div>
+
+                        </article>
+
+                    </a>
+
+                </div>
+
+                <!-- Low Priority -->
+
+                <div class="col-md-4">
+
+                    <a
+                        href="./issues.html#priority=Low"
+                        class="text-decoration-none d-block h-100"
+                        aria-label="View low-priority issues">
+
+                        <article
+                            class="card border-success shadow-sm h-100
+                                   dashboard-stat-card">
+
+                            <div class="card-body text-center">
+
+                                <i
+                                    class="bi bi-check-circle-fill
+                                           text-success fs-3 mb-2 d-block"
+                                    aria-hidden="true">
+                                </i>
+
+                                <h3 class="h6 text-body mb-2">
+
+                                    Low Priority
+
+                                </h3>
+
+                                <p
+                                    class="display-6 fw-semibold
+                                           text-success mb-0"
+                                    id="lowPriority">
+
+                                    0
+
+                                </p>
+
+                            </div>
+
+                        </article>
+
+                    </a>
+
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- ==================================================
+             Charts
+        =================================================== -->
+
+        <section aria-labelledby="dashboardChartsHeading">
+
+            <h2
+                id="dashboardChartsHeading"
+                class="visually-hidden">
+
+                Dashboard charts
+
+            </h2>
+
+            <div class="row g-4">
+
+                <!-- Status Chart -->
+
+                <div class="col-lg-6">
+
+                    <article class="card shadow-sm h-100">
+
+                        <div class="card-header bg-body py-3">
+
+                            <h3 class="h6 fw-bold mb-0">
+
+                                <i
+                                    class="bi bi-pie-chart me-2"
+                                    aria-hidden="true">
+                                </i>
+
+                                Status Overview
+
+                            </h3>
+
+                        </div>
+
+                        <div class="card-body">
+
+                            <div style="height: 320px;">
+
+                                <canvas
+                                    id="statusChart"
+                                    role="img"
+                                    aria-label="Chart showing issues by status">
+                                </canvas>
+
+                            </div>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+                <!-- Priority Chart -->
+
+                <div class="col-lg-6">
+
+                    <article class="card shadow-sm h-100">
+
+                        <div class="card-header bg-body py-3">
+
+                            <h3 class="h6 fw-bold mb-0">
+
+                                <i
+                                    class="bi bi-bar-chart me-2"
+                                    aria-hidden="true">
+                                </i>
+
+                                Priority Overview
+
+                            </h3>
+
+                        </div>
+
+                        <div class="card-body">
+
+                            <div style="height: 320px;">
+
+                                <canvas
+                                    id="priorityChart"
+                                    role="img"
+                                    aria-label="Chart showing issues by priority">
+                                </canvas>
+
+                            </div>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- ==================================================
+             Category Chart
+        =================================================== -->
+
+        <section
+            class="mt-4"
+            aria-labelledby="categoryChartHeading">
+
+            <article class="card shadow-sm">
+
+                <div class="card-header bg-body py-3">
+
+                    <h2
+                        id="categoryChartHeading"
+                        class="h6 fw-bold mb-0">
+
+                        <i
+                            class="bi bi-grid me-2"
+                            aria-hidden="true">
+                        </i>
+
+                        Issues by Category
+
+                    </h2>
+
+                </div>
+
+                <div class="card-body">
+
+                    <div style="height: 320px;">
+
+                        <canvas
+                            id="categoryChart"
+                            role="img"
+                            aria-label="Chart showing issues grouped by category">
+                        </canvas>
+
+                    </div>
+
+                </div>
+
+            </article>
+
+        </section>
+
+        <!-- ==================================================
+             Recent Issues
+        =================================================== -->
+
+        <section
+            class="mt-4"
+            aria-labelledby="recentIssuesHeading">
+
+            <article class="card shadow-sm">
+
+                <div
+                    class="card-header bg-body py-3
+                           d-flex flex-column flex-sm-row
+                           justify-content-between align-items-sm-center gap-2">
+
+                    <h2
+                        id="recentIssuesHeading"
+                        class="h6 fw-bold mb-0">
+
+                        <i
+                            class="bi bi-clock-history me-2"
+                            aria-hidden="true">
+                        </i>
+
+                        Recent Issues
+
+                    </h2>
+
+                    <a
+                        href="./issues.html"
+                        class="btn btn-sm btn-outline-primary">
+
+                        View All
+
+                    </a>
+
+                </div>
+
+                <div
+                    class="list-group list-group-flush"
+                    id="recentIssues"
+                    aria-live="polite">
+
+                    <!-- Recent issues are rendered by dashboard.js -->
+
+                </div>
+
+            </article>
+
+        </section>
+
+    </main>
+
+    <!-- ==================================================
+         Footer
+    =================================================== -->
+
+    <footer class="border-top bg-body-tertiary py-4 mt-5">
+
+        <div class="container">
+
+            <div
+                class="d-flex flex-column flex-md-row
+                       justify-content-between align-items-center gap-2">
+
+                <p class="text-body-secondary small mb-0">
+
+                    &copy; 2026 CityVUE.
+                    Citizen Engagement Platform.
+
+                </p>
+
+                <a
+                    href="./report.html"
+                    class="small text-decoration-none">
+
+                    Report a community issue
+
+                </a>
+
+            </div>
+
+        </div>
+
+    </footer>
+
+    <!-- ==================================================
+         Chart.js
+    =================================================== -->
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- ==================================================
+         Dashboard JavaScript
+    =================================================== -->
+
+    <script
+        type="module"
+        src="../assets/pages/dashboard.js">
+    </script>
+
+</body>
+
+</html>

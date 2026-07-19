@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 
 <head>
 
@@ -11,14 +11,9 @@
 
     <title>Report Issue | CityVUE</title>
 
-    <link
-        rel="stylesheet"
-        href="../node_modules/bootstrap/dist/css/bootstrap.min.css">
 
-    <link
-        rel="stylesheet"
-        href="../node_modules/bootstrap-icons/font/bootstrap-icons.css">
 
+    <!-- Custom CSS -->
     <link
         rel="stylesheet"
         href="../assets/css/styles.css">
@@ -27,199 +22,389 @@
 
 <body>
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <!-- ==================================================
+         JavaScript Disabled Message
+    =================================================== -->
 
-<div class="container">
+    <noscript>
 
-<a
-class="navbar-brand fw-bold"
-href="../index.html">
+        <div
+            class="alert alert-danger text-center rounded-0 m-0"
+            role="alert">
 
-<i class="bi bi-buildings-fill me-2"></i>
+            <strong>JavaScript Required:</strong>
 
-CityVUE
+            CityVUE requires JavaScript to function correctly.
+            Please enable JavaScript in your browser.
 
-</a>
+        </div>
 
-</div>
+    </noscript>
 
-</nav>
+    <!-- ==========================================
+         Navigation
+    =========================================== -->
 
-<main class="container py-5">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 
-<div class="row justify-content-center">
+        <div class="container">
 
-<div class="col-lg-8">
+            <a
+                class="navbar-brand fw-bold"
+                href="../index.html">
 
-<div class="card shadow">
+                <i class="bi bi-buildings-fill me-2"></i>
 
-<div class="card-header">
+                CityVUE
 
-<h2 class="mb-0">
+            </a>
 
-Report a Community Issue
+            <button
+                class="navbar-toggler"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#navbarNav"
+                aria-controls="navbarNav"
+                aria-expanded="false"
+                aria-label="Toggle navigation">
 
-</h2>
+                <span class="navbar-toggler-icon"></span>
 
-</div>
+            </button>
 
-<div class="card-body">
+            <div
+                class="collapse navbar-collapse"
+                id="navbarNav">
 
-<form id="issueForm">
+                <ul class="navbar-nav ms-auto align-items-lg-center">
 
-<div class="mb-3">
+                    <li class="nav-item">
 
-<label class="form-label">
+                        <a
+                            class="nav-link"
+                            href="../index.html">
 
-Issue Title
+                            Home
 
-</label>
+                        </a>
 
-<input
-type="text"
-id="title"
-class="form-control"
-required>
+                    </li>
 
-</div>
+                    <li class="nav-item">
 
-<div class="mb-3">
+                        <a
+                            class="nav-link active"
+                            aria-current="page"
+                            href="./report.html">
 
-<label class="form-label">
+                            Report Issue
 
-Description
+                        </a>
 
-</label>
+                    </li>
 
-<textarea
-id="description"
-class="form-control"
-rows="4"
-required></textarea>
+                    <li class="nav-item">
 
-</div>
+                        <a
+                            class="nav-link"
+                            href="./issues.html">
 
-<div class="row">
+                            Issue List
 
-<div class="col-md-6 mb-3">
+                        </a>
 
-<label class="form-label">
+                    </li>
 
-Category
+                    <li class="nav-item">
 
-</label>
+                        <a
+                            class="nav-link"
+                            href="./dashboard.html">
 
-<select
-id="category"
-class="form-select">
+                            Dashboard
 
-<option>Road</option>
+                        </a>
 
-<option>Lighting</option>
+                    </li>
 
-<option>Water</option>
+                    <li class="nav-item ms-lg-3 mt-2 mt-lg-0">
 
-<option>Garbage</option>
+                        <button
+                            id="themeToggle"
+                            class="btn btn-outline-light btn-sm">
 
-<option>Parks</option>
+                            <i class="bi bi-moon-stars-fill me-1"></i>
 
-<option>Other</option>
+                            Dark Mode
 
-</select>
+                        </button>
 
-</div>
+                    </li>
 
-<div class="col-md-6 mb-3">
+                </ul>
 
-<label class="form-label">
+            </div>
 
-Priority
+        </div>
 
-</label>
+    </nav>
 
-<select
-id="priority"
-class="form-select">
+    <!-- ==========================================
+         Main Content
+    =========================================== -->
 
-<option>Low</option>
+    <main class="container py-5">
 
-<option selected>Medium</option>
+        <div class="row justify-content-center">
 
-<option>High</option>
+            <div class="col-lg-9">
 
-</select>
+                <div class="card shadow">
 
-</div>
+                    <div class="card-header bg-primary text-white">
 
-</div>
+                        <h2 class="mb-0">
 
-<div class="mb-3">
+                            <i class="bi bi-pencil-square me-2"></i>
 
-<label class="form-label">
+                            Report a Community Issue
 
-Reported By
+                        </h2>
 
-</label>
+                    </div>
 
-<input
-type="text"
-id="reportedBy"
-class="form-control"
-required>
+                    <div class="card-body">
 
-</div>
+                        <form id="issueForm">
 
-<div class="mb-4">
+                            <!-- Issue Title -->
 
-<label class="form-label">
+                            <div class="mb-3">
 
-Location
+                                <label
+                                    for="title"
+                                    class="form-label">
 
-</label>
+                                    Issue Title
 
-<input
-type="text"
-id="location"
-class="form-control"
-required>
+                                </label>
 
-</div>
+                                <input
+                                    type="text"
+                                    id="title"
+                                    class="form-control"
+                                    placeholder="Enter a short issue title"
+                                    required>
 
-<button
-type="submit"
-class="btn btn-primary">
+                            </div>
 
-<i class="bi bi-save me-2"></i>
+                            <!-- Description -->
 
-Submit Issue
+                            <div class="mb-3">
 
-</button>
+                                <label
+                                    for="description"
+                                    class="form-label">
 
-<a
-href="../index.html"
-class="btn btn-secondary">
+                                    Description
 
-Cancel
+                                </label>
 
-</a>
+                                <textarea
+                                    id="description"
+                                    class="form-control"
+                                    rows="5"
+                                    placeholder="Describe the issue in detail..."
+                                    required></textarea>
 
-</form>
+                            </div>
 
-</div>
+                            <div class="row">
 
-</div>
+                                <!-- Category -->
 
-</div>
+                                <div class="col-md-6 mb-3">
 
-</div>
+                                    <label
+                                        for="category"
+                                        class="form-label">
 
-</main>
+                                        Category
 
-<script src="../node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+                                    </label>
 
-<script
-type="module"
-src="../assets/js/pages/report.js"></script>
+                                    <select
+                                        id="category"
+                                        class="form-select">
+
+                                        <option value="Road">Road</option>
+                                        <option value="Lighting">Lighting</option>
+                                        <option value="Water">Water</option>
+                                        <option value="Garbage">Garbage</option>
+                                        <option value="Parks">Parks</option>
+                                        <option value="Other">Other</option>
+
+                                    </select>
+
+                                </div>
+
+                                <!-- Priority -->
+
+                                <div class="col-md-6 mb-3">
+
+                                    <label
+                                        for="priority"
+                                        class="form-label">
+
+                                        Priority
+
+                                    </label>
+
+                                    <select
+                                        id="priority"
+                                        class="form-select">
+
+                                        <option value="Low">Low</option>
+                                        <option
+                                            value="Medium"
+                                            selected>
+
+                                            Medium
+
+                                        </option>
+
+                                        <option value="High">High</option>
+
+                                    </select>
+
+                                </div>
+
+                            </div>
+
+                            <!-- Reported By -->
+
+                            <div class="mb-3">
+
+                                <label
+                                    for="reportedBy"
+                                    class="form-label">
+
+                                    Reported By
+
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="reportedBy"
+                                    class="form-control"
+                                    placeholder="Enter your name"
+                                    required>
+
+                            </div>
+
+                            <!-- Location -->
+
+                            <div class="mb-4">
+
+                                <label
+                                    for="location"
+                                    class="form-label">
+
+                                    Location
+
+                                </label>
+
+                                <input
+                                    type="text"
+                                    id="location"
+                                    class="form-control"
+                                    placeholder="Enter the issue location"
+                                    required>
+
+                            </div>
+
+                            <!-- Buttons -->
+
+                            <div class="d-flex gap-2">
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-primary">
+
+                                    <i class="bi bi-save me-2"></i>
+
+                                    Submit Issue
+
+                                </button>
+
+                                <a
+                                    href="./issues.html"
+                                    class="btn btn-secondary">
+
+                                    Cancel
+
+                                </a>
+
+                            </div>
+
+                        </form>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- ==========================================
+         Toast Notification
+    =========================================== -->
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+
+        <div
+            id="appToast"
+            class="toast text-bg-success border-0"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true">
+
+            <div class="d-flex">
+
+                <div
+                    id="toastMessage"
+                    class="toast-body">
+
+                    Success
+
+                </div>
+
+                <button
+                    type="button"
+                    class="btn-close btn-close-white me-2 m-auto"
+                    data-bs-dismiss="toast"
+                    aria-label="Close">
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Bootstrap JavaScript -->
+
+    <script src="../node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Report Page Script -->
+
+    <script
+        type="module"
+        src="../assets/js/pages/report.js">
+    </script>
 
 </body>
 

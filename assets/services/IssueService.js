@@ -1,5 +1,10 @@
 import Issue from "../models/Issue.js";
 
+import {
+    load,
+    save
+} from "../js/storage.js";
+
 const STORAGE_KEY = "cityvueIssues";
 
 export default class IssueService {

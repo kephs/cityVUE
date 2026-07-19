@@ -1,9 +1,182 @@
+/* =====================================================
+   Global Reset
+===================================================== */
+
 * {
+
     margin: 0;
+
     padding: 0;
+
     box-sizing: border-box;
+
+}
+
+/* =====================================================
+   Base Styles
+===================================================== */
+
+body {
+
+    font-family: Arial, Helvetica, sans-serif;
+
+}
+
+/* ======================================================
+   Sticky Footer Layout
+====================================================== */
+
+html,
+body {
+    height: 100%;
 }
 
 body {
-    font-family: Arial, Helvetica, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+/* =====================================================
+   Dark Mode Customizations
+===================================================== */
+
+/*
+    Bootstrap automatically changes the body's
+    background and text colors when
+    data-bs-theme="dark" is applied.
+
+    Only override styles that Bootstrap
+    doesn't already handle well.
+*/
+
+/* Header */
+
+[data-bs-theme="dark"] header {
+
+    background-color: #343a40 !important;
+
+}
+
+/* Hero Section */
+
+[data-bs-theme="dark"] .hero {
+
+    background: linear-gradient(
+
+        135deg,
+
+        #0d6efd,
+
+        #212529
+
+    );
+
+}
+
+/* Footer */
+
+[data-bs-theme="dark"] footer {
+
+    background-color: #111827;
+
+    color: #dee2e6;
+
+}
+
+/* Cards */
+
+[data-bs-theme="dark"] .card {
+
+    border-color: #495057;
+
+}
+
+/* Card Headers */
+
+[data-bs-theme="dark"] .card-header {
+
+    background-color: #343a40;
+
+}
+
+/* Tables */
+
+[data-bs-theme="dark"] .table {
+
+    --bs-table-bg: transparent;
+
+}
+
+/* List Groups */
+
+[data-bs-theme="dark"] .list-group-item {
+
+    background-color: transparent;
+
+    color: inherit;
+
+}
+
+/* Form Controls */
+
+[data-bs-theme="dark"] .form-control,
+
+[data-bs-theme="dark"] .form-select {
+
+    border-color: #495057;
+
+}
+
+/* Placeholder */
+
+[data-bs-theme="dark"] ::placeholder {
+
+    color: #adb5bd;
+
+}
+
+/* Links */
+
+[data-bs-theme="dark"] a {
+
+    color: #8ab4ff;
+
+}
+
+[data-bs-theme="dark"] a:hover {
+
+    color: #a8c7ff;
+
+}
+
+/* Canvas (Chart.js) */
+
+[data-bs-theme="dark"] canvas {
+
+    background-color: transparent;
+
+}
+
+/* Make Cards on Dasboard Page clickable (dashboard.html) */
+.dashboard-stat-card {
+    cursor: pointer;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        border-color 0.2s ease;
+}
+
+.dashboard-stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.12) !important;
+}
+
+a:focus-visible .dashboard-stat-card {
+    outline: 3px solid rgba(13, 110, 253, 0.4);
+    outline-offset: 3px;
 }

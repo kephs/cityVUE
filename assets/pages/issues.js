@@ -1,4 +1,12 @@
+import { Modal } from "bootstrap";
+import "../js/app.js";
+
 import IssueService from "../services/IssueService.js";
+
+import {
+    initializeTheme
+} from "../components/theme.js";
+
 import {
     initializeToast,
     showToast
@@ -49,17 +57,19 @@ let deleteModal = null;
 document.addEventListener("DOMContentLoaded", initialize);
 
 function initialize() {
-
+    initializeTheme();
     initializeToast();
 
     if (deleteModalElement) {
-        deleteModal = new bootstrap.Modal(deleteModalElement);
+        deleteModal =
+            Modal.getOrCreateInstance(
+                deleteModalElement
+            );
     }
 
     bindEvents();
-
+    applyUrlFilters();
     loadIssues();
-
 }
 
 // ======================================================
@@ -196,12 +206,11 @@ function sortIssues() {
             break;
 
         case "priority":
-
-            filteredIssues.sort((a, b) =>
-                PRIORITY_ORDER[a.priority] -
-                PRIORITY_ORDER[b.priority]
+            filteredIssues.sort(
+                (a, b) =>
+                    (PRIORITY_ORDER[a.priority] ?? 99) -
+                    (PRIORITY_ORDER[b.priority] ?? 99)
             );
-
             break;
 
         default:
@@ -299,7 +308,7 @@ function createIssueRow(issue) {
 
             <button
                 class="btn btn-sm btn-danger delete-btn"
-                data-id="${issue.id}"
+                data-id="${String(issue.id)}"
                 title="Delete">
 
                 <i class="bi bi-trash"></i>
@@ -357,6 +366,85 @@ function renderEmptyState() {
 }
 
 // ======================================================
+// Apply URL Filters
+// Supports both:
+// issues.html?status=Open
+// issues.html#status=Open
+// ======================================================
+
+function applyUrlFilters() {
+
+    const queryParams =
+        new URLSearchParams(window.location.search);
+
+    const hashValue =
+        window.location.hash.replace(/^#/, "");
+
+    const hashParams =
+        new URLSearchParams(hashValue);
+
+    const status =
+        hashParams.get("status") ||
+        queryParams.get("status");
+
+    const priority =
+        hashParams.get("priority") ||
+        queryParams.get("priority");
+
+    const category =
+        hashParams.get("category") ||
+        queryParams.get("category");
+
+    setFilterValue(
+        statusFilter,
+        status
+    );
+
+    setFilterValue(
+        priorityFilter,
+        priority
+    );
+
+    setFilterValue(
+        categoryFilter,
+        category
+    );
+
+}
+
+function setFilterValue(
+    filterElement,
+    requestedValue
+) {
+
+    if (!filterElement || !requestedValue) {
+
+        return;
+
+    }
+
+    const decodedValue =
+        decodeURIComponent(requestedValue)
+            .trim();
+
+    const matchingOption =
+        Array.from(filterElement.options)
+            .find(
+                option =>
+                    option.value.toLowerCase() ===
+                    decodedValue.toLowerCase()
+            );
+
+    if (matchingOption) {
+
+        filterElement.value =
+            matchingOption.value;
+
+    }
+
+}
+
+// ======================================================
 // Table Events
 // ======================================================
 
@@ -371,7 +459,7 @@ function handleTableClick(event) {
     }
 
     const issue = issues.find(
-        issue => issue.id === deleteButton.dataset.id
+        issue => String(issue.id) === deleteButton.dataset.id
     );
 
     if (!issue) {
@@ -443,16 +531,17 @@ function getStatusBadge(status) {
 }
 
 function formatDate(date) {
-
     if (!date) return "";
 
-    return new Date(date).toLocaleDateString(
-        "en-US",
-        {
-            year: "numeric",
-            month: "short",
-            day: "numeric"
-        }
-    );
+    const parsedDate = new Date(date);
 
+    if (Number.isNaN(parsedDate.getTime())) {
+        return "Unknown";
+    }
+
+    return parsedDate.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+    });
 }
