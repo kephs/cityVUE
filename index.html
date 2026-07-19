@@ -32,19 +32,6 @@
         type="image/x-icon"
         href="./assets/images/favicon.ico"> -->
 
-    <!-- =========================
-         Bootstrap CSS
-    ========================== -->
-
-    <link
-        rel="stylesheet"
-        href="./node_modules/bootstrap/dist/css/bootstrap.min.css">
-
-    <!-- Bootstrap Icons -->
-
-    <link
-        rel="stylesheet"
-        href="./node_modules/bootstrap-icons/font/bootstrap-icons.css">
 
     <!-- =========================
          Custom Styles
@@ -60,7 +47,7 @@
 
     <!-- ==========================================
      Navigation
-========================================== -->
+    ========================================== -->
 
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
 
@@ -325,46 +312,33 @@
 
     </main>
 
-    <!-- =========================
-         Footer
-    ========================== -->
+<!-- =========================
+     Footer
+========================== -->
 
-    <footer class="bg-dark text-white py-4 mt-5">
+<footer class="bg-dark text-white py-4 mt-5">
 
-        <div class="container text-center">
+    <div class="container text-center">
 
-            <p class="mb-1">
+        <p class="mb-1">
 
-                &copy; 2026 CityVUE
+            &copy; 2026 CityVUE
 
-            </p>
+        </p>
 
-            <small>
+        <small>
 
-                Built by Kyle Josephs
+            Built by Kyle Josephs
 
-            </small>
+        </small>
 
-        </div>
+    </div>
 
-    </footer>
+</footer>
 
-    <!-- =========================
-         JavaScript
-    ========================== -->
-
-    <!-- Bootstrap Bundle -->
-
-    <script src="./node_modules/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Main Application -->
-
-    <script
-        type="module"
-        src="./assets/js/app.js">
-    </script>
-
-    <!-- Bootstrap Toast -->
+<!-- =========================
+     Toast Notification
+========================== -->
 
 <div
     class="toast-container position-fixed bottom-0 end-0 p-3">
@@ -389,7 +363,8 @@
             <button
                 type="button"
                 class="btn-close btn-close-white me-2 m-auto"
-                data-bs-dismiss="toast">
+                data-bs-dismiss="toast"
+                aria-label="Close">
             </button>
 
         </div>
@@ -397,6 +372,15 @@
     </div>
 
 </div>
+
+<!-- =========================
+     Main Application
+========================== -->
+
+<script
+    type="module"
+    src="./assets/js/app.js">
+</script>
 
 </body>
 
