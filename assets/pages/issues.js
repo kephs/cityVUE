@@ -273,53 +273,87 @@ function createIssueRow(issue) {
 
     const row = document.createElement("tr");
 
-    row.innerHTML = `
-
-        <td>${issue.title || ""}</td>
-
-        <td>${issue.category || ""}</td>
-
-        <td>${issue.priority || ""}</td>
-
-        <td>
-
-            <span class="badge ${getStatusBadge(issue.status)}">
-
-                ${issue.status || "Open"}
-
-            </span>
-
-        </td>
-
-        <td>${issue.reportedBy || ""}</td>
-
-        <td>${formatDate(issue.dateReported)}</td>
-
-        <td>
-
-            <a
-                href="./report.html?id=${issue.id}"
-                class="btn btn-sm btn-outline-primary me-2"
-                title="Edit">
-
-                <i class="bi bi-pencil"></i>
-
-            </a>
-
-            <button
-                class="btn btn-sm btn-danger delete-btn"
-                data-id="${String(issue.id)}"
-                title="Delete">
-
-                <i class="bi bi-trash"></i>
-
-            </button>
-
-        </td>
-
-    `;
+    row.append(
+        createTextCell(issue.title),
+        createTextCell(issue.category),
+        createTextCell(issue.priority),
+        createStatusCell(issue.status),
+        createTextCell(issue.reportedBy),
+        createTextCell(formatDate(issue.dateReported)),
+        createActionsCell(issue.id)
+    );
 
     return row;
+
+}
+
+function createTextCell(value) {
+
+    const cell = document.createElement("td");
+
+    cell.textContent = String(value || "");
+
+    return cell;
+
+}
+
+function createStatusCell(status) {
+
+    const cell = document.createElement("td");
+    const badge = document.createElement("span");
+
+    badge.className =
+        `badge ${getStatusBadge(status)}`;
+
+    badge.textContent = String(status || "Open");
+
+    cell.appendChild(badge);
+
+    return cell;
+
+}
+
+function createActionsCell(id) {
+
+    const cell = document.createElement("td");
+    const issueId = String(id || "");
+
+    const editLink = document.createElement("a");
+
+    editLink.href =
+        `./report.html?id=${encodeURIComponent(issueId)}`;
+
+    editLink.className =
+        "btn btn-sm btn-outline-primary me-2";
+
+    editLink.title = "Edit";
+
+    const editIcon = document.createElement("i");
+
+    editIcon.className = "bi bi-pencil";
+
+    editLink.appendChild(editIcon);
+
+    const deleteButton = document.createElement("button");
+
+    deleteButton.type = "button";
+    deleteButton.className =
+        "btn btn-sm btn-danger delete-btn";
+    deleteButton.dataset.id = issueId;
+    deleteButton.title = "Delete";
+
+    const deleteIcon = document.createElement("i");
+
+    deleteIcon.className = "bi bi-trash";
+
+    deleteButton.appendChild(deleteIcon);
+
+    cell.append(
+        editLink,
+        deleteButton
+    );
+
+    return cell;
 
 }
 
@@ -492,7 +526,38 @@ function confirmDelete() {
 
     }
 
-    IssueService.deleteIssue(issueToDelete);
+    try {
+
+        const deleted =
+            IssueService.deleteIssue(issueToDelete);
+
+        if (!deleted) {
+
+            showToast(
+                "Issue could not be found.",
+                "warning"
+            );
+
+            return;
+
+        }
+
+    }
+    catch (error) {
+
+        console.error(
+            "Unable to delete the issue:",
+            error
+        );
+
+        showToast(
+            "The issue could not be deleted. Please try again.",
+            "danger"
+        );
+
+        return;
+
+    }
 
     issueToDelete = null;
 

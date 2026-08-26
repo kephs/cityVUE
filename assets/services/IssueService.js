@@ -1,10 +1,5 @@
 import Issue from "../models/Issue.js";
 
-import {
-    load,
-    save
-} from "../js/storage.js";
-
 const STORAGE_KEY = "cityvueIssues";
 
 export default class IssueService {
@@ -15,11 +10,42 @@ export default class IssueService {
 
     static getIssues() {
 
-        const issues = JSON.parse(
-            localStorage.getItem(STORAGE_KEY)
-        ) || [];
+        try {
 
-        return issues;
+            const storedValue =
+                localStorage.getItem(STORAGE_KEY);
+
+            if (storedValue === null) {
+
+                return [];
+
+            }
+
+            const issues = JSON.parse(storedValue);
+
+            if (!Array.isArray(issues)) {
+
+                console.error(
+                    "Stored CityVUE issue data is invalid."
+                );
+
+                return [];
+
+            }
+
+            return issues;
+
+        }
+        catch (error) {
+
+            console.error(
+                "Unable to read stored CityVUE issues:",
+                error
+            );
+
+            return [];
+
+        }
 
     }
 
@@ -35,10 +61,7 @@ export default class IssueService {
 
         issues.push(issue);
 
-        localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify(issues)
-        );
+        this.writeIssues(issues);
 
         return issue;
 
@@ -76,10 +99,7 @@ export default class IssueService {
 
         issues[index] = new Issue(updatedIssue);
 
-        localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify(issues)
-        );
+        this.writeIssues(issues);
 
         return true;
 
@@ -103,10 +123,7 @@ export default class IssueService {
 
         }
 
-        localStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify(filteredIssues)
-        );
+        this.writeIssues(filteredIssues);
 
         return true;
 
@@ -118,9 +135,58 @@ export default class IssueService {
 
     static clearIssues() {
 
-        localStorage.removeItem(STORAGE_KEY);
+        try {
+
+            localStorage.removeItem(STORAGE_KEY);
+
+        }
+        catch (error) {
+
+            console.error(
+                "Unable to clear stored CityVUE issues:",
+                error
+            );
+
+            throw new Error(
+                "CityVUE could not clear the stored issues.",
+                { cause: error }
+            );
+
+        }
 
         return true;
+
+    }
+
+    // ======================================================
+    // Persist Issues
+    // ======================================================
+
+    static writeIssues(issues) {
+
+        try {
+
+            const serializedIssues = JSON.stringify(issues);
+
+            localStorage.setItem(
+                STORAGE_KEY,
+                serializedIssues
+            );
+
+        }
+        catch (error) {
+
+            console.error(
+                "Unable to save CityVUE issues:",
+                error
+            );
+
+            throw new Error(
+                "CityVUE could not save the issue data.",
+                { cause: error }
+            );
+
+        }
 
     }
 

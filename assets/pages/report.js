@@ -141,22 +141,53 @@ function handleSubmit(event) {
 
     };
 
-    if (editing) {
+    try {
 
-        IssueService.updateIssue(issue);
+        if (editing) {
 
-        showToast(
-            "Issue updated successfully."
-        );
+            const updated =
+                IssueService.updateIssue(issue);
+
+            if (!updated) {
+
+                showToast(
+                    "Issue could not be found.",
+                    "warning"
+                );
+
+                return;
+
+            }
+
+            showToast(
+                "Issue updated successfully."
+            );
+
+        }
+        else {
+
+            IssueService.saveIssue(issue);
+
+            showToast(
+                "Issue submitted successfully."
+            );
+
+        }
 
     }
-    else {
+    catch (error) {
 
-        IssueService.saveIssue(issue);
+        console.error(
+            "Unable to save the issue:",
+            error
+        );
 
         showToast(
-            "Issue submitted successfully."
+            "The issue could not be saved. Please try again.",
+            "danger"
         );
+
+        return;
 
     }
 
