@@ -1,396 +1,343 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
-    <!-- =========================
-         Meta Information
-    ========================== -->
-
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0">
-
-    <title>CityVUE | Resident Engagement Platform</title>
+    <title>CityVue | Resident Engagement Platform</title>
 
     <meta
         name="description"
-        content="CityVUE allows residents to report community issues, track requests, and improve their city.">
-
-    <meta
-        name="author"
-        content="Kyle Josephs">
-
-    <!-- =========================
-         Favicon
-    ========================== -->
-<!-- 
-    <link
-        rel="icon"
-        type="image/x-icon"
-        href="./assets/images/favicon.ico"> -->
-
-
-    <!-- =========================
-         Custom Styles
-    ========================== -->
+        content="CityVue helps residents report community issues, track requests, request services, and stay connected."
+    >
 
     <link
         rel="stylesheet"
-        href="./assets/css/styles.css">
+        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+    >
 
+    <link rel="stylesheet" href="./assets/css/styles.css">
 </head>
 
 <body>
-
-    <!-- ==========================================
-     Navigation
-    ========================================== -->
-
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-
-        <div class="container">
-
-            <a
-                class="navbar-brand fw-bold"
-                href="./index.html">
-
-                <i class="bi bi-buildings-fill me-2"></i>
-
-                CityVUE
-
+    <!-- =====================================================
+         Navigation
+    ====================================================== -->
+    <header class="site-header">
+        <nav class="navbar page-container" aria-label="Primary navigation">
+            <a class="city-brand" href="./index.html" aria-label="CityVue home">
+                <img
+                    src="./assets/rockville-logo.png"
+                    alt="City of Rockville — Rise Together"
+                >
             </a>
 
             <button
-                class="navbar-toggler"
+                class="mobile-menu-button"
+                id="mobileMenuButton"
                 type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#navbarNav"
-                aria-controls="navbarNav"
+                aria-label="Open navigation menu"
                 aria-expanded="false"
-                aria-label="Toggle navigation">
-
-                <span class="navbar-toggler-icon"></span>
-
+                aria-controls="primaryNavigation"
+            >
+                <i class="bi bi-list"></i>
             </button>
 
-            <div
-                class="collapse navbar-collapse"
-                id="navbarNav">
+            <div class="navigation-links" id="primaryNavigation">
+                <a class="nav-link active" href="./index.html">Home</a>
+                <a class="nav-link" href="./pages/report.html">Report Issue</a>
+                <a class="nav-link" href="./pages/issues.html">Issue List</a>
+                <a class="nav-link" href="./pages/dashboard.html">Dashboard</a>
 
-                <ul class="navbar-nav ms-auto align-items-lg-center">
-
-                    <li class="nav-item">
-
-                        <a
-                            class="nav-link active"
-                            aria-current="page"
-                            href="./index.html">
-
-                            Home
-
-                        </a>
-
-                    </li>
-
-                    <li class="nav-item">
-
-                        <a
-                            class="nav-link"
-                            href="./pages/report.html">
-
-                            Report Issue
-
-                        </a>
-
-                    </li>
-
-                    <li class="nav-item">
-
-                        <a
-                            class="nav-link"
-                            href="./pages/issues.html">
-
-                            Issue List
-
-                        </a>
-
-                    </li>
-
-                    <li class="nav-item">
-
-                        <a
-                            class="nav-link"
-                            href="./pages/dashboard.html">
-
-                            Dashboard
-
-                        </a>
-
-                    </li>
-
-                    <li class="nav-item ms-lg-3 mt-2 mt-lg-0">
-
-                        <button
-                            id="themeToggle"
-                            class="btn btn-outline-light btn-sm">
-
-                            <i class="bi bi-moon-stars-fill me-1"></i>
-
-                            Dark Mode
-
-                        </button>
-
-                    </li>
-
-                </ul>
-
+                <button
+                    class="theme-button"
+                    id="darkModeToggle"
+                    type="button"
+                    aria-label="Switch to dark mode"
+                >
+                    <i class="bi bi-moon-stars-fill"></i>
+                    <span>Dark Mode</span>
+                </button>
             </div>
-
-        </div>
-
-    </nav>
-    <!-- =========================
-         Hero Section
-    ========================== -->
-
-    <header class="bg-light py-5">
-
-        <div class="container text-center">
-
-            <h1 class="display-4 fw-bold">
-
-                Welcome to CityVUE
-
-            </h1>
-
-            <p class="lead mt-3">
-
-                Report community issues, track requests, and help make your city a better place.
-
-            </p>
-
-            <a
-                href="./pages/report.html"
-                class="btn btn-primary btn-lg mt-3">
-
-                <i class="bi bi-plus-circle me-2"></i>
-
-                Report an Issue
-
-            </a>
-
-        </div>
-
+        </nav>
     </header>
 
-    <!-- =========================
-         Main Content
-    ========================== -->
+    <main>
+        <!-- =================================================
+             Hero
+        ================================================== -->
+        <section class="hero" aria-label="CityVue introduction">
+            <img
+                class="hero-image"
+                src="./assets/ask-rockville-hero.png"
+                alt="CityVue resident engagement app shown beside a Rockville city park and clock tower."
+            >
 
-    <main id="app">
-
-        <!-- Quick Actions -->
-
-        <section class="container my-5">
-
-            <div class="row g-4">
-
-                <!-- Report Issue -->
-
-                <div class="col-md-4">
-
-                    <div class="card h-100 shadow-sm">
-
-                        <div class="card-body text-center">
-
-                            <i class="bi bi-flag display-4 text-primary"></i>
-
-                            <h4 class="mt-3">
-
-                                Report Issue
-
-                            </h4>
-
-                            <p>
-
-                                Quickly submit a new community issue.
-
-                            </p>
-
-                            <a
-                                href="./pages/report.html"
-                                class="btn btn-primary">
-
-                                Report
-
-                            </a>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- View Issues -->
-
-                <div class="col-md-4">
-
-                    <div class="card h-100 shadow-sm">
-
-                        <div class="card-body text-center">
-
-                            <i class="bi bi-list-check display-4 text-success"></i>
-
-                            <h4 class="mt-3">
-
-                                View Issues
-
-                            </h4>
-
-                            <p>
-
-                                Browse and search reported issues.
-
-                            </p>
-
-                            <a
-                                href="./pages/issues.html"
-                                class="btn btn-success">
-
-                                View List
-
-                            </a>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- Dashboard -->
-
-                <div class="col-md-4">
-
-                    <div class="card h-100 shadow-sm">
-
-                        <div class="card-body text-center">
-
-                            <i class="bi bi-speedometer2 display-4 text-warning"></i>
-
-                            <h4 class="mt-3">
-
-                                Dashboard
-
-                            </h4>
-
-                            <p>
-
-                                View statistics and issue summaries.
-
-                            </p>
-
-                            <a
-                                href="./pages/dashboard.html"
-                                class="btn btn-warning">
-
-                                Open Dashboard
-
-                            </a>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </div>
-
+            <!-- Invisible accessible link positioned over the button
+                 that is part of the approved hero artwork. -->
+            <a
+                class="hero-report-link"
+                href="./pages/report.html"
+                aria-label="Report an Issue"
+            ></a>
         </section>
 
+        <!-- =================================================
+             Service Highlights
+        ================================================== -->
+        <section class="service-highlights" aria-label="CityVue services">
+            <div class="page-container service-grid">
+                <article class="service-item">
+                    <div class="service-icon">
+                        <i class="bi bi-bell"></i>
+                    </div>
+
+                    <div>
+                        <h2>Track Updates</h2>
+                        <p>Stay informed about the status of your request.</p>
+                    </div>
+                </article>
+
+                <article class="service-item">
+                    <div class="service-icon">
+                        <i class="bi bi-calendar3"></i>
+                    </div>
+
+                    <div>
+                        <h2>Request Services</h2>
+                        <p>Request non-emergency city services quickly.</p>
+                    </div>
+                </article>
+
+                <article class="service-item">
+                    <div class="service-icon">
+                        <i class="bi bi-chat-square-text"></i>
+                    </div>
+
+                    <div>
+                        <h2>Stay Connected</h2>
+                        <p>Get the latest news and important updates.</p>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <div class="page-container main-content">
+            <!-- =================================================
+                 Action Cards
+            ================================================== -->
+            <section class="action-grid" aria-label="Quick actions">
+                <article class="action-card">
+                    <div class="action-icon action-icon-blue">
+                        <i class="bi bi-flag"></i>
+                    </div>
+
+                    <h2>Report an Issue</h2>
+
+                    <p>
+                        Quickly submit a new community issue to let us know.
+                    </p>
+
+                    <a class="button button-blue" href="./pages/report.html">
+                        Report Issue
+                    </a>
+                </article>
+
+                <article class="action-card">
+                    <div class="action-icon action-icon-green">
+                        <i class="bi bi-list-check"></i>
+                    </div>
+
+                    <h2>View Issues</h2>
+
+                    <p>
+                        Browse and search reported issues in your community.
+                    </p>
+
+                    <a class="button button-green" href="./pages/issues.html">
+                        View Issue List
+                    </a>
+                </article>
+
+                <article class="action-card">
+                    <div class="action-icon action-icon-gold">
+                        <i class="bi bi-speedometer2"></i>
+                    </div>
+
+                    <h2>Dashboard</h2>
+
+                    <p>
+                        View statistics and summaries about community issues.
+                    </p>
+
+                    <a class="button button-gold" href="./pages/dashboard.html">
+                        Open Dashboard
+                    </a>
+                </article>
+            </section>
+
+            <!-- =================================================
+                 Community Statistics
+            ================================================== -->
+            <section class="impact-panel" aria-labelledby="impactHeading">
+                <header class="section-heading">
+                    <h2 id="impactHeading">Making a Difference Together</h2>
+                    <p>Your reports help us build a better Rockville.</p>
+                </header>
+
+                <div class="statistics-grid">
+                    <article class="statistic">
+                        <div class="statistic-icon stat-blue">
+                            <i class="bi bi-clipboard2-data"></i>
+                        </div>
+
+                        <div>
+                            <strong id="totalIssues">1,248</strong>
+                            <span>Total Issues Reported</span>
+                        </div>
+                    </article>
+
+                    <article class="statistic">
+                        <div class="statistic-icon stat-green">
+                            <i class="bi bi-check-circle"></i>
+                        </div>
+
+                        <div>
+                            <strong id="resolvedIssues">982</strong>
+                            <span>Issues Resolved</span>
+                        </div>
+                    </article>
+
+                    <article class="statistic">
+                        <div class="statistic-icon stat-orange">
+                            <i class="bi bi-clock"></i>
+                        </div>
+
+                        <div>
+                            <strong>3.2</strong>
+                            <span>Avg. Days to Resolve</span>
+                        </div>
+                    </article>
+
+                    <article class="statistic">
+                        <div class="statistic-icon stat-purple">
+                            <i class="bi bi-people"></i>
+                        </div>
+
+                        <div>
+                            <strong>8,756</strong>
+                            <span>Active Residents Engaged</span>
+                        </div>
+                    </article>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 Recent Activity
+            ================================================== -->
+            <section class="recent-activity" aria-labelledby="recentHeading">
+                <div class="recent-header">
+                    <h2 id="recentHeading">
+                        <i class="bi bi-calendar3"></i>
+                        Recent Activity
+                    </h2>
+
+                    <a href="./pages/issues.html">
+                        View All Issues
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </div>
+
+                <div class="activity-list">
+                    <a class="activity-row" href="./pages/issues.html">
+                        <div class="activity-icon activity-tree">
+                            <i class="bi bi-tree"></i>
+                        </div>
+
+                        <div class="activity-details">
+                            <strong>Tree Branch Overhanging Sidewalk</strong>
+                            <span>Woodley Gardens, Rockville, MD</span>
+                        </div>
+
+                        <time datetime="2025-05-18">May 18, 2025</time>
+
+                        <span class="status status-progress">In Progress</span>
+
+                        <i class="bi bi-chevron-right row-arrow"></i>
+                    </a>
+
+                    <a class="activity-row" href="./pages/issues.html">
+                        <div class="activity-icon activity-light">
+                            <i class="bi bi-lamp"></i>
+                        </div>
+
+                        <div class="activity-details">
+                            <strong>Street Light Out</strong>
+                            <span>N. Washington St, Rockville, MD</span>
+                        </div>
+
+                        <time datetime="2025-05-17">May 17, 2025</time>
+
+                        <span class="status status-resolved">Resolved</span>
+
+                        <i class="bi bi-chevron-right row-arrow"></i>
+                    </a>
+
+                    <a class="activity-row" href="./pages/issues.html">
+                        <div class="activity-icon activity-trash">
+                            <i class="bi bi-trash3"></i>
+                        </div>
+
+                        <div class="activity-details">
+                            <strong>Overflowing Trash Bin</strong>
+                            <span>Town Center Park, Rockville, MD</span>
+                        </div>
+
+                        <time datetime="2025-05-16">May 16, 2025</time>
+
+                        <span class="status status-submitted">Submitted</span>
+
+                        <i class="bi bi-chevron-right row-arrow"></i>
+                    </a>
+                </div>
+            </section>
+
+            <!-- =================================================
+                 Feedback
+            ================================================== -->
+            <section class="feedback-panel">
+                <div class="feedback-message">
+                    <div class="feedback-icon">
+                        <i class="bi bi-chat-dots"></i>
+                    </div>
+
+                    <div>
+                        <h2>Have feedback or ideas?</h2>
+                        <p>We'd love to hear from you.</p>
+                    </div>
+                </div>
+
+                <a class="feedback-button" href="mailto:feedback@rockvillemd.gov">
+                    Share Feedback
+                </a>
+            </section>
+        </div>
     </main>
 
-<!-- =========================
-     Footer
-========================== -->
+    <!-- =====================================================
+         Footer
+    ====================================================== -->
+    <footer class="site-footer">
+        <div class="page-container footer-content">
+            <p>&copy; 2026 CityVue. Resident Engagement Platform.</p>
 
-<footer class="border-top bg-body-tertiary py-4 mt-5">
-
-        <div class="container">
-
-            <div
-                class="d-flex flex-column flex-md-row
-                       justify-content-between align-items-center gap-2">
-
-                <p class="text-body-secondary small mb-0">
-
-                    &copy; 2026 CityVUE.
-                    Resident Engagement Platform.
-
-                </p>
-
-                <a
-                    class="small text-decoration-none"
-                    href="./pages/report.html">
-
-                    Report a community issue
-
-                </a>
-
-            </div>
-
+            <a href="./pages/report.html">
+                Report a community issue
+                <i class="bi bi-chevron-right"></i>
+            </a>
         </div>
-
     </footer>
 
-<!-- =========================
-     Toast Notification
-========================== -->
-
-<div
-    class="toast-container position-fixed bottom-0 end-0 p-3">
-
-    <div
-        id="appToast"
-        class="toast text-bg-success border-0"
-        role="alert"
-        aria-live="assertive"
-        aria-atomic="true">
-
-        <div class="d-flex">
-
-            <div
-                id="toastMessage"
-                class="toast-body">
-
-                Success
-
-            </div>
-
-            <button
-                type="button"
-                class="btn-close btn-close-white me-2 m-auto"
-                data-bs-dismiss="toast"
-                aria-label="Close">
-            </button>
-
-        </div>
-
-    </div>
-
-</div>
-
-<!-- =========================
-     Main Application
-========================== -->
-
-<script
-    type="module"
-    src="./assets/js/app.js">
-</script>
-
+    <script src="./assets/js/app.js"></script>
 </body>
-
 </html>
