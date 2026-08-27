@@ -7,6 +7,12 @@
   "scripts": {
     "start": "parcel index.html --open",
     "build": "parcel build index.html --dist-dir dist",
+    "legacy:start": "parcel index.html --open",
+    "legacy:build": "parcel build index.html --dist-dir dist",
+    "react:start": "vite react",
+    "react:build": "vite build react --outDir ../dist-react --emptyOutDir",
+    "react:preview": "vite preview react --outDir ../dist-react",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/Issue.test.js test/IssueListUtils.test.js test/IssueService.test.js test/Statistics.test.js",
     "clean": "rimraf dist .parcel-cache",
     "deploy": "npm run build && firebase deploy",
     "serve": "firebase emulators:start --only hosting"
@@ -22,11 +28,15 @@
   "license": "ISC",
   "devDependencies": {
     "parcel": "^2.16.4",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "vite": "^8.2.2"
   },
   "dependencies": {
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
-    "firebase": "^12.16.0"
+    "firebase": "^12.16.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.2"
   }
 }

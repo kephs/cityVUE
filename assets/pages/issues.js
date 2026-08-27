@@ -4,6 +4,15 @@ import "../js/app.js";
 import IssueService from "../services/IssueService.js";
 
 import {
+    filterIssues,
+    getIssueFiltersFromUrl
+} from "../js/utils/issueFilters.js";
+
+import {
+    sortIssues as sortIssueCollection
+} from "../js/utils/issueSort.js";
+
+import {
     initializeTheme
 } from "../components/theme.js";
 
@@ -11,16 +20,6 @@ import {
     initializeToast,
     showToast
 } from "../components/toast.js";
-
-// ======================================================
-// Constants
-// ======================================================
-
-const PRIORITY_ORDER = {
-    High: 1,
-    Medium: 2,
-    Low: 3
-};
 
 // ======================================================
 // DOM Elements
@@ -115,55 +114,16 @@ function loadIssues() {
 
 function applyFilters() {
 
-    const search = searchInput?.value.trim().toLowerCase() || "";
+    const search = searchInput?.value || "";
     const category = categoryFilter?.value || "";
     const priority = priorityFilter?.value || "";
     const status = statusFilter?.value || "";
 
-    filteredIssues = issues.filter(issue => {
-
-        const matchesSearch =
-
-            (issue.title || "").toLowerCase().includes(search) ||
-
-            (issue.description || "").toLowerCase().includes(search) ||
-
-            (issue.category || "").toLowerCase().includes(search) ||
-
-            (issue.reportedBy || "").toLowerCase().includes(search) ||
-
-            (issue.location || "").toLowerCase().includes(search);
-
-        const matchesCategory =
-
-            !category ||
-
-            issue.category === category;
-
-        const matchesPriority =
-
-            !priority ||
-
-            issue.priority === priority;
-
-        const matchesStatus =
-
-            !status ||
-
-            issue.status === status;
-
-        return (
-
-            matchesSearch &&
-
-            matchesCategory &&
-
-            matchesPriority &&
-
-            matchesStatus
-
-        );
-
+    filteredIssues = filterIssues(issues, {
+        search,
+        category,
+        priority,
+        status
     });
 
     sortIssues();
@@ -178,49 +138,10 @@ function sortIssues() {
 
     const sortBy = sortSelect?.value || "newest";
 
-    switch (sortBy) {
-
-        case "oldest":
-
-            filteredIssues.sort((a, b) =>
-                new Date(a.dateReported) -
-                new Date(b.dateReported)
-            );
-
-            break;
-
-        case "titleAsc":
-
-            filteredIssues.sort((a, b) =>
-                (a.title || "").localeCompare(b.title || "")
-            );
-
-            break;
-
-        case "titleDesc":
-
-            filteredIssues.sort((a, b) =>
-                (b.title || "").localeCompare(a.title || "")
-            );
-
-            break;
-
-        case "priority":
-            filteredIssues.sort(
-                (a, b) =>
-                    (PRIORITY_ORDER[a.priority] ?? 99) -
-                    (PRIORITY_ORDER[b.priority] ?? 99)
-            );
-            break;
-
-        default:
-
-            filteredIssues.sort((a, b) =>
-                new Date(b.dateReported) -
-                new Date(a.dateReported)
-            );
-
-    }
+    filteredIssues = sortIssueCollection(
+        filteredIssues,
+        sortBy
+    );
 
     renderIssues();
 
@@ -407,73 +328,21 @@ function renderEmptyState() {
 // ======================================================
 
 function applyUrlFilters() {
-
-    const queryParams =
-        new URLSearchParams(window.location.search);
-
-    const hashValue =
-        window.location.hash.replace(/^#/, "");
-
-    const hashParams =
-        new URLSearchParams(hashValue);
-
-    const status =
-        hashParams.get("status") ||
-        queryParams.get("status");
-
-    const priority =
-        hashParams.get("priority") ||
-        queryParams.get("priority");
-
-    const category =
-        hashParams.get("category") ||
-        queryParams.get("category");
-
-    setFilterValue(
-        statusFilter,
-        status
+    const filters = getIssueFiltersFromUrl(
+        window.location.search,
+        window.location.hash
     );
 
-    setFilterValue(
-        priorityFilter,
-        priority
-    );
-
-    setFilterValue(
-        categoryFilter,
-        category
-    );
-
-}
-
-function setFilterValue(
-    filterElement,
-    requestedValue
-) {
-
-    if (!filterElement || !requestedValue) {
-
-        return;
-
+    if (statusFilter && filters.status) {
+        statusFilter.value = filters.status;
     }
 
-    const decodedValue =
-        decodeURIComponent(requestedValue)
-            .trim();
+    if (priorityFilter && filters.priority) {
+        priorityFilter.value = filters.priority;
+    }
 
-    const matchingOption =
-        Array.from(filterElement.options)
-            .find(
-                option =>
-                    option.value.toLowerCase() ===
-                    decodedValue.toLowerCase()
-            );
-
-    if (matchingOption) {
-
-        filterElement.value =
-            matchingOption.value;
-
+    if (categoryFilter && filters.category) {
+        categoryFilter.value = filters.category;
     }
 
 }

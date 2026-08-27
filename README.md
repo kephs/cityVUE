@@ -43,6 +43,12 @@ Start the Parcel development server:
 npm start
 ```
 
+The explicit legacy alias runs the same working MVP:
+
+```powershell
+npm run legacy:start
+```
+
 ## Build
 
 Create the production bundle in the ignored `dist` directory:
@@ -50,6 +56,42 @@ Create the production bundle in the ignored `dist` directory:
 ```powershell
 npm run build
 ```
+
+`npm run legacy:build` is an explicit alias for the same Parcel build. During the parallel migration, `npm run build` remains the validated legacy/deployment build.
+
+## Parallel React/Vite shell
+
+Stage 1 includes an isolated React/Vite technical shell under `react/`. It does not replace or migrate the working Parcel MVP.
+
+Start the React development application:
+
+```powershell
+npm run react:start
+```
+
+Create its production bundle in the separately ignored `dist-react` directory:
+
+```powershell
+npm run react:build
+```
+
+Preview the built React shell locally:
+
+```powershell
+npm run react:preview
+```
+
+The React shell currently demonstrates only the root and not-found routes. Report Issue, Issue List, Dashboard, and other MVP workflows remain exclusively in the Parcel application.
+
+## Automated tests
+
+Run the framework-independent Node regression suite:
+
+```powershell
+npm test
+```
+
+These tests remain independent of React and Vite.
 
 ## Firebase Hosting emulator
 

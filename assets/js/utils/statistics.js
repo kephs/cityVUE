@@ -16,15 +16,15 @@ export function getStatusCounts(issues) {
     return {
 
         open: issues.filter(
-            issue => issue.status === "Open"
+            issue => normalizeValue(issue.status) === "open"
         ).length,
 
         inProgress: issues.filter(
-            issue => issue.status === "In Progress"
+            issue => normalizeValue(issue.status) === "in progress"
         ).length,
 
         closed: issues.filter(
-            issue => issue.status === "Closed"
+            issue => normalizeValue(issue.status) === "closed"
         ).length
 
     };
@@ -38,15 +38,15 @@ export function getPriorityCounts(issues) {
     return {
 
         high: issues.filter(
-            issue => issue.priority === "High"
+            issue => normalizeValue(issue.priority) === "high"
         ).length,
 
         medium: issues.filter(
-            issue => issue.priority === "Medium"
+            issue => normalizeValue(issue.priority) === "medium"
         ).length,
 
         low: issues.filter(
-            issue => issue.priority === "Low"
+            issue => normalizeValue(issue.priority) === "low"
         ).length
 
     };
@@ -57,17 +57,18 @@ export function getPriorityCounts(issues) {
 
 export function getCategoryCounts(issues) {
 
-    const categories = {};
+    return issues.reduce(
+        (counts, issue) => {
+            const category =
+                String(issue.category || "Uncategorized").trim() ||
+                "Uncategorized";
 
-    issues.forEach(issue => {
+            counts[category] = (counts[category] || 0) + 1;
 
-        const category = issue.category || "Other";
-
-        categories[category] = (categories[category] || 0) + 1;
-
-    });
-
-    return categories;
+            return counts;
+        },
+        {}
+    );
 
 }
 
@@ -81,12 +82,24 @@ export function getRecentIssues(issues, limit = 5) {
 
             (a, b) =>
 
-                new Date(b.dateReported) -
+                getTimestamp(b.dateReported) -
 
-                new Date(a.dateReported)
+                getTimestamp(a.dateReported)
 
         )
 
         .slice(0, limit);
 
+}
+
+function normalizeValue(value) {
+    return String(value || "")
+        .trim()
+        .toLowerCase();
+}
+
+function getTimestamp(date) {
+    const timestamp = new Date(date).getTime();
+
+    return Number.isNaN(timestamp) ? 0 : timestamp;
 }

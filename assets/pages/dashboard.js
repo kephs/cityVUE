@@ -4,6 +4,14 @@ import IssueService from "../services/IssueService.js";
 
 import { initializeTheme } from "../components/theme.js";
 
+import {
+    getCategoryCounts,
+    getPriorityCounts,
+    getRecentIssues,
+    getStatusCounts,
+    getTotalIssues
+} from "../js/utils/statistics.js";
+
 // ======================================================
 // Constants
 // ======================================================
@@ -136,7 +144,7 @@ function renderStatistics(issues) {
 
     setTextContent(
         totalIssuesElement,
-        issues.length
+        getTotalIssues(issues)
     );
 
     setTextContent(
@@ -167,80 +175,6 @@ function renderStatistics(issues) {
     setTextContent(
         lowPriorityElement,
         priorityCounts.low
-    );
-
-}
-
-// ======================================================
-// Status Counts
-// ======================================================
-
-function getStatusCounts(issues) {
-
-    return {
-
-        open: issues.filter(
-            issue => normalizeValue(issue.status) === "open"
-        ).length,
-
-        inProgress: issues.filter(
-            issue =>
-                normalizeValue(issue.status) ===
-                "in progress"
-        ).length,
-
-        closed: issues.filter(
-            issue => normalizeValue(issue.status) === "closed"
-        ).length
-
-    };
-
-}
-
-// ======================================================
-// Priority Counts
-// ======================================================
-
-function getPriorityCounts(issues) {
-
-    return {
-
-        high: issues.filter(
-            issue => normalizeValue(issue.priority) === "high"
-        ).length,
-
-        medium: issues.filter(
-            issue => normalizeValue(issue.priority) === "medium"
-        ).length,
-
-        low: issues.filter(
-            issue => normalizeValue(issue.priority) === "low"
-        ).length
-
-    };
-
-}
-
-// ======================================================
-// Category Counts
-// ======================================================
-
-function getCategoryCounts(issues) {
-
-    return issues.reduce(
-        (counts, issue) => {
-
-            const category =
-                String(issue.category || "Uncategorized").trim() ||
-                "Uncategorized";
-
-            counts[category] =
-                (counts[category] || 0) + 1;
-
-            return counts;
-
-        },
-        {}
     );
 
 }
@@ -536,7 +470,10 @@ function renderRecentIssues(issues) {
 
     recentIssuesList.replaceChildren();
 
-    const recentIssues = getRecentIssues(issues);
+    const recentIssues = getRecentIssues(
+        issues,
+        RECENT_ISSUE_LIMIT
+    );
 
     if (recentIssues.length === 0) {
 
@@ -558,22 +495,6 @@ function renderRecentIssues(issues) {
     });
 
     recentIssuesList.appendChild(fragment);
-
-}
-
-// ======================================================
-// Get Recent Issues
-// ======================================================
-
-function getRecentIssues(issues) {
-
-    return [...issues]
-        .sort(
-            (firstIssue, secondIssue) =>
-                getTimestamp(secondIssue.dateReported) -
-                getTimestamp(firstIssue.dateReported)
-        )
-        .slice(0, RECENT_ISSUE_LIMIT);
 
 }
 
@@ -732,17 +653,6 @@ function normalizeValue(value) {
     return String(value || "")
         .trim()
         .toLowerCase();
-
-}
-
-function getTimestamp(date) {
-
-    const timestamp =
-        new Date(date).getTime();
-
-    return Number.isNaN(timestamp)
-        ? 0
-        : timestamp;
 
 }
 
