@@ -274,3 +274,5 @@ Do not interpret roadmap inclusion as approval to modify City production systems
 ## React MVP Cutover Gate
 
 React migration Stage 9 is limited to route-level performance preparation, isolated Firebase Hosting preview configuration, emulator validation, preview-channel UAT, and a documented rollback/cutover checklist. It does not authorize a live Firebase deployment or removal of the Parcel rollback path. See `docs/features/F006-react-stage-9-cutover-preparation.md`.
+
+React migration Stage 10 completed the approved production Hosting cutover to the React/Vite MVP on August 29, 2026. Parcel remains a tested emergency rollback target. This frontend cutover does not complete or authorize the still-pending vendor-neutral domain, backend/API, persistence, identity, security, or enterprise-integration roadmap phases. See `docs/features/F007-react-stage-10-production-cutover.md`.

@@ -1,9 +1,9 @@
 # F001 — React and Vite Migration Plan
 
-**Status:** Approved and in progress
+**Status:** Complete
 **Type:** Assessment and implementation plan only
 **Canonical development name:** CityVUE
-**Decision state:** React/Vite migration direction approved; implementation in progress
+**Decision state:** React/Vite MVP deployed to production; Parcel retained for rollback
 
 ## Current-state summary
 
