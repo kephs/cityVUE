@@ -85,3 +85,11 @@ body {
         animation-iteration-count: 1 !important;
     }
 }
+.route-loading {
+    align-items: center;
+    display: flex;
+    gap: 0.625rem;
+    justify-content: center;
+    min-height: 12rem;
+    color: var(--bs-secondary-color);
+}

@@ -270,3 +270,7 @@ Candidate -> Designed -> Approved -> Implemented -> Validated
 ```
 
 Do not interpret roadmap inclusion as approval to modify City production systems.
+
+## React MVP Cutover Gate
+
+React migration Stage 9 is limited to route-level performance preparation, isolated Firebase Hosting preview configuration, emulator validation, preview-channel UAT, and a documented rollback/cutover checklist. It does not authorize a live Firebase deployment or removal of the Parcel rollback path. See `docs/features/F006-react-stage-9-cutover-preparation.md`.
