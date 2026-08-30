@@ -70,6 +70,16 @@ Direct live loads passed for `/`, `/report`, `/issues`, `/dashboard`, `/about`, 
 
 The disposable live `Pothole` issue created at `310 Stage 10 Live Test Way` and edited to `312 Stage 10 Live Test Way` was permanently deleted after explicit confirmation. The live origin was verified at zero issues and the empty state afterward.
 
+## Home and Report UX Production Promotion
+
+The reviewed Home live-data enhancement and resident-facing Report intake enhancement were promoted together on August 30, 2026 at approximately 2:37 PM America/New_York. The prior production state is tagged locally as `pre-home-report-production-promotion` at `e2b38de`; the combined reviewed implementation is commit `23ab040` (`feat: promote reviewed Home and report UX enhancements`).
+
+Only Firebase Hosting was deployed with the existing React production configuration. Firebase uploaded 20 files from `dist-react`, finalized the version, and released it successfully at `https://cityvue-1.web.app`. No other Firebase service was deployed or changed.
+
+The promotion passed 58 Node tests and 48 React tests, the Parcel rollback build, the React/Vite production build, `git diff --check`, and `npm audit` with zero vulnerabilities. Hosted verification passed at 1440 px, 768 px, and 390 px in light and dark mode for the Home CTA, live zero-data metrics, Recent Issues empty state, responsive layout, Report Issue terminology, prominent Issue selection, icons, search, mobile focus/scroll behavior, and selection flow. Direct loads and refreshes for `/`, `/report`, `/issues`, and `/dashboard` passed with a clean browser console. SPA HTML and hashed JavaScript retained their intended no-cache and immutable cache headers, respectively. No synthetic production Issue was created.
+
+The existing origin-specific browser-local persistence boundary and Parcel rollback path remain unchanged.
+
 ## Bundle and Performance Record
 
 The initial JavaScript is 288.45 kB minified / 92.05 kB gzip. Dashboard and Chart.js remain isolated in a deferred 214.49 kB minified / 72.74 kB gzip chunk. Page chunks range from 5.34 kB to 15.95 kB minified. The 311.98 kB shared CSS compresses to 45.25 kB gzip. The approximately 2.12 MB Home hero PNG remains a known later optimization candidate and did not block cutover.
