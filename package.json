@@ -6,17 +6,21 @@
   "source": "index.html",
   "scripts": {
     "start": "parcel index.html --open",
-    "build": "parcel build index.html --dist-dir dist",
+    "build": "npm run build:react",
+    "build:legacy": "parcel build index.html --dist-dir dist",
+    "build:react": "vite build react --outDir ../dist-react --emptyOutDir",
     "legacy:start": "parcel index.html --open",
-    "legacy:build": "parcel build index.html --dist-dir dist",
+    "legacy:build": "npm run build:legacy",
     "react:start": "vite react",
-    "react:build": "vite build react --outDir ../dist-react --emptyOutDir",
+    "react:build": "npm run build:react",
     "react:preview": "vite preview react --outDir ../dist-react",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/Catalog.test.js test/Issue.test.js test/IssueListUtils.test.js test/IssueService.test.js test/LegacyIssueMatching.test.js test/Statistics.test.js test/ThemePreferences.test.js",
     "test:react": "vitest run --config vitest.config.mjs --maxWorkers=1",
     "clean": "rimraf dist .parcel-cache",
-    "deploy": "npm run build && firebase deploy",
-    "serve": "firebase emulators:start --only hosting"
+    "deploy": "npm run deploy:react",
+    "deploy:react": "npm run build:react && firebase deploy --only hosting --config firebase.json --project cityvue-1",
+    "deploy:legacy": "npm run build:legacy && firebase deploy --only hosting --config firebase.legacy.rollback.json --project cityvue-1",
+    "serve": "firebase emulators:start --only hosting --config firebase.json --project cityvue-1"
   },
   "keywords": [
     "cityvue",
