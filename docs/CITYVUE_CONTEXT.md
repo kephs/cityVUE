@@ -35,6 +35,8 @@ A working MVP has been developed and deployed. Known capabilities include:
 
 Firebase Hosting has been used for MVP deployment. The repository is authoritative for exact framework versions, dependencies, routing, state management, persistence, and implementation details.
 
+React migration Stage 8 defines the current React MVP routes as Home, Report an Issue, Issue List, Edit Issue, Dashboard, and Not Found. Legacy About and Contact shells are intentionally excluded because approved substantive content and supported contact functionality are not available. Future informational, support, privacy, accessibility, legal, emergency-use, and feedback content requires City ownership and approval; see `docs/features/F005-react-stage-8-informational-routes.md`.
+
 ## Strategic Goal: Vendor Neutrality
 
 CityVUE must not be designed as “the VUEWorks front end.”
@@ -130,6 +132,20 @@ These are not implemented unless confirmed in the repository:
 - VistaShare integration
 - Additional APIs
 - Central CityVUE API/integration layer
+
+The expected long-term domain also includes vendor-neutral assignment/routing, append-oriented request activity and audit history, watchers, centrally configured notification orchestration, attachments, work items, external-system references, and explicit integration status. Staff workspaces should eventually support My Assignments, group work, and unassigned queues while keeping requester, assignee, watcher, public comments/activity, and internal notes/activity distinct. These capabilities are requirements, not current implementation; see `docs/features/F002-core-product-capabilities-domain-requirements.md` for the detailed reference.
+
+The current browser-backed `Issue`/`cityvueIssues` implementation remains a temporary MVP compatibility model during the controlled React parity migration. It must not be silently reshaped into the future `ServiceRequest` domain. F001 remains authoritative for migration sequencing, and React components should stay behind neutral service boundaries so later API/domain work can be introduced separately.
+
+Approved future staff requirements include an API-authorized Dashboard that defaults to **My Assigned Issues**, with additional authorized Department, Category, group/queue, and permission-controlled All Issues scopes. Dashboard metrics must reflect the selected authorized scope. Future canonical `ServiceRequest` status changes use controlled, permission-validated actions with append-oriented Activity/audit history rather than arbitrary status replacement.
+
+The current React Dashboard has no staff identity or assignments, reads all locally stored legacy `Issue` records, and supports display and filter drill-down only. The future staff Dashboard is assignment-aware, permission-aware, scope-aware, and API-backed; current Issue editing and status display remain unchanged.
+
+F003 defines the future dynamic service-catalog and intelligent-intake direction. The canonical hierarchy is `Department → Category → Service`, while residents normally select resident-friendly Categories and Services without choosing an internal Department. Published Service definitions may eventually drive live search, service-specific questions, location and attachment policies, anonymous/contact behavior, safety guidance, and routing metadata. The future CityVUE API is authoritative for catalog administration, validation, versioning, publication, routing, and audit; React only renders supplied configuration and collects answers. See `docs/features/F003-dynamic-service-catalog-intelligent-intake.md`. None of these capabilities are currently implemented.
+
+Category and Service icons are future Admin-managed presentation metadata selected from an approved application-controlled library. Current fixture icons are prototype-only and are not official City selections; they do not alter `Issue`, routing, or persistence.
+
+Stage 5.1 currently flattens the resident description and visible dynamic answers into legacy `Issue.description` for compatibility. Future canonical `ServiceRequest` records require a separate description and structured, typed `Answer[]` tied to stable question identifiers and the exact ServiceDefinition version used at submission. Reverse-parsing compatibility descriptions is prohibited as a canonical edit-reconstruction strategy.
 
 ## Architectural Principles
 

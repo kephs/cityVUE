@@ -6,3 +6,82 @@ body {
 #root {
     min-height: 100vh;
 }
+
+.app-shell {
+    min-width: 320px;
+}
+
+.react-site-header {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+}
+
+.react-site-header .navbar {
+    min-height: 64px;
+}
+
+.react-site-header .nav-link {
+    border-radius: 0.375rem;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.react-site-header .nav-link:hover,
+.react-site-header .nav-link:focus-visible,
+.react-site-header .nav-link.active {
+    color: #fff;
+}
+
+.react-site-header .nav-link.active {
+    background: rgba(0, 0, 0, 0.18);
+    font-weight: 600;
+}
+
+.skip-link {
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 1100;
+    padding: 0.65rem 1rem;
+    border-radius: 0.375rem;
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    box-shadow: var(--bs-box-shadow);
+    transform: translateY(-150%);
+}
+
+.skip-link:focus {
+    transform: translateY(0);
+}
+
+:where(a, button):focus-visible {
+    outline: 3px solid #79b5ff;
+    outline-offset: 3px;
+}
+
+@media (min-width: 992px) {
+    .react-site-header .navbar-collapse {
+        display: flex !important;
+    }
+}
+
+@media (max-width: 991.98px) {
+    .react-site-header .navbar-collapse {
+        padding-block: 0.75rem 1rem;
+    }
+
+    .react-site-header .nav-link {
+        padding: 0.65rem 0.75rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}

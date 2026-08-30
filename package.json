@@ -12,7 +12,8 @@
     "react:start": "vite react",
     "react:build": "vite build react --outDir ../dist-react --emptyOutDir",
     "react:preview": "vite preview react --outDir ../dist-react",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/Issue.test.js test/IssueListUtils.test.js test/IssueService.test.js test/Statistics.test.js",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/Catalog.test.js test/Issue.test.js test/IssueListUtils.test.js test/IssueService.test.js test/LegacyIssueMatching.test.js test/Statistics.test.js test/ThemePreferences.test.js",
+    "test:react": "vitest run --config vitest.config.mjs --maxWorkers=1",
     "clean": "rimraf dist .parcel-cache",
     "deploy": "npm run build && firebase deploy",
     "serve": "firebase emulators:start --only hosting"
@@ -27,13 +28,19 @@
   "author": "Kyle Josephs",
   "license": "ISC",
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
+    "jsdom": "^29.1.1",
     "parcel": "^2.16.4",
     "rimraf": "^6.0.1",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
+    "chart.js": "4.5.1",
     "firebase": "^12.16.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

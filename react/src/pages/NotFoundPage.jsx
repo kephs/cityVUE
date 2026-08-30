@@ -6,9 +6,9 @@ export default function NotFoundPage() {
             <div className="card border-0 shadow-sm">
                 <div className="card-body p-4 p-md-5">
                     <p className="text-primary fw-semibold mb-2">404</p>
-                    <h2 className="card-title" id="not-found-heading">
+                    <h1 className="card-title h2" id="not-found-heading">
                         Page not found
-                    </h2>
+                    </h1>
                     <p className="card-text text-body-secondary">
                         This route is not available in the CityVUE React migration shell.
                     </p>

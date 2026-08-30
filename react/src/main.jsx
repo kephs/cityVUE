@@ -6,10 +6,13 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 
 import router from "./app/router.jsx";
+import { ThemeProvider } from "./theme/ThemeProvider.jsx";
 import "./styles.css";
 
 createRoot(document.querySelector("#root")).render(
     <StrictMode>
-        <RouterProvider router={router} />
+        <ThemeProvider>
+            <RouterProvider router={router} />
+        </ThemeProvider>
     </StrictMode>
 );

@@ -1,9 +1,9 @@
 # F001 — React and Vite Migration Plan
 
-**Status:** Proposed for review
+**Status:** Approved and in progress
 **Type:** Assessment and implementation plan only
 **Canonical development name:** CityVUE
-**Decision state:** React/Vite is a preferred direction, not yet an approved framework decision
+**Decision state:** React/Vite migration direction approved; implementation in progress
 
 ## Current-state summary
 
@@ -246,8 +246,8 @@ Proposed canonical current-MVP routes:
 | `/issues` | Issue list, search, filters, and sort |
 | `/issues/:issueId/edit` | Edit an existing issue |
 | `/dashboard` | Dashboard/statistics |
-| `/about` | About, only if substantive content is confirmed |
-| `/contact` | Contact, only if substantive content is confirmed |
+| `/about` | Explicitly excluded from the Stage 8 React MVP; approved substantive content is not available |
+| `/contact` | Explicitly excluded from the Stage 8 React MVP; approved contact content and delivery functionality are not available |
 | `*` | Accessible not-found page |
 
 Compatibility requirements:
@@ -445,6 +445,8 @@ Each stage should be a focused reviewable change. No stage should silently begin
 **Validation:** Content-owner review, links, metadata, accessibility.
 **Rollback:** Exclude unapproved routes.
 **Done:** Inclusion/exclusion is explicit; no placeholder route is presented as complete.
+
+**Stage 8 outcome:** Complete. Repository review confirmed that legacy About and Contact are skeletal, nonfunctional artifacts rather than approved content, so both routes are excluded from the React MVP. The unsupported Home feedback `mailto:` CTA and unused React placeholder component were removed. See `docs/features/F005-react-stage-8-informational-routes.md` for the final route inventory and deferred content requirements.
 
 ### Stage 9 — Cutover preparation and Firebase emulator validation
 

@@ -1,20 +1,20 @@
+import Hero from "./home/Hero.jsx";
+import ImpactSummary from "./home/ImpactSummary.jsx";
+import QuickActions from "./home/QuickActions.jsx";
+import RecentActivity from "./home/RecentActivity.jsx";
+import ServiceHighlights from "./home/ServiceHighlights.jsx";
+import "./home/home.css";
+
 export default function HomePage() {
     return (
-        <section aria-labelledby="shell-heading">
-            <div className="card border-0 shadow-sm">
-                <div className="card-body p-4 p-md-5">
-                    <p className="text-primary fw-semibold mb-2">
-                        Stage 1 technical shell
-                    </p>
-                    <h2 className="card-title" id="shell-heading">
-                        React migration shell is active
-                    </h2>
-                    <p className="card-text text-body-secondary mb-0">
-                        The existing Parcel application remains the working CityVUE MVP.
-                        Current pages and workflows have not been migrated into this shell.
-                    </p>
-                </div>
+        <div className="home-page">
+            <Hero />
+            <ServiceHighlights />
+            <div className="home-container home-main-content">
+                <QuickActions />
+                <ImpactSummary />
+                <RecentActivity />
             </div>
-        </section>
+        </div>
     );
 }

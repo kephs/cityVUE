@@ -56,6 +56,8 @@ Responsibilities include the home page, service discovery, Report an Issue, dyna
 
 The UI must not contain privileged enterprise credentials or vendor-specific integration logic.
 
+Catalog presentation metadata may include application-approved logical icon keys for Categories and Services. The presentation layer maps those keys to the installed approved icon library and applies a safe Service → Category → generic fallback; arbitrary markup, script, CSS class input, and remote image URLs are not catalog data.
+
 ### CityVUE Application/API Layer — Proposed
 
 Potential responsibilities:
@@ -70,6 +72,11 @@ Potential responsibilities:
 - Logging/audit hooks
 - Notification orchestration
 - API versioning
+- Assignment/routing and workflow enforcement
+- Append-oriented activity/audit recording
+- Watcher management and visibility enforcement
+- Notification-rule evaluation and delivery orchestration
+- Request-number generation and idempotency controls
 
 Technology and hosting are TBD.
 
@@ -163,6 +170,40 @@ ServiceRequest
 
 The final schema is TBD.
 
+Canonical requests must separate the resident's general description from structured dynamic answers:
+
+```text
+ServiceRequest
+  +-- description
+  +-- serviceDefinitionId
+  +-- serviceDefinitionVersion
+  +-- Answer[]
+        +-- questionId
+        +-- question/version display snapshots
+        +-- typed value
+```
+
+Future edit reconstruction must use the exact versioned ServiceDefinition and authoritative structured Answer records associated with the request. Human-readable description summaries may be generated for presentation or integration, but parsing description text is not a canonical reconstruction strategy. Historical definitions and submitted display snapshots must keep older requests understandable after questions or options change. See `docs/features/F003-dynamic-service-catalog-intelligent-intake.md` for the detailed requirement.
+
+The detailed capability and domain requirements are recorded in `docs/features/F002-core-product-capabilities-domain-requirements.md`. The production model must also account for neutral `Assignment`, `Activity`, `Watcher`, `Notification`, `NotificationRule`, `WorkItem`, `ExternalSystemReference`, and `IntegrationStatus` concepts. These are proposed domain boundaries, not implemented schemas.
+
+```text
+ServiceRequest
+  +-- Assignment(s)
+  +-- Activity[]
+  +-- Watcher[]
+  +-- Attachment[]
+  +-- WorkItem[]
+  +-- ExternalSystemReference[]
+  +--> Notification orchestration
+```
+
+Assignments may target staff identities, groups/teams/queues, or roles and must preserve reassignment history, timestamps, and the responsible actor/system. Configurable automatic routing may consider service, category, department, location/GIS asset, priority, and other approved request attributes. Requester, assignee, watcher, and external-system owner remain distinct.
+
+Significant request changes should append timestamped `Activity` records with actor, visibility, old/new values where appropriate, and metadata. Public/requester-visible activity and internal staff activity require explicit separation and server-side authorization; audit history must not be silently overwritten.
+
+Watchers follow activity but do not become assignees. `NotificationRule` represents centrally managed event/recipient/template conditions, while `Notification` represents a delivery instance and its queued, sent, retrying, or failed lifecycle. Notification and assignment rules must not be embedded in React components.
+
 ## Service Catalog — Proposed
 
 A service definition may include:
@@ -182,6 +223,12 @@ Service
 - notificationRules
 - trackingCapabilities
 ```
+
+The catalog hierarchy is `Department → Category → Service`. Department is primarily an internal ownership and routing concept; resident intake normally begins with resident-friendly Categories and Services. A Service may supply versioned dynamic questions, conditional visibility, location requirements, attachment policy, anonymous/contact policy, safety guidance, notification references, and routing metadata.
+
+The future CityVUE API/application layer owns authoritative catalog persistence, Admin authorization, validation, versioning, publication, routing, audit, and request creation. React renders published configuration and collects resident answers; it must not become authoritative for Admin rules or routing. Published definitions referenced by historical requests should remain resolvable and should normally be archived rather than hard-deleted.
+
+During a separately approved React migration Stage 5.1, a repository-local preloaded fixture may sit behind a catalog abstraction. That fixture is temporary and replaceable by the future API; browser storage is not the future catalog authority. See `docs/features/F003-dynamic-service-catalog-intelligent-intake.md`.
 
 Routing examples are illustrative, not approved City routing decisions.
 
@@ -225,6 +272,10 @@ Protected operation
 
 Client-side guards are not the security boundary.
 
+Authenticated staff Dashboard scopes are API-authorized views over canonical `ServiceRequest` records. The default future staff view is My Assigned Issues, with Department, Category, group/queue, and All Issues views available only where the signed-in user's roles, memberships, and permissions allow them. Scope selection in React never expands RBAC, and every Dashboard metric must be calculated from the same authorized active scope. Exact API routes and multi-Department/group-work UX remain TBD.
+
+Canonical status changes are server-authoritative domain/application actions rather than arbitrary field overwrites. Permitted transitions, reasons, required information, and permissions remain configurable future workflow decisions; each completed transition appends Activity/audit history and may invoke centralized Notification orchestration. External EAM statuses remain vendor-neutral mappings handled through adapters and mapping profiles, with source-of-truth and conflict policies still to be designed.
+
 ## Data Ownership — TBD
 
 Before production integration determine CityVUE persistence, authoritative systems, external ID mappings, status synchronization, attachment handling, audit history, reporting, retention, privacy, and backup/recovery.
@@ -252,6 +303,10 @@ Enterprise System
 ```
 
 Specific persistence/queue/retry technology is TBD.
+
+Notification delivery and reliable integration work should run through server-side/background processing capable of queuing, bounded retry, deduplication/idempotency, timestamps, correlation, observable terminal failure, and recovery. React may initiate operations and display state, but it is not the execution or authorization boundary.
+
+`IntegrationStatus` describes transmission/synchronization state and is separate from a request's business `RequestStatus`. `ExternalSystemReference` links a CityVUE entity to a vendor record without making the vendor identifier or schema canonical.
 
 ## Status Normalization — Proposed
 
@@ -320,5 +375,10 @@ Formal City security review should precede production enterprise integrations.
 16. Logging/monitoring
 17. Data retention
 18. Deployment/change management
+19. Assignment targets, routing precedence, fallbacks, transfers, and escalation rules
+20. Activity taxonomy, visibility, retention, correction, and audit access
+21. Watcher eligibility, management permissions, privacy, and preferences
+22. Notification channels, consent, templates, deduplication, retry, and operational ownership
+23. Workflow transitions, work-item ownership, due dates, resolution codes, and closure reasons
 
 Document durable decisions as ADRs under `docs/decisions/`.
