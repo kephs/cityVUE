@@ -34,24 +34,49 @@ describe("ReportIssuePage configuration-driven intake", () => {
         expect(screen.queryByText("Environmental Services")).not.toBeInTheDocument();
     });
 
-    test("Category selection filters Services and changing Category clears selection", async () => {
+    test("Category selection reveals Issues, renders configured icons, and changing Category clears selection", async () => {
         const user = userEvent.setup(); renderPage();
+        expect(screen.queryByRole("heading", { name: "Choose an Issue" })).not.toBeInTheDocument();
         await selectPothole(user);
+        expect(screen.getByRole("heading", { name: "Choose an Issue" })).toBeInTheDocument();
+        expect(screen.queryByRole("heading", { name: "Choose a Service" })).not.toBeInTheDocument();
+        expect(screen.getByText("2 issues found")).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Pothole/ }).closest("label").querySelector(".bi-cone-striped")).toBeInTheDocument();
         expect(screen.getByRole("radio", { name: /Damaged Street Sign/ })).toBeInTheDocument();
         await user.click(screen.getByRole("radio", { name: /Streetlights/ }));
         expect(screen.getByRole("radio", { name: /Streetlight Out/ })).toBeInTheDocument();
+        expect(screen.getByText("1 issue found")).toBeInTheDocument();
         expect(screen.queryByRole("radio", { name: /Pothole/ })).not.toBeInTheDocument();
     });
 
     test("live search supports aliases and a clear zero-result state", async () => {
         const user = userEvent.setup(); renderPage();
         await user.click(screen.getByRole("radio", { name: /Roads & Streets/ }));
-        const search = screen.getByRole("searchbox", { name: "Search services" });
+        const search = screen.getByRole("searchbox", { name: "Search issues" });
+        expect(search).toHaveAttribute("placeholder", "Search issues in Roads & Streets");
         await user.type(search, "hole in road");
+        expect(screen.getByText("1 issue found")).toBeInTheDocument();
         expect(screen.getByRole("radio", { name: /Pothole/ })).toBeInTheDocument();
         expect(screen.queryByRole("radio", { name: /Damaged Street Sign/ })).not.toBeInTheDocument();
         await user.clear(search); await user.type(search, "no such service");
-        expect(screen.getByRole("heading", { name: "No matching services found." })).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "No matching issues found." })).toBeInTheDocument();
+        expect(screen.getByText("Try a different word or choose another category.")).toBeInTheDocument();
+    });
+
+    test("mobile Category changes focus and reveal the Issue section with reduced-motion respected", async () => {
+        const user = userEvent.setup();
+        const originalWidth = window.innerWidth;
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+        window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+        const scrollIntoView = vi.fn();
+        Element.prototype.scrollIntoView = scrollIntoView;
+        renderPage();
+        await user.click(screen.getByRole("radio", { name: /Trees & Landscaping/ }));
+        const heading = await screen.findByRole("heading", { name: "Choose an Issue" });
+        await vi.waitFor(() => expect(heading).toHaveFocus());
+        expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
+        expect(screen.getByRole("radio", { name: /Fallen Tree or Branch/ }).closest("label").querySelector(".bi-tree")).toBeInTheDocument();
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
     });
 
     test("renders configured questions and validates required visible questions", async () => {
@@ -98,6 +123,7 @@ describe("ReportIssuePage configuration-driven intake", () => {
         const user = userEvent.setup(); renderPage(); await reachPotholeDetails(user); await completeAnonymousDetails(user, "yes");
         await user.click(screen.getByRole("button", { name: "Review request" }));
         expect(screen.getByRole("heading", { name: "Review Your Request" })).toBeInTheDocument();
+        expect(screen.getByText("Selected Issue")).toBeInTheDocument();
         expect(screen.getByText("Large pothole near the intersection.")).toBeInTheDocument();
         expect(screen.getByText("Reporting anonymously")).toBeInTheDocument();
         await user.click(screen.getByRole("button", { name: "Back / Edit" }));

@@ -1,34 +1,36 @@
 import { Link } from "react-router-dom";
+import { getRecentIssues } from "../../../../assets/js/utils/statistics.js";
+import { getIssueIcon } from "../issues/issueIconPresentation.js";
+import { formatIssueDate, getStatusClassName } from "../issues/issuePresentation.js";
 
-const activities = [
-    { icon: "bi-tree", tone: "tree", title: "Tree Branch Overhanging Sidewalk", location: "Woodley Gardens, Rockville, MD", date: "2025-05-18", displayDate: "May 18, 2025", status: "In Progress", statusTone: "progress" },
-    { icon: "bi-lamp", tone: "light", title: "Street Light Out", location: "N. Washington St, Rockville, MD", date: "2025-05-17", displayDate: "May 17, 2025", status: "Resolved", statusTone: "resolved" },
-    { icon: "bi-trash3", tone: "trash", title: "Overflowing Trash Bin", location: "Town Center Park, Rockville, MD", date: "2025-05-16", displayDate: "May 16, 2025", status: "Submitted", statusTone: "submitted" }
-];
+const RECENT_LIMIT = 3;
 
-export default function RecentActivity() {
+export default function RecentActivity({ issues }) {
+    const recentIssues = getRecentIssues(issues, RECENT_LIMIT);
     return (
         <section className="home-recent-activity" aria-labelledby="recent-heading">
             <div className="home-recent-header">
-                <h2 id="recent-heading"><i className="bi bi-calendar3" aria-hidden="true"></i>Recent Activity</h2>
+                <h2 id="recent-heading"><i className="bi bi-clock-history" aria-hidden="true"></i>Recent Issues</h2>
                 <Link to="/issues">View All Issues<i className="bi bi-chevron-right" aria-hidden="true"></i></Link>
             </div>
-            <div className="home-activity-list">
-                {activities.map((activity) => (
-                    <Link className="home-activity-row" to="/issues" key={activity.title}>
-                        <div className={`home-activity-icon home-activity-${activity.tone}`} aria-hidden="true">
-                            <i className={`bi ${activity.icon}`}></i>
+            {recentIssues.length ? <div className="home-activity-list">
+                {recentIssues.map((issue, index) => {
+                    const displayDate = formatIssueDate(issue.dateReported) || "Date unavailable";
+                    const target = issue.id ? `/issues/${encodeURIComponent(String(issue.id))}/edit` : "/issues";
+                    return <Link className="home-activity-row" to={target} key={issue.id || `recent-issue-${index}`}>
+                        <div className="home-activity-icon" aria-hidden="true">
+                            <i className={`bi ${getIssueIcon(issue)}`}></i>
                         </div>
                         <div className="home-activity-details">
-                            <strong>{activity.title}</strong>
-                            <span>{activity.location}</span>
+                            <strong>{issue.title || "Untitled Issue"}</strong>
+                            <span>{issue.location || "Location unavailable"}</span>
                         </div>
-                        <time dateTime={activity.date}>{activity.displayDate}</time>
-                        <span className={`home-status home-status-${activity.statusTone}`}>{activity.status}</span>
+                        <time dateTime={issue.dateReported || undefined}>{displayDate}</time>
+                        <span className={`badge ${getStatusClassName(issue.status)}`}>{issue.status || "Open"}</span>
                         <i className="bi bi-chevron-right home-row-arrow" aria-hidden="true"></i>
-                    </Link>
-                ))}
-            </div>
+                    </Link>;
+                })}
+            </div> : <div className="home-recent-empty" role="status"><span className="home-recent-empty-icon" aria-hidden="true"><i className="bi bi-inbox" /></span><div><h3>No issues have been reported yet.</h3><p>When concerns are reported, the newest issues will appear here.</p></div><Link to="/report">Report a Concern<i className="bi bi-arrow-right" aria-hidden="true" /></Link></div>}
         </section>
     );
 }
