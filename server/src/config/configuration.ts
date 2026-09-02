@@ -24,6 +24,7 @@ export interface AppConfiguration {
     serviceName: string;
     otlpEndpoint?: string;
   };
+  catalog: { developmentOrganizationId: string };
 }
 
 export function configuration(): AppConfiguration {
@@ -58,6 +59,11 @@ export function configuration(): AppConfiguration {
     telemetry: {
       serviceName: process.env.OTEL_SERVICE_NAME ?? 'cityvue-api',
       ...(otlpEndpoint ? { otlpEndpoint } : {}),
+    },
+    catalog: {
+      developmentOrganizationId:
+        process.env.DEVELOPMENT_ORGANIZATION_ID ??
+        '10000000-0000-4000-8000-000000000001',
     },
   };
 }

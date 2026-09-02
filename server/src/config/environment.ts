@@ -18,6 +18,7 @@ export interface EnvironmentVariables {
   RATE_LIMIT_TTL_MS: number;
   RATE_LIMIT_MAX: number;
   OTEL_SERVICE_NAME: string;
+  DEVELOPMENT_ORGANIZATION_ID: string;
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
 }
 
@@ -71,6 +72,9 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
   RATE_LIMIT_TTL_MS: Joi.number().integer().min(1000).default(60000),
   RATE_LIMIT_MAX: Joi.number().integer().min(1).default(120),
   OTEL_SERVICE_NAME: Joi.string().trim().min(1).default('cityvue-api'),
+  DEVELOPMENT_ORGANIZATION_ID: Joi.string()
+    .guid({ version: ['uuidv4'] })
+    .default('10000000-0000-4000-8000-000000000001'),
   OTEL_EXPORTER_OTLP_ENDPOINT: Joi.string().uri().optional(),
 }).unknown(true);
 

@@ -32,7 +32,9 @@ export function configureApplication(app: INestApplication): void {
 
   const openApiConfig = new DocumentBuilder()
     .setTitle('CityVUE API')
-    .setDescription('CityVUE platform health and readiness API')
+    .setDescription(
+      'CityVUE platform health, readiness, and resident service catalog API',
+    )
     .setVersion('1')
     .build();
   const document = SwaggerModule.createDocument(app, openApiConfig);
