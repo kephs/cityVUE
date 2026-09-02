@@ -1,8 +1,8 @@
 # F009 — Phase A Backend Platform Foundation
 
-**Status:** Implemented and infrastructure-validated locally; not deployed  
-**Scope:** Backend platform foundation only  
-**Canonical development name:** CityVUE  
+**Status:** Implemented and infrastructure-validated locally; not deployed
+**Scope:** Backend platform foundation only
+**Canonical development name:** CityVUE
 **Architecture authority:** F008 and its approved pre-Phase-A addenda
 
 ## Outcome

@@ -32,6 +32,7 @@ The React migration remains a controlled parity migration:
 5. Privileged operations, authorization, notification delivery, integration processing, and credentials belong behind a server-side boundary.
 6. Significant request changes should be auditable rather than silently overwritten.
 7. Public/requester-visible information and internal staff information require an explicit visibility boundary.
+8. Canonical entities belong to an `Organization`; tenant isolation and Organization-scoped authorization are server-side invariants even when initial municipalities use separate deployments.
 
 ## Conceptual Domain Direction
 
@@ -54,6 +55,7 @@ ServiceRequest
 
 | Concept | Responsibility |
 | --- | --- |
+| `Organization` | Canonical municipal/government customer and ownership boundary for domain data, staff/authorization, configuration, catalog, GIS, integrations, notifications, and storage context; “tenant” describes technical isolation. |
 | `ServiceRequest` | CityVUE-owned representation of a citizen issue or service need, including request number, service/category, location, requester details when appropriate, priority, status, responsible department, and lifecycle timestamps. |
 | `Service` | Catalog definition for a requestable service, intake requirements, ownership, routing metadata, notification rules, and destination metadata. |
 | `Category` | Citizen- and staff-usable classification that may organize services and support dependent selection. |
@@ -74,7 +76,7 @@ ServiceRequest
 | `ExternalSystemReference` | Link between a CityVUE entity and an external system record, including system, external identifier/type, synchronization context, and timestamps. |
 | `IntegrationStatus` | CityVUE-owned state describing submission/synchronization progress and failures independently of the external record's business status. |
 
-Final identifiers, fields, cardinalities, retention rules, authoritative ownership, and storage technology remain TBD and require approved design/ADRs.
+Final identifiers, fields, cardinalities, retention rules, authoritative ownership, and storage technology remain TBD and require approved design/ADRs. Every canonical ServiceRequest belongs to exactly one Organization independently of Department/Division/Category/Assignment, and owned relationships may not cross Organization boundaries. Canonical domain implementation must introduce Organization before or alongside Organization-owned entities.
 
 ## Assignment and Routing
 
@@ -161,6 +163,9 @@ Channels beyond email, including SMS or push, require separate approval and chan
 
 - Support approved address autocomplete and validation sources.
 - Represent intersections, parks/facilities, non-address locations, coordinates, map/drop-pin selection, and GIS asset links.
+- Determine geographic eligibility per ServiceDefinition through an API-authoritative configured policy rather than one universal municipal-boundary rule; approved policies may use City boundaries, ServiceAreas, City-owned/maintained property or roadway, facilities/parks, GIS assets, utility areas, or no geographic restriction.
+- Resolve Location to canonical coordinates or appropriate facility/parcel/asset references and distinguish `Eligible`, `Ineligible`, and `UnableToDetermine`; Service-specific policy governs correction, blocking, staff review, or manual triage.
+- Use a vendor-neutral GIS/location service boundary over authoritative City-approved sources, with resilience, observability, privacy, audit, and permission-controlled override requirements.
 - Provide accessible non-map alternatives and avoid making a vendor GIS schema canonical.
 
 ### Attachments

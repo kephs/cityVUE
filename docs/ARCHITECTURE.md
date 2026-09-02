@@ -58,7 +58,7 @@ The UI must not contain privileged enterprise credentials or vendor-specific int
 
 Catalog presentation metadata may include application-approved logical icon keys for Categories and Services. The presentation layer maps those keys to the installed approved icon library and applies a safe Service → Category → generic fallback; arbitrary markup, script, CSS class input, and remote image URLs are not catalog data.
 
-### CityVUE Application/API Layer — Proposed
+### CityVUE Application/API Layer — Phase A Foundation Implemented
 
 Potential responsibilities:
 
@@ -78,7 +78,7 @@ Potential responsibilities:
 - Notification-rule evaluation and delivery orchestration
 - Request-number generation and idempotency controls
 
-Technology and hosting are TBD.
+F008 selects a TypeScript/NestJS modular REST API with an OpenAPI contract, PostgreSQL persistence, and Azure Container Apps for the future API and worker runtime. Phase A implements the isolated `server/` platform foundation: strict configuration, Kysely/`pg` connectivity and migrations, `/api/v1` health/readiness, OpenAPI, structured request logging/correlation, sanitized errors, security headers, explicit CORS, baseline rate limiting, tests, and container/local-PostgreSQL definitions. It creates no business modules, endpoints, tables, authentication, cloud resources, or frontend connection. Azure Database for PostgreSQL Flexible Server, Blob Storage, Key Vault, managed identity, and Application Insights/Azure Monitor remain future deployment/integration direction. See `docs/features/F008-production-backend-persistence-security-architecture.md` and `docs/features/F009-phase-a-backend-platform-foundation.md`.
 
 ### Integration Router — Proposed
 
@@ -146,13 +146,48 @@ Integration Router
 
 This architecture can support phased migrations where departments move at different times.
 
+## Organization / Tenant Architecture — Approved Direction
+
+`Organization` is the canonical business/domain term for a municipal or government customer. “Tenant” describes the corresponding technical isolation boundary where useful. CityVUE is intended to be a reusable Organization-aware municipal platform; canonical names and behavior must not hard-code one municipality or require source-code forks such as municipality-specific service classes or `if city === ...` logic.
+
+The preferred initial enterprise deployment model is one isolated tenant/environment per municipality. Each Organization may receive separate application runtime, database, object storage, Microsoft Entra configuration, secrets, integrations, telemetry, backup/restore, disaster recovery, and maintenance windows. This reduces cross-Organization exposure risk and simplifies security, procurement, authorization, operations, and troubleshooting. A future shared CityVUE SaaS platform is optional and must not be implemented until tenant isolation, operations, billing, procurement, security, and customer-data requirements justify it.
+
+Even in isolated deployments, the canonical domain remains Organization-aware. Conceptually, an Organization has a stable ID, name, short name, slug, active/inactive state, default business timezone, branding/configuration references, and timestamps; possible later metadata includes primary domain, support information, locale, default map extent, and service-area references. Exact schema remains TBD. Organization owns Departments, optional Divisions, Categories, ServiceDefinitions, ServiceRequests, StaffIdentity records, Groups, Roles/Permissions, ServiceAreas, integration configuration, notifications/workflow configuration, and other tenant data. No owned relationship may cross Organization boundaries.
+
+```text
+Organization
+   +-- Department
+         +-- Category
+         +-- Division [optional, 0..many]
+               +-- Category
+                     +-- ServiceDefinition / Issue
+   +-- ServiceRequest[]
+   +-- Staff / Groups / Roles / Permissions
+   +-- ServiceAreas / GIS configuration
+   +-- Integration / Notification configuration
+```
+
+Every canonical ServiceRequest belongs to exactly one Organization independently of Department, Division, Category, or Assignment. Department transfer never changes Organization ownership. Staff identity, memberships, RBAC scopes, API access, catalog configuration, GIS/service areas, integrations/mapping profiles, external references, notification rules/templates, attachments/storage, exports, retention, archival, deletion, and migrations all retain Organization context. `ExternalSystemReference` is meaningful with its Organization and integration context; vendor credentials or mappings must never leak between Organizations.
+
+The API enforces Organization scope server-side as an authorization invariant. Authentication alone never permits cross-Organization access, and changing IDs, route/query parameters, bodies, UUIDs, or client state must not bypass scope. Future repositories must make accidental unscoped queries difficult through explicit `organizationId`, scoped repository/application context, or an equivalent reviewed pattern. PostgreSQL Row-Level Security may provide defense in depth only if later justified; it is not selected automatically here. Some names/keys may be unique only within an Organization, while exact indexes remain TBD.
+
+Each Organization may reference its own approved `IdentityProviderConfiguration`, including Entra tenant and separate SPA/API application identifiers and identity settings. Credentials remain in approved secret management such as Key Vault, not ordinary Organization rows. Cross-tenant administration is not designed. Phase B must establish trusted Organization identity context, Entra-tenant association, staff membership, and server-side Organization authorization.
+
+Organization configuration supplies the authoritative business timezone used for `SR-YYYYMM-NNNNNN`, never a browser timezone. The reference remains immutable, server-generated, globally unique, and free of Organization/Department prefixes. If a future shared database serves several Organizations, concurrency-safe allocation and uniqueness enforcement still operate across all Organizations.
+
+Organization-owned presentation configuration may later supply name, logo, colors, portal title, support text, and footer content while **CityVUE** remains the canonical product name. GIS providers/layers, service areas, storage partitions, EAM adapters, notification senders/templates, and telemetry context are Organization-scoped behind existing abstractions. Operational telemetry may include a safe non-sensitive Organization identifier where appropriate; business Activity/audit remains separate.
+
+The core domain remains infrastructure-portable. F008's preferred initial enterprise implementation uses Azure managed services, but Organization-aware application/domain code should remain deployable through containers on a customer-managed VPS, another approved cloud, or other suitable host. Azure-specific identity, secret, storage, and telemetry integrations stay at infrastructure boundaries. Commercial licensing, intellectual-property ownership, contracting, procurement, and customer/data ownership are legal and organizational matters outside this software architecture and require separate review.
+
 ## Canonical Service Request Model — Proposed
 
 Potential fields:
 
 ```text
 ServiceRequest
-- cityvueRequestId
+- id (immutable internal UUID or equivalent)
+- organizationId
+- referenceNumber (immutable SR-YYYYMM-NNNNNN)
 - externalReferences[]
 - serviceId
 - categoryId
@@ -169,6 +204,12 @@ ServiceRequest
 ```
 
 The final schema is TBD.
+
+The internal ID is the technical relationship/primary identifier and is never replaced by or derived from the human reference number. The CityVUE API generates `referenceNumber` in `SR-YYYYMM-NNNNNN` format, where `YYYYMM` is the server-authoritative calendar month in the owning Organization's configured business timezone and `NNNNNN` is a zero-padded six-digit sequence. The sequence restarts at `000001` at each month boundary in that timezone, is global across CityVUE rather than per Organization, Department, or Division, and provides a namespace of 999,999 references per calendar month; this namespace does not limit total database storage. The complete reference remains globally unique even when sequence components repeat in different months.
+
+Reference allocation is atomic and concurrency-safe within the ServiceRequest creation transaction so simultaneous requests never receive the same reference. Request creation, monthly-sequence allocation, reference construction, Answers, and initial Activity participate in the appropriate transactional boundary. The browser must never generate the authoritative reference or determine its period from the resident's clock, and a future PostgreSQL implementation must not use `MAX(referenceNumber) + 1` or equivalent race-prone logic. The exact allocation mechanism and approved business timezone will be established during canonical ServiceRequest persistence, not Phase A.
+
+Department and Division are structured ownership relationships, not encoded reference prefixes, because ownership can change throughout a request's lifecycle. Once assigned, a reference remains unchanged through Department or Division transfer, reassignment, Category changes, status transitions, reopening, EAM integration, and archival. Full-reference search and display are future requirements for details, appropriate lists, resident confirmations, notifications, exports, integrations, and Activity/audit context. External EAM work-order numbers remain separate `ExternalSystemReference` values.
 
 Canonical requests must separate the resident's general description from structured dynamic answers:
 
@@ -218,13 +259,24 @@ Service
 - requiredFields
 - dynamicQuestions
 - locationRequirements
+- locationEligibilityPolicy
 - destinationSystem
 - mappingProfile
 - notificationRules
 - trackingCapabilities
 ```
 
-The catalog hierarchy is `Department → Category → Service`. Department is primarily an internal ownership and routing concept; resident intake normally begins with resident-friendly Categories and Services. A Service may supply versioned dynamic questions, conditional visibility, location requirements, attachment policy, anonymous/contact policy, safety guidance, notification references, and routing metadata.
+Within one Organization, the catalog hierarchy supports both `Department → Category → Service` and `Department → Division → Category → Service`. A Department may have zero, one, or multiple Divisions; Division is optional, and each Division belongs to exactly one Department in the same Organization. Every Category belongs to one Organization and Department ownership hierarchy and may either be owned directly by that Department or by one of that Department's Divisions. Cross-Organization ownership and cross-Department Division references are invalid, and the Department relationship must not be duplicated inconsistently.
+
+Department is primarily an internal ownership and routing concept; resident intake normally begins with resident-friendly Categories and Services. A Service may supply versioned dynamic questions, conditional visibility, location requirements, attachment policy, anonymous/contact policy, safety guidance, notification references, and routing metadata. Departments, Divisions, and Category ownership must support audited organizational change, including rename, activation/deactivation, and Category movement, while historical requests remain understandable through archival/version/snapshot strategy rather than unsafe hard deletion.
+
+Location requirement and geographic eligibility are separate per-ServiceDefinition policies. A Service may require, optionally accept, or omit a Location while independently selecting an approved `LocationEligibilityPolicy`, such as City boundary, ServiceArea, City-maintained roadway, City-owned property/facility/park, GIS asset, utility service area, no geographic restriction, or another configured rule; the exact schema remains TBD. CityVUE must not reduce all services to one inside-city/accepted versus outside-city/rejected rule because operational boundaries, ownership, and maintenance responsibility may differ by Service.
+
+React may resolve input and provide immediate feedback, but the CityVUE API revalidates eligibility before authoritative ServiceRequest creation through a vendor-neutral GIS/location service boundary backed by City-approved boundary, service-area, property/facility, and asset sources. Production City-boundary checks use an authoritative polygon rather than hand-entered ranges, approximate bounding boxes, or browser-only definitions. Evaluation distinguishes `Eligible`, `Ineligible`, and `UnableToDetermine`; each ServiceDefinition governs whether an indeterminate result requires correction, permits staff review, or routes to manual triage. Where eligibility is required, an API-confirmed ineligible request is normally blocked with plain-language guidance rather than accepted and silently discarded, subject to future approved exception policy.
+
+Canonical Location may retain the entered/display and normalized address, coordinates, location type, appropriate facility/park/parcel/GIS-asset references, eligibility policy/reference, result, and validation timestamp without adopting a GIS vendor schema. Authorized staff resolution or override requires permission, actor, timestamp, reason, and Activity/audit history. Eligibility context must be sufficient to explain acceptance, rejection, review, or override without requiring a full polygon snapshot. Location precision, visibility, retention, export, logging, and attachment-metadata implications require City privacy/security review.
+
+The GIS/location boundary must handle timeouts, transient failures, retries, degraded/manual-review paths, and observability without assuming a GIS provider is always available. Geographic eligibility is distinct from organizational routing: an eligible Location may inform an approved routing rule, but Department/Division/Group must not be inferred solely from a boundary. EAM adapters receive only supported canonical location or asset references through vendor-specific mappings. Mobile GPS, map pins, photo geolocation, or nearby-asset UX remain inputs—not authoritative proof of eligibility.
 
 The future CityVUE API/application layer owns authoritative catalog persistence, Admin authorization, validation, versioning, publication, routing, audit, and request creation. React renders published configuration and collects resident answers; it must not become authoritative for Admin rules or routing. Published definitions referenced by historical requests should remain resolvable and should normally be archived rather than hard-deleted.
 
@@ -250,9 +302,7 @@ WORK_ORDER_CREATION
 
 ### Staff
 
-Microsoft Entra ID is a candidate. Potential requirements include City staff sign-in, roles/permissions, protected functions, secure token handling, API authentication, and server-side authorization.
-
-Exact configuration is TBD.
+F008 selects single-tenant Microsoft Entra ID for future workforce authentication using separate Web SPA and CityVUE API registrations. The SPA uses MSAL authorization code + PKCE with no client secret; the API validates access tokens and enforces authorization. Entra may provide coarse admission/app-role or group signals, while CityVUE persists granular permissions and organizational scopes. Exact tenant/client identifiers, scopes, redirects, role grants, and Conditional Access policy remain subject to City Cybersecurity/Microsoft Admin approval.
 
 ### Citizens
 
@@ -272,7 +322,13 @@ Protected operation
 
 Client-side guards are not the security boundary.
 
-Authenticated staff Dashboard scopes are API-authorized views over canonical `ServiceRequest` records. The default future staff view is My Assigned Issues, with Department, Category, group/queue, and All Issues views available only where the signed-in user's roles, memberships, and permissions allow them. Scope selection in React never expands RBAC, and every Dashboard metric must be calculated from the same authorized active scope. Exact API routes and multi-Department/group-work UX remain TBD.
+Authenticated staff Dashboard scopes are API-authorized views over canonical `ServiceRequest` records. The default future staff view is My Assigned Issues, with Department, optional selected Division, Category, group/queue, and All Issues views available only where the signed-in user's roles, memberships, and permissions allow them. Staff may be associated with multiple Departments and/or Divisions; Division access is explicit and is not inferred solely from Category selection. Scope selection in React never expands RBAC, and every Dashboard metric must be calculated from the same authorized active scope. Exact API routes and multi-Department/Division/group-work UX remain TBD.
+
+## ServiceRequest Details — Approved Future Direction
+
+The future Issue List should label the current visible `Title` concept as **Issue** without renaming legacy `Issue.title`. Each Issue name becomes the primary link to a read-only `/issues/:issueId` details route; selecting it must not enter edit mode automatically. The details experience presents only applicable lifecycle data, potentially including reference number, Issue, Department/Division, Category, status, priority, date reported, reporter/contact, location, resident description, structured Answers, attachments, assignment, Activity, watchers, external references, and integration status.
+
+Authorized Edit and Delete actions should move to the details experience. The list may retain a compact More menu where implementation review demonstrates a need, but should avoid large Edit/Delete controls in every row. View, edit, and delete permissions are independent and enforced by the CityVUE API; rendering or hiding React controls is not authorization.
 
 Canonical status changes are server-authoritative domain/application actions rather than arbitrary field overwrites. Permitted transitions, reasons, required information, and permissions remain configurable future workflow decisions; each completed transition appends Activity/audit history and may invoke centralized Notification orchestration. External EAM statuses remain vendor-neutral mappings handled through adapters and mapping profiles, with source-of-truth and conflict policies still to be designed.
 
@@ -324,7 +380,7 @@ The goal is to change integration configuration/adapters rather than rebuild the
 
 ## Hosting
 
-Firebase Hosting has been used for the MVP. Future front-end, API, integration, persistence, and background-processing hosting are TBD.
+Firebase Hosting remains the current React static-frontend host and Parcel rollback target. F008 recommends Azure Container Apps for the future API and worker, Azure Database for PostgreSQL Flexible Server, private Azure Blob Storage, Key Vault through managed identity, and Application Insights/Azure Monitor. Firebase Hosting does not become the API or persistence platform by implication.
 
 Evaluate future hosting against City standards, security, identity, networking, supportability, cost/licensing, monitoring, backup/recovery, procurement, and disaster recovery.
 
@@ -357,8 +413,8 @@ Formal City security review should precede production enterprise integrations.
 
 ## Architecture Decisions Still Required
 
-1. Production API technology and hosting
-2. Persistence/database and system-of-record boundaries
+1. Detailed production API deployment topology and City operational approval for the F008-selected stack
+2. System-of-record and field-ownership boundaries within the selected PostgreSQL persistence direction
 3. Citizen identity/tracking model
 4. Staff Entra authentication/authorization
 5. Canonical request schema

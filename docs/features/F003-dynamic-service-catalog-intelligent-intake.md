@@ -60,7 +60,7 @@ The detailed UI and step structure remain subject to accessibility testing and p
 
 ## Category Experience
 
-Resident intake should preload active Categories with resident-friendly names, optional descriptions, and configurable display order. Category search may be introduced as the catalog grows. Internal departmental jargon should be avoided where it does not help residents. Administrators must eventually be able to manage Category metadata and its hidden Department relationship.
+Resident intake preloads active Categories with resident-friendly names, optional descriptions, and configurable display order. The React/Vite prototype now provides immediate Category search across active catalog names and resident-facing descriptions through the catalog abstraction; the helper is compatible with future configured aliases and keywords without hard-coded Category terms. Internal departmental jargon should be avoided where it does not help residents. Administrators must eventually be able to manage Category metadata and its hidden Department relationship.
 
 ## Service Discovery and Live Search
 
@@ -82,6 +82,7 @@ A future `ServiceDefinition` may include:
 
 ```text
 ServiceDefinition
+- organizationId
 - serviceId
 - name
 - citizenDisplayName
@@ -93,6 +94,7 @@ ServiceDefinition
 - questions[]
 - anonymousPolicy
 - locationRequirements
+- locationEligibilityPolicy
 - attachmentRules
 - defaultPriority
 - defaultGroup
@@ -110,6 +112,8 @@ ServiceDefinition
 ```
 
 These fields are conceptual. Identifiers, cardinalities, constraints, ownership, and persistence format require later design approval.
+
+The Service Catalog is Organization-owned. Each Organization may configure its own Departments, optional Divisions, Categories, ServiceDefinitions, questions, routes, icons, geographic eligibility, workflow/notification references, destinations, and mappings without municipality-specific source forks. Catalog records and published versions may not cross Organization boundaries; exact keys and Organization-scoped uniqueness constraints remain future schema decisions. See F008's Organization/Tenant Architecture section.
 
 ## Dynamic Questions
 
@@ -148,6 +152,10 @@ The eventual rule format must be deterministic, testable, cycle-safe, versioned,
 Each Service should declare whether location is required, optional, or not applicable and which modes it supports. Candidate modes are street address, intersection, park, City facility, trail, parcel, map pin, current/GPS location, GIS asset, and free-text description.
 
 Contextual location questions may include nearest intersection, landmark, direction of travel, side of street, lane, asset number, facility name, and additional description. Residents should not be forced through irrelevant fields. Address validation, GIS resolution, geolocation permissions, and asset lookup remain later capabilities with accessible non-map alternatives.
+
+Location requirement is distinct from geographic eligibility. For example, a conceptual `LocationPolicy: Required` controls whether and how a Location is collected, while `LocationEligibilityPolicy: CityBoundary` controls the authoritative geographic rule applied to it. Other future configured policies may use a ServiceArea, City-maintained roadway, City-owned property/facility/park, GIS asset ownership or maintenance responsibility, utility service area, no geographic restriction, or another approved rule. These examples are capabilities, not official mappings for any City Service.
+
+React may provide immediate location feedback, but the API must resolve and revalidate eligibility against City-approved sources before authoritative creation; browser logic and device GPS are not proof of eligibility. The result should distinguish `Eligible`, `Ineligible`, and `UnableToDetermine`. Each published ServiceDefinition may require correction, block creation, or allow staff review/manual triage according to approved policy. Authorized override or resolution requires permission and Activity/audit history. Exact schemas, GIS providers, resident messaging, and resilience behavior remain later Location/GIS design work.
 
 ## Attachment Policy
 
@@ -308,26 +316,28 @@ Components should depend on the abstraction so the fixture can later be replaced
 ## Conceptual Relationships
 
 ```text
-Department
-   +-- Category[]
-           +-- Service[]
-                   +-- Question[]
-                   +-- RoutingRule[]
-                   +-- NotificationRule[]
-                   +-- AttachmentPolicy
-                   +-- LocationRequirements
-                   +-- Version[]
-
-ServiceRequest
-   +-- selected ServiceDefinition/version
-   +-- Answer[]
-   +-- Location
-   +-- Attachment[]
-   +-- Requester/Contact
-   +-- Assignment(s)
-   +-- Activity[]
-   +-- Watcher[]
-   +-- ExternalSystemReference[]
+Organization
+   +-- Department[]
+   |     +-- Division[] [optional]
+   |     +-- Category[] (direct or through Division)
+   |           +-- Service[]
+   |                 +-- Question[]
+   |                 +-- RoutingRule[]
+   |                 +-- NotificationRule[]
+   |                 +-- AttachmentPolicy
+   |                 +-- LocationRequirements
+   |                 +-- LocationEligibilityPolicy
+   |                 +-- Version[]
+   +-- ServiceRequest[]
+         +-- selected ServiceDefinition/version
+         +-- Answer[]
+         +-- Location
+         +-- Attachment[]
+         +-- Requester/Contact
+         +-- Assignment(s)
+         +-- Activity[]
+         +-- Watcher[]
+         +-- ExternalSystemReference[]
 ```
 
 These relationships are conceptual and do not establish production classes or persistence schemas.
@@ -366,9 +376,10 @@ F003 does not implement React behavior, a catalog fixture, an Admin portal, pers
 5. Dynamic question and conditional-rule contract with cycle and dependency validation.
 6. Server-side validation contract and error representation.
 7. Location modes, GIS sources, permissions, accuracy, and accessible fallbacks.
-8. Attachment storage, malware scanning, file policy, privacy, retention, and authorization.
-9. Anonymous eligibility, contact requirements, consent, verification, and notification preferences.
-10. Safety-content ownership, approval, review cadence, and emergency escalation language.
-11. Duplicate-detection thresholds, privacy, override, and false-match handling.
-12. Routing precedence, fallbacks, escalation, destination capability checks, and audit behavior.
-13. Stage 5.1 fixture scope and mapping limits for the temporary `Issue` model.
+8. Geographic eligibility policy schema, authoritative layers, three-state results, ineligible/indeterminate behavior, staff override, resilience, privacy, and audit requirements.
+9. Attachment storage, malware scanning, file policy, privacy, retention, and authorization.
+10. Anonymous eligibility, contact requirements, consent, verification, and notification preferences.
+11. Safety-content ownership, approval, review cadence, and emergency escalation language.
+12. Duplicate-detection thresholds, privacy, override, and false-match handling.
+13. Routing precedence, fallbacks, escalation, destination capability checks, and audit behavior.
+14. Stage 5.1 fixture scope and mapping limits for the temporary `Issue` model.
