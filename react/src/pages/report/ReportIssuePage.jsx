@@ -1,144 +1,56 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import IssueService from "../../../../assets/services/IssueService.js";
-import { getCategoryById, getServiceById, getVisibleQuestions, searchCategories, searchServices } from "../../catalog/catalogService.js";
-import { mapIntakeToLegacyIssue } from "../../catalog/intakeCompatibility.js";
+import { getVisibleQuestions, searchCategories, searchServices } from "../../catalog/catalogService.js";
+import { createResidentIntakeRepositories } from "../../residentIntake/residentIntakeRepositories.js";
 import { resolveIssueIcon } from "../issues/issueIconPresentation.js";
 import IssueForm from "./IssueForm.jsx";
 import "./report.css";
 
 const initialValues = { description: "", location: "", reportingMode: "anonymous", reporterName: "" };
-const stepLabels = { service: "Choose an issue", details: "Request details", review: "Review your request" };
-const stepOrder = ["service", "details", "review"];
+const labels = { service: "Issue", details: "Details", review: "Review" };
 
-function StepProgress({ currentStep }) {
-    const currentIndex = stepOrder.indexOf(currentStep);
-    return (
-        <nav className="intake-progress" aria-label="Request progress">
-            <p className="visually-hidden" aria-live="polite">Step {currentIndex + 1} of 3: {stepLabels[currentStep]}</p>
-            <ol>
-                {stepOrder.map((stepName, index) => {
-                    const state = index < currentIndex ? "completed" : index === currentIndex ? "current" : "upcoming";
-                    return <li key={stepName} className={state} aria-current={state === "current" ? "step" : undefined}><span className="step-marker" aria-hidden="true">{state === "completed" ? <i className="bi bi-check-lg" /> : index + 1}</span><span>{stepName === "service" ? "Issue" : stepName === "details" ? "Details" : "Review"}</span><small>{state === "completed" ? "Completed" : state === "current" ? "Current" : "Upcoming"}</small></li>;
-                })}
-            </ol>
-        </nav>
-    );
+function Progress({ step }) {
+    const steps = Object.keys(labels); const current = steps.indexOf(step);
+    return <nav className="intake-progress" aria-label="Request progress"><p className="visually-hidden" aria-live="polite">Step {current + 1} of 3</p><ol>{steps.map((name, index) => <li key={name} className={index < current ? "completed" : index === current ? "current" : "upcoming"} aria-current={index === current ? "step" : undefined}><span className="step-marker" aria-hidden="true">{index < current ? <i className="bi bi-check-lg" /> : index + 1}</span><span>{labels[name]}</span><small>{index < current ? "Completed" : index === current ? "Current" : "Upcoming"}</small></li>)}</ol></nav>;
 }
 
-function issueCountText(count) {
-    return `${count} ${count === 1 ? "issue" : "issues"} found`;
-}
-
-function categoryCountText(count) {
-    return `${count} ${count === 1 ? "category" : "categories"} found`;
-}
-
-export default function ReportIssuePage({ saveIssue = (issue) => IssueService.saveIssue(issue), createTimestamp = () => new Date().toISOString(), onSuccess }) {
+export default function ReportIssuePage({ saveIssue, createTimestamp, onSuccess, repositories }) {
     const navigate = useNavigate();
+    const data = useMemo(() => repositories || createResidentIntakeRepositories({ saveIssue, createTimestamp }), [repositories, saveIssue, createTimestamp]);
     const [step, setStep] = useState("service");
-    const [categoryId, setCategoryId] = useState("");
-    const [serviceId, setServiceId] = useState("");
-    const [categorySearchQuery, setCategorySearchQuery] = useState("");
-    const [searchQuery, setSearchQuery] = useState("");
-    const [answers, setAnswers] = useState({});
-    const [values, setValues] = useState(initialValues);
-    const [errors, setErrors] = useState({});
-    const [saveError, setSaveError] = useState("");
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const submissionInProgress = useRef(false);
-    const issueSectionHeading = useRef(null);
-    const categorySearchInput = useRef(null);
-    const categories = useMemo(() => searchCategories(categorySearchQuery), [categorySearchQuery]);
-    const services = useMemo(() => searchServices(categoryId, searchQuery), [categoryId, searchQuery]);
-    const category = getCategoryById(categoryId);
-    const service = getServiceById(serviceId);
-    const visibleQuestions = getVisibleQuestions(service, answers);
+    const [categoryItems, setCategoryItems] = useState(() => data.catalog.initialCategories || []); const [serviceItems, setServiceItems] = useState([]);
+    const [categoryId, setCategoryId] = useState(""); const [serviceId, setServiceId] = useState(""); const [service, setService] = useState(null);
+    const [categoryQuery, setCategoryQuery] = useState(""); const [serviceQuery, setServiceQuery] = useState("");
+    const [answers, setAnswers] = useState({}); const [values, setValues] = useState(initialValues); const [errors, setErrors] = useState({});
+    const [catalog, setCatalog] = useState({ loading: data.mode === "api", phase: "categories", error: "" }); const [saveError, setSaveError] = useState("");
+    const [submitting, setSubmitting] = useState(false); const [result, setResult] = useState(null);
+    const sequence = useRef(0); const submittingRef = useRef(false);
+    const categories = useMemo(() => searchCategories(categoryQuery, categoryItems), [categoryQuery, categoryItems]);
+    const services = useMemo(() => searchServices(categoryId, serviceQuery, serviceItems), [categoryId, serviceQuery, serviceItems]);
+    const category = categoryItems.find((item) => item.id === categoryId); const visible = getVisibleQuestions(service, answers);
 
-    useEffect(() => {
-        if (!categoryId || window.innerWidth > 768) return;
-        const heading = issueSectionHeading.current;
-        if (!heading) return;
-        const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-        requestAnimationFrame(() => {
-            heading.focus({ preventScroll: true });
-            heading.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-        });
-    }, [categoryId]);
+    const loadCategories = async (signal) => { setCatalog({ loading: true, phase: "categories", error: "" }); try { setCategoryItems(await data.catalog.loadCategories({ signal })); setCatalog({ loading: false, phase: "categories", error: "" }); } catch (error) { if (error.code !== "cancelled") setCatalog({ loading: false, phase: "categories", error: error.message }); } };
+    useEffect(() => { if (data.mode === "legacy") return undefined; const controller = new AbortController(); loadCategories(controller.signal); return () => controller.abort(); }, [data]);
+    useEffect(() => { if (!categoryId || window.innerWidth > 768 || serviceItems.length === 0) return; const heading = document.getElementById("service-heading"); const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches; requestAnimationFrame(() => { heading?.focus({ preventScroll: true }); heading?.scrollIntoView?.({ behavior: reduce ? "auto" : "smooth", block: "start" }); }); }, [categoryId, serviceItems]);
+    const selectCategory = async (id) => { const request = ++sequence.current; setCategoryId(id); setServiceId(""); setService(null); setServiceItems([]); setAnswers({}); setCatalog({ loading: true, phase: "issues", error: "" }); try { const items = await data.catalog.loadIssues(id); if (request === sequence.current) { setServiceItems(items); setCatalog({ loading: false, phase: "issues", error: "" }); } } catch (error) { if (request === sequence.current) setCatalog({ loading: false, phase: "issues", error: error.message }); } };
+    const selectService = async (id) => { const request = ++sequence.current; setServiceId(id); setService(null); setAnswers({}); setCatalog({ loading: true, phase: "definition", error: "" }); try { const item = await data.catalog.loadDefinition(id, categoryId); if (request === sequence.current) { setService(item); setValues((old) => ({ ...old, reportingMode: item.anonymousPolicy === "not-allowed" ? "identified" : old.reportingMode })); setCatalog({ loading: false, phase: "definition", error: "" }); } } catch (error) { if (request === sequence.current) setCatalog({ loading: false, phase: "definition", error: error.message }); } };
+    const retry = () => catalog.phase === "categories" ? loadCategories() : catalog.phase === "issues" ? selectCategory(categoryId) : selectService(serviceId);
+    const move = (next) => { setStep(next); setErrors({}); setSaveError(""); requestAnimationFrame(() => document.querySelector("[data-step-heading]")?.focus()); };
+    const changeValue = (name, value) => { setValues((old) => ({ ...old, [name]: value })); setErrors((old) => ({ ...old, [name]: undefined })); setSaveError(""); };
+    const changeAnswer = (id, value) => { setAnswers((old) => { const next = { ...old, [id]: value }; const shown = new Set(getVisibleQuestions(service, next).map((q) => q.id)); for (const q of service.questions || []) if (!shown.has(q.id)) delete next[q.id]; return next; }); setErrors((old) => ({ ...old, [`question:${id}`]: undefined })); };
+    const continueService = () => { const next = {}; if (!category) next.category = "Choose a Category."; if (!service) next.service = catalog.loading ? "Wait for the issue form to finish loading." : "Choose an Issue."; if (Object.keys(next).length) setErrors(next); else move("details"); };
+    const continueDetails = () => { const next = {}; for (const q of visible) if (q.required && String(answers[q.id] ?? "").trim() === "") next[`question:${q.id}`] = "This question is required."; if (!values.description.trim()) next.description = "Describe your concern."; if (service.locationRequirement === "required" && !values.location.trim()) next.location = "Enter the issue location."; if (values.reportingMode === "identified" && !values.reporterName.trim()) next.reporterName = "Enter your name."; if (Object.keys(next).length) setErrors(next); else move("review"); };
+    const submit = async () => { if (submittingRef.current) return; submittingRef.current = true; setSubmitting(true); setSaveError(""); try { const response = await data.requests.createServiceRequest({ category, service, answers, ...values }); if (onSuccess) onSuccess(response); else if (data.mode === "legacy") navigate("/issues", { state: { notice: "Issue submitted successfully." } }); else setResult(response); } catch (error) { console.error("Unable to submit the issue:", error); setSaveError(data.mode === "legacy" ? "The issue could not be saved. Please try again." : (error.message || "The issue could not be submitted. Please try again.")); submittingRef.current = false; setSubmitting(false); } };
 
-    const moveToStep = (nextStep) => { setStep(nextStep); setErrors({}); setSaveError(""); requestAnimationFrame(() => document.querySelector("[data-step-heading]")?.focus()); };
-    const clearCategorySearch = () => { setCategorySearchQuery(""); categorySearchInput.current?.focus(); };
-    const selectCategory = (id) => { setCategoryId(id); setServiceId(""); setSearchQuery(""); setAnswers({}); setErrors({}); };
-    const selectService = (id) => {
-        const nextService = getServiceById(id);
-        setServiceId(id);
-        setAnswers({});
-        setValues((current) => ({ ...current, reportingMode: nextService?.anonymousPolicy === "not-allowed" ? "identified" : current.reportingMode }));
-        setErrors({});
-    };
-    const changeValue = (name, value) => { setValues((current) => ({ ...current, [name]: value })); setErrors((current) => ({ ...current, [name]: undefined })); setSaveError(""); };
-    const changeAnswer = (questionId, value) => {
-        setAnswers((current) => {
-            const next = { ...current, [questionId]: value };
-            const visibleIds = new Set(getVisibleQuestions(service, next).map((question) => question.id));
-            for (const question of service.questions || []) if (!visibleIds.has(question.id)) delete next[question.id];
-            return next;
-        });
-        setErrors((current) => ({ ...current, [`question:${questionId}`]: undefined }));
-    };
-    const continueFromService = () => {
-        const nextErrors = {};
-        if (!category) nextErrors.category = "Choose a Category.";
-        if (!service) nextErrors.service = "Choose an Issue.";
-        if (Object.keys(nextErrors).length) return setErrors(nextErrors);
-        moveToStep("details");
-    };
-    const continueFromDetails = () => {
-        const nextErrors = {};
-        for (const question of visibleQuestions) if (question.required && String(answers[question.id] ?? "").trim() === "") nextErrors[`question:${question.id}`] = "This question is required.";
-        if (!values.description) nextErrors.description = "Describe your concern.";
-        if (service.locationRequirement === "required" && !values.location) nextErrors.location = "Enter the issue location.";
-        if (values.reportingMode === "identified" && !values.reporterName) nextErrors.reporterName = "Enter your name.";
-        if (Object.keys(nextErrors).length) { setErrors(nextErrors); requestAnimationFrame(() => document.querySelector("[aria-invalid='true']")?.focus()); return; }
-        moveToStep("review");
-    };
-    const submitRequest = () => {
-        if (submissionInProgress.current) return;
-        submissionInProgress.current = true;
-        setIsSubmitting(true);
-        setSaveError("");
-        try {
-            saveIssue(mapIntakeToLegacyIssue({ category, service, answers, ...values, dateReported: createTimestamp() }));
-            if (onSuccess) onSuccess();
-            else navigate("/issues", { state: { notice: "Issue submitted successfully." } });
-        } catch (error) {
-            console.error("Unable to save the issue:", error);
-            setSaveError("The issue could not be saved. Please try again.");
-            submissionInProgress.current = false;
-            setIsSubmitting(false);
-        }
-    };
-
-    return (
-        <section className="report-issue-page" aria-labelledby="report-heading">
-            <div className="intake-header">
-                <header className="report-intro"><span className="report-intro-icon" aria-hidden="true"><i className="bi bi-megaphone" /></span><div><h1 id="report-heading">Report an Issue</h1><p>Find the issue that best matches your concern.</p></div></header>
-                <StepProgress currentStep={step} />
-            </div>
-            {saveError && <div className="alert alert-danger" role="alert">{saveError}</div>}
-            <div className="card border-0 report-form-card"><div className="card-body p-3 p-md-4 p-lg-5">
-                {step === "service" && <div className="step-panel">
-                    <div className="section-heading"><span className="section-symbol" aria-hidden="true"><i className="bi bi-grid" /></span><div><h2 className="h4" tabIndex="-1" data-step-heading>Choose a Category</h2><p>Select the kind of concern you want to report.</p></div></div>
-                    <div className="prototype-notice"><i className="bi bi-info-circle" aria-hidden="true" /><span>Prototype data — sample issue catalog for development.</span></div>
-                    <div className="category-search-surface"><label className="form-label fw-semibold" htmlFor="category-search">Search categories</label><div className="category-search"><i className="bi bi-search" aria-hidden="true" /><input className="form-control" id="category-search" ref={categorySearchInput} type="search" autoComplete="off" placeholder="Search categories..." value={categorySearchQuery} onChange={(event) => setCategorySearchQuery(event.target.value)} />{categorySearchQuery && <button className="btn btn-outline-secondary" type="button" aria-label="Clear category search" onClick={clearCategorySearch}>Clear</button>}</div><p className="result-count" aria-live="polite" aria-atomic="true">{categoryCountText(categories.length)}</p></div>
-                    {categories.length ? <div className="category-grid" role="radiogroup" aria-label="Category">{categories.map((item) => <label key={item.id} className={`catalog-choice category-choice accent-${item.accent}${categoryId === item.id ? " selected" : ""}`}><input type="radio" name="category" value={item.id} checked={categoryId === item.id} onChange={() => selectCategory(item.id)} /><span className="choice-icon" aria-hidden="true"><i className={`bi ${item.icon}`} /></span><span className="choice-copy"><strong>{item.name}</strong><small>{item.description}</small></span><i className={`bi ${categoryId === item.id ? "bi-check-circle-fill" : "bi-circle"} choice-state`} aria-hidden="true" /></label>)}</div> : <div className="empty-categories"><i className="bi bi-search" aria-hidden="true" /><h3>No matching categories found.</h3><p>Try a different word or clear your search.</p><button className="btn btn-outline-primary" type="button" onClick={clearCategorySearch}>Clear search</button></div>}
-                    {errors.category && <div className="text-danger mt-2" role="alert">{errors.category}</div>}
-                    {category && <section className="service-section" aria-labelledby="service-heading"><div className="section-heading compact"><span className="section-symbol" aria-hidden="true"><i className="bi bi-list-check" /></span><div><p className="issue-section-kicker">Next: {category.name}</p><h2 className="h3" id="service-heading" tabIndex="-1" ref={issueSectionHeading}>Choose an Issue</h2><p>Choose the issue that best matches your concern in <strong>{category.name}</strong>.</p></div></div><div className="issue-search-surface"><label className="form-label fw-semibold" htmlFor="service-search">Search issues</label><div className="service-search"><i className="bi bi-search" aria-hidden="true" /><input className="form-control" id="service-search" type="search" placeholder={`Search issues in ${category.name}`} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />{searchQuery && <button className="btn btn-outline-secondary" type="button" onClick={() => setSearchQuery("")}>Clear<span className="visually-hidden"> issue search</span></button>}</div><p className="result-count" aria-live="polite">{issueCountText(services.length)}</p></div>{services.length ? <div className="service-list" role="radiogroup" aria-label="Issue">{services.map((item) => <label key={item.id} className={`catalog-choice service-choice accent-${category.accent}${serviceId === item.id ? " selected" : ""}`}><input type="radio" name="service" value={item.id} checked={serviceId === item.id} onChange={() => selectService(item.id)} /><span className="choice-icon issue-choice-icon" aria-hidden="true"><i className={`bi ${resolveIssueIcon({ service: item, category })}`} /></span><span className="choice-copy"><strong>{item.name}</strong><small>{item.citizenDescription}</small></span><i className={`bi ${serviceId === item.id ? "bi-check-circle-fill" : "bi-circle"} choice-state`} aria-hidden="true" /></label>)}</div> : <div className="empty-services" role="status"><i className="bi bi-search" aria-hidden="true" /><h3>No matching issues found.</h3><p>Try a different word or choose another category.</p><button className="btn btn-outline-primary" type="button" onClick={() => setSearchQuery("")}>Clear search</button></div>}<aside className="service-guidance"><strong>Can't find the issue you're looking for?</strong><span>Try another search or choose a different category.</span></aside>{errors.service && <div className="text-danger mt-2" role="alert">{errors.service}</div>}</section>}
-                    <div className="intake-actions action-footer justify-content-end"><button className="btn btn-primary" type="button" onClick={continueFromService}>Continue <i className="bi bi-arrow-right ms-2" aria-hidden="true" /></button></div>
-                </div>}
-                {step === "details" && service && <div className="step-panel"><div className="selected-service-banner"><i className="bi bi-check-circle" aria-hidden="true" /><div><span>Selected issue</span><p className="service-path">{category?.name} <i className="bi bi-chevron-right" aria-hidden="true" /> Issue details</p><h2 className="h4" tabIndex="-1" data-step-heading>{service.name}</h2><p>{service.citizenDescription}</p></div></div><div className="details-surface"><IssueForm service={service} visibleQuestions={visibleQuestions} values={values} answers={answers} errors={errors} onValueChange={changeValue} onAnswerChange={changeAnswer} onContinue={continueFromDetails} onBack={() => moveToStep("service")} /></div></div>}
-                {step === "review" && service && category && <div className="step-panel"><div className="review-heading"><span className="review-icon" aria-hidden="true"><i className="bi bi-clipboard-check" /></span><div><h2 className="h4" tabIndex="-1" data-step-heading>Review Your Request</h2><p>Please review your request before submitting.</p></div></div><dl className="review-list"><div className="review-pair"><dt>Selected Issue</dt><dd><strong>{service.name}</strong><span>{category.name}</span></dd></div><div className="review-pair"><dt>Location</dt><dd>{values.location}</dd></div><div className="review-pair"><dt>Reporting Information</dt><dd>{values.reportingMode === "anonymous" ? "Reporting anonymously" : values.reporterName}</dd></div><div className="review-pair"><dt>Details</dt><dd>{values.description}</dd></div>{visibleQuestions.filter((question) => answers[question.id]).map((question) => <div key={question.id} className="review-pair"><dt>{question.label}</dt><dd>{answers[question.id]}</dd></div>)}</dl><div className="intake-actions action-footer"><button className="btn btn-outline-secondary" type="button" onClick={() => moveToStep("details")}><i className="bi bi-arrow-left me-2" aria-hidden="true" />Back / Edit</button><button className="btn btn-primary" type="button" disabled={isSubmitting} onClick={submitRequest}>{isSubmitting ? "Submitting..." : "Submit Request"}<i className="bi bi-send ms-2" aria-hidden="true" /></button></div></div>}
-            </div></div>
-        </section>
-    );
+    if (result) return <section className="report-issue-page"><div className="card report-form-card"><div className="card-body p-5 text-center"><h1>Request submitted successfully.</h1><p>Reference</p><p className="display-6 request-reference" role="status">{result.referenceNumber}</p><p>Save this reference for future communication.</p></div></div></section>;
+    return <section className="report-issue-page" aria-labelledby="report-heading"><div className="intake-header"><header className="report-intro"><span className="report-intro-icon" aria-hidden="true"><i className="bi bi-megaphone" /></span><div><h1 id="report-heading">Report an Issue</h1><p>Find the issue that best matches your concern.</p></div></header><Progress step={step} /></div>{saveError && <div className="alert alert-danger" role="alert">{saveError}</div>}<div className="card border-0 report-form-card"><div className="card-body p-3 p-md-4 p-lg-5">
+        {step === "service" && <div className="step-panel"><div className="section-heading"><span className="section-symbol" aria-hidden="true"><i className="bi bi-grid" /></span><div><h2 className="h4" data-step-heading tabIndex="-1">Choose a Category</h2><p>Select the kind of concern you want to report.</p></div></div><div className="prototype-notice"><i className="bi bi-info-circle" /><span>{data.catalog.notice}</span></div>
+            {catalog.loading && <div className="catalog-message" role="status">Loading {catalog.phase === "definition" ? "issue questions" : catalog.phase}…</div>}{catalog.error && <div className="alert alert-warning" role="alert">{catalog.error} <button className="btn btn-sm btn-outline-primary" type="button" onClick={retry}>Try again</button></div>}
+            <div className="category-search-surface"><label className="form-label fw-semibold" htmlFor="category-search">Search categories</label><div className="category-search"><input className="form-control" id="category-search" type="search" placeholder="Search categories..." value={categoryQuery} onChange={(e) => setCategoryQuery(e.target.value)} />{categoryQuery && <button className="btn btn-outline-secondary" type="button" aria-label="Clear category search" onClick={(event) => { setCategoryQuery(""); event.currentTarget.parentElement?.querySelector("input")?.focus(); }}>Clear</button>}</div><p className="result-count" aria-live="polite">{categories.length} {categories.length === 1 ? "category" : "categories"} found</p></div>
+            {categories.length ? <div className="category-grid" role="radiogroup" aria-label="Category">{categories.map((item) => <label key={item.id} className={`catalog-choice accent-${item.accent}${categoryId === item.id ? " selected" : ""}`}><input type="radio" name="category" checked={categoryId === item.id} onChange={() => selectCategory(item.id)} /><span className="choice-icon"><i className={`bi ${item.icon}`} /></span><span className="choice-copy"><strong>{item.name}</strong><small>{item.description}</small></span></label>)}</div> : !catalog.loading && <div className="empty-categories"><h3>No matching categories found.</h3><p>Try a different word or clear your search.</p><button className="btn btn-outline-primary" onClick={() => { setCategoryQuery(""); document.getElementById("category-search")?.focus(); }}>Clear search</button></div>}{errors.category && <div role="alert" className="text-danger">{errors.category}</div>}
+            {category && <section className="service-section"><h2 id="service-heading" tabIndex="-1">Choose an Issue</h2><p>Choose the issue that best matches your concern in <strong>{category.name}</strong>.</p><div className="issue-search-surface"><label htmlFor="service-search" className="form-label fw-semibold">Search issues</label><div className="service-search"><input id="service-search" className="form-control" type="search" placeholder={`Search issues in ${category.name}`} value={serviceQuery} onChange={(e) => setServiceQuery(e.target.value)} />{serviceQuery && <button className="btn btn-outline-secondary" type="button" onClick={() => setServiceQuery("")}>Clear<span className="visually-hidden"> issue search</span></button>}</div><p className="result-count" aria-live="polite">{services.length} {services.length === 1 ? "issue" : "issues"} found</p></div>{services.length ? <div className="service-list" role="radiogroup" aria-label="Issue">{services.map((item) => <label key={item.id} className={`catalog-choice service-choice${serviceId === item.id ? " selected" : ""}`}><input type="radio" name="service" checked={serviceId === item.id} onChange={() => selectService(item.id)} /><span className="choice-icon issue-choice-icon"><i className={`bi ${resolveIssueIcon({ service: item, category })}`} /></span><span className="choice-copy"><strong>{item.name}</strong><small>{item.citizenDescription}</small></span></label>)}</div> : !catalog.loading && <div className="empty-services"><h3>No matching issues found.</h3><p>Try a different word or choose another category.</p></div>}{errors.service && <div role="alert" className="text-danger">{errors.service}</div>}</section>}
+            <div className="intake-actions action-footer justify-content-end"><button className="btn btn-primary" type="button" onClick={continueService}>Continue <i className="bi bi-arrow-right ms-2" /></button></div></div>}
+        {step === "details" && service && <div className="step-panel"><div className="selected-service-banner"><div><span>Selected issue</span><h2 className="h4" data-step-heading tabIndex="-1">{service.name}</h2><p>{service.citizenDescription}</p></div></div><IssueForm service={service} visibleQuestions={visible} values={values} answers={answers} errors={errors} onValueChange={changeValue} onAnswerChange={changeAnswer} onContinue={continueDetails} onBack={() => move("service")} /></div>}
+        {step === "review" && <div className="step-panel"><div className="review-heading"><div><h2 className="h4" data-step-heading tabIndex="-1">Review Your Request</h2><p>Please review your request before submitting.</p></div></div><dl className="review-list"><div className="review-pair"><dt>Selected Issue</dt><dd><strong>{service.name}</strong><span>{category.name}</span></dd></div><div className="review-pair"><dt>Location</dt><dd>{values.location}</dd></div><div className="review-pair"><dt>Reporting Information</dt><dd>{values.reportingMode === "anonymous" ? "Reporting anonymously" : values.reporterName}</dd></div><div className="review-pair"><dt>Details</dt><dd>{values.description}</dd></div>{visible.filter((q) => answers[q.id] !== "" && answers[q.id] !== undefined).map((q) => <div className="review-pair" key={q.id}><dt>{q.label}</dt><dd>{String(answers[q.id])}</dd></div>)}</dl><div className="intake-actions action-footer"><button className="btn btn-outline-secondary" onClick={() => move("details")}>Back / Edit</button><button className="btn btn-primary" disabled={submitting} onClick={submit}>{submitting ? "Submitting..." : "Submit Request"}<i className="bi bi-send ms-2" /></button></div></div>}
+    </div></div></section>;
 }

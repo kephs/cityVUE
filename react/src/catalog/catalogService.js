@@ -37,9 +37,9 @@ export function getCategoryById(categoryId) {
     return getActiveCategories().find((category) => category.id === categoryId) || null;
 }
 
-export function searchServices(categoryId, query = "") {
+export function searchServices(categoryId, query = "", availableServices = serviceCatalog.services) {
     const normalizedQuery = String(query).trim().toLowerCase();
-    const services = getServicesByCategory(categoryId);
+    const services = availableServices.filter((service) => service.status === "active" && service.categoryId === categoryId);
     if (!normalizedQuery) return services;
 
     return services.filter((service) => [

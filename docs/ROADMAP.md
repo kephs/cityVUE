@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+- [x] Phase D1 local resident intake transition foundation: explicit legacy/API repositories, canonical catalog identifiers, and canonical POST submission. Production cutover remains deferred.
+
 **Status:** Working development roadmap  
 **Canonical development name:** CityVUE  
 **Current stage:** Internal development/prototype

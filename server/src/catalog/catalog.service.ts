@@ -64,6 +64,7 @@ export class CatalogService {
       name: issue.name,
       description: issue.resident_description,
       iconKey: issue.icon_key,
+      serviceDefinitionVersionId: issue.version_id,
       version: issue.version_number,
       defaultPriority: issue.default_priority,
       locationPolicy: issue.location_policy,

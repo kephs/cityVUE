@@ -1,5 +1,7 @@
 # CityVUE — Architecture
 
+React `/report` selects paired catalog and request repositories from centralized Vite configuration. Legacy mode remains fixture/localStorage-backed; local API mode normalizes canonical catalog DTOs and submits canonical request DTOs through a shared fetch client. Organization context remains backend-owned.
+
 **Status:** Working architecture / target direction  
 **Canonical development name:** CityVUE  
 **Important:** Proposed/TBD items are not final City decisions.

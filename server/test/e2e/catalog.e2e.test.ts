@@ -9,6 +9,7 @@ import { DatabaseService } from '../../src/database/database.service.js';
 
 const categoryId = '30000000-0000-4000-8000-000000000001';
 const issueId = '40000000-0000-4000-8000-000000000001';
+const versionId = '50000000-0000-4000-8000-000000000001';
 let app: INestApplication;
 
 before(async () => {
@@ -50,6 +51,7 @@ before(async () => {
         name: 'Pothole',
         description: 'Report pavement damage.',
         iconKey: 'cone-striped',
+        serviceDefinitionVersionId: versionId,
         version: 1,
         defaultPriority: 'medium',
         locationPolicy: 'required',
@@ -110,7 +112,11 @@ test('catalog endpoints expose resident DTO fields', async () => {
   const detail = await request(app.getHttpServer())
     .get(`/api/v1/catalog/issues/${issueId}`)
     .expect(200);
-  const detailBody = detail.body as { questions: { key: string }[] };
+  const detailBody = detail.body as {
+    serviceDefinitionVersionId: string;
+    questions: { key: string }[];
+  };
+  assert.equal(detailBody.serviceDefinitionVersionId, versionId);
   assert.equal(detailBody.questions[0]?.key, 'roadBlocked');
 });
 

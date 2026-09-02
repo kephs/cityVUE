@@ -45,6 +45,7 @@ export class QuestionDto {
 }
 
 export class IssueDetailDto extends IssueSummaryDto {
+  @ApiProperty({ format: 'uuid' }) serviceDefinitionVersionId!: string;
   @ApiProperty() version!: number;
   @ApiProperty({ enum: ['low', 'medium', 'high', 'urgent'] })
   defaultPriority!: string;

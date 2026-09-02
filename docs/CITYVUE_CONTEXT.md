@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+Phase D1 adds a local-only resident intake API mode behind repository boundaries. Production remains on the default fixture/`IssueService` path, and other resident/staff surfaces are not cut over. See F012.
+
 ## Project Identity
 
 **CityVUE** is the canonical name of the application during development.
