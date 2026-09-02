@@ -7,6 +7,12 @@ dist-react/
 .parcel-cache/
 
 .env
+.env.*
+!.env.example
+server/dist/
+server/dist-test/
+server/coverage/
+server/node_modules/
 
 .firebase/
 
