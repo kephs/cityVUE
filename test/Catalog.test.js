@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { getActiveCategories, getServicesByCategory, getServiceById, getVisibleQuestions, searchServices } from "../react/src/catalog/catalogService.js";
+import { getActiveCategories, getServicesByCategory, getServiceById, getVisibleQuestions, searchCategories, searchServices } from "../react/src/catalog/catalogService.js";
 import { formatCompatibilityDescription, mapIntakeToLegacyIssue } from "../react/src/catalog/intakeCompatibility.js";
 
 test("active categories are ordered and retain valid Department relationships", () => {
@@ -8,6 +8,32 @@ test("active categories are ordered and retain valid Department relationships", 
     assert.ok(categories.length >= 4);
     assert.equal(categories.some((category) => category.status !== "active"), false);
     assert.ok(categories.every((category) => category.departmentId));
+});
+
+test("Category search returns all active Categories for an empty or whitespace query", () => {
+    assert.deepEqual(searchCategories(""), getActiveCategories());
+    assert.deepEqual(searchCategories("   "), getActiveCategories());
+});
+
+test("Category search is case-insensitive across names and resident descriptions", () => {
+    assert.deepEqual(searchCategories("  STREETLIGHTS ").map((category) => category.id), ["lighting"]);
+    assert.deepEqual(searchCategories("STANDING WATER").map((category) => category.id), ["water"]);
+});
+
+test("Category search returns no matches and never includes inactive Categories", () => {
+    assert.deepEqual(searchCategories("not a category"), []);
+    assert.deepEqual(searchCategories("archived demonstration"), []);
+});
+
+test("Category search handles missing optional metadata and supports future aliases and keywords", () => {
+    const categories = [
+        { id: "minimal", name: "Minimal", status: "active", displayOrder: 2 },
+        { id: "metadata", name: "Configured", status: "active", displayOrder: 1, aliases: ["resident term"], keywords: ["common phrase"] },
+        { id: "inactive", name: "Resident term", status: "inactive", displayOrder: 0 }
+    ];
+    assert.deepEqual(searchCategories("minimal", categories).map((category) => category.id), ["minimal"]);
+    assert.deepEqual(searchCategories("resident term", categories).map((category) => category.id), ["metadata"]);
+    assert.deepEqual(searchCategories("common phrase", categories).map((category) => category.id), ["metadata"]);
 });
 
 test("services are filtered by Category and invalid categories return no services", () => {

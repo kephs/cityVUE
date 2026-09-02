@@ -20,6 +20,11 @@
 .section-heading h2 { margin: 0 0 .2rem; font-weight: 700; }
 .section-symbol { display: grid; flex: 0 0 2rem; width: 2rem; height: 2rem; place-items: center; border-radius: .6rem; background: rgba(var(--bs-primary-rgb), .1); color: var(--bs-primary); }
 .prototype-notice { display: flex; gap: .5rem; align-items: center; width: fit-content; margin: 0 0 1.25rem 2.85rem; padding: .45rem .75rem; border-radius: 2rem; background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); font-size: .8rem; }
+.category-search-surface { width: 100%; margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--bs-border-color); border-radius: .8rem; background: var(--bs-body-bg); }
+.category-search, .service-search { position: relative; display: flex; gap: .6rem; }
+.category-search > .bi-search, .service-search > .bi-search { position: absolute; z-index: 2; top: 50%; left: .95rem; color: var(--bs-secondary-color); transform: translateY(-50%); }
+.category-search .form-control, .service-search .form-control { min-height: 46px; padding-left: 2.6rem; }
+.category-search .form-control { width: 100%; }
 
 .category-grid, .service-list { display: grid; gap: .85rem; }
 .category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -48,17 +53,15 @@
 .section-heading.compact h2:focus-visible { border-radius: .25rem; outline: 3px solid #79b5ff; outline-offset: 4px; }
 .issue-section-kicker { margin-bottom: .2rem !important; color: var(--bs-primary) !important; font-size: .78rem; font-weight: 750; letter-spacing: .055em; text-transform: uppercase; }
 .issue-search-surface { margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--bs-border-color); border-radius: .8rem; background: var(--bs-body-bg); }
-.service-search { position: relative; display: flex; gap: .6rem; }
-.service-search > .bi-search { position: absolute; z-index: 2; top: 50%; left: .95rem; color: var(--bs-secondary-color); transform: translateY(-50%); }
-.service-search .form-control { min-height: 46px; padding-left: 2.6rem; }
 .result-count { margin: .65rem 0; color: var(--bs-secondary-color); font-size: .875rem; font-weight: 600; }
 .service-choice { min-height: 88px; padding-block: .9rem; background: var(--bs-body-bg); }
 .service-choice .choice-copy strong { font-size: 1.05rem; }
 .issue-choice-icon { background: rgba(var(--bs-primary-rgb), .1); }
 .empty-services { padding: 2rem 1rem; border: 1px dashed var(--bs-border-color); border-radius: .85rem; background: var(--bs-tertiary-bg); text-align: center; }
-.empty-services > .bi { color: var(--bs-primary); font-size: 1.6rem; }
-.empty-services h3 { margin: .5rem 0 .25rem; font-size: 1.05rem; }
-.empty-services p { color: var(--bs-secondary-color); }
+.empty-categories { margin-bottom: 1rem; padding: 2rem 1rem; border: 1px dashed var(--bs-border-color); border-radius: .85rem; background: var(--bs-tertiary-bg); text-align: center; }
+.empty-services > .bi, .empty-categories > .bi { color: var(--bs-primary); font-size: 1.6rem; }
+.empty-services h3, .empty-categories h3 { margin: .5rem 0 .25rem; font-size: 1.05rem; }
+.empty-services p, .empty-categories p { color: var(--bs-secondary-color); }
 .service-guidance { display: flex; flex-wrap: wrap; gap: .25rem .5rem; margin-top: 1rem; padding: .75rem .9rem; border-radius: .7rem; background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); font-size: .85rem; }
 .service-guidance strong { color: var(--bs-body-color); }
 
@@ -95,14 +98,14 @@
     .intake-header { padding: 1rem .9rem .75rem; }
     .prototype-notice { margin-left: 0; border-radius: .65rem; }
     .service-section { margin-inline: -.25rem; padding: 1.1rem; scroll-margin-top: .75rem; }
-    .service-search, .intake-actions { flex-direction: column; }
-    .service-search .btn, .intake-actions .btn { width: 100%; }
+    .category-search, .service-search, .intake-actions { flex-direction: column; }
+    .category-search .btn, .service-search .btn, .intake-actions .btn { width: 100%; }
     .intake-progress li > span:not(.step-marker) { font-size: .8rem; }
 }
 
 @media (prefers-reduced-motion: reduce) { .catalog-choice { transition: none; } .step-panel { animation: none; } }
 @media (forced-colors: active) {
-    .intake-header, .report-form-card, .catalog-choice, .review-pair, .details-surface fieldset, .action-footer, .service-section { border: 1px solid CanvasText !important; }
+    .intake-header, .report-form-card, .catalog-choice, .category-search-surface, .empty-categories, .review-pair, .details-surface fieldset, .action-footer, .service-section { border: 1px solid CanvasText !important; }
     .catalog-choice.selected, .intake-progress li.current .step-marker, .service-section { outline: 3px solid Highlight; }
     .catalog-choice input { position: static; width: auto; height: auto; opacity: 1; }
 }

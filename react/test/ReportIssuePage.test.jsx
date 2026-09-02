@@ -28,10 +28,59 @@ async function completeAnonymousDetails(user, blocked = "no") {
 describe("ReportIssuePage configuration-driven intake", () => {
     test("renders active fixture Categories without exposing Departments", () => {
         renderPage();
+        expect(screen.getByRole("searchbox", { name: "Search categories" })).toHaveAttribute("placeholder", "Search categories...");
+        expect(screen.getByText("5 categories found")).toBeInTheDocument();
         expect(screen.getByRole("radio", { name: /Roads & Streets/ })).toBeInTheDocument();
         expect(screen.getByRole("radio", { name: /Trash & Recycling/ })).toBeInTheDocument();
         expect(screen.queryByText("Public Works")).not.toBeInTheDocument();
         expect(screen.queryByText("Environmental Services")).not.toBeInTheDocument();
+    });
+
+    test("Category live search filters names and descriptions with singular and plural counts", async () => {
+        const user = userEvent.setup(); renderPage();
+        const search = screen.getByRole("searchbox", { name: "Search categories" });
+        await user.type(search, "street");
+        expect(screen.getByText("2 categories found")).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Roads & Streets/ })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Streetlights/ })).toBeInTheDocument();
+        await user.clear(search); await user.type(search, "standing water");
+        expect(screen.getByText("1 category found")).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Water & Drainage/ })).toBeInTheDocument();
+        expect(screen.queryByRole("radio", { name: /Roads & Streets/ })).not.toBeInTheDocument();
+    });
+
+    test("Category zero-result state clears search, restores Categories, and returns focus", async () => {
+        const user = userEvent.setup(); renderPage();
+        const search = screen.getByRole("searchbox", { name: "Search categories" });
+        await user.type(search, "no matching category");
+        expect(screen.getByText("0 categories found")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "No matching categories found." })).toBeInTheDocument();
+        expect(screen.getByText("Try a different word or clear your search.")).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "Clear search" }));
+        expect(search).toHaveValue("");
+        expect(search).toHaveFocus();
+        expect(screen.getByText("5 categories found")).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Roads & Streets/ })).toBeInTheDocument();
+    });
+
+    test("Category filtering hides without destroying the selected Category, Issue, or intake state", async () => {
+        const user = userEvent.setup(); renderPage(); await reachPotholeDetails(user);
+        await user.type(screen.getByLabelText("Approximate size in feet"), "3");
+        await user.type(screen.getByLabelText("Tell us more about the concern *"), "Preserve this description");
+        await user.type(screen.getByLabelText("Location *"), "Main Street");
+        await user.click(screen.getByRole("button", { name: "Back" }));
+        const search = screen.getByRole("searchbox", { name: "Search categories" });
+        await user.type(search, "trash");
+        expect(screen.queryByRole("radio", { name: /Roads & Streets/ })).not.toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Choose an Issue" })).toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Pothole/ })).toBeChecked();
+        await user.click(screen.getByRole("button", { name: "Clear category search" }));
+        expect(search).toHaveFocus();
+        expect(screen.getByRole("radio", { name: /Roads & Streets/ })).toBeChecked();
+        await user.click(screen.getByRole("button", { name: "Continue" }));
+        expect(screen.getByLabelText("Approximate size in feet")).toHaveValue(3);
+        expect(screen.getByLabelText("Tell us more about the concern *")).toHaveValue("Preserve this description");
+        expect(screen.getByLabelText("Location *")).toHaveValue("Main Street");
     });
 
     test("Category selection reveals Issues, renders configured icons, and changing Category clears selection", async () => {
@@ -106,6 +155,19 @@ describe("ReportIssuePage configuration-driven intake", () => {
         await user.type(screen.getByLabelText("Approximate size in feet"), "3");
         await user.click(screen.getByRole("button", { name: "Back" }));
         await user.click(screen.getByRole("radio", { name: /Damaged Street Sign/ }));
+        await user.click(screen.getByRole("radio", { name: /Pothole/ }));
+        await user.click(screen.getByRole("button", { name: "Continue" }));
+        expect(screen.getByLabelText("Approximate size in feet")).toHaveValue(null);
+    });
+
+    test("explicitly choosing a different Category clears stale Issue selection and answers", async () => {
+        const user = userEvent.setup(); renderPage(); await reachPotholeDetails(user);
+        await user.type(screen.getByLabelText("Approximate size in feet"), "4");
+        await user.click(screen.getByRole("button", { name: "Back" }));
+        await user.click(screen.getByRole("radio", { name: /Streetlights/ }));
+        expect(screen.queryByRole("radio", { name: /Pothole/ })).not.toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: /Streetlight Out/ })).not.toBeChecked();
+        await user.click(screen.getByRole("radio", { name: /Roads & Streets/ }));
         await user.click(screen.getByRole("radio", { name: /Pothole/ }));
         await user.click(screen.getByRole("button", { name: "Continue" }));
         expect(screen.getByLabelText("Approximate size in feet")).toHaveValue(null);

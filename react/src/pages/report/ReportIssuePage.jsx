@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import IssueService from "../../../../assets/services/IssueService.js";
-import { getActiveCategories, getCategoryById, getServiceById, getVisibleQuestions, searchServices } from "../../catalog/catalogService.js";
+import { getCategoryById, getServiceById, getVisibleQuestions, searchCategories, searchServices } from "../../catalog/catalogService.js";
 import { mapIntakeToLegacyIssue } from "../../catalog/intakeCompatibility.js";
 import { resolveIssueIcon } from "../issues/issueIconPresentation.js";
 import IssueForm from "./IssueForm.jsx";
@@ -30,11 +30,16 @@ function issueCountText(count) {
     return `${count} ${count === 1 ? "issue" : "issues"} found`;
 }
 
+function categoryCountText(count) {
+    return `${count} ${count === 1 ? "category" : "categories"} found`;
+}
+
 export default function ReportIssuePage({ saveIssue = (issue) => IssueService.saveIssue(issue), createTimestamp = () => new Date().toISOString(), onSuccess }) {
     const navigate = useNavigate();
     const [step, setStep] = useState("service");
     const [categoryId, setCategoryId] = useState("");
     const [serviceId, setServiceId] = useState("");
+    const [categorySearchQuery, setCategorySearchQuery] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [answers, setAnswers] = useState({});
     const [values, setValues] = useState(initialValues);
@@ -43,7 +48,8 @@ export default function ReportIssuePage({ saveIssue = (issue) => IssueService.sa
     const [isSubmitting, setIsSubmitting] = useState(false);
     const submissionInProgress = useRef(false);
     const issueSectionHeading = useRef(null);
-    const categories = useMemo(() => getActiveCategories(), []);
+    const categorySearchInput = useRef(null);
+    const categories = useMemo(() => searchCategories(categorySearchQuery), [categorySearchQuery]);
     const services = useMemo(() => searchServices(categoryId, searchQuery), [categoryId, searchQuery]);
     const category = getCategoryById(categoryId);
     const service = getServiceById(serviceId);
@@ -61,6 +67,7 @@ export default function ReportIssuePage({ saveIssue = (issue) => IssueService.sa
     }, [categoryId]);
 
     const moveToStep = (nextStep) => { setStep(nextStep); setErrors({}); setSaveError(""); requestAnimationFrame(() => document.querySelector("[data-step-heading]")?.focus()); };
+    const clearCategorySearch = () => { setCategorySearchQuery(""); categorySearchInput.current?.focus(); };
     const selectCategory = (id) => { setCategoryId(id); setServiceId(""); setSearchQuery(""); setAnswers({}); setErrors({}); };
     const selectService = (id) => {
         const nextService = getServiceById(id);
@@ -123,7 +130,8 @@ export default function ReportIssuePage({ saveIssue = (issue) => IssueService.sa
                 {step === "service" && <div className="step-panel">
                     <div className="section-heading"><span className="section-symbol" aria-hidden="true"><i className="bi bi-grid" /></span><div><h2 className="h4" tabIndex="-1" data-step-heading>Choose a Category</h2><p>Select the kind of concern you want to report.</p></div></div>
                     <div className="prototype-notice"><i className="bi bi-info-circle" aria-hidden="true" /><span>Prototype data — sample issue catalog for development.</span></div>
-                    <div className="category-grid" role="radiogroup" aria-label="Category">{categories.map((item) => <label key={item.id} className={`catalog-choice category-choice accent-${item.accent}${categoryId === item.id ? " selected" : ""}`}><input type="radio" name="category" value={item.id} checked={categoryId === item.id} onChange={() => selectCategory(item.id)} /><span className="choice-icon" aria-hidden="true"><i className={`bi ${item.icon}`} /></span><span className="choice-copy"><strong>{item.name}</strong><small>{item.description}</small></span><i className={`bi ${categoryId === item.id ? "bi-check-circle-fill" : "bi-circle"} choice-state`} aria-hidden="true" /></label>)}</div>
+                    <div className="category-search-surface"><label className="form-label fw-semibold" htmlFor="category-search">Search categories</label><div className="category-search"><i className="bi bi-search" aria-hidden="true" /><input className="form-control" id="category-search" ref={categorySearchInput} type="search" autoComplete="off" placeholder="Search categories..." value={categorySearchQuery} onChange={(event) => setCategorySearchQuery(event.target.value)} />{categorySearchQuery && <button className="btn btn-outline-secondary" type="button" aria-label="Clear category search" onClick={clearCategorySearch}>Clear</button>}</div><p className="result-count" aria-live="polite" aria-atomic="true">{categoryCountText(categories.length)}</p></div>
+                    {categories.length ? <div className="category-grid" role="radiogroup" aria-label="Category">{categories.map((item) => <label key={item.id} className={`catalog-choice category-choice accent-${item.accent}${categoryId === item.id ? " selected" : ""}`}><input type="radio" name="category" value={item.id} checked={categoryId === item.id} onChange={() => selectCategory(item.id)} /><span className="choice-icon" aria-hidden="true"><i className={`bi ${item.icon}`} /></span><span className="choice-copy"><strong>{item.name}</strong><small>{item.description}</small></span><i className={`bi ${categoryId === item.id ? "bi-check-circle-fill" : "bi-circle"} choice-state`} aria-hidden="true" /></label>)}</div> : <div className="empty-categories"><i className="bi bi-search" aria-hidden="true" /><h3>No matching categories found.</h3><p>Try a different word or clear your search.</p><button className="btn btn-outline-primary" type="button" onClick={clearCategorySearch}>Clear search</button></div>}
                     {errors.category && <div className="text-danger mt-2" role="alert">{errors.category}</div>}
                     {category && <section className="service-section" aria-labelledby="service-heading"><div className="section-heading compact"><span className="section-symbol" aria-hidden="true"><i className="bi bi-list-check" /></span><div><p className="issue-section-kicker">Next: {category.name}</p><h2 className="h3" id="service-heading" tabIndex="-1" ref={issueSectionHeading}>Choose an Issue</h2><p>Choose the issue that best matches your concern in <strong>{category.name}</strong>.</p></div></div><div className="issue-search-surface"><label className="form-label fw-semibold" htmlFor="service-search">Search issues</label><div className="service-search"><i className="bi bi-search" aria-hidden="true" /><input className="form-control" id="service-search" type="search" placeholder={`Search issues in ${category.name}`} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />{searchQuery && <button className="btn btn-outline-secondary" type="button" onClick={() => setSearchQuery("")}>Clear<span className="visually-hidden"> issue search</span></button>}</div><p className="result-count" aria-live="polite">{issueCountText(services.length)}</p></div>{services.length ? <div className="service-list" role="radiogroup" aria-label="Issue">{services.map((item) => <label key={item.id} className={`catalog-choice service-choice accent-${category.accent}${serviceId === item.id ? " selected" : ""}`}><input type="radio" name="service" value={item.id} checked={serviceId === item.id} onChange={() => selectService(item.id)} /><span className="choice-icon issue-choice-icon" aria-hidden="true"><i className={`bi ${resolveIssueIcon({ service: item, category })}`} /></span><span className="choice-copy"><strong>{item.name}</strong><small>{item.citizenDescription}</small></span><i className={`bi ${serviceId === item.id ? "bi-check-circle-fill" : "bi-circle"} choice-state`} aria-hidden="true" /></label>)}</div> : <div className="empty-services" role="status"><i className="bi bi-search" aria-hidden="true" /><h3>No matching issues found.</h3><p>Try a different word or choose another category.</p><button className="btn btn-outline-primary" type="button" onClick={() => setSearchQuery("")}>Clear search</button></div>}<aside className="service-guidance"><strong>Can't find the issue you're looking for?</strong><span>Try another search or choose a different category.</span></aside>{errors.service && <div className="text-danger mt-2" role="alert">{errors.service}</div>}</section>}
                     <div className="intake-actions action-footer justify-content-end"><button className="btn btn-primary" type="button" onClick={continueFromService}>Continue <i className="bi bi-arrow-right ms-2" aria-hidden="true" /></button></div>

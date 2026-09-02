@@ -10,6 +10,21 @@ export function getActiveCategories() {
         .sort((a, b) => a.displayOrder - b.displayOrder);
 }
 
+export function searchCategories(query = "", categories = getActiveCategories()) {
+    const normalizedQuery = String(query).trim().toLowerCase();
+    const activeCategories = [...categories]
+        .filter((category) => category?.status === "active")
+        .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+    if (!normalizedQuery) return activeCategories;
+
+    return activeCategories.filter((category) => [
+        category.name,
+        category.description,
+        ...(category.keywords || []),
+        ...(category.aliases || [])
+    ].some((value) => String(value || "").toLowerCase().includes(normalizedQuery)));
+}
+
 export function getServicesByCategory(categoryId) {
     return serviceCatalog.services.filter((service) => service.status === "active" && service.categoryId === categoryId);
 }
