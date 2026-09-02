@@ -12,6 +12,7 @@ import { RequestLoggingMiddleware } from './common/logging/request-logging.middl
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
+import { ServiceRequestModule } from './service-request/service-request.module.js';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { CatalogModule } from './catalog/catalog.module.js';
     DatabaseModule,
     HealthModule,
     CatalogModule,
+    ServiceRequestModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

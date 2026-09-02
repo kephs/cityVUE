@@ -58,7 +58,7 @@ The UI must not contain privileged enterprise credentials or vendor-specific int
 
 Catalog presentation metadata may include application-approved logical icon keys for Categories and Services. The presentation layer maps those keys to the installed approved icon library and applies a safe Service → Category → generic fallback; arbitrary markup, script, CSS class input, and remote image URLs are not catalog data.
 
-### CityVUE Application/API Layer — Phase A and Phase C0 Foundations Implemented
+### CityVUE Application/API Layer — Phase A, C0, and D0 Foundations Implemented
 
 Potential responsibilities:
 
@@ -79,6 +79,8 @@ Potential responsibilities:
 - Request-number generation and idempotency controls
 
 F008 selects a TypeScript/NestJS modular REST API with an OpenAPI contract and PostgreSQL persistence. Phase A implements the isolated platform foundation. Phase C0 adds Organization-owned Department, optional Division, Category, stable ServiceDefinition, immutable published ServiceDefinitionVersion, Question, and QuestionOption persistence plus Organization-scoped resident catalog reads. Composite foreign keys prohibit cross-Organization relationships. A configured development Organization is temporary and is not a production tenant-security boundary; Phase B remains deferred. React continues to use its fixture. See F009 and `docs/features/F010-phase-c0-organization-service-catalog-persistence.md`.
+
+Phase D0 adds transactional canonical ServiceRequest creation, globally unique timezone-aware monthly references, typed and snapshotted Answers, optional requester/contact and Location foundations, initial append-only Activity, and an Organization-scoped exact-reference repository lookup. The public React application remains unconnected, and authentication, staff reads/workflow, GIS, notifications, attachments, and integrations remain deferred. See `docs/features/F011-phase-d0-canonical-service-request-persistence.md`.
 
 ### Integration Router — Proposed
 

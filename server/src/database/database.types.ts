@@ -91,6 +91,80 @@ interface QuestionOptionTable {
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
+interface ReferenceSequenceTable {
+  period_key: string;
+  last_value: number;
+  updated_at: Generated<Timestamp>;
+}
+interface ServiceRequestTable {
+  id: string;
+  organization_id: string;
+  reference_number: string;
+  service_definition_id: string;
+  service_definition_version_id: string;
+  category_id: string;
+  status: string;
+  priority: string;
+  description: string;
+  reporting_identity: string;
+  revision: Generated<number>;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface RequesterContactTable {
+  id: string;
+  organization_id: string;
+  service_request_id: string;
+  name: string;
+  email: string | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface LocationTable {
+  id: string;
+  organization_id: string;
+  service_request_id: string;
+  entered_address: string;
+  normalized_address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_type: string;
+  facility_reference: string | null;
+  park_reference: string | null;
+  parcel_reference: string | null;
+  gis_asset_reference: string | null;
+  eligibility_result: string | null;
+  validated_at: Date | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface AnswerTable {
+  id: string;
+  organization_id: string;
+  service_request_id: string;
+  question_id: string;
+  question_key: string;
+  question_label: string;
+  question_type: string;
+  display_order: number;
+  text_value: string | null;
+  number_value: string | null;
+  boolean_value: boolean | null;
+  option_key: string | null;
+  display_value: string | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface ActivityTable {
+  id: string;
+  organization_id: string;
+  service_request_id: string;
+  activity_type: string;
+  actor_type: string;
+  actor_reference: string | null;
+  metadata: JsonValue;
+  occurred_at: Generated<Timestamp>;
+}
 
 export interface DatabaseSchema {
   organization: OrganizationTable;
@@ -101,6 +175,12 @@ export interface DatabaseSchema {
   service_definition_version: ServiceDefinitionVersionTable;
   question: QuestionTable;
   question_option: QuestionOptionTable;
+  service_request_reference_sequence: ReferenceSequenceTable;
+  service_request: ServiceRequestTable;
+  requester_contact: RequesterContactTable;
+  location: LocationTable;
+  answer: AnswerTable;
+  activity: ActivityTable;
 }
 
 export type Organization = Selectable<OrganizationTable>;
