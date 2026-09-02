@@ -80,6 +80,16 @@ The promotion passed 58 Node tests and 48 React tests, the Parcel rollback build
 
 The existing origin-specific browser-local persistence boundary and Parcel rollback path remain unchanged.
 
+## Category Live Search Production Promotion
+
+The reviewed Category Live Search enhancement and compatible Browserslist security remediation were promoted to production on September 1, 2026 at approximately 10:56 PM America/New_York. The prior production state is tagged locally as `pre-category-live-search-promotion` at `4e9507c`; the reviewed implementation is commit `3c9465a` (`feat: add Category live search and remediate Browserslist`). Browserslist was updated from 4.28.6 to 4.28.8 with its compatible browser-data dependencies.
+
+Only Firebase Hosting was deployed with the existing React production configuration. Firebase uploaded 20 files from `dist-react`, finalized the version, and released it successfully at `https://cityvue-1.web.app`. No other Firebase service was deployed or changed.
+
+The promotion passed 62 Node tests, 52 React tests, 11 backend unit tests, 2 backend E2E tests, backend typecheck/build/lint, the Parcel rollback build, the React/Vite production build, `git diff --check`, and root/backend audits with zero vulnerabilities. The database connectivity test was skipped because `TEST_DATABASE_URL` was not configured; no production or shared database was used.
+
+Live verification passed Category name and description filtering, singular/plural/zero counts, both clear controls and focus restoration, full-width alignment, selected Category/Issue preservation while filtered, explicit different-Category reset, unchanged Issue search, mobile Category-to-Issue focus/scroll, 1440/768/390 responsive layouts, light/dark themes, direct loads and refreshes for `/`, `/report`, `/issues`, and `/dashboard`, and console/asset review. Category search produced no additional asset or network activity. No synthetic production Issue was created. `Issue`, `IssueService`, `cityvueIssues`, backend runtime behavior, Firebase configuration, and the Parcel rollback path were unchanged.
+
 ## Bundle and Performance Record
 
 The initial JavaScript is 288.45 kB minified / 92.05 kB gzip. Dashboard and Chart.js remain isolated in a deferred 214.49 kB minified / 72.74 kB gzip chunk. Page chunks range from 5.34 kB to 15.95 kB minified. The 311.98 kB shared CSS compresses to 45.25 kB gzip. The approximately 2.12 MB Home hero PNG remains a known later optimization candidate and did not block cutover.
