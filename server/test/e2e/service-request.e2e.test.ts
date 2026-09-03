@@ -5,6 +5,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { CreateServiceRequestService } from '../../src/service-request/create-service-request.service.js';
+import { GetServiceRequestDetailsService } from '../../src/service-request/get-service-request-details.service.js';
 import type { CreateServiceRequestDto } from '../../src/service-request/service-request.dto.js';
 import { DatabaseService } from '../../src/database/database.service.js';
 
@@ -24,6 +25,7 @@ before(async () => {
   process.env.DATABASE_URL =
     'postgresql://cityvue:placeholder@localhost:5432/cityvue_test';
   process.env.LOG_LEVEL = 'silent';
+  process.env.ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS = 'true';
   const [{ AppModule }, { configureApplication }] = await Promise.all([
     import('../../src/app.module.js'),
     import('../../src/bootstrap.js'),
@@ -56,6 +58,52 @@ before(async () => {
     .useValue({ status: async () => 'up' })
     .overrideProvider(CreateServiceRequestService)
     .useValue(create)
+    .overrideProvider(GetServiceRequestDetailsService)
+    .useValue({
+      execute: async (id: string) => {
+        if (id !== '80000000-0000-4000-8000-000000000001')
+          throw new NotFoundException();
+        return {
+          serviceRequest: {
+            id,
+            referenceNumber: 'SR-202609-000001',
+            status: 'open',
+            priority: 'medium',
+            createdAt: new Date('2026-09-02T12:00:00Z'),
+            updatedAt: new Date('2026-09-02T12:00:00Z'),
+            revision: 1,
+          },
+          classification: {
+            serviceDefinitionId: serviceId,
+            serviceDefinitionVersionId: versionId,
+            issueName: 'Pothole',
+            category: {
+              id: '30000000-0000-4000-8000-000000000001',
+              name: 'Roads & Streets',
+            },
+            department: {
+              id: '20000000-0000-4000-8000-000000000001',
+              name: 'Public Works',
+            },
+          },
+          request: { description: 'Synthetic road damage' },
+          answers: [],
+          location: {
+            enteredAddress: '123 Test Street',
+            locationType: 'entered_address',
+          },
+          requester: { anonymous: true },
+          activity: [
+            {
+              type: 'service_request_created',
+              actorType: 'anonymous_resident',
+              occurredAt: new Date('2026-09-02T12:00:00Z'),
+              metadata: { referenceNumber: 'SR-202609-000001' },
+            },
+          ],
+        };
+      },
+    })
     .compile();
   app = module.createNestApplication();
   configureApplication(app);
@@ -116,5 +164,24 @@ test('POST returns safe policy and catalog errors', async () => {
       ...base,
       serviceDefinitionVersionId: '50000000-0000-4000-8000-000000000099',
     })
+    .expect(404);
+});
+
+test('GET returns development-only Organization-scoped details and safe not found responses', async () => {
+  const response = await request(app.getHttpServer())
+    .get('/api/v1/service-requests/80000000-0000-4000-8000-000000000001')
+    .expect(200);
+  const body = response.body as {
+    classification: { department: { name: string } };
+    location: { enteredAddress: string };
+  };
+  assert.equal(body.classification.department.name, 'Public Works');
+  assert.equal(body.location.enteredAddress, '123 Test Street');
+  assert.equal('organizationId' in body, false);
+  await request(app.getHttpServer())
+    .get('/api/v1/service-requests/not-a-uuid')
+    .expect(404);
+  await request(app.getHttpServer())
+    .get('/api/v1/service-requests/80000000-0000-4000-8000-000000000099')
     .expect(404);
 });

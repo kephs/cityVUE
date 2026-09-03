@@ -14,6 +14,20 @@ test('configuration validation applies safe platform defaults', () => {
   assert.equal(environment.APP_NAME, 'cityvue-api');
   assert.equal(environment.DATABASE_POOL_MAX, 10);
   assert.equal(environment.CORS_ORIGINS, 'http://localhost:5173');
+  assert.equal(environment.ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS, false);
+});
+
+test('production rejects development-only canonical detail reads', () => {
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        DATABASE_SSL_MODE: 'require',
+        ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS: 'true',
+      }),
+    /development service request reads cannot be enabled in production/,
+  );
 });
 
 test('configuration validation rejects a missing database URL', () => {

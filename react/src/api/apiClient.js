@@ -8,7 +8,8 @@ export class CityVueApiError extends Error {
     }
 }
 
-function publicMessage(status) {
+function publicMessage(status, path) {
+    if (status === 404 && path.startsWith('/service-requests/')) return ["not-found", "The requested service request is unavailable."];
     if (status === 404 || status === 409) return ["catalog-version", "The issue form has changed. Please review the latest questions before submitting."];
     if (status === 400 || status === 422) return ["validation", "Some request information is no longer valid. Please review your answers and try again."];
     return ["server", "CityVUE could not complete the request. Please try again."];
@@ -29,7 +30,7 @@ export function createApiClient({ baseUrl, fetchImplementation = fetch, timeoutM
             });
             const requestId = response.headers?.get?.("x-request-id") || undefined;
             if (!response.ok) {
-                const [code, message] = publicMessage(response.status);
+                const [code, message] = publicMessage(response.status, path);
                 throw new CityVueApiError(code, message, { status: response.status, requestId });
             }
             return response.status === 204 ? undefined : response.json();

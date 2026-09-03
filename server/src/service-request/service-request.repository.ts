@@ -26,6 +26,96 @@ export interface CatalogSubmissionDefinition {
 
 @Injectable()
 export class ServiceRequestRepository {
+  async loadDetails(
+    trx: Transaction<DatabaseSchema>,
+    organizationId: string,
+    serviceRequestId: string,
+  ) {
+    const request = await trx
+      .selectFrom('service_request as request')
+      .innerJoin('service_definition_version as version', (join) =>
+        join
+          .onRef('version.id', '=', 'request.service_definition_version_id')
+          .onRef('version.organization_id', '=', 'request.organization_id'),
+      )
+      .innerJoin('category as category', (join) =>
+        join
+          .onRef('category.id', '=', 'request.category_id')
+          .onRef('category.organization_id', '=', 'request.organization_id'),
+      )
+      .innerJoin('department as department', (join) =>
+        join
+          .onRef('department.id', '=', 'category.department_id')
+          .onRef('department.organization_id', '=', 'request.organization_id'),
+      )
+      .leftJoin('division as division', (join) =>
+        join
+          .onRef('division.id', '=', 'category.division_id')
+          .onRef('division.organization_id', '=', 'request.organization_id'),
+      )
+      .select([
+        'request.id',
+        'request.reference_number',
+        'request.status',
+        'request.priority',
+        'request.description',
+        'request.reporting_identity',
+        'request.revision',
+        'request.created_at',
+        'request.updated_at',
+        'request.service_definition_id',
+        'request.service_definition_version_id',
+        'version.name as issue_name',
+        'category.id as category_id',
+        'category.name as category_name',
+        'department.id as department_id',
+        'department.name as department_name',
+        'division.id as division_id',
+        'division.name as division_name',
+      ])
+      .where('request.organization_id', '=', organizationId)
+      .where('request.id', '=', serviceRequestId)
+      .executeTakeFirst();
+    if (!request) return undefined;
+    const [answers, contact, location, activity] = await Promise.all([
+      trx
+        .selectFrom('answer')
+        .selectAll()
+        .where('organization_id', '=', organizationId)
+        .where('service_request_id', '=', serviceRequestId)
+        .orderBy('display_order')
+        .orderBy('id')
+        .execute(),
+      trx
+        .selectFrom('requester_contact')
+        .select(['name', 'email'])
+        .where('organization_id', '=', organizationId)
+        .where('service_request_id', '=', serviceRequestId)
+        .executeTakeFirst(),
+      trx
+        .selectFrom('location')
+        .selectAll()
+        .where('organization_id', '=', organizationId)
+        .where('service_request_id', '=', serviceRequestId)
+        .executeTakeFirst(),
+      trx
+        .selectFrom('activity')
+        .select([
+          'activity_type',
+          'actor_type',
+          'metadata',
+          'occurred_at',
+          'id',
+        ])
+        .where('organization_id', '=', organizationId)
+        .where('service_request_id', '=', serviceRequestId)
+        .orderBy('occurred_at')
+        .orderBy('id')
+        .execute(),
+    ]);
+    return { request, answers, contact, location, activity };
+  }
+
   async loadSubmissionDefinition(
     trx: Transaction<DatabaseSchema>,
     organizationId: string,

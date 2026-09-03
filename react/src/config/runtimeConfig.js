@@ -7,11 +7,12 @@ export function readResidentIntakeConfig(environment = import.meta.env) {
     }
 
     const apiBaseUrl = String(environment?.VITE_CITYVUE_API_BASE_URL || "").trim().replace(/\/$/, "");
+    const developmentReadsEnabled = String(environment?.VITE_CITYVUE_ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS || "false").trim().toLowerCase() === "true";
     if (dataSource === DATA_SOURCES.api) {
         if (!apiBaseUrl) throw new Error("VITE_CITYVUE_API_BASE_URL is required in api mode.");
         let parsed;
         try { parsed = new URL(apiBaseUrl); } catch { throw new Error("VITE_CITYVUE_API_BASE_URL must be a valid HTTP(S) URL."); }
         if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("VITE_CITYVUE_API_BASE_URL must be a valid HTTP(S) URL.");
     }
-    return { dataSource, apiBaseUrl };
+    return { dataSource, apiBaseUrl, developmentReadsEnabled: dataSource === DATA_SOURCES.api && developmentReadsEnabled };
 }

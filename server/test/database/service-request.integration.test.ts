@@ -13,6 +13,7 @@ import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import { CreateServiceRequestService } from '../../src/service-request/create-service-request.service.js';
+import { GetServiceRequestDetailsService } from '../../src/service-request/get-service-request-details.service.js';
 import { ServiceRequestRepository } from '../../src/service-request/service-request.repository.js';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -225,6 +226,14 @@ test(
         { client: db } as DatabaseService,
         repository,
       );
+      const reader = new GetServiceRequestDetailsService(
+        {
+          get: (key: string) =>
+            key === 'serviceRequestReads.developmentEnabled' ? true : org,
+        } as unknown as ConfigService<AppConfiguration, true>,
+        { client: db } as DatabaseService,
+        repository,
+      );
       const payload = {
         serviceDefinitionId: serviceId,
         serviceDefinitionVersionId: version,
@@ -322,12 +331,36 @@ test(
             repository.findByReference(org, september.referenceNumber, trx),
           ),
       );
+      const readModel = await reader.execute(september.id);
+      assert.equal(readModel.classification.issueName, 'Pothole');
+      assert.equal(readModel.classification.department.name, 'Works');
+      assert.equal(readModel.classification.category.name, 'Roads');
+      assert.equal(readModel.classification.division, undefined);
+      assert.deepEqual(
+        readModel.answers.map((answer) => answer.label),
+        ['Blocked?', 'Details', 'Condition'],
+      );
+      assert.equal(readModel.answers[2]?.value, 'bad');
+      assert.equal(readModel.answers[2].displayValue, 'Damaged');
+      assert.equal(readModel.location?.enteredAddress, '1 Main Street');
+      assert.deepEqual(readModel.requester, { anonymous: true });
+      assert.equal(readModel.activity[0]?.type, 'service_request_created');
+      assert.equal(
+        await db
+          .transaction()
+          .execute((trx) =>
+            repository.loadDetails(trx, randomUUID(), september.id),
+          ),
+        undefined,
+      );
+      await assert.rejects(reader.execute('malformed'));
+      await assert.rejects(reader.execute(randomUUID()));
 
       const identified = await creator.execute(
         {
           ...payload,
           reportingIdentity: 'identified',
-          contact: { name: 'Resident', email: 'resident@example.test' },
+          contact: { name: 'Alex Example', email: 'resident@example.test' },
         },
         new Date('2026-10-15T12:00:00Z'),
       );
@@ -341,6 +374,12 @@ test(
         ).email,
         'resident@example.test',
       );
+      const identifiedReadModel = await reader.execute(identified.id);
+      assert.deepEqual(identifiedReadModel.requester, {
+        anonymous: false,
+        name: 'Alex Example',
+        email: 'resident@example.test',
+      });
 
       const before = await db
         .selectFrom('service_request')

@@ -10,5 +10,9 @@ export function createLegacyIssueRepository({ saveIssue = (issue) => IssueServic
 }
 
 export function createApiServiceRequestRepository(apiClient) {
-    return { mode: "api", createServiceRequest: (input, options) => apiClient.post("/service-requests", mapIntakeToCreateServiceRequest(input), options) };
+    return {
+        mode: "api",
+        createServiceRequest: (input, options) => apiClient.post("/service-requests", mapIntakeToCreateServiceRequest(input), options),
+        getServiceRequestDetails: (id, options) => apiClient.get(`/service-requests/${encodeURIComponent(id)}`, options)
+    };
 }

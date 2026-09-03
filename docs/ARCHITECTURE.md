@@ -84,6 +84,8 @@ F008 selects a TypeScript/NestJS modular REST API with an OpenAPI contract and P
 
 Phase D0 adds transactional canonical ServiceRequest creation, globally unique timezone-aware monthly references, typed and snapshotted Answers, optional requester/contact and Location foundations, initial append-only Activity, and an Organization-scoped exact-reference repository lookup. The public React application remains unconnected, and authentication, staff reads/workflow, GIS, notifications, attachments, and integrations remain deferred. See `docs/features/F011-phase-d0-canonical-service-request-persistence.md`.
 
+Phase D2 adds a separate canonical details read-model service. It uses one database transaction and trusted configured Organization context to assemble the exact persisted ServiceDefinitionVersion classification, Answer snapshots, requester/contact, Location foundation, and ordered Activity. Its HTTP route and React details consumer are disabled by default, explicitly local/test-only, and cannot be enabled when the API runs with `NODE_ENV=production`. Protected production staff access remains blocked on Entra/RBAC. See `docs/features/F013-phase-d2-service-request-read-model-details.md`.
+
 ### Integration Router — Proposed
 
 ```text

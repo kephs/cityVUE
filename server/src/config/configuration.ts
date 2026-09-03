@@ -25,6 +25,7 @@ export interface AppConfiguration {
     otlpEndpoint?: string;
   };
   catalog: { developmentOrganizationId: string };
+  serviceRequestReads: { developmentEnabled: boolean };
 }
 
 export function configuration(): AppConfiguration {
@@ -64,6 +65,10 @@ export function configuration(): AppConfiguration {
       developmentOrganizationId:
         process.env.DEVELOPMENT_ORGANIZATION_ID ??
         '10000000-0000-4000-8000-000000000001',
+    },
+    serviceRequestReads: {
+      developmentEnabled:
+        process.env.ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS === 'true',
     },
   };
 }

@@ -5,7 +5,7 @@ import { createApiServiceRequestRepository, createLegacyIssueRepository } from "
 
 export function createResidentIntakeRepositories({ environment, fetchImplementation, saveIssue, createTimestamp } = {}) {
     const config = readResidentIntakeConfig(environment);
-    if (config.dataSource === "legacy") return { mode: "legacy", catalog: createFixtureCatalogRepository(), requests: createLegacyIssueRepository({ saveIssue, createTimestamp }) };
+    if (config.dataSource === "legacy") return { mode: "legacy", detailsEnabled: false, catalog: createFixtureCatalogRepository(), requests: createLegacyIssueRepository({ saveIssue, createTimestamp }) };
     const client = createApiClient({ baseUrl: config.apiBaseUrl, fetchImplementation });
-    return { mode: "api", catalog: createApiCatalogRepository(client), requests: createApiServiceRequestRepository(client) };
+    return { mode: "api", detailsEnabled: config.developmentReadsEnabled, catalog: createApiCatalogRepository(client), requests: createApiServiceRequestRepository(client) };
 }

@@ -95,3 +95,45 @@ export class CreateServiceRequestResponseDto {
   @ApiProperty({ enum: ['open'] }) status!: string;
   @ApiProperty({ format: 'date-time' }) createdAt!: Date;
 }
+
+export class ServiceRequestDetailsResponseDto {
+  @ApiProperty({ type: Object }) serviceRequest!: {
+    id: string;
+    referenceNumber: string;
+    status: string;
+    priority: string;
+    createdAt: Date | string;
+    updatedAt: Date | string;
+    revision: number;
+  };
+  @ApiProperty({ type: Object }) classification!: {
+    serviceDefinitionId: string;
+    serviceDefinitionVersionId: string;
+    issueName: string;
+    category: { id: string; name: string };
+    department: { id: string; name: string };
+    division?: { id: string; name: string };
+  };
+  @ApiProperty({ type: Object }) request!: { description: string };
+  @ApiProperty({ type: [Object] }) answers!: {
+    questionId: string;
+    questionKey: string;
+    label: string;
+    type: string;
+    order: number;
+    displayValue: string;
+    value: string | number | boolean;
+  }[];
+  @ApiPropertyOptional({ type: Object }) location?: Record<string, unknown>;
+  @ApiProperty({ type: Object }) requester!: {
+    anonymous: boolean;
+    name?: string;
+    email?: string;
+  };
+  @ApiProperty({ type: [Object] }) activity!: {
+    type: string;
+    actorType: string;
+    occurredAt: Date | string;
+    metadata: Record<string, unknown>;
+  }[];
+}

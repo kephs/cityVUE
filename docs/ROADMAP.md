@@ -1,6 +1,7 @@
 # CityVUE — Roadmap
 
 - [x] Phase D1 local resident intake transition foundation: explicit legacy/API repositories, canonical catalog identifiers, and canonical POST submission. Production cutover remains deferred.
+- [x] Phase D2 local canonical ServiceRequest details foundation: Organization-scoped read model, fail-closed development endpoint, and gated read-only React details route. Production staff access remains deferred pending Entra/RBAC.
 
 **Status:** Working development roadmap  
 **Canonical development name:** CityVUE  
@@ -73,7 +74,7 @@ Roadmap inclusion does not constitute City approval.
 - [ ] Validate structured answers server-side against the associated published definition, including required visible questions, types, options, constraints, and conditional applicability.
 - [ ] Retain historical form definitions or equivalent immutable/versioned representations for safe request display and edit reconstruction.
 - [ ] Render canonical Request Details/Edit views with separate resident-description and structured-answer fields rather than a combined description textarea.
-- [ ] Add a read-only `/issues/:issueId` Issue/ServiceRequest Details route showing only lifecycle-applicable, authorized information.
+- [x] Add a local-development read-only `/issues/:issueId` canonical ServiceRequest Details route; production authorization and Issue List navigation remain deferred.
 - [ ] Make Issue names the primary Issue List links, relabel the visible Title column as Issue, and simplify row actions by placing authorized Edit/Delete on Details with an optional compact More menu only if needed.
 - [ ] Add append-oriented answer edit history aligned with the Activity/audit model.
 - [ ] Define a separately reviewed legacy compatibility and migration strategy that does not depend on reverse-parsing `Issue.description`.

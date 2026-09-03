@@ -9,6 +9,7 @@ const IssuesPage = lazy(() => import("../pages/issues/IssuesPage.jsx"));
 const EditIssuePage = lazy(() => import("../pages/issues/EditIssuePage.jsx"));
 const DashboardPage = lazy(() => import("../pages/dashboard/DashboardPage.jsx"));
 const ReportIssuePage = lazy(() => import("../pages/report/ReportIssuePage.jsx"));
+const ServiceRequestDetailsPage = lazy(() => import("../pages/issues/ServiceRequestDetailsPage.jsx"));
 
 function redirectLegacyReport({ request }) {
     const issueId = new URL(request.url).searchParams.get("id")?.trim();
@@ -38,6 +39,10 @@ const router = createBrowserRouter([
             {
                 path: "issues/:issueId/edit",
                 element: <EditIssuePage />
+            },
+            {
+                path: "issues/:issueId",
+                element: <ServiceRequestDetailsPage />
             },
             {
                 path: "dashboard",

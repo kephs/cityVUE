@@ -7,8 +7,8 @@ import ReportIssuePage from "../src/pages/report/ReportIssuePage.jsx";
 const category = { id: "category", name: "Roads", description: "Road concerns", icon: "bi-signpost", accent: "blue", status: "active" };
 const service = { id: "service", categoryId: "category", serviceDefinitionVersionId: "version", name: "Pothole", citizenDescription: "Road damage", status: "active", locationRequirement: "required", anonymousPolicy: "allowed", questions: [] };
 
-function apiRepositories(createServiceRequest) {
-    return { mode: "api", catalog: { notice: "Local API mode", loadCategories: vi.fn(async () => [category]), loadIssues: vi.fn(async () => [service]), loadDefinition: vi.fn(async () => service) }, requests: { createServiceRequest } };
+function apiRepositories(createServiceRequest, detailsEnabled = false) {
+    return { mode: "api", detailsEnabled, catalog: { notice: "Local API mode", loadCategories: vi.fn(async () => [category]), loadIssues: vi.fn(async () => [service]), loadDefinition: vi.fn(async () => service) }, requests: { createServiceRequest } };
 }
 
 async function completeRequest(user) {
@@ -30,6 +30,13 @@ test("API mode loads asynchronously, submits once, and displays the API referenc
     expect(create).toHaveBeenCalledOnce(); expect(screen.getByRole("button", { name: "Submitting..." })).toBeDisabled();
     resolveRequest({ id: "request", referenceNumber: "SR-202609-000123", status: "open", createdAt: "2026-09-02T00:00:00Z" });
     expect(await screen.findByRole("status")).toHaveTextContent("SR-202609-000123");
+});
+
+test("offers canonical details navigation only when development reads are enabled", async () => {
+    const user = userEvent.setup(); const create = vi.fn().mockResolvedValue({ id: "80000000-0000-4000-8000-000000000001", referenceNumber: "SR-202609-000125" });
+    render(<MemoryRouter><ReportIssuePage repositories={apiRepositories(create, true)} /></MemoryRouter>);
+    await completeRequest(user); await user.click(screen.getByRole("button", { name: "Submit Request" }));
+    expect(await screen.findByRole("button", { name: "View request details" })).toBeInTheDocument();
 });
 
 test("API submission errors preserve review state and allow an explicit retry", async () => {
