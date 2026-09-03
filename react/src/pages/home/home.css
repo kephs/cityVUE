@@ -155,6 +155,8 @@
 .home-action-icon-blue { background: #edf4ff; color: #1268e9; }
 .home-action-icon-green { background: #edf9f1; color: #159454; }
 .home-action-icon-gold { background: #fff7df; color: #f2ac00; }
+.home-action-icon-emergency { background: #fff0f1; color: #b42331; }
+.home-action-icon-water { background: #eaf8fc; color: #087ea4; }
 
 .home-action-card h2 {
     margin: 0 0 10px;
@@ -188,9 +190,12 @@
     filter: saturate(1.08) brightness(1.02);
 }
 
+.home-call-button { gap: .5rem; }
+
 .home-button-blue { background: linear-gradient(180deg, #1778f4, #075bd4); }
 .home-button-green { background: linear-gradient(180deg, #29a861, #168549); }
 .home-button-gold { background: linear-gradient(180deg, #ffc015, #f0a900); color: #1f2937 !important; }
+.home-button-emergency { background: linear-gradient(180deg, #dc3545, #b42331); }
 
 .home-impact-panel {
     margin-top: 31px;
@@ -360,6 +365,8 @@ body.dark-mode .home-statistic span { color: #c1cce0; }
 body.dark-mode .home-hero::after { background: linear-gradient(180deg, rgba(8, 21, 42, 0), rgba(8, 21, 42, 0.92)); }
 body.dark-mode .home-activity-row:hover { background: #172d4b; }
 body.dark-mode .home-recent-empty, body.dark-mode .home-data-error { background: var(--home-surface); }
+body.dark-mode .home-action-icon-emergency { background: #3a2028; color: #ff9299; }
+body.dark-mode .home-action-icon-water { background: #123342; color: #72d5f5; }
 
 @media (min-width: 1440px) {
     .home-page { --home-content-width: 1440px; }

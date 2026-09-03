@@ -3,6 +3,8 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, test } from "vitest";
 
 import HomePage from "../src/pages/HomePage.jsx";
+import PrimaryNavigation from "../src/components/navigation/PrimaryNavigation.jsx";
+import { ThemeProvider } from "../src/theme/ThemeProvider.jsx";
 
 function renderHome(issues = [], loadIssues = () => issues) {
     return render(<MemoryRouter><HomePage loadIssues={loadIssues} /></MemoryRouter>);
@@ -16,6 +18,27 @@ const issues = [
 ];
 
 describe("HomePage live issue presentation", () => {
+    test("keeps Report an Issue and replaces the old shortcuts with callable emergency guidance", () => {
+        renderHome();
+
+        expect(screen.getByRole("heading", { name: "Report an Issue" })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Report Issue" })).toHaveAttribute("href", "/report");
+        expect(screen.getByRole("heading", { name: "Police or Fire Emergency" })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Call 911" })).toHaveAttribute("href", "tel:911");
+        expect(screen.getByRole("heading", { name: "Water/Sewer Emergency" })).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: "Call 240-314-8567" })).toHaveAttribute("href", "tel:2403148567");
+        expect(screen.queryByRole("heading", { name: "View Issues" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: "View Issue List" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("link", { name: "Open Dashboard" })).not.toBeInTheDocument();
+    });
+
+    test("leaves Issue List and Dashboard in the primary navigation", () => {
+        render(<ThemeProvider><MemoryRouter><PrimaryNavigation isOpen={false} onNavigate={() => {}} /></MemoryRouter></ThemeProvider>);
+        expect(screen.getByRole("link", { name: "Issue List" })).toHaveAttribute("href", "/issues");
+        expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+    });
+
     test("renders the real Hero CTA and removes old shortcut UI and ServiceHighlights", () => {
         renderHome();
         const hero = screen.getByRole("region", { name: "CityVUE introduction" });

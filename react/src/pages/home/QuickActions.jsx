@@ -2,8 +2,8 @@ import { Link } from "react-router-dom";
 
 const actions = [
     { icon: "bi-flag", tone: "blue", title: "Report an Issue", description: "Quickly submit a new community issue to let us know.", label: "Report Issue", to: "/report" },
-    { icon: "bi-list-check", tone: "green", title: "View Issues", description: "Browse and search reported issues in your community.", label: "View Issue List", to: "/issues" },
-    { icon: "bi-speedometer2", tone: "gold", title: "Dashboard", description: "View statistics and summaries about community issues.", label: "Open Dashboard", to: "/dashboard" }
+    { icon: "bi-shield-fill-exclamation", tone: "emergency", title: "Police or Fire Emergency", description: "If this is a Police or Fire Emergency, call immediately.", phone: "911", label: "Call 911", href: "tel:911" },
+    { icon: "bi-droplet-fill", tone: "water", buttonTone: "gold", title: "Water/Sewer Emergency", description: "If this is a Water/Sewer Emergency, call the City immediately.", phone: "240-314-8567", label: "240-314-8567", href: "tel:2403148567" }
 ];
 
 export default function QuickActions() {
@@ -16,7 +16,7 @@ export default function QuickActions() {
                     </div>
                     <h2>{action.title}</h2>
                     <p>{action.description}</p>
-                    <Link className={`home-button home-button-${action.tone}`} to={action.to}>{action.label}</Link>
+                    {action.to ? <Link className={`home-button home-button-${action.tone}`} to={action.to}>{action.label}</Link> : <a className={`home-button home-call-button home-button-${action.buttonTone ?? action.tone}`} href={action.href} aria-label={`Call ${action.phone}`}><i className="bi bi-telephone-fill" aria-hidden="true" />{action.label}</a>}
                 </article>
             ))}
         </section>

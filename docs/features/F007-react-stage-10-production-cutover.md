@@ -108,6 +108,14 @@ Live direct-load and refresh checks passed for `/`, `/report`, `/issues`, `/dash
 
 Production contained zero Issues, so no synthetic production record was created. Populated Issue List, Dashboard, Department analytics, and Edit presentation remained covered by the approved preview/local UAT and automated regression suite. The refinement did not change filters, sorting, search, routing, chart-click behavior, edit/delete behavior, theme persistence, API-mode behavior, `Issue`, `IssueService`, or the `cityvueIssues` storage key. Production remains legacy/localStorage-backed, the backend remains undeployed, and Phase D2 has not started.
 
+## Home Emergency Information Cards Production Promotion
+
+The reviewed Home emergency-information cards were promoted on September 3, 2026 at approximately 2:35 PM America/New_York. The prior committed production baseline is tagged `pre-home-emergency-cards-promotion` at `34e05f6`. Only Firebase Hosting was deployed to `https://cityvue-1.web.app`; backend behavior and all other Firebase services were unchanged.
+
+Home retains the unchanged Report an Issue card and replaces its former Issue List and Dashboard shortcuts with Police or Fire Emergency guidance linked to `tel:911` and Water/Sewer Emergency guidance linked to `tel:2403148567`. The call links use descriptive accessible names, decorative icons, visible keyboard focus, compact aligned buttons, and a consistent `0.5rem` icon/text gap.
+
+The promotion passed 62 Node tests, 79 React tests, 26 backend unit tests, 10 backend E2E tests, backend typecheck/build, Parcel and React/Vite production builds, `git diff --check`, and offline root/backend audits with zero vulnerabilities. Live direct-load and refresh checks passed for `/`, `/report`, `/issues`, and `/dashboard`; responsive checks passed at 1440, 768, and 390 px in light and dark mode with equal-height card presentation, no horizontal overflow, missing assets, or console errors. No synthetic production Issue was created. `Issue`, `IssueService`, `cityvueIssues`, legacy persistence, and the Parcel rollback path remain unchanged.
+
 ## Bundle and Performance Record
 
 The initial JavaScript is 288.45 kB minified / 92.05 kB gzip. Dashboard and Chart.js remain isolated in a deferred 214.49 kB minified / 72.74 kB gzip chunk. Page chunks range from 5.34 kB to 15.95 kB minified. The 311.98 kB shared CSS compresses to 45.25 kB gzip. The approximately 2.12 MB Home hero PNG remains a known later optimization candidate and did not block cutover.
