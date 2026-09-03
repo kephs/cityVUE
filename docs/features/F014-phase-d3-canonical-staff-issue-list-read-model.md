@@ -1,0 +1,18 @@
+# F014 — Phase D3 Canonical Staff Issue List Read Model
+
+**Status:** Implemented and locally validated; production exposure deferred
+**Scope:** Local development only
+
+Phase D3 adds an Organization-scoped canonical `ServiceRequest` list at `GET /api/v1/service-requests` and lets the existing `/issues` route consume it only when API mode and the explicit development-read flag are enabled. It is a read-only foundation, not staff authorization. Production remains legacy/localStorage-backed until Entra identity, server-side RBAC, privacy/security review, and a separately approved backend deployment exist.
+
+Each row contains only `serviceRequestId`, `referenceNumber`, `issueName`, Category ID/name, Department ID/name, nullable Division ID/name, canonical status and priority, `createdAt`, `updatedAt`, and `revision`. It omits description, requester/contact, Answers, Location, Activity, assignments, attachments, watchers, work orders, integrations, routing data, and Organization internals.
+
+The route reuses `ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS`. It is false by default and forbidden in production. Organization context comes only from backend `DEVELOPMENT_ORGANIZATION_ID`; no Organization input is accepted. Malformed UUID filters return validation errors, while well-formed IDs outside the configured Organization return an empty result so existence is not disclosed.
+
+`search` is trimmed and matched case-insensitively with escaped PostgreSQL `ILIKE` patterns across reference number, exact-version Issue name, Category, Department, and optional Division. Full and partial reference fragments work. Resident description is deliberately excluded. Filters are `status`, `priority`, `department`, `division`, and `category`. Joined hierarchy predicates enforce authoritative relationships. Allowed sorts are `newest`, `oldest`, `reference_asc`, `reference_desc`, `priority`, `status`, and `issue_name`; each maps to explicit SQL.
+
+D3 uses bounded offset pagination (`page`, `pageSize`) with defaults 1 and 25 and a maximum 100. The response includes total and Previous/Next metadata. Offset pagination supports the initial multi-sort UX and exact count; deep-page and count cost should be measured before production, with keyset pagination considered when volume warrants it. The implementation uses one joined list query plus one count query and no N+1 reads. Existing `(organization_id, created_at)` and new scoped status/priority indexes support primary browsing paths.
+
+The frontend normalizes rows to `{ id, referenceNumber, issueName, department, division, category, priority, status, reportedAt, source }`. API mode uses server-side query operations and canonical catalog hierarchy metadata for dependent choices. URL parameters are `search`, `department`, `division`, `category`, `priority`, `status`, `sort`, and `page`, using UUIDs for hierarchy values. Issue names link to `/issues/:serviceRequestId`; canonical rows have no Edit/Delete actions. Loading, empty, no-match, unavailable/error, retry, result-count, and Previous/Next states are explicit. Legacy mode retains prior URL parsing, client search/filter/sort, localStorage, and Edit/Delete, with no canonical fallback after API failure.
+
+Tests cover service normalization/scoping/mapping, API validation and safe shape, PostgreSQL search/filter/sort/pagination/count/isolation, frontend rendering/query behavior, and legacy regressions. Existing semantic table labels, mobile stacked rows, focus styling, and dark-theme tokens apply. Production still requires Entra/RBAC, API authorization, privacy/security review, deployment controls, load testing, and production UAT. No workflow action, identity, GIS, attachment, notification, or EAM behavior is introduced.

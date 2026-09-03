@@ -3,6 +3,7 @@ import { CreateServiceRequestService } from './create-service-request.service.js
 import { ServiceRequestController } from './service-request.controller.js';
 import { ServiceRequestRepository } from './service-request.repository.js';
 import { GetServiceRequestDetailsService } from './get-service-request-details.service.js';
+import { ListServiceRequestsService } from './list-service-requests.service.js';
 
 @Module({
   controllers: [ServiceRequestController],
@@ -10,6 +11,7 @@ import { GetServiceRequestDetailsService } from './get-service-request-details.s
     ServiceRequestRepository,
     CreateServiceRequestService,
     GetServiceRequestDetailsService,
+    ListServiceRequestsService,
   ],
   exports: [CreateServiceRequestService, ServiceRequestRepository],
 })

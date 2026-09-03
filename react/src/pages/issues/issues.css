@@ -55,6 +55,9 @@
 .issue-row-actions .btn:focus-visible,.issue-row:focus-within { outline:3px solid #79b5ff; outline-offset:-2px; }
 .issues-empty-state { padding:3.25rem 1rem; text-align:center; background:linear-gradient(135deg,color-mix(in srgb,var(--bs-primary-bg-subtle) 45%,var(--bs-body-bg)),var(--bs-body-bg)); }
 .issues-empty-icon { display:grid; width:4rem; height:4rem; margin-inline:auto; place-items:center; border-radius:50%; background:var(--bs-primary-bg-subtle); color:var(--bs-primary); font-size:1.55rem; }
+.issue-reference { color:var(--bs-primary-text-emphasis); font-weight:750; white-space:nowrap; }
+.issues-pagination { display:flex; justify-content:center; align-items:center; gap:1rem; padding:1rem; border-top:1px solid var(--bs-border-color); background:var(--bs-tertiary-bg); }
+.issues-pagination .btn { min-width:6.5rem; }
 
 .issues-table td:first-child {
     min-width: 12rem;
@@ -369,6 +372,7 @@
     .issues-header { margin-bottom:1.25rem; }
     .issue-filter-card .card-body { padding:1rem!important; }
     .issue-filter-card .btn { width:100%; }
+    .issues-pagination { flex-wrap:wrap; }
     .issues-table td { grid-template-columns:minmax(6.25rem,34%) minmax(0,1fr); }
     .edit-context-card {
         padding: 1rem;

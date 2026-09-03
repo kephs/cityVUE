@@ -6,6 +6,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { CreateServiceRequestService } from '../../src/service-request/create-service-request.service.js';
 import { GetServiceRequestDetailsService } from '../../src/service-request/get-service-request-details.service.js';
+import { ListServiceRequestsService } from '../../src/service-request/list-service-requests.service.js';
 import type { CreateServiceRequestDto } from '../../src/service-request/service-request.dto.js';
 import { DatabaseService } from '../../src/database/database.service.js';
 
@@ -104,6 +105,34 @@ before(async () => {
         };
       },
     })
+    .overrideProvider(ListServiceRequestsService)
+    .useValue({
+      execute: async (query: Record<string, unknown>) => ({
+        items: [
+          {
+            serviceRequestId: '80000000-0000-4000-8000-000000000001',
+            referenceNumber: 'SR-202609-000001',
+            issueName: 'Pothole',
+            categoryId: '30000000-0000-4000-8000-000000000001',
+            categoryName: 'Roads & Streets',
+            departmentId: '20000000-0000-4000-8000-000000000001',
+            departmentName: 'Public Works',
+            divisionId: null,
+            divisionName: null,
+            status: query.status ?? 'open',
+            priority: 'medium',
+            createdAt: new Date('2026-09-02T12:00:00Z'),
+            updatedAt: new Date('2026-09-02T12:00:00Z'),
+            revision: 1,
+          },
+        ],
+        total: 1,
+        page: Number(query.page ?? 1),
+        pageSize: Number(query.pageSize ?? 25),
+        hasPreviousPage: false,
+        hasNextPage: false,
+      }),
+    })
     .compile();
   app = module.createNestApplication();
   configureApplication(app);
@@ -184,4 +213,33 @@ test('GET returns development-only Organization-scoped details and safe not foun
   await request(app.getHttpServer())
     .get('/api/v1/service-requests/80000000-0000-4000-8000-000000000099')
     .expect(404);
+});
+test('GET list returns paginated minimal rows and validates query options', async () => {
+  const response = await request(app.getHttpServer())
+    .get(
+      '/api/v1/service-requests?search=000001&status=open&sort=reference_asc&page=1&pageSize=10',
+    )
+    .expect(200);
+  const listBody = response.body as { items: Record<string, unknown>[] };
+  const firstItem = listBody.items[0];
+  assert.ok(firstItem);
+  assert.equal(firstItem.referenceNumber, 'SR-202609-000001');
+  for (const forbidden of [
+    'description',
+    'requester',
+    'location',
+    'answers',
+    'activity',
+    'organizationId',
+  ])
+    assert.equal(forbidden in firstItem, false);
+  await request(app.getHttpServer())
+    .get('/api/v1/service-requests?pageSize=101')
+    .expect(400);
+  await request(app.getHttpServer())
+    .get('/api/v1/service-requests?department=bad')
+    .expect(400);
+  await request(app.getHttpServer())
+    .get('/api/v1/service-requests?sort=created_at;drop table')
+    .expect(400);
 });

@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+- [x] Phase D3 local canonical staff Issue List foundation: minimal Organization-scoped DTO, dev-gated search and hierarchy filters, controlled sorting, bounded pagination/counts, and API-mode rendering on the existing `/issues` route. Production access remains deferred pending Entra/RBAC and deployment approval.
+
 - [x] Phase D1 local resident intake transition foundation: explicit legacy/API repositories, canonical catalog identifiers, and canonical POST submission. Production cutover remains deferred.
 - [x] Phase D2 local canonical ServiceRequest details foundation: Organization-scoped read model, fail-closed development endpoint, and gated read-only React details route. Production staff access remains deferred pending Entra/RBAC.
 

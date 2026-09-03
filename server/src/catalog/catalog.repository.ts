@@ -9,20 +9,42 @@ export class CatalogRepository {
   async listActiveCategories(organizationId: string, search?: string) {
     let query = this.database.client
       .selectFrom('category')
-      .select(['id', 'name', 'description', 'icon_key'])
-      .where('organization_id', '=', organizationId)
-      .where('status', '=', 'active');
+      .innerJoin('department', (join) =>
+        join
+          .onRef('department.id', '=', 'category.department_id')
+          .onRef('department.organization_id', '=', 'category.organization_id'),
+      )
+      .leftJoin('division', (join) =>
+        join
+          .onRef('division.id', '=', 'category.division_id')
+          .onRef('division.organization_id', '=', 'category.organization_id'),
+      )
+      .select([
+        'category.id',
+        'category.name',
+        'category.description',
+        'category.icon_key',
+        'department.id as department_id',
+        'department.name as department_name',
+        'division.id as division_id',
+        'division.name as division_name',
+      ])
+      .where('category.organization_id', '=', organizationId)
+      .where('category.status', '=', 'active');
     if (search) {
       const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
       query = query.where((eb) =>
         eb.or([
-          eb('name', 'ilike', pattern),
-          eb('description', 'ilike', pattern),
-          sql<boolean>`exists (select 1 from unnest(aliases || keywords) term where term ilike ${pattern})`,
+          eb('category.name', 'ilike', pattern),
+          eb('category.description', 'ilike', pattern),
+          sql<boolean>`exists (select 1 from unnest(category.aliases || category.keywords) term where term ilike ${pattern})`,
         ]),
       );
     }
-    return query.orderBy('display_order').orderBy('name').execute();
+    return query
+      .orderBy('category.display_order')
+      .orderBy('category.name')
+      .execute();
   }
 
   async listPublishedIssues(

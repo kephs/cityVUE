@@ -13,6 +13,11 @@ export function createApiServiceRequestRepository(apiClient) {
     return {
         mode: "api",
         createServiceRequest: (input, options) => apiClient.post("/service-requests", mapIntakeToCreateServiceRequest(input), options),
-        getServiceRequestDetails: (id, options) => apiClient.get(`/service-requests/${encodeURIComponent(id)}`, options)
+        getServiceRequestDetails: (id, options) => apiClient.get(`/service-requests/${encodeURIComponent(id)}`, options),
+        listServiceRequests: (query = {}, options) => {
+            const params = new URLSearchParams();
+            for (const [key, value] of Object.entries(query)) if (value !== "" && value !== undefined) params.set(key, String(value));
+            return apiClient.get(`/service-requests${params.size ? `?${params}` : ""}`, options);
+        }
     };
 }

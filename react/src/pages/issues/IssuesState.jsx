@@ -22,11 +22,13 @@ export function NoMatchesState({ onReset }) {
     );
 }
 
-export function IssuesErrorState() {
+export function IssuesLoadingState() { return <div className="issues-empty-state" role="status">Loading issues…</div>; }
+
+export function IssuesErrorState({ message = "Issues could not be loaded.", onRetry }) {
     return (
         <div className="alert alert-danger" role="alert">
             <h2 className="h5 alert-heading">Issues could not be loaded</h2>
-            <p className="mb-0">Please refresh the page and try again.</p>
+            <p className="mb-2">{message}</p>{onRetry && <button className="btn btn-outline-danger" type="button" onClick={onRetry}>Try again</button>}
         </div>
     );
 }

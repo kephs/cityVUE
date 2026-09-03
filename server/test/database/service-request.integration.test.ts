@@ -9,11 +9,16 @@ import {
   down as requestDown,
   up as requestUp,
 } from '../../migrations/20260902010000-create-service-request-foundation.js';
+import {
+  down as listDown,
+  up as listUp,
+} from '../../migrations/20260902020000-add-service-request-list-indexes.js';
 import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import { CreateServiceRequestService } from '../../src/service-request/create-service-request.service.js';
 import { GetServiceRequestDetailsService } from '../../src/service-request/get-service-request-details.service.js';
+import { ListServiceRequestsService } from '../../src/service-request/list-service-requests.service.js';
 import { ServiceRequestRepository } from '../../src/service-request/service-request.repository.js';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -44,6 +49,7 @@ test(
     try {
       await catalogUp(db);
       await requestUp(db);
+      await listUp(db);
       await db
         .insertInto('organization')
         .values({
@@ -234,6 +240,14 @@ test(
         { client: db } as DatabaseService,
         repository,
       );
+      const listReader = new ListServiceRequestsService(
+        {
+          get: (key: string) =>
+            key === 'serviceRequestReads.developmentEnabled' ? true : org,
+        } as unknown as ConfigService<AppConfiguration, true>,
+        { client: db } as DatabaseService,
+        repository,
+      );
       const payload = {
         serviceDefinitionId: serviceId,
         serviceDefinitionVersionId: version,
@@ -380,6 +394,40 @@ test(
         name: 'Alex Example',
         email: 'resident@example.test',
       });
+      const listed = await listReader.execute({
+        search: 'pOtHoLe',
+        department,
+        category,
+        status: 'open',
+        priority: 'high',
+        sort: 'reference_desc',
+        page: 1,
+        pageSize: 5,
+      });
+      assert.equal(listed.total, 15);
+      assert.equal(listed.items.length, 5);
+      assert.equal(listed.hasNextPage, true);
+      assert.equal(
+        listed.items.every(
+          (item) => item.departmentName === 'Works' && item.divisionId === null,
+        ),
+        true,
+      );
+      assert.equal(Object.hasOwn(listed.items[0] ?? {}, 'description'), false);
+      assert.equal(
+        (await listReader.execute({ search: september.referenceNumber })).total,
+        1,
+      );
+      assert.equal(
+        (
+          await repository.listForOrganization(db, randomUUID(), {
+            sort: 'newest',
+            page: 1,
+            pageSize: 25,
+          })
+        ).total,
+        0,
+      );
 
       const before = await db
         .selectFrom('service_request')
@@ -476,6 +524,7 @@ test(
           })
           .execute(),
       );
+      await listDown(db);
       await requestDown(db);
     } finally {
       await db.destroy();

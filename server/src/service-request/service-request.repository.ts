@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { sql, type Transaction } from 'kysely';
+import { sql, type Kysely, type Transaction } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
 
 export interface CatalogSubmissionDefinition {
@@ -26,6 +26,142 @@ export interface CatalogSubmissionDefinition {
 
 @Injectable()
 export class ServiceRequestRepository {
+  async listForOrganization(
+    db: Kysely<DatabaseSchema>,
+    organizationId: string,
+    options: {
+      search?: string;
+      status?: string;
+      priority?: string;
+      department?: string;
+      division?: string;
+      category?: string;
+      sort: string;
+      page: number;
+      pageSize: number;
+    },
+  ) {
+    const base = () => {
+      let query = db
+        .selectFrom('service_request as request')
+        .innerJoin('service_definition_version as version', (join) =>
+          join
+            .onRef('version.id', '=', 'request.service_definition_version_id')
+            .onRef('version.organization_id', '=', 'request.organization_id'),
+        )
+        .innerJoin('category as category', (join) =>
+          join
+            .onRef('category.id', '=', 'request.category_id')
+            .onRef('category.organization_id', '=', 'request.organization_id'),
+        )
+        .innerJoin('department as department', (join) =>
+          join
+            .onRef('department.id', '=', 'category.department_id')
+            .onRef(
+              'department.organization_id',
+              '=',
+              'request.organization_id',
+            ),
+        )
+        .leftJoin('division as division', (join) =>
+          join
+            .onRef('division.id', '=', 'category.division_id')
+            .onRef('division.organization_id', '=', 'request.organization_id'),
+        )
+        .where('request.organization_id', '=', organizationId);
+      if (options.search) {
+        const pattern = `%${options.search.replace(/[\\%_]/g, '\\$&')}%`;
+        query = query.where((eb) =>
+          eb.or([
+            eb('request.reference_number', 'ilike', pattern),
+            eb('version.name', 'ilike', pattern),
+            eb('category.name', 'ilike', pattern),
+            eb('department.name', 'ilike', pattern),
+            eb('division.name', 'ilike', pattern),
+          ]),
+        );
+      }
+      if (options.status)
+        query = query.where('request.status', '=', options.status);
+      if (options.priority)
+        query = query.where('request.priority', '=', options.priority);
+      if (options.department)
+        query = query.where('department.id', '=', options.department);
+      if (options.division)
+        query = query.where('division.id', '=', options.division);
+      if (options.category)
+        query = query.where('category.id', '=', options.category);
+      return query;
+    };
+    const countRow = await base()
+      .select(sql<number>`count(*)::integer`.as('count'))
+      .executeTakeFirstOrThrow();
+    let rows = base().select([
+      'request.id',
+      'request.reference_number',
+      'version.name as issue_name',
+      'category.id as category_id',
+      'category.name as category_name',
+      'department.id as department_id',
+      'department.name as department_name',
+      'division.id as division_id',
+      'division.name as division_name',
+      'request.status',
+      'request.priority',
+      'request.created_at',
+      'request.updated_at',
+      'request.revision',
+    ]);
+    switch (options.sort) {
+      case 'oldest':
+        rows = rows
+          .orderBy('request.created_at', 'asc')
+          .orderBy('request.id', 'asc');
+        break;
+      case 'reference_asc':
+        rows = rows
+          .orderBy('request.reference_number', 'asc')
+          .orderBy('request.id', 'asc');
+        break;
+      case 'reference_desc':
+        rows = rows
+          .orderBy('request.reference_number', 'desc')
+          .orderBy('request.id', 'desc');
+        break;
+      case 'priority':
+        rows = rows
+          .orderBy(
+            sql`case request.priority when 'urgent' then 1 when 'high' then 2 when 'medium' then 3 else 4 end`,
+          )
+          .orderBy('request.created_at', 'desc')
+          .orderBy('request.id', 'desc');
+        break;
+      case 'status':
+        rows = rows
+          .orderBy('request.status', 'asc')
+          .orderBy('request.created_at', 'desc')
+          .orderBy('request.id', 'desc');
+        break;
+      case 'issue_name':
+        rows = rows
+          .orderBy('version.name', 'asc')
+          .orderBy('request.created_at', 'desc')
+          .orderBy('request.id', 'desc');
+        break;
+      default:
+        rows = rows
+          .orderBy('request.created_at', 'desc')
+          .orderBy('request.id', 'desc');
+    }
+    return {
+      rows: await rows
+        .limit(options.pageSize)
+        .offset((options.page - 1) * options.pageSize)
+        .execute(),
+      total: countRow.count,
+    };
+  }
+
   async loadDetails(
     trx: Transaction<DatabaseSchema>,
     organizationId: string,

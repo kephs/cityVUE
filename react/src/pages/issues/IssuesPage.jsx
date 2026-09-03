@@ -1,120 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
-
+import { useLocation, useNavigate } from "react-router-dom";
 import { filterIssues, getIssueFiltersFromUrl } from "../../../../assets/js/utils/issueFilters.js";
 import { sortIssues } from "../../../../assets/js/utils/issueSort.js";
 import IssueService from "../../../../assets/services/IssueService.js";
+import { createResidentIntakeRepositories } from "../../residentIntake/residentIntakeRepositories.js";
+import { canonicalListQuery, normalizeServiceRequestListRow } from "../../serviceRequests/serviceRequestListData.js";
 import IssueFilters from "./IssueFilters.jsx";
 import IssueTable from "./IssueTable.jsx";
 import DeleteIssueDialog from "./DeleteIssueDialog.jsx";
-import { IssuesErrorState, NoIssuesState, NoMatchesState } from "./IssuesState.jsx";
+import { IssuesErrorState, IssuesLoadingState, NoIssuesState, NoMatchesState } from "./IssuesState.jsx";
 import "./issues.css";
 
-const emptyFilters = { search: "", category: "", priority: "", status: "" };
+const emptyFilters = { search: "", department: "", division: "", category: "", priority: "", status: "" };
+const apiSorts = new Set(["newest", "oldest", "reference_asc", "reference_desc", "priority", "status", "issue_name"]);
+function apiUrlState(search) { const p = new URLSearchParams(search); const sort = p.get("sort") || "newest"; return { filters: Object.fromEntries(Object.keys(emptyFilters).map((key) => [key, p.get(key) || ""])), sort: apiSorts.has(sort) ? sort : "newest", page: Math.max(1, Number.parseInt(p.get("page") || "1", 10) || 1) }; }
 
-export default function IssuesPage({ loadIssues = () => IssueService.getIssues(), deleteIssue = (id) => IssueService.deleteIssue(id) }) {
-    const location = useLocation();
-    const urlFilters = useMemo(
-        () => getIssueFiltersFromUrl(location.search, location.hash),
-        [location.search, location.hash]
-    );
-    const [filters, setFilters] = useState({ ...emptyFilters, ...urlFilters });
-    const [sortBy, setSortBy] = useState("newest");
-    const [readState, setReadState] = useState(() => {
-        try {
-            const issues = loadIssues();
-            return { issues: Array.isArray(issues) ? issues : [], error: false };
-        } catch {
-            return { issues: [], error: true };
-        }
-    });
-    const [notice, setNotice] = useState(location.state?.notice || "");
-    const [deleteTarget, setDeleteTarget] = useState(null);
-    const [deleteError, setDeleteError] = useState("");
-    const [deleting, setDeleting] = useState(false);
-    const deleteTriggerRef = useRef(null);
-
-    useEffect(() => {
-        setFilters((current) => ({ ...current, ...urlFilters }));
-    }, [urlFilters]);
-
-    const visibleIssues = useMemo(
-        () => sortIssues(filterIssues(readState.issues, filters), sortBy),
-        [readState.issues, filters, sortBy]
-    );
-    const hasActiveFilters = Object.values(filters).some(Boolean);
-    const resetFilters = () => setFilters(emptyFilters);
-    const cancelDelete = useCallback(() => {
-        if (deleting) return;
-        setDeleteTarget(null);
-        setDeleteError("");
-    }, [deleting]);
-    const openDelete = (issue, trigger) => {
-        deleteTriggerRef.current = trigger;
-        setDeleteError("");
-        setDeleteTarget(issue);
-    };
-    const confirmDelete = () => {
-        if (!deleteTarget || deleting) return;
-        setDeleting(true);
-        setDeleteError("");
-        try {
-            if (!deleteIssue(deleteTarget.id)) throw new Error("not deleted");
-            setReadState((current) => ({ ...current, issues: current.issues.filter((issue) => issue.id !== deleteTarget.id) }));
-            setNotice("Issue deleted successfully.");
-            setDeleteTarget(null);
-        } catch {
-            setDeleteError("The issue could not be deleted. Please try again.");
-        } finally {
-            setDeleting(false);
-        }
-    };
-
-    if (readState.error) {
-        return (
-            <section aria-labelledby="issues-heading">
-                <h1 className="mb-2" id="issues-heading">Issue List</h1>
-                <p className="text-body-secondary mb-4">Search, review, and manage reported community issues.</p>
-                <IssuesErrorState />
-            </section>
-        );
-    }
-
-    return (
-        <section className="issues-page" aria-labelledby="issues-heading">
-            {notice && (
-                <div className="alert alert-success" role="status">
-                    {notice}
-                </div>
-            )}
-            <header className="issues-header">
-                <div className="issues-header-icon" aria-hidden="true"><i className="bi bi-list-check" /></div>
-                <div><p className="issues-eyebrow">Community Operations</p><h1 id="issues-heading">Issue List</h1>
-                <p className="text-body-secondary mb-0">Search, review, and manage reported community issues.</p></div>
-            </header>
-            <IssueFilters
-                filters={filters}
-                sortBy={sortBy}
-                hasActiveFilters={hasActiveFilters}
-                onFilterChange={(name, value) => setFilters((current) => ({ ...current, [name]: value }))}
-                onSortChange={setSortBy}
-                onReset={resetFilters}
-            />
-            <section className="card border-0 shadow-sm overflow-hidden" aria-labelledby="reported-issues-heading">
-                <div className="card-header bg-body d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 py-3">
-                    <div>
-                        <h2 className="h5 fw-bold mb-1" id="reported-issues-heading">Reported Issues</h2>
-                        <p className="text-body-secondary small mb-0">Edit an issue or delete one with confirmation.</p>
-                    </div>
-                    <span className="issues-result-count" aria-live="polite">{visibleIssues.length} {visibleIssues.length === 1 ? "issue" : "issues"}</span>
-                </div>
-                {readState.issues.length === 0
-                    ? <NoIssuesState />
-                    : visibleIssues.length === 0
-                        ? <NoMatchesState onReset={resetFilters} />
-                        : <IssueTable issues={visibleIssues} onDelete={openDelete} />}
-            </section>
-            <DeleteIssueDialog issue={deleteTarget} error={deleteError} deleting={deleting} onCancel={cancelDelete} onConfirm={confirmDelete} returnFocusRef={deleteTriggerRef} />
-        </section>
-    );
+export default function IssuesPage({ loadIssues = () => IssueService.getIssues(), deleteIssue = (id) => IssueService.deleteIssue(id), repositories }) {
+    const location = useLocation(); const navigate = useNavigate();
+    const data = useMemo(() => repositories || createResidentIntakeRepositories(), [repositories]); const apiMode = data.mode === "api";
+    const initial = useMemo(() => apiMode ? apiUrlState(location.search) : { filters: { ...emptyFilters, ...getIssueFiltersFromUrl(location.search, location.hash) }, sort: "newest", page: 1 }, []);
+    const [filters, setFilters] = useState(initial.filters); const [sortBy, setSortBy] = useState(initial.sort); const [page, setPage] = useState(initial.page); const [catalog, setCatalog] = useState([]); const [reload, setReload] = useState(0);
+    const [readState, setReadState] = useState(() => { if (apiMode) return { issues: [], total: 0, loading: data.detailsEnabled, error: data.detailsEnabled ? "" : "Canonical staff reads are unavailable in this environment." }; try { const rows = loadIssues(); return { issues: Array.isArray(rows) ? rows : [], total: Array.isArray(rows) ? rows.length : 0, loading: false, error: "" }; } catch { return { issues: [], total: 0, loading: false, error: "Issues could not be loaded." }; } });
+    const [notice, setNotice] = useState(location.state?.notice || ""); const [deleteTarget, setDeleteTarget] = useState(null); const [deleteError, setDeleteError] = useState(""); const [deleting, setDeleting] = useState(false); const deleteTriggerRef = useRef(null);
+    useEffect(() => { if (!apiMode || !data.detailsEnabled) return; const c = new AbortController(); data.catalog.loadCategories({ signal: c.signal }).then(setCatalog).catch((e) => { if (e.code !== "cancelled") setReadState((s) => ({ ...s, loading: false, error: e.message })); }); return () => c.abort(); }, [apiMode, data]);
+    useEffect(() => { if (!apiMode || !data.detailsEnabled) return; const p = new URLSearchParams(); for (const [key,value] of Object.entries(filters)) if (value) p.set(key,value); if (sortBy !== "newest") p.set("sort",sortBy); if (page > 1) p.set("page",String(page)); navigate({ pathname: location.pathname, search: p.toString() }, { replace: true }); const c = new AbortController(); const timer = setTimeout(async () => { setReadState((s) => ({ ...s, loading:true,error:"" })); try { const result = await data.requests.listServiceRequests(canonicalListQuery(filters, sortBy, page), { signal:c.signal }); setReadState({ issues:result.items.map(normalizeServiceRequestListRow), total:result.total, pageSize:result.pageSize, hasPreviousPage:result.hasPreviousPage, hasNextPage:result.hasNextPage, loading:false,error:"" }); } catch(e) { if(e.code!=="cancelled") setReadState((s)=>({...s,loading:false,error:e.message})); } },200); return ()=>{clearTimeout(timer);c.abort();}; },[apiMode,data,filters,sortBy,page,reload]);
+    const visible = useMemo(()=>apiMode?readState.issues:sortIssues(filterIssues(readState.issues,filters),sortBy),[apiMode,readState.issues,filters,sortBy]); const active=Object.values(filters).some(Boolean);
+    const reset=()=>{setFilters(emptyFilters);setSortBy("newest");setPage(1);}; const change=(name,value)=>{setFilters((old)=>{const next={...old,[name]:value};if(apiMode&&name==="department"){next.division="";next.category="";}if(apiMode&&name==="division")next.category="";return next;});setPage(1);};
+    const cancelDelete=useCallback(()=>{if(!deleting){setDeleteTarget(null);setDeleteError("");}},[deleting]); const confirmDelete=()=>{if(!deleteTarget||deleting)return;setDeleting(true);try{if(!deleteIssue(deleteTarget.id))throw new Error();setReadState((s)=>{const issues=s.issues.filter((x)=>x.id!==deleteTarget.id);return {...s,issues,total:issues.length};});setNotice("Issue deleted successfully.");setDeleteTarget(null);}catch{setDeleteError("The issue could not be deleted. Please try again.");}finally{setDeleting(false);}};
+    const scoped=catalog.filter((x)=>(!filters.department||x.departmentId===filters.department)&&(!filters.division||x.divisionId===filters.division)); const departments=[...new Map(catalog.map((x)=>[x.departmentId,{value:x.departmentId,label:x.departmentName}])).values()]; const divisions=[...new Map(catalog.filter((x)=>!filters.department||x.departmentId===filters.department).filter((x)=>x.divisionId).map((x)=>[x.divisionId,{value:x.divisionId,label:x.divisionName}])).values()]; const categories=apiMode?scoped.map((x)=>({value:x.id,label:x.name})):undefined;
+    return <section className="issues-page" aria-labelledby="issues-heading">{notice&&<div className="alert alert-success" role="status">{notice}</div>}<header className="issues-header"><div className="issues-header-icon" aria-hidden="true"><i className="bi bi-list-check"/></div><div><p className="issues-eyebrow">Community Operations</p><h1 id="issues-heading">Issue List</h1><p className="text-body-secondary mb-0">Search and review reported community issues.</p></div></header><IssueFilters apiMode={apiMode} filters={filters} sortBy={sortBy} hasActiveFilters={active} departments={departments} divisions={divisions} categories={categories} onFilterChange={change} onSortChange={(v)=>{setSortBy(v);setPage(1);}} onReset={reset}/><section className="card border-0 shadow-sm overflow-hidden" aria-labelledby="reported-issues-heading"><div className="card-header bg-body d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 py-3"><div><h2 className="h5 fw-bold mb-1" id="reported-issues-heading">Reported Issues</h2><p className="text-body-secondary small mb-0">{apiMode?"Canonical staff read model — local development only.":"Edit an issue or delete one with confirmation."}</p></div><span className="issues-result-count" aria-live="polite">{apiMode?`${readState.total} matching ${readState.total===1?"issue":"issues"}`:`${visible.length} ${visible.length===1?"issue":"issues"}`}</span></div>{readState.loading?<IssuesLoadingState/>:readState.error?<IssuesErrorState message={readState.error} onRetry={data.detailsEnabled?()=>setReload((x)=>x+1):undefined}/>:readState.total===0&&!active?<NoIssuesState/>:visible.length===0?<NoMatchesState onReset={reset}/>:<><IssueTable apiMode={apiMode} issues={visible} onDelete={(issue,trigger)=>{deleteTriggerRef.current=trigger;setDeleteTarget(issue);}}/>{apiMode&&<nav className="issues-pagination" aria-label="Issue list pagination"><button className="btn btn-outline-primary" disabled={!readState.hasPreviousPage} onClick={()=>setPage((x)=>x-1)}>Previous</button><span>Showing {(page-1)*(readState.pageSize||25)+1}–{Math.min(page*(readState.pageSize||25),readState.total)}</span><button className="btn btn-outline-primary" disabled={!readState.hasNextPage} onClick={()=>setPage((x)=>x+1)}>Next</button></nav>}</>}</section>{!apiMode&&<DeleteIssueDialog issue={deleteTarget} error={deleteError} deleting={deleting} onCancel={cancelDelete} onConfirm={confirmDelete} returnFocusRef={deleteTriggerRef}/>}</section>;
 }

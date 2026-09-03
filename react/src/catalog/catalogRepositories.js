@@ -16,7 +16,7 @@ export function createFixtureCatalogRepository() {
 }
 
 export function normalizeApiCategories(rows) {
-    return rows.map((row, index) => ({ id: row.id, name: row.name, description: row.description, icon: iconClass(row.iconKey, "bi-grid"), accent: accents[index % accents.length], aliases: row.aliases || [], keywords: row.keywords || [], status: "active", displayOrder: index }));
+    return rows.map((row, index) => ({ id: row.id, name: row.name, description: row.description, icon: iconClass(row.iconKey, "bi-grid"), accent: accents[index % accents.length], aliases: row.aliases || [], keywords: row.keywords || [], status: "active", displayOrder: index, departmentId: row.departmentId, departmentName: row.departmentName, divisionId: row.divisionId || null, divisionName: row.divisionName || null }));
 }
 
 export function normalizeApiIssues(rows, categoryId) {

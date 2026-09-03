@@ -1,5 +1,7 @@
 # CityVUE — Architecture
 
+Phase D3 adds a minimal Organization-scoped canonical `ServiceRequest` list at `GET /api/v1/service-requests`. It reuses the fail-closed D2 development-read gate and accepts no client Organization context. PostgreSQL provides safe search, canonical hierarchy filters, allow-listed sorting, bounded pagination, and counts without returning requester, description, answers, location, or activity. React `/issues` consumes it only in API/dev-read mode; production legacy mode remains localStorage-backed. See F014.
+
 React `/report` selects paired catalog and request repositories from centralized Vite configuration. Legacy mode remains fixture/localStorage-backed; local API mode normalizes canonical catalog DTOs and submits canonical request DTOs through a shared fetch client. Organization context remains backend-owned.
 
 **Status:** Working architecture / target direction  

@@ -32,6 +32,10 @@ export class CatalogService {
       name: row.name,
       description: row.description,
       iconKey: row.icon_key,
+      departmentId: row.department_id,
+      departmentName: row.department_name,
+      divisionId: row.division_id,
+      divisionName: row.division_name,
     }));
   }
   async listIssues(

@@ -5,6 +5,11 @@ export class CategoryDto {
   @ApiProperty() name!: string;
   @ApiProperty() description!: string;
   @ApiProperty() iconKey!: string;
+  @ApiProperty({ format: 'uuid' }) departmentId!: string;
+  @ApiProperty() departmentName!: string;
+  @ApiPropertyOptional({ format: 'uuid', nullable: true }) divisionId!:
+    string | null;
+  @ApiPropertyOptional({ nullable: true }) divisionName!: string | null;
 }
 
 export class IssueSummaryDto {

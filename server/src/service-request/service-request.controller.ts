@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -18,10 +19,13 @@ import {
 } from '@nestjs/swagger';
 import { CreateServiceRequestService } from './create-service-request.service.js';
 import { GetServiceRequestDetailsService } from './get-service-request-details.service.js';
+import { ListServiceRequestsService } from './list-service-requests.service.js';
 import {
   CreateServiceRequestDto,
   CreateServiceRequestResponseDto,
   ServiceRequestDetailsResponseDto,
+  ListServiceRequestsQueryDto,
+  ServiceRequestListResponseDto,
 } from './service-request.dto.js';
 
 @ApiTags('service requests')
@@ -30,6 +34,7 @@ export class ServiceRequestController {
   constructor(
     private readonly createRequest: CreateServiceRequestService,
     private readonly getDetails: GetServiceRequestDetailsService,
+    private readonly listRequests: ListServiceRequestsService,
   ) {}
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -47,6 +52,17 @@ export class ServiceRequestController {
   })
   create(@Body() input: CreateServiceRequestDto) {
     return this.createRequest.execute(input);
+  }
+  @Get()
+  @ApiOperation({
+    summary: 'Development-only canonical staff service request list',
+    description:
+      'Not a production authorization boundary. Requires the explicit development read gate and backend-controlled Organization context.',
+  })
+  @ApiOkResponse({ type: ServiceRequestListResponseDto })
+  @ApiNotFoundResponse({ description: 'Development reads are unavailable' })
+  list(@Query() query: ListServiceRequestsQueryDto) {
+    return this.listRequests.execute(query);
   }
   @Get(':serviceRequestId')
   @ApiOperation({
