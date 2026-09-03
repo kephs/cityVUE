@@ -2,6 +2,8 @@
 
 Phase D1 adds a local-only resident intake API mode behind repository boundaries. Production remains on the default fixture/`IssueService` path, and other resident/staff surfaces are not cut over. See F012.
 
+The legacy-backed React Dashboard also presents transitional **Issues by Department** analytics. Department is derived at presentation time only by an exact `Issue.category` match to the active fixture Category and that Category's owning Department, including ownership through an optional Division. Missing, unmatched, ambiguous, or invalid relationships are counted as **Unassigned Department**. Counts sort highest first with an alphabetical tie-break. No Department or Division value is persisted on legacy Issues, and Department drill-down remains deferred until the Dashboard and Issue List use API-authorized canonical ServiceRequests.
+
 ## Project Identity
 
 **CityVUE** is the canonical name of the application during development.

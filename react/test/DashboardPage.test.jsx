@@ -51,6 +51,24 @@ describe("DashboardPage", () => {
         expect(within(categoryData).getByRole("link", { name: "View Uncategorized issues" })).toHaveAttribute("href", "/issues?category=Uncategorized");
     });
 
+    test("renders informational Department counts and includes unmatched Issues", () => {
+        renderDashboard();
+        const departmentSection = screen.getByRole("heading", { name: "Issues by Department" }).closest("section");
+        const departmentData = within(departmentSection).getByLabelText("Department chart data");
+
+        expect(within(departmentData).getByText("Public Works")).toBeInTheDocument();
+        expect(within(departmentData).getByLabelText("4 issues")).toHaveTextContent("4");
+        expect(within(departmentData).getByText("Environmental Services").closest("div")).toHaveTextContent("1");
+        expect(within(departmentData).getByText("Unassigned Department").closest("div")).toHaveTextContent("1");
+        expect(within(departmentData).queryByRole("link")).not.toBeInTheDocument();
+
+        const departmentChart = chartMocks.Chart.mock.calls[3][1];
+        expect(departmentChart.data.labels).toEqual(["Public Works", "Environmental Services", "Unassigned Department"]);
+        expect(departmentChart.data.datasets[0].data).toEqual([4, 1, 1]);
+        expect(departmentChart.options.indexAxis).toBe("y");
+        expect(departmentChart.options.onClick).toBeUndefined();
+    });
+
     test("recent issues use existing newest-first ordering and five-item limit", () => {
         renderDashboard();
         const list = screen.getByRole("heading", { name: "Recent Issues" }).closest("section");
@@ -102,10 +120,10 @@ describe("DashboardPage", () => {
         expect(screen.queryByLabelText("View total issues")).not.toBeInTheDocument();
     });
 
-    test("creates three chart instances and destroys them on unmount", () => {
+    test("creates four chart instances and destroys them on unmount", () => {
         const view = renderDashboard();
-        expect(chartMocks.Chart).toHaveBeenCalledTimes(3);
+        expect(chartMocks.Chart).toHaveBeenCalledTimes(4);
         view.unmount();
-        expect(chartMocks.destroy).toHaveBeenCalledTimes(3);
+        expect(chartMocks.destroy).toHaveBeenCalledTimes(4);
     });
 });

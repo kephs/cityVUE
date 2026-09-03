@@ -90,6 +90,14 @@ The promotion passed 62 Node tests, 52 React tests, 11 backend unit tests, 2 bac
 
 Live verification passed Category name and description filtering, singular/plural/zero counts, both clear controls and focus restoration, full-width alignment, selected Category/Issue preservation while filtered, explicit different-Category reset, unchanged Issue search, mobile Category-to-Issue focus/scroll, 1440/768/390 responsive layouts, light/dark themes, direct loads and refreshes for `/`, `/report`, `/issues`, and `/dashboard`, and console/asset review. Category search produced no additional asset or network activity. No synthetic production Issue was created. `Issue`, `IssueService`, `cityvueIssues`, backend runtime behavior, Firebase configuration, and the Parcel rollback path were unchanged.
 
+## Dashboard Department Analytics Production Promotion
+
+The reviewed **Issues by Department** enhancement was promoted on September 2, 2026 at approximately 8:53 PM America/New_York. The prior committed production baseline is tagged `pre-dashboard-department-analytics-promotion` at `eeccdb1`. Only Firebase Hosting was deployed to `https://cityvue-1.web.app`; backend behavior and other Firebase services were unchanged.
+
+The promotion passed 62 Node tests, 65 React tests, 16 backend unit tests, 7 backend E2E tests, backend typecheck/build, Parcel and React/Vite production builds, `git diff --check`, and root/backend audits with zero vulnerabilities. Direct production loads and refreshes passed for `/`, `/report`, `/issues`, and `/dashboard`; responsive empty-state checks passed at 1440, 768, and 390 px in light and dark mode with no horizontal overflow or console errors. The production browser origin contained zero Issues, so no synthetic production data was created and populated production verification relied on the approved populated local UAT and automated chart/count/lifecycle coverage.
+
+Department analytics remain transitional presentation logic derived from exact legacy `Issue.category` matching against the active fixture Category and its owning Department, including optional Division ownership. Missing, unmatched, ambiguous, or invalid relationships are reported as **Unassigned Department**. Department and Division are not persisted on legacy Issues, `IssueService` and `cityvueIssues` remain unchanged, and no Department drill-down was added.
+
 ## Bundle and Performance Record
 
 The initial JavaScript is 288.45 kB minified / 92.05 kB gzip. Dashboard and Chart.js remain isolated in a deferred 214.49 kB minified / 72.74 kB gzip chunk. Page chunks range from 5.34 kB to 15.95 kB minified. The 311.98 kB shared CSS compresses to 45.25 kB gzip. The approximately 2.12 MB Home hero PNG remains a known later optimization candidate and did not block cutover.

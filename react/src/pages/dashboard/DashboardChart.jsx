@@ -3,7 +3,7 @@ import Chart from "chart.js/auto";
 
 import { useTheme } from "../../theme/useTheme.js";
 
-export default function DashboardChart({ type, labels, values, label, onDataClick }) {
+export default function DashboardChart({ type, labels, values, label, onDataClick, indexAxis = "x" }) {
     const canvasRef = useRef(null);
     const { theme } = useTheme();
     const serializedLabels = JSON.stringify(labels);
@@ -23,6 +23,7 @@ export default function DashboardChart({ type, labels, values, label, onDataClic
             type,
             data: { labels, datasets: [{ label, data: values, backgroundColor: colors, borderColor: dark ? "#172235" : "#ffffff", borderWidth: type === "bar" ? 0 : 2 }] },
             options: {
+                indexAxis,
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: { duration: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 250 },
@@ -38,13 +39,17 @@ export default function DashboardChart({ type, labels, values, label, onDataClic
                 } : undefined,
                 plugins: { legend: { display: type !== "bar", position: "bottom", labels: { color: textColor, usePointStyle: true, pointStyle: "circle", padding: 18, font: { family: "Inter, Segoe UI, sans-serif", size: 12, weight: 600 } } }, tooltip: { padding: 10, cornerRadius: 7, callbacks: { afterLabel: onDataClick ? (context) => `View ${context.label} issues` : undefined } } },
                 scales: type === "bar" ? {
-                    x: { ticks: { color: textColor, font: { size: 11, weight: 600 }, maxRotation: 35, minRotation: 0 }, grid: { display: false }, border: { display: false } },
-                    y: { beginAtZero: true, ticks: { color: textColor, precision: 0, padding: 8 }, grid: { color: gridColor }, border: { display: false } }
+                    x: indexAxis === "y"
+                        ? { beginAtZero: true, ticks: { color: textColor, precision: 0, padding: 8 }, grid: { color: gridColor }, border: { display: false } }
+                        : { ticks: { color: textColor, font: { size: 11, weight: 600 }, maxRotation: 35, minRotation: 0 }, grid: { display: false }, border: { display: false } },
+                    y: indexAxis === "y"
+                        ? { ticks: { color: textColor, autoSkip: false, font: { size: 11, weight: 600 } }, grid: { display: false }, border: { display: false } }
+                        : { beginAtZero: true, ticks: { color: textColor, precision: 0, padding: 8 }, grid: { color: gridColor }, border: { display: false } }
                 } : undefined
             }
         });
         return () => chart.destroy();
-    }, [type, label, theme, serializedLabels, serializedValues, onDataClick]);
+    }, [type, label, theme, serializedLabels, serializedValues, onDataClick, indexAxis]);
 
     return <canvas ref={canvasRef} aria-hidden="true" />;
 }
