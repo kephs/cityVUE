@@ -140,6 +140,14 @@ export class ServiceRequestDetailsResponseDto {
     occurredAt: Date | string;
     metadata: Record<string, unknown>;
   }[];
+  @ApiPropertyOptional({ type: Object }) currentAssignment?: Record<
+    string,
+    unknown
+  >;
+  @ApiProperty({ type: [Object] }) assignmentHistory!: Record<
+    string,
+    unknown
+  >[];
 }
 
 export const serviceRequestListSorts = [
@@ -158,9 +166,11 @@ export class ListServiceRequestsQueryDto {
   @IsString()
   @MaxLength(200)
   search?: string;
-  @ApiPropertyOptional({ enum: ['open', 'closed', 'cancelled'] })
+  @ApiPropertyOptional({
+    enum: ['open', 'in_progress', 'on_hold', 'closed', 'cancelled'],
+  })
   @IsOptional()
-  @IsIn(['open', 'closed', 'cancelled'])
+  @IsIn(['open', 'in_progress', 'on_hold', 'closed', 'cancelled'])
   status?: string;
   @ApiPropertyOptional({ enum: ['low', 'medium', 'high', 'urgent'] })
   @IsOptional()
@@ -223,4 +233,50 @@ export class ServiceRequestListResponseDto {
   @ApiProperty() pageSize!: number;
   @ApiProperty() hasPreviousPage!: boolean;
   @ApiProperty() hasNextPage!: boolean;
+}
+
+export class AssignmentActionDto {
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedRevision!: number;
+  @ApiProperty({ enum: ['unassigned', 'department', 'group', 'individual'] })
+  @IsIn(['unassigned', 'department', 'group', 'individual'])
+  assignmentType!: string;
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID('4')
+  targetId?: string;
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+export class WorkflowActionDto {
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedRevision!: number;
+  @ApiProperty({ enum: ['start_work', 'hold', 'resume', 'close', 'reopen'] })
+  @IsIn(['start_work', 'hold', 'resume', 'close', 'reopen'])
+  action!: 'start_work' | 'hold' | 'resume' | 'close' | 'reopen';
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+  @ApiPropertyOptional({ maxLength: 2000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  resolutionSummary?: string;
+}
+
+export class StaffMutationResponseDto {
+  @ApiProperty({ format: 'uuid' }) serviceRequestId!: string;
+  @ApiProperty() referenceNumber!: string;
+  @ApiProperty() status!: string;
+  @ApiProperty() revision!: number;
+  @ApiPropertyOptional({ type: Object }) currentAssignment?: {
+    type: string;
+    targetId?: string;
+    displayName?: string;
+  };
+  @ApiProperty({ format: 'date-time' }) updatedAt!: Date | string;
 }

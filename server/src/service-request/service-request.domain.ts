@@ -1,4 +1,44 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
+
+export type WorkflowAction =
+  'start_work' | 'hold' | 'resume' | 'close' | 'reopen';
+export type WorkflowStatus = 'open' | 'in_progress' | 'on_hold' | 'closed';
+const transitions: Partial<
+  Record<string, Partial<Record<WorkflowAction, WorkflowStatus>>>
+> = {
+  open: { start_work: 'in_progress', close: 'closed' },
+  in_progress: { hold: 'on_hold', close: 'closed' },
+  on_hold: { resume: 'in_progress', close: 'closed' },
+  closed: { reopen: 'open' },
+};
+
+export function resolveWorkflowTransition(
+  status: string,
+  action: WorkflowAction,
+): WorkflowStatus {
+  const allowed = transitions[status];
+  const next = allowed ? allowed[action] : undefined;
+  if (!next)
+    throw new ConflictException(
+      'Workflow action is not valid for the current status',
+    );
+  return next;
+}
+
+export function validateWorkflowInput(
+  action: WorkflowAction,
+  reason?: string,
+  resolution?: string,
+): void {
+  const cleanReason = reason?.trim();
+  const cleanResolution = resolution?.trim();
+  if (action === 'hold' && !cleanReason)
+    throw new BadRequestException('Hold reason is required');
+  if (action === 'reopen' && !cleanReason)
+    throw new BadRequestException('Reopen reason is required');
+  if (action === 'close' && !cleanResolution)
+    throw new BadRequestException('Resolution summary is required');
+}
 
 export type SupportedQuestionType =
   'short_text' | 'long_text' | 'number' | 'yes_no' | 'single_select';

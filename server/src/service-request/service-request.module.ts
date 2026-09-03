@@ -5,6 +5,7 @@ import { ServiceRequestRepository } from './service-request.repository.js';
 import { GetServiceRequestDetailsService } from './get-service-request-details.service.js';
 import { ListServiceRequestsService } from './list-service-requests.service.js';
 import { LocationEligibilityModule } from '../location-eligibility/location-eligibility.module.js';
+import { StaffActionsService } from './staff-actions.service.js';
 
 @Module({
   imports: [LocationEligibilityModule],
@@ -14,6 +15,7 @@ import { LocationEligibilityModule } from '../location-eligibility/location-elig
     CreateServiceRequestService,
     GetServiceRequestDetailsService,
     ListServiceRequestsService,
+    StaffActionsService,
   ],
   exports: [CreateServiceRequestService, ServiceRequestRepository],
 })

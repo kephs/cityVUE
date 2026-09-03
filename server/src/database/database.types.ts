@@ -193,8 +193,64 @@ interface ActivityTable {
   activity_type: string;
   actor_type: string;
   actor_reference: string | null;
+  staff_identity_id: Generated<string | null>;
   metadata: JsonValue;
   occurred_at: Generated<Timestamp>;
+}
+interface StaffIdentityTable {
+  id: string;
+  organization_id: string;
+  entra_object_id: string | null;
+  display_name: string;
+  email: string | null;
+  active: boolean;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface StaffDepartmentMembershipTable {
+  organization_id: string;
+  staff_identity_id: string;
+  department_id: string;
+  active: boolean;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface StaffDivisionMembershipTable extends StaffDepartmentMembershipTable {
+  division_id: string;
+}
+interface WorkGroupTable {
+  id: string;
+  organization_id: string;
+  department_id: string;
+  division_id: string | null;
+  name: string;
+  description: string | null;
+  active: boolean;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface WorkGroupMembershipTable {
+  organization_id: string;
+  work_group_id: string;
+  staff_identity_id: string;
+  active: boolean;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface ServiceRequestAssignmentTable {
+  id: string;
+  organization_id: string;
+  service_request_id: string;
+  assignment_type: string;
+  staff_identity_id: string | null;
+  work_group_id: string | null;
+  department_id: string | null;
+  assigned_at: Generated<Timestamp>;
+  ended_at: Timestamp | null;
+  assigned_by_actor_type: string;
+  assigned_by_staff_identity_id: string;
+  reason: string | null;
+  created_at: Generated<Timestamp>;
 }
 
 export interface DatabaseSchema {
@@ -212,6 +268,12 @@ export interface DatabaseSchema {
   location: LocationTable;
   answer: AnswerTable;
   activity: ActivityTable;
+  staff_identity: StaffIdentityTable;
+  staff_department_membership: StaffDepartmentMembershipTable;
+  staff_division_membership: StaffDivisionMembershipTable;
+  work_group: WorkGroupTable;
+  work_group_membership: WorkGroupMembershipTable;
+  service_request_assignment: ServiceRequestAssignmentTable;
 }
 
 export type Organization = Selectable<OrganizationTable>;

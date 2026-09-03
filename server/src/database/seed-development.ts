@@ -11,6 +11,32 @@ const departments = [
   ['20000000-0000-4000-8000-000000000002', 'Environmental Services'],
   ['20000000-0000-4000-8000-000000000003', 'Community Services'],
 ] as const;
+const developmentStaff = [
+  ['90000000-0000-4000-8000-000000000001', 'Alex Example', 'alex@example.test'],
+  [
+    '90000000-0000-4000-8000-000000000002',
+    'Jordan Example',
+    'jordan@example.test',
+  ],
+] as const;
+const developmentDivisions = [
+  ['22000000-0000-4000-8000-000000000001', departments[0][0], 'Streets'],
+  ['22000000-0000-4000-8000-000000000002', departments[2][0], 'Parks'],
+] as const;
+const developmentGroups = [
+  [
+    '91000000-0000-4000-8000-000000000001',
+    departments[0][0],
+    developmentDivisions[0][0],
+    'Streets Queue',
+  ],
+  [
+    '91000000-0000-4000-8000-000000000002',
+    departments[2][0],
+    developmentDivisions[1][0],
+    'Parks Queue',
+  ],
+] as const;
 const categories = [
   [
     '30000000-0000-4000-8000-000000000001',
@@ -262,6 +288,120 @@ async function seed(db: Kysely<DatabaseSchema>): Promise<void> {
         })),
       )
       .onConflict((oc) => oc.column('id').doNothing())
+      .execute();
+    await trx
+      .insertInto('division')
+      .values(
+        developmentDivisions.map(([id, department_id, name], index) => ({
+          id,
+          organization_id: organizationId,
+          department_id,
+          name,
+          description:
+            'Synthetic development-only division; not official City configuration.',
+          status: 'active',
+          display_order: index + 1,
+        })),
+      )
+      .onConflict((oc) => oc.column('id').doNothing())
+      .execute();
+    await trx
+      .insertInto('staff_identity')
+      .values(
+        developmentStaff.map(([id, display_name, email]) => ({
+          id,
+          organization_id: organizationId,
+          entra_object_id: null,
+          display_name,
+          email,
+          active: true,
+        })),
+      )
+      .onConflict((oc) => oc.column('id').doNothing())
+      .execute();
+    await trx
+      .deleteFrom('staff_department_membership')
+      .where('organization_id', '=', organizationId)
+      .where('staff_identity_id', '=', developmentStaff[1][0])
+      .where('department_id', '<>', departments[2][0])
+      .execute();
+    await trx
+      .insertInto('staff_department_membership')
+      .values([
+        {
+          organization_id: organizationId,
+          staff_identity_id: developmentStaff[0][0],
+          department_id: departments[0][0],
+          active: true,
+        },
+        {
+          organization_id: organizationId,
+          staff_identity_id: developmentStaff[1][0],
+          department_id: departments[2][0],
+          active: true,
+        },
+      ])
+      .onConflict((oc) =>
+        oc.columns(['staff_identity_id', 'department_id']).doNothing(),
+      )
+      .execute();
+    await trx
+      .insertInto('staff_division_membership')
+      .values([
+        {
+          organization_id: organizationId,
+          staff_identity_id: developmentStaff[0][0],
+          department_id: developmentDivisions[0][1],
+          division_id: developmentDivisions[0][0],
+          active: true,
+        },
+        {
+          organization_id: organizationId,
+          staff_identity_id: developmentStaff[1][0],
+          department_id: developmentDivisions[1][1],
+          division_id: developmentDivisions[1][0],
+          active: true,
+        },
+      ])
+      .onConflict((oc) =>
+        oc.columns(['staff_identity_id', 'division_id']).doNothing(),
+      )
+      .execute();
+    await trx
+      .insertInto('work_group')
+      .values(
+        developmentGroups.map(([id, department_id, division_id, name]) => ({
+          id,
+          organization_id: organizationId,
+          department_id,
+          division_id,
+          name,
+          description:
+            'Synthetic development-only queue; not official City configuration.',
+          active: true,
+        })),
+      )
+      .onConflict((oc) => oc.column('id').doNothing())
+      .execute();
+    await trx
+      .insertInto('work_group_membership')
+      .values([
+        {
+          organization_id: organizationId,
+          work_group_id: developmentGroups[0][0],
+          staff_identity_id: developmentStaff[0][0],
+          active: true,
+        },
+        {
+          organization_id: organizationId,
+          work_group_id: developmentGroups[1][0],
+          staff_identity_id: developmentStaff[1][0],
+          active: true,
+        },
+      ])
+      .onConflict((oc) =>
+        oc.columns(['work_group_id', 'staff_identity_id']).doNothing(),
+      )
       .execute();
     await trx
       .insertInto('category')

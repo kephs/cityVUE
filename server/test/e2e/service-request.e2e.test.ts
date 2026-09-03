@@ -9,6 +9,7 @@ import { GetServiceRequestDetailsService } from '../../src/service-request/get-s
 import { ListServiceRequestsService } from '../../src/service-request/list-service-requests.service.js';
 import type { CreateServiceRequestDto } from '../../src/service-request/service-request.dto.js';
 import { DatabaseService } from '../../src/database/database.service.js';
+import { StaffActionsService } from '../../src/service-request/staff-actions.service.js';
 
 const serviceId = '40000000-0000-4000-8000-000000000001';
 const versionId = '50000000-0000-4000-8000-000000000001';
@@ -27,6 +28,7 @@ before(async () => {
     'postgresql://cityvue:placeholder@localhost:5432/cityvue_test';
   process.env.LOG_LEVEL = 'silent';
   process.env.ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS = 'true';
+  process.env.ENABLE_DEVELOPMENT_STAFF_ACTIONS = 'true';
   const [{ AppModule }, { configureApplication }] = await Promise.all([
     import('../../src/app.module.js'),
     import('../../src/bootstrap.js'),
@@ -151,6 +153,37 @@ before(async () => {
         pageSize: Number(query.pageSize ?? 25),
         hasPreviousPage: false,
         hasNextPage: false,
+      }),
+    })
+    .overrideProvider(StaffActionsService)
+    .useValue({
+      assign: async (
+        id: string,
+        input: {
+          expectedRevision: number;
+          assignmentType: string;
+          targetId?: string;
+        },
+      ) => ({
+        serviceRequestId: id,
+        referenceNumber: 'SR-202609-000001',
+        status: 'open',
+        revision: input.expectedRevision + 1,
+        currentAssignment: {
+          type: input.assignmentType,
+          ...(input.targetId ? { targetId: input.targetId } : {}),
+        },
+        updatedAt: new Date('2026-09-03T12:00:00Z'),
+      }),
+      workflow: async (
+        id: string,
+        input: { expectedRevision: number; action: string },
+      ) => ({
+        serviceRequestId: id,
+        referenceNumber: 'SR-202609-000001',
+        status: input.action === 'start_work' ? 'in_progress' : 'closed',
+        revision: input.expectedRevision + 1,
+        updatedAt: new Date('2026-09-03T12:00:00Z'),
       }),
     })
     .compile();
@@ -279,4 +312,26 @@ test('GET list returns paginated minimal rows and validates query options', asyn
   await request(app.getHttpServer())
     .get('/api/v1/service-requests?sort=created_at;drop table')
     .expect(400);
+});
+
+test('development staff assignment and workflow endpoints expose safe command responses', async () => {
+  const id = '80000000-0000-4000-8000-000000000001';
+  const targetId = '20000000-0000-4000-8000-000000000001';
+  const assigned = await request(app.getHttpServer())
+    .post(`/api/v1/service-requests/${id}/assignment`)
+    .send({ expectedRevision: 1, assignmentType: 'department', targetId })
+    .expect(200);
+  const assignedBody = assigned.body as {
+    currentAssignment: { type: string };
+    revision: number;
+  };
+  assert.equal(assignedBody.currentAssignment.type, 'department');
+  assert.equal(assignedBody.revision, 2);
+  const transitioned = await request(app.getHttpServer())
+    .post(`/api/v1/service-requests/${id}/workflow`)
+    .send({ expectedRevision: 2, action: 'start_work' })
+    .expect(200);
+  const transitionedBody = transitioned.body as { status: string };
+  assert.equal(transitionedBody.status, 'in_progress');
+  assert.equal('organizationId' in transitionedBody, false);
 });

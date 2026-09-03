@@ -216,43 +216,91 @@ export class ServiceRequestRepository {
       .where('request.id', '=', serviceRequestId)
       .executeTakeFirst();
     if (!request) return undefined;
-    const [answers, contact, location, activity] = await Promise.all([
-      trx
-        .selectFrom('answer')
-        .selectAll()
-        .where('organization_id', '=', organizationId)
-        .where('service_request_id', '=', serviceRequestId)
-        .orderBy('display_order')
-        .orderBy('id')
-        .execute(),
-      trx
-        .selectFrom('requester_contact')
-        .select(['name', 'email'])
-        .where('organization_id', '=', organizationId)
-        .where('service_request_id', '=', serviceRequestId)
-        .executeTakeFirst(),
-      trx
-        .selectFrom('location')
-        .selectAll()
-        .where('organization_id', '=', organizationId)
-        .where('service_request_id', '=', serviceRequestId)
-        .executeTakeFirst(),
-      trx
-        .selectFrom('activity')
-        .select([
-          'activity_type',
-          'actor_type',
-          'metadata',
-          'occurred_at',
-          'id',
-        ])
-        .where('organization_id', '=', organizationId)
-        .where('service_request_id', '=', serviceRequestId)
-        .orderBy('occurred_at')
-        .orderBy('id')
-        .execute(),
-    ]);
-    return { request, answers, contact, location, activity };
+    const [answers, contact, location, activity, assignments] =
+      await Promise.all([
+        trx
+          .selectFrom('answer')
+          .selectAll()
+          .where('organization_id', '=', organizationId)
+          .where('service_request_id', '=', serviceRequestId)
+          .orderBy('display_order')
+          .orderBy('id')
+          .execute(),
+        trx
+          .selectFrom('requester_contact')
+          .select(['name', 'email'])
+          .where('organization_id', '=', organizationId)
+          .where('service_request_id', '=', serviceRequestId)
+          .executeTakeFirst(),
+        trx
+          .selectFrom('location')
+          .selectAll()
+          .where('organization_id', '=', organizationId)
+          .where('service_request_id', '=', serviceRequestId)
+          .executeTakeFirst(),
+        trx
+          .selectFrom('activity')
+          .select([
+            'activity_type',
+            'actor_type',
+            'metadata',
+            'occurred_at',
+            'id',
+          ])
+          .where('organization_id', '=', organizationId)
+          .where('service_request_id', '=', serviceRequestId)
+          .orderBy('occurred_at')
+          .orderBy('id')
+          .execute(),
+        trx
+          .selectFrom('service_request_assignment as assignment')
+          .leftJoin('staff_identity as staff', (join) =>
+            join
+              .onRef('staff.id', '=', 'assignment.staff_identity_id')
+              .onRef(
+                'staff.organization_id',
+                '=',
+                'assignment.organization_id',
+              ),
+          )
+          .leftJoin('work_group as work_group', (join) =>
+            join
+              .onRef('work_group.id', '=', 'assignment.work_group_id')
+              .onRef(
+                'work_group.organization_id',
+                '=',
+                'assignment.organization_id',
+              ),
+          )
+          .leftJoin('department as assigned_department', (join) =>
+            join
+              .onRef('assigned_department.id', '=', 'assignment.department_id')
+              .onRef(
+                'assigned_department.organization_id',
+                '=',
+                'assignment.organization_id',
+              ),
+          )
+          .select([
+            'assignment.id',
+            'assignment.assignment_type',
+            'assignment.staff_identity_id',
+            'assignment.work_group_id',
+            'assignment.department_id',
+            'assignment.assigned_at',
+            'assignment.ended_at',
+            'assignment.reason',
+            'staff.display_name as staff_name',
+            'work_group.name as group_name',
+            'assigned_department.name as assigned_department_name',
+          ])
+          .where('assignment.organization_id', '=', organizationId)
+          .where('assignment.service_request_id', '=', serviceRequestId)
+          .orderBy('assignment.assigned_at')
+          .orderBy('assignment.id')
+          .execute(),
+      ]);
+    return { request, answers, contact, location, activity, assignments };
   }
 
   async loadSubmissionDefinition(

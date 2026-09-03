@@ -75,6 +75,7 @@ const record = {
       metadata: { referenceNumber: 'SR-202609-000001', private: 'omitted' },
     },
   ],
+  assignments: [],
 };
 
 function service(enabled = true, result: unknown = record) {

@@ -31,8 +31,20 @@ function answerDisplay(answer: Parameters<typeof answerValue>[0]): string {
 
 function safeActivityMetadata(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const referenceNumber = (value as Record<string, unknown>).referenceNumber;
-  return typeof referenceNumber === 'string' ? { referenceNumber } : {};
+  const source = value as Record<string, unknown>;
+  const safe: Record<string, unknown> = {};
+  for (const key of [
+    'referenceNumber',
+    'previousAssignmentType',
+    'newAssignmentType',
+    'targetDisplayName',
+    'reason',
+    'fromStatus',
+    'toStatus',
+    'resolutionSummary',
+  ])
+    if (typeof source[key] === 'string') safe[key] = source[key];
+  return safe;
 }
 
 function timestamp(value: unknown): Date | string {
@@ -66,7 +78,37 @@ export class GetServiceRequestDetailsService {
         this.repository.loadDetails(trx, this.organizationId, id),
       );
     if (!details) throw new NotFoundException();
-    const { request, answers, contact, location, activity } = details;
+    const { request, answers, contact, location, activity, assignments } =
+      details;
+    const mappedAssignments = assignments.map((entry) => ({
+      type: entry.assignment_type,
+      ...(entry.staff_identity_id
+        ? {
+            targetId: entry.staff_identity_id,
+            ...(entry.staff_name ? { displayName: entry.staff_name } : {}),
+          }
+        : {}),
+      ...(entry.work_group_id
+        ? {
+            targetId: entry.work_group_id,
+            ...(entry.group_name ? { displayName: entry.group_name } : {}),
+          }
+        : {}),
+      ...(entry.department_id
+        ? {
+            targetId: entry.department_id,
+            ...(entry.assigned_department_name
+              ? { displayName: entry.assigned_department_name }
+              : {}),
+          }
+        : {}),
+      assignedAt: timestamp(entry.assigned_at),
+      ...(entry.ended_at ? { endedAt: timestamp(entry.ended_at) } : {}),
+      ...(entry.reason ? { reason: entry.reason } : {}),
+    }));
+    const currentAssignment = mappedAssignments.find(
+      (entry) => !('endedAt' in entry),
+    );
     return {
       serviceRequest: {
         id: request.id,
@@ -136,6 +178,8 @@ export class GetServiceRequestDetailsService {
               ...(contact?.name ? { name: contact.name } : {}),
               ...(contact?.email ? { email: contact.email } : {}),
             },
+      ...(currentAssignment ? { currentAssignment } : {}),
+      assignmentHistory: mappedAssignments,
       activity: activity.map((entry) => ({
         type: entry.activity_type,
         actorType: entry.actor_type,

@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+- [x] Phase F0 local staff assignment and controlled workflow domain foundation: Organization-scoped development StaffIdentity/explicit memberships, WorkGroups, assignment history, controlled status actions, optimistic concurrency, append-only Activity, and production-forbidden development mutation endpoints. Entra/RBAC, production staff UI/API exposure, notifications, and integrations remain deferred.
+
 - [x] Phase E0 local canonical Location/geographic eligibility foundation: exact-version policy, vendor-neutral provider contract, deterministic production-forbidden test provider, fail-closed decisions, immutable eligible snapshot, safe errors/logging, and no-partial-write coverage. Authoritative City GIS, PostGIS choice, overrides, and deployment remain deferred.
 
 - [x] Phase D3 local canonical staff Issue List foundation: minimal Organization-scoped DTO, dev-gated search and hierarchy filters, controlled sorting, bounded pagination/counts, and API-mode rendering on the existing `/issues` route. Production access remains deferred pending Entra/RBAC and deployment approval.

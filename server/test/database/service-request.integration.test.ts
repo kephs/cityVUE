@@ -17,6 +17,10 @@ import {
   down as eligibilityDown,
   up as eligibilityUp,
 } from '../../migrations/20260902030000-add-location-eligibility-snapshot.js';
+import {
+  down as staffDown,
+  up as staffUp,
+} from '../../migrations/20260903010000-add-staff-assignment-workflow-foundation.js';
 import { BadRequestException } from '@nestjs/common';
 import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
@@ -56,6 +60,7 @@ test(
       await requestUp(db);
       await listUp(db);
       await eligibilityUp(db);
+      await staffUp(db);
       await db
         .insertInto('organization')
         .values({
@@ -586,6 +591,7 @@ test(
           })
           .execute(),
       );
+      await staffDown(db);
       await eligibilityDown(db);
       await listDown(db);
       await requestDown(db);

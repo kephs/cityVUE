@@ -8,6 +8,8 @@ import {
   periodKeyFor,
   validateLocationPolicy,
   validateRequesterPolicy,
+  resolveWorkflowTransition,
+  validateWorkflowInput,
 } from '../../src/service-request/service-request.domain.js';
 
 test('formats canonical references and rejects invalid components', () => {
@@ -60,5 +62,36 @@ test('enforces requester and location policies', () => {
   }, BadRequestException);
   assert.doesNotThrow(() => {
     validateLocationPolicy('optional', false);
+  });
+});
+
+test('workflow transition matrix resolves only controlled actions', () => {
+  assert.equal(resolveWorkflowTransition('open', 'start_work'), 'in_progress');
+  assert.equal(resolveWorkflowTransition('in_progress', 'hold'), 'on_hold');
+  assert.equal(resolveWorkflowTransition('on_hold', 'resume'), 'in_progress');
+  assert.equal(resolveWorkflowTransition('closed', 'reopen'), 'open');
+  assert.throws(() => {
+    resolveWorkflowTransition('open', 'resume');
+  }, /not valid/);
+  assert.throws(() => {
+    resolveWorkflowTransition('closed', 'start_work');
+  }, /not valid/);
+});
+
+test('workflow actions require operational reasons and resolution', () => {
+  assert.throws(() => {
+    validateWorkflowInput('hold');
+  }, /Hold reason/);
+  assert.throws(() => {
+    validateWorkflowInput('reopen');
+  }, /Reopen reason/);
+  assert.throws(() => {
+    validateWorkflowInput('close');
+  }, /Resolution summary/);
+  assert.doesNotThrow(() => {
+    validateWorkflowInput('hold', 'Awaiting utility locate');
+  });
+  assert.doesNotThrow(() => {
+    validateWorkflowInput('close', undefined, 'Work completed');
   });
 });

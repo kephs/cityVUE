@@ -26,7 +26,11 @@ import {
   ServiceRequestDetailsResponseDto,
   ListServiceRequestsQueryDto,
   ServiceRequestListResponseDto,
+  AssignmentActionDto,
+  WorkflowActionDto,
+  StaffMutationResponseDto,
 } from './service-request.dto.js';
+import { StaffActionsService } from './staff-actions.service.js';
 
 @ApiTags('service requests')
 @Controller('service-requests')
@@ -35,6 +39,7 @@ export class ServiceRequestController {
     private readonly createRequest: CreateServiceRequestService,
     private readonly getDetails: GetServiceRequestDetailsService,
     private readonly listRequests: ListServiceRequestsService,
+    private readonly staffActions: StaffActionsService,
   ) {}
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -75,5 +80,26 @@ export class ServiceRequestController {
   })
   details(@Param('serviceRequestId') id: string) {
     return this.getDetails.execute(id);
+  }
+  @Post(':serviceRequestId/assignment')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Development-only staff assignment action' })
+  @ApiOkResponse({ type: StaffMutationResponseDto })
+  assignment(
+    @Param('serviceRequestId') id: string,
+    @Body() input: AssignmentActionDto,
+  ) {
+    return this.staffActions.assign(id, input);
+  }
+
+  @Post(':serviceRequestId/workflow')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Development-only controlled workflow action' })
+  @ApiOkResponse({ type: StaffMutationResponseDto })
+  workflow(
+    @Param('serviceRequestId') id: string,
+    @Body() input: WorkflowActionDto,
+  ) {
+    return this.staffActions.workflow(id, input);
   }
 }

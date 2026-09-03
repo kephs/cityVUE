@@ -26,6 +26,7 @@ export interface AppConfiguration {
   };
   catalog: { developmentOrganizationId: string };
   serviceRequestReads: { developmentEnabled: boolean };
+  staffActions: { developmentEnabled: boolean; developmentActorId: string };
   locationEligibility: {
     provider: string;
     developmentEnabled: boolean;
@@ -74,6 +75,13 @@ export function configuration(): AppConfiguration {
     serviceRequestReads: {
       developmentEnabled:
         process.env.ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS === 'true',
+    },
+    staffActions: {
+      developmentEnabled:
+        process.env.ENABLE_DEVELOPMENT_STAFF_ACTIONS === 'true',
+      developmentActorId:
+        process.env.DEVELOPMENT_STAFF_ACTOR_ID ??
+        '90000000-0000-4000-8000-000000000001',
     },
     locationEligibility: {
       provider: process.env.LOCATION_ELIGIBILITY_PROVIDER ?? 'disabled',

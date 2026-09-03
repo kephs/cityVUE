@@ -20,6 +20,8 @@ export interface EnvironmentVariables {
   OTEL_SERVICE_NAME: string;
   DEVELOPMENT_ORGANIZATION_ID: string;
   ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS: boolean;
+  ENABLE_DEVELOPMENT_STAFF_ACTIONS: boolean;
+  DEVELOPMENT_STAFF_ACTOR_ID: string;
   LOCATION_ELIGIBILITY_PROVIDER: 'disabled' | 'development';
   ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY: boolean;
   LOCATION_ELIGIBILITY_TIMEOUT_MS: number;
@@ -83,6 +85,13 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
     .truthy('true')
     .falsy('false')
     .default(false),
+  ENABLE_DEVELOPMENT_STAFF_ACTIONS: Joi.boolean()
+    .truthy('true')
+    .falsy('false')
+    .default(false),
+  DEVELOPMENT_STAFF_ACTOR_ID: Joi.string()
+    .guid({ version: ['uuidv4'] })
+    .default('90000000-0000-4000-8000-000000000001'),
   LOCATION_ELIGIBILITY_PROVIDER: Joi.string()
     .valid('disabled', 'development')
     .default('disabled'),
@@ -117,6 +126,14 @@ export function validateEnvironment(
   ) {
     throw new Error(
       'Invalid server configuration: DATABASE_SSL_MODE cannot be disable in production',
+    );
+  }
+  if (
+    environment.NODE_ENV === 'production' &&
+    environment.ENABLE_DEVELOPMENT_STAFF_ACTIONS
+  ) {
+    throw new Error(
+      'Invalid server configuration: development staff actions cannot be enabled in production',
     );
   }
   if (

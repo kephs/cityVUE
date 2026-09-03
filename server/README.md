@@ -55,6 +55,8 @@ Migration names use `YYYYMMDDHHMMSS-kebab-case-description.ts`. Phase A contains
 
 ## Configuration
 
+Local staff mutation exercises require both `ENABLE_DEVELOPMENT_STAFF_ACTIONS=true` and an active Organization-scoped `DEVELOPMENT_STAFF_ACTOR_ID` created by the development seed. This gate is not authorization and is rejected when `NODE_ENV=production`. Never enable these endpoints in a deployed environment; production staff access still requires Entra authentication and server-enforced RBAC.
+
 Startup validation requires `DATABASE_URL` and validates `NODE_ENV`, `PORT`, `APP_NAME`, `APP_VERSION`, `LOG_LEVEL`, `DATABASE_SSL_MODE`, pool/timeouts, `CORS_ORIGINS`, baseline rate limits, and telemetry placeholders. Production rejects disabled database TLS. `verify-full` preserves certificate validation; never disable certificate validation globally.
 
 CORS uses an explicit comma-separated origin allowlist. `*` is rejected. Development defaults to `http://localhost:5173`; add `https://cityvue-1.web.app` explicitly in a future approved deployment environment.
