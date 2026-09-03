@@ -1,5 +1,7 @@
 # CityVUE — Architecture
 
+Phase E0 adds API-authoritative geographic eligibility to canonical request creation. The exact immutable `ServiceDefinitionVersion` supplies a vendor-neutral policy and conservative failure behavior; restrictive policies call an injected provider before the database write transaction, while unrestricted services perform no provider call. Eligible requests persist an immutable Location eligibility snapshot. Ineligible, indeterminate, timeout, and provider-failure outcomes block without partial writes and return allow-listed resident-safe errors. Only a deterministic, production-forbidden development provider exists; authoritative GIS layers, PostGIS, staff overrides, and deployment remain deferred. See F015.
+
 Phase D3 adds a minimal Organization-scoped canonical `ServiceRequest` list at `GET /api/v1/service-requests`. It reuses the fail-closed D2 development-read gate and accepts no client Organization context. PostgreSQL provides safe search, canonical hierarchy filters, allow-listed sorting, bounded pagination, and counts without returning requester, description, answers, location, or activity. React `/issues` consumes it only in API/dev-read mode; production legacy mode remains localStorage-backed. See F014.
 
 React `/report` selects paired catalog and request repositories from centralized Vite configuration. Legacy mode remains fixture/localStorage-backed; local API mode normalizes canonical catalog DTOs and submits canonical request DTOs through a shared fetch client. Organization context remains backend-owned.

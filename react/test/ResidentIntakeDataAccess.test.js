@@ -30,5 +30,7 @@ describe("resident intake data access", () => {
         await expect(conflict.get("/x")).rejects.toMatchObject({ code: "catalog-version" });
         const offline = createApiClient({ baseUrl: "http://api", fetchImplementation: async () => { throw new TypeError("database secret"); } });
         await expect(offline.get("/x")).rejects.toMatchObject({ code: "network", message: expect.not.stringContaining("database secret") });
+        const location = createApiClient({ baseUrl: "http://api", fetchImplementation: async () => ({ ok: false, status: 400, headers: new Headers(), json: async () => ({ code: "LOCATION_INELIGIBLE", message: "internal provider detail" }) }) });
+        await expect(location.post("/service-requests", {})).rejects.toMatchObject({ code: "LOCATION_INELIGIBLE", message: "This issue appears to be outside the service area for this request type." });
     });
 });

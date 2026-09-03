@@ -8,7 +8,10 @@ export class CityVueApiError extends Error {
     }
 }
 
-function publicMessage(status, path) {
+function publicMessage(status, path, code) {
+    if (code === "LOCATION_INELIGIBLE") return [code, "This issue appears to be outside the service area for this request type."];
+    if (code === "LOCATION_ELIGIBILITY_UNDETERMINED") return [code, "We could not confirm whether this location is eligible. Please check the location and try again."];
+    if (code === "LOCATION_ELIGIBILITY_UNAVAILABLE") return [code, "Location validation is temporarily unavailable. Please try again."];
     if (status === 404 && path.startsWith('/service-requests/')) return ["not-found", "The requested service request is unavailable."];
     if (status === 404 || status === 409) return ["catalog-version", "The issue form has changed. Please review the latest questions before submitting."];
     if (status === 400 || status === 422) return ["validation", "Some request information is no longer valid. Please review your answers and try again."];
@@ -30,7 +33,9 @@ export function createApiClient({ baseUrl, fetchImplementation = fetch, timeoutM
             });
             const requestId = response.headers?.get?.("x-request-id") || undefined;
             if (!response.ok) {
-                const [code, message] = publicMessage(response.status, path);
+                let payload = {};
+                try { payload = await response.json(); } catch { /* safe generic mapping below */ }
+                const [code, message] = publicMessage(response.status, path, payload?.code);
                 throw new CityVueApiError(code, message, { status: response.status, requestId });
             }
             return response.status === 204 ? undefined : response.json();

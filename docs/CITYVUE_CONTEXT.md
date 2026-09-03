@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+Phase E0 adds a local-development canonical Location and geographic eligibility foundation. Canonical intake now evaluates restrictive exact-version policies through a vendor-neutral provider before the write transaction, persists an eligible Location snapshot, and fails closed with distinct safe outcomes for ineligible, indeterminate, and unavailable validation. Unrestricted services skip evaluation. The deterministic provider is explicitly gated and forbidden in production; real GIS data/providers, maps, PostGIS selection, overrides, Entra/RBAC, and deployment remain deferred. See F015.
+
 Phase D3 adds a local-development-only canonical staff Issue List foundation. The minimal list is Organization-scoped, reuse-gated by the D2 development-read flag, searchable/filterable/sortable/paginated, and PII/location-minimized. React `/issues` uses it only in explicit API/dev-read mode; production remains legacy/localStorage-backed. See F014.
 
 Phase D1 adds a local-only resident intake API mode behind repository boundaries. Phase D2 adds an Organization-scoped canonical ServiceRequest details read model and a read-only React `/issues/:issueId` experience, both guarded by explicit local-development flags. Production remains on the default fixture/`IssueService` path, and other resident/staff surfaces are not cut over. See F012 and F013.

@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+- [x] Phase E0 local canonical Location/geographic eligibility foundation: exact-version policy, vendor-neutral provider contract, deterministic production-forbidden test provider, fail-closed decisions, immutable eligible snapshot, safe errors/logging, and no-partial-write coverage. Authoritative City GIS, PostGIS choice, overrides, and deployment remain deferred.
+
 - [x] Phase D3 local canonical staff Issue List foundation: minimal Organization-scoped DTO, dev-gated search and hierarchy filters, controlled sorting, bounded pagination/counts, and API-mode rendering on the existing `/issues` route. Production access remains deferred pending Entra/RBAC and deployment approval.
 
 - [x] Phase D1 local resident intake transition foundation: explicit legacy/API repositories, canonical catalog identifiers, and canonical POST submission. Production cutover remains deferred.

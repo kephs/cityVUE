@@ -26,6 +26,11 @@ export interface AppConfiguration {
   };
   catalog: { developmentOrganizationId: string };
   serviceRequestReads: { developmentEnabled: boolean };
+  locationEligibility: {
+    provider: string;
+    developmentEnabled: boolean;
+    timeoutMs: number;
+  };
 }
 
 export function configuration(): AppConfiguration {
@@ -69,6 +74,12 @@ export function configuration(): AppConfiguration {
     serviceRequestReads: {
       developmentEnabled:
         process.env.ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS === 'true',
+    },
+    locationEligibility: {
+      provider: process.env.LOCATION_ELIGIBILITY_PROVIDER ?? 'disabled',
+      developmentEnabled:
+        process.env.ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY === 'true',
+      timeoutMs: Number(process.env.LOCATION_ELIGIBILITY_TIMEOUT_MS ?? 3000),
     },
   };
 }

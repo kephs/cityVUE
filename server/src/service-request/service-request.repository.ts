@@ -11,6 +11,9 @@ export interface CatalogSubmissionDefinition {
   priority: string;
   locationPolicy: string;
   anonymousPolicy: string;
+  geographicEligibilityMode: string;
+  geographicEligibilityPolicyReference: string | null;
+  unableToDetermineBehavior: string;
   questions: {
     id: string;
     key: string;
@@ -253,7 +256,7 @@ export class ServiceRequestRepository {
   }
 
   async loadSubmissionDefinition(
-    trx: Transaction<DatabaseSchema>,
+    trx: Kysely<DatabaseSchema> | Transaction<DatabaseSchema>,
     organizationId: string,
     serviceId: string,
     versionId: string,
@@ -284,6 +287,9 @@ export class ServiceRequestRepository {
         'version.default_priority',
         'version.location_policy',
         'version.anonymous_reporting_policy',
+        'version.geographic_eligibility_mode',
+        'version.geographic_eligibility_policy_reference',
+        'version.unable_to_determine_behavior',
       ])
       .where('org.id', '=', organizationId)
       .where('org.status', '=', 'active')
@@ -332,6 +338,10 @@ export class ServiceRequestRepository {
       priority: definition.default_priority,
       locationPolicy: definition.location_policy,
       anonymousPolicy: definition.anonymous_reporting_policy,
+      geographicEligibilityMode: definition.geographic_eligibility_mode,
+      geographicEligibilityPolicyReference:
+        definition.geographic_eligibility_policy_reference,
+      unableToDetermineBehavior: definition.unable_to_determine_behavior,
       questions: questions.map((q) => ({
         id: q.id,
         key: q.question_key,

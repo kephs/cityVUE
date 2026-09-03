@@ -39,6 +39,26 @@ before(async () => {
         );
       if (!input.location)
         throw new BadRequestException('Location is required for this service');
+      const locationErrors: Record<string, { code: string; message: string }> =
+        {
+          'DEV-INELIGIBLE': {
+            code: 'LOCATION_INELIGIBLE',
+            message:
+              'This issue appears to be outside the service area for this request type.',
+          },
+          'DEV-UNABLE': {
+            code: 'LOCATION_ELIGIBILITY_UNDETERMINED',
+            message:
+              'We could not confirm whether this location is eligible. Please check the location and try again.',
+          },
+          'DEV-FAILURE': {
+            code: 'LOCATION_ELIGIBILITY_UNAVAILABLE',
+            message:
+              'Location validation is temporarily unavailable. Please try again.',
+          },
+        };
+      const locationError = locationErrors[input.location.enteredAddress];
+      if (locationError) throw new BadRequestException(locationError);
       if (
         input.reportingIdentity === 'anonymous' &&
         input.serviceDefinitionId.endsWith('05')
@@ -194,6 +214,23 @@ test('POST returns safe policy and catalog errors', async () => {
       serviceDefinitionVersionId: '50000000-0000-4000-8000-000000000099',
     })
     .expect(404);
+});
+
+test('POST exposes distinct resident-safe location eligibility outcomes', async () => {
+  for (const [enteredAddress, code] of [
+    ['DEV-INELIGIBLE', 'LOCATION_INELIGIBLE'],
+    ['DEV-UNABLE', 'LOCATION_ELIGIBILITY_UNDETERMINED'],
+    ['DEV-FAILURE', 'LOCATION_ELIGIBILITY_UNAVAILABLE'],
+  ] as const) {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/service-requests')
+      .send({ ...base, location: { enteredAddress } })
+      .expect(400);
+    const body = response.body as Record<string, unknown>;
+    assert.equal(body.code, code);
+    assert.equal('stack' in body, false);
+    assert.equal(JSON.stringify(body).includes('provider'), false);
+  }
 });
 
 test('GET returns development-only Organization-scoped details and safe not found responses', async () => {

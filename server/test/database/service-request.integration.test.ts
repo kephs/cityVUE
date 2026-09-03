@@ -13,6 +13,11 @@ import {
   down as listDown,
   up as listUp,
 } from '../../migrations/20260902020000-add-service-request-list-indexes.js';
+import {
+  down as eligibilityDown,
+  up as eligibilityUp,
+} from '../../migrations/20260902030000-add-location-eligibility-snapshot.js';
+import { BadRequestException } from '@nestjs/common';
 import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
@@ -50,6 +55,7 @@ test(
       await catalogUp(db);
       await requestUp(db);
       await listUp(db);
+      await eligibilityUp(db);
       await db
         .insertInto('organization')
         .values({
@@ -231,6 +237,31 @@ test(
         config,
         { client: db } as DatabaseService,
         repository,
+        {
+          execute: async (input: {
+            enteredAddress: string;
+            policyType: string;
+          }) => {
+            if (input.enteredAddress === 'DEV-INELIGIBLE')
+              throw new BadRequestException({
+                code: 'LOCATION_INELIGIBLE',
+                message: 'Outside service area',
+              });
+            if (input.enteredAddress === 'DEV-UNABLE')
+              throw new BadRequestException({
+                code: 'LOCATION_ELIGIBILITY_UNDETERMINED',
+                message: 'Unable to determine',
+              });
+            return {
+              result: 'eligible',
+              policyType: input.policyType,
+              validatedAt: new Date('2026-10-15T12:00:00Z'),
+              providerKey: 'development',
+              providerReference: null,
+              reasonCode: 'development_match',
+            };
+          },
+        } as never,
       );
       const reader = new GetServiceRequestDetailsService(
         {
@@ -357,6 +388,17 @@ test(
       assert.equal(readModel.answers[2]?.value, 'bad');
       assert.equal(readModel.answers[2].displayValue, 'Damaged');
       assert.equal(readModel.location?.enteredAddress, '1 Main Street');
+      const locationSnapshot = await db
+        .selectFrom('location')
+        .selectAll()
+        .where('service_request_id', '=', september.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(locationSnapshot.eligibility_result, 'eligible');
+      assert.equal(
+        locationSnapshot.eligibility_policy_type,
+        'city_maintained_roadway',
+      );
+      assert.equal(locationSnapshot.eligibility_provider_key, 'development');
       assert.deepEqual(readModel.requester, { anonymous: true });
       assert.equal(readModel.activity[0]?.type, 'service_request_created');
       assert.equal(
@@ -433,6 +475,26 @@ test(
         .selectFrom('service_request')
         .select(({ fn }) => fn.countAll<number>().as('count'))
         .executeTakeFirstOrThrow();
+      await assert.rejects(
+        creator.execute(
+          { ...payload, location: { enteredAddress: 'DEV-INELIGIBLE' } },
+          new Date('2026-10-15T12:00:00Z'),
+        ),
+        (error: unknown) =>
+          error instanceof BadRequestException &&
+          (error.getResponse() as { code?: string }).code ===
+            'LOCATION_INELIGIBLE',
+      );
+      await assert.rejects(
+        creator.execute(
+          { ...payload, location: { enteredAddress: 'DEV-UNABLE' } },
+          new Date('2026-10-15T12:00:00Z'),
+        ),
+        (error: unknown) =>
+          error instanceof BadRequestException &&
+          (error.getResponse() as { code?: string }).code ===
+            'LOCATION_ELIGIBILITY_UNDETERMINED',
+      );
       await assert.rejects(
         creator.execute(
           {
@@ -524,6 +586,7 @@ test(
           })
           .execute(),
       );
+      await eligibilityDown(db);
       await listDown(db);
       await requestDown(db);
     } finally {

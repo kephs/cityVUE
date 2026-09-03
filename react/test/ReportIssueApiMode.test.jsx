@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { expect, test, vi } from "vitest";
 import ReportIssuePage from "../src/pages/report/ReportIssuePage.jsx";
+import { CityVueApiError } from "../src/api/apiClient.js";
 
 const category = { id: "category", name: "Roads", description: "Road concerns", icon: "bi-signpost", accent: "blue", status: "active" };
 const service = { id: "service", categoryId: "category", serviceDefinitionVersionId: "version", name: "Pothole", citizenDescription: "Road damage", status: "active", locationRequirement: "required", anonymousPolicy: "allowed", questions: [] };
@@ -48,4 +49,18 @@ test("API submission errors preserve review state and allow an explicit retry", 
     expect(screen.getByText("Resident-only description")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Submit Request" }));
     expect(create).toHaveBeenCalledTimes(2);
+});
+
+test.each([
+    ["LOCATION_INELIGIBLE", "This issue appears to be outside the service area for this request type."],
+    ["LOCATION_ELIGIBILITY_UNDETERMINED", "We could not confirm whether this location is eligible. Please check the location and try again."],
+    ["LOCATION_ELIGIBILITY_UNAVAILABLE", "Location validation is temporarily unavailable. Please try again."]
+])("shows safe geographic error %s and preserves review state", async (code, message) => {
+    const user = userEvent.setup(); const create = vi.fn().mockRejectedValue(new CityVueApiError(code, message, { status: 400 }));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    render(<MemoryRouter><ReportIssuePage repositories={apiRepositories(create)} /></MemoryRouter>);
+    await completeRequest(user); await user.click(screen.getByRole("button", { name: "Submit Request" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.getByText("Resident-only description")).toBeInTheDocument();
+    expect(screen.queryByText(/provider|layer|endpoint/i)).not.toBeInTheDocument();
 });

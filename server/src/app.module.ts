@@ -13,6 +13,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
 import { ServiceRequestModule } from './service-request/service-request.module.js';
+import { LocationEligibilityModule } from './location-eligibility/location-eligibility.module.js';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ServiceRequestModule } from './service-request/service-request.module.j
     DatabaseModule,
     HealthModule,
     CatalogModule,
+    LocationEligibilityModule,
     ServiceRequestModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -15,6 +15,22 @@ test('configuration validation applies safe platform defaults', () => {
   assert.equal(environment.DATABASE_POOL_MAX, 10);
   assert.equal(environment.CORS_ORIGINS, 'http://localhost:5173');
   assert.equal(environment.ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS, false);
+  assert.equal(environment.LOCATION_ELIGIBILITY_PROVIDER, 'disabled');
+  assert.equal(environment.ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY, false);
+});
+
+test('production rejects the deterministic development location provider', () => {
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        DATABASE_SSL_MODE: 'require',
+        LOCATION_ELIGIBILITY_PROVIDER: 'development',
+        ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY: 'true',
+      }),
+    /development location eligibility cannot be enabled in production/,
+  );
 });
 
 test('production rejects development-only canonical detail reads', () => {

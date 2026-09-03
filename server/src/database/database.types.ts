@@ -57,6 +57,12 @@ interface ServiceDefinitionVersionTable {
   default_priority: string;
   location_policy: string;
   geographic_eligibility_mode: string;
+  geographic_eligibility_policy_reference: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null
+  >;
+  unable_to_determine_behavior: Generated<string>;
   anonymous_reporting_policy: string;
   status: string;
   published_at: Date | null;
@@ -134,6 +140,31 @@ interface LocationTable {
   parcel_reference: string | null;
   gis_asset_reference: string | null;
   eligibility_result: string | null;
+  eligibility_policy_type: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null
+  >;
+  eligibility_policy_reference: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null
+  >;
+  eligibility_provider_key: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null
+  >;
+  eligibility_provider_reference: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null
+  >;
+  eligibility_reason_code: ColumnType<
+    string | null,
+    string | null | undefined,
+    string | null
+  >;
   validated_at: Date | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;

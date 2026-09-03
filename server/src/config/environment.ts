@@ -20,6 +20,9 @@ export interface EnvironmentVariables {
   OTEL_SERVICE_NAME: string;
   DEVELOPMENT_ORGANIZATION_ID: string;
   ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS: boolean;
+  LOCATION_ELIGIBILITY_PROVIDER: 'disabled' | 'development';
+  ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY: boolean;
+  LOCATION_ELIGIBILITY_TIMEOUT_MS: number;
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
 }
 
@@ -80,6 +83,18 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
     .truthy('true')
     .falsy('false')
     .default(false),
+  LOCATION_ELIGIBILITY_PROVIDER: Joi.string()
+    .valid('disabled', 'development')
+    .default('disabled'),
+  ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY: Joi.boolean()
+    .truthy('true')
+    .falsy('false')
+    .default(false),
+  LOCATION_ELIGIBILITY_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(100)
+    .max(30000)
+    .default(3000),
   OTEL_EXPORTER_OTLP_ENDPOINT: Joi.string().uri().optional(),
 }).unknown(true);
 
@@ -102,6 +117,15 @@ export function validateEnvironment(
   ) {
     throw new Error(
       'Invalid server configuration: DATABASE_SSL_MODE cannot be disable in production',
+    );
+  }
+  if (
+    environment.NODE_ENV === 'production' &&
+    (environment.LOCATION_ELIGIBILITY_PROVIDER === 'development' ||
+      environment.ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY)
+  ) {
+    throw new Error(
+      'Invalid server configuration: development location eligibility cannot be enabled in production',
     );
   }
   if (

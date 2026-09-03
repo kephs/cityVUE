@@ -13,6 +13,8 @@ export interface ErrorResponse {
   statusCode: number;
   error: string;
   requestId: string;
+  code?: string;
+  message?: string;
 }
 
 export function buildErrorResponse(
@@ -27,7 +29,35 @@ export function buildErrorResponse(
         ? String(response.error)
         : exception.name.replace(/Exception$/, '');
 
-    return { statusCode, error, requestId };
+    const candidateCode =
+      typeof response === 'object' &&
+      'code' in response &&
+      typeof response.code === 'string'
+        ? response.code
+        : undefined;
+    const allowedCodes = new Set([
+      'LOCATION_INELIGIBLE',
+      'LOCATION_ELIGIBILITY_UNDETERMINED',
+      'LOCATION_ELIGIBILITY_UNAVAILABLE',
+    ]);
+    const code =
+      candidateCode && allowedCodes.has(candidateCode)
+        ? candidateCode
+        : undefined;
+    const message =
+      code &&
+      typeof response === 'object' &&
+      'message' in response &&
+      typeof response.message === 'string'
+        ? response.message
+        : undefined;
+    return {
+      statusCode,
+      error,
+      requestId,
+      ...(code ? { code } : {}),
+      ...(message ? { message } : {}),
+    };
   }
 
   return {
