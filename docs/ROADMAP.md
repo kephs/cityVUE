@@ -15,6 +15,19 @@ CityVUE should evolve from the existing MVP into a **vendor-neutral citizen-enga
 
 Roadmap inclusion does not constitute City approval.
 
+## Production Hosting and Deployment Readiness — Planning Only
+
+F016 records Azure managed services as the preferred first-municipality target while preserving a portable React, NestJS, TypeScript, PostgreSQL, Docker, and REST/OpenAPI core. A VPS/container-host deployment remains technically possible for a future customer-managed environment, but it is not the recommended initial City production architecture. No infrastructure is approved or provisioned by this roadmap entry.
+
+- [ ] Obtain City architecture, cybersecurity, privacy, and production approval.
+- [ ] Approve Azure subscriptions/resource groups, operational ownership, networking/private connectivity, and administrative access.
+- [ ] Establish separate Development, Test/QA, and Production databases, configuration, secrets, storage, telemetry, and integration credentials; prohibit routine production data use in development/testing.
+- [ ] Approve Entra registrations, Conditional Access, Key Vault/managed identities, PostgreSQL environments, Container Registry, Container Apps, Static Web Apps, monitoring, and custom DNS/TLS.
+- [ ] Approve authoritative GIS sources and EAM/integration connectivity, mappings, credentials, failure behavior, and support ownership.
+- [ ] Complete data-governance/retention decisions, backup and restore testing, recovery objectives, disaster recovery, CI/CD controls, security testing, performance/accessibility validation, production UAT, rollback, and launch runbooks.
+
+The planned order is: architecture/security approval; subscription/resource-group approval; networking; Entra; Key Vault; PostgreSQL Test; Container Registry; Container Apps Test; Static Web App Test; CI/CD; API Test deployment; React API-mode Test deployment; GIS/integration Test connectivity; security/UAT; Production PostgreSQL; Production API infrastructure; Production frontend infrastructure; Production DNS; Production migrations; and controlled Production launch. Every item remains incomplete until separately authorized and evidenced. See F016 for the detailed gates.
+
 ## Phase 0 — Development Baseline
 
 **Goal:** Make the project safe, understandable, reproducible, and ready for AI-assisted development.
