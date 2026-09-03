@@ -1,12 +1,12 @@
-.issues-page { --issues-blue:#155fb8; max-width:1320px; margin-inline:auto; }
+.issues-page { --issues-blue:#155fb8; max-width:1440px; margin-inline:auto; }
 .issues-page .card { --bs-card-border-color:var(--bs-border-color); overflow:hidden; border:1px solid var(--bs-border-color)!important; border-radius:1rem; box-shadow:0 .7rem 2rem rgba(20,43,70,.08)!important; }
 .issues-header { display:flex; gap:1rem; align-items:center; margin-bottom:1.5rem; }
 .issues-header-icon { display:grid; flex:0 0 3.25rem; width:3.25rem; height:3.25rem; place-items:center; border-radius:1rem; background:rgba(var(--bs-primary-rgb),.11); color:var(--bs-primary); font-size:1.45rem; }
 .issues-eyebrow { margin:0 0 .15rem; color:var(--issues-blue); font-size:.76rem; font-weight:750; letter-spacing:.055em; text-transform:uppercase; }
-.issues-header h1 { margin:0 0 .2rem; color:#17365f; font-weight:760; letter-spacing:-.025em; }
+.issues-header h1 { margin:0 0 .2rem; color:#17365f; font-size:clamp(2rem,3vw,2.65rem); font-weight:760; letter-spacing:-.025em; }
 .issue-filter-card .card-body { background:color-mix(in srgb,var(--bs-tertiary-bg) 55%,var(--bs-body-bg)); }
 .issue-filter-card h2 { color:#17365f; font-weight:700; }
-.issue-filter-card .form-label { display:flex; gap:.4rem; align-items:center; margin-bottom:.4rem; color:var(--bs-secondary-color); font-size:.78rem; font-weight:700; letter-spacing:.02em; }
+.issue-filter-card .form-label { display:flex; gap:.4rem; align-items:center; margin-bottom:.45rem; color:var(--bs-secondary-color); font-size:.86rem; font-weight:700; letter-spacing:.02em; }
 .issue-filter-card .form-label .bi { color:var(--bs-primary); }
 .issue-filter-card .form-control,.issue-filter-card .form-select,.issue-filter-card .input-group-text { min-height:44px; }
 .issue-filter-card .form-control:focus,.issue-filter-card .form-select:focus { border-color:#62a4ef; box-shadow:0 0 0 .22rem rgba(var(--bs-primary-rgb),.16); }
@@ -19,13 +19,13 @@
 
 .issues-table th,
 .issues-table td {
-    padding: 0.9rem 1rem;
+    padding: 1rem 1.05rem;
     vertical-align: middle;
 }
 
 .issues-table th {
     color: var(--bs-secondary-color);
-    font-size: 0.78rem;
+    font-size: 0.84rem;
     letter-spacing: 0.025em;
     text-transform: uppercase;
     white-space: nowrap;
@@ -43,9 +43,9 @@
 .issue-row-icon { display:grid; flex:0 0 2.65rem; width:2.65rem; height:2.65rem; place-items:center; border-radius:.75rem; background:var(--bs-primary-bg-subtle); color:var(--issues-blue); font-size:1.15rem; }
 .issue-title-copy { min-width:0; }
 .issue-title-copy strong,.issue-title-copy small { display:block; }
-.issue-title-copy strong { color:#17365f; font-size:.92rem; }
-.issue-title-copy small { margin-top:.15rem; color:var(--bs-secondary-color); font-size:.75rem; }
-.issue-priority { display:inline-flex; gap:.45rem; align-items:center; font-size:.82rem; font-weight:700; white-space:nowrap; }
+.issue-title-copy strong { color:#17365f; font-size:1rem; }
+.issue-title-copy small { margin-top:.15rem; color:var(--bs-secondary-color); font-size:.82rem; }
+.issue-priority { display:inline-flex; gap:.45rem; align-items:center; font-size:.88rem; font-weight:700; white-space:nowrap; }
 .issue-priority i { width:.48rem; height:.48rem; border-radius:50%; background:var(--bs-secondary); }
 .issue-priority.priority-high i { background:var(--bs-danger); }
 .issue-priority.priority-medium i { background:#d99a00; }
@@ -69,13 +69,16 @@
 }
 
 .edit-issue-page {
-    max-width: 960px;
+    max-width: 1060px;
     margin-inline: auto;
 }
 
 .edit-page-header {
     margin-bottom: 1.5rem;
 }
+
+.edit-page-header h1,
+.edit-issue-page > h1 { font-size: clamp(2rem, 3vw, 2.65rem); }
 
 .edit-back-link {
     display: inline-flex;
@@ -207,7 +210,7 @@
     gap: 0.65rem;
     align-items: center;
     margin-bottom: 1.25rem;
-    font-size: 1.08rem;
+    font-size: 1.18rem;
     font-weight: 700;
 }
 

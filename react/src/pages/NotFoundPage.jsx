@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 export default function NotFoundPage() {
     return (
-        <section aria-labelledby="not-found-heading">
+        <section className="not-found-page" aria-labelledby="not-found-heading">
             <div className="card border-0 shadow-sm">
                 <div className="card-body p-4 p-md-5">
                     <p className="text-primary fw-semibold mb-2">404</p>

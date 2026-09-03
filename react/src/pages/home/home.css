@@ -7,7 +7,7 @@
     --home-shadow: 0 10px 30px rgba(20, 51, 94, 0.12);
     --home-shadow-lg: 0 20px 55px rgba(20, 51, 94, 0.16);
     --home-radius: 14px;
-    --home-content-width: 1280px;
+    --home-content-width: 1360px;
     --home-transition: 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
     overflow: clip;
     color: var(--home-text);
@@ -166,18 +166,18 @@
     min-height: 48px;
     margin: 0 auto 20px;
     color: #34445f;
-    font-size: 0.85rem;
+    font-size: 0.92rem;
 }
 
 .home-button {
     display: inline-flex;
     min-width: 145px;
-    min-height: 37px;
+    min-height: 42px;
     align-items: center;
     justify-content: center;
     border-radius: 5px;
     color: #fff !important;
-    font-size: 0.86rem;
+    font-size: 0.92rem;
     font-weight: 700;
     transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
 }
@@ -246,14 +246,14 @@
 .home-stat-purple { background: #f7efff; color: #8139da; }
 
 .home-statistic strong { display: block; font-size: 1.58rem; line-height: 1.05; }
-.home-statistic span { display: block; margin-top: 5px; color: #273851; font-size: 0.72rem; line-height: 1.2; }
+.home-statistic span { display: block; margin-top: 5px; color: #273851; font-size: 0.78rem; line-height: 1.25; }
 
 .home-recent-activity { margin-top: 20px; }
 .home-recent-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-inline: 6px; }
 .home-recent-header h2 { display: flex; align-items: center; gap: 11px; margin: 0; font-size: 1.13rem; font-weight: 700; }
 .home-recent-header h2 i,
 .home-recent-header a { color: #0968e9; }
-.home-recent-header a { display: inline-flex; align-items: center; gap: 7px; font-size: 0.8rem; }
+.home-recent-header a { display: inline-flex; align-items: center; gap: 7px; font-size: 0.88rem; }
 .home-recent-header a:hover { text-decoration: underline; text-underline-offset: 4px; }
 
 .home-activity-list {
@@ -290,9 +290,9 @@
 .home-activity-icon { background: #eef6ff; color: #1269e7; }
 .home-activity-details strong,
 .home-activity-details span { display: block; }
-.home-activity-details strong { font-size: 0.86rem; font-weight: 600; }
+.home-activity-details strong { font-size: 0.94rem; font-weight: 600; }
 .home-activity-details span,
-.home-activity-row time { color: #53637d; font-size: 0.75rem; }
+.home-activity-row time { color: #53637d; font-size: 0.82rem; }
 .home-activity-row time { text-align: center; }
 
 .home-activity-row .badge { justify-self: center; font-size: .7rem; white-space: nowrap; }
@@ -362,7 +362,7 @@ body.dark-mode .home-activity-row:hover { background: #172d4b; }
 body.dark-mode .home-recent-empty, body.dark-mode .home-data-error { background: var(--home-surface); }
 
 @media (min-width: 1440px) {
-    .home-page { --home-content-width: 1360px; }
+    .home-page { --home-content-width: 1440px; }
     .home-main-content { padding-top: 42px; }
     .home-action-grid { gap: 28px; }
 }

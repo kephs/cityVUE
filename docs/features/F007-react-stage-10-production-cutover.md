@@ -98,6 +98,16 @@ The promotion passed 62 Node tests, 65 React tests, 16 backend unit tests, 7 bac
 
 Department analytics remain transitional presentation logic derived from exact legacy `Issue.category` matching against the active fixture Category and its owning Department, including optional Division ownership. Missing, unmatched, ambiguous, or invalid relationships are reported as **Unassigned Department**. Department and Division are not persisted on legacy Issues, `IssueService` and `cityvueIssues` remain unchanged, and no Department drill-down was added.
 
+## Global Visual Scale and Readability Production Promotion
+
+The reviewed presentation-only visual-scale refinement was promoted on September 2, 2026 at approximately 9:22 PM America/New_York. The prior production baseline is tagged `pre-global-visual-scale-promotion` at `e67f76b`. Only Firebase Hosting was deployed to `https://cityvue-1.web.app`; backend behavior and all other Firebase services were unchanged.
+
+The promotion passed 62 Node tests, 65 React tests, 16 backend unit tests, 7 backend E2E tests, backend typecheck/build, Parcel and React/Vite production builds, `git diff --check`, and root/backend audits with zero vulnerabilities. The production bundle contained no source maps or backend source, loaded all reviewed chunks successfully, and retained legacy data mode.
+
+Live direct-load and refresh checks passed for `/`, `/report`, `/issues`, `/dashboard`, an unavailable `/issues/:id/edit`, and an unknown route. Responsive checks passed at 1920, 1440, 1024, 768, and 390 px in light and dark mode, including mobile navigation, page gutters, controls, cards, empty states, and visible keyboard focus. Native browser zoom percentages could not be measured reliably by the automation environment; the approved preview and production review instead covered equivalent responsive reflow widths for 125%, 150%, and 200%, with no clipping, overlap, inaccessible controls, or critical horizontal overflow observed. A human native-zoom spot-check remains appropriate when operationally convenient.
+
+Production contained zero Issues, so no synthetic production record was created. Populated Issue List, Dashboard, Department analytics, and Edit presentation remained covered by the approved preview/local UAT and automated regression suite. The refinement did not change filters, sorting, search, routing, chart-click behavior, edit/delete behavior, theme persistence, API-mode behavior, `Issue`, `IssueService`, or the `cityvueIssues` storage key. Production remains legacy/localStorage-backed, the backend remains undeployed, and Phase D2 has not started.
+
 ## Bundle and Performance Record
 
 The initial JavaScript is 288.45 kB minified / 92.05 kB gzip. Dashboard and Chart.js remain isolated in a deferred 214.49 kB minified / 72.74 kB gzip chunk. Page chunks range from 5.34 kB to 15.95 kB minified. The 311.98 kB shared CSS compresses to 45.25 kB gzip. The approximately 2.12 MB Home hero PNG remains a known later optimization candidate and did not block cutover.

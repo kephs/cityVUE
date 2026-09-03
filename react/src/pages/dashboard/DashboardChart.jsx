@@ -37,14 +37,14 @@ export default function DashboardChart({ type, labels, values, label, onDataClic
                     const index = elements?.[0]?.index;
                     event.native.target.style.cursor = Number.isInteger(index) && values[index] > 0 ? "pointer" : "default";
                 } : undefined,
-                plugins: { legend: { display: type !== "bar", position: "bottom", labels: { color: textColor, usePointStyle: true, pointStyle: "circle", padding: 18, font: { family: "Inter, Segoe UI, sans-serif", size: 12, weight: 600 } } }, tooltip: { padding: 10, cornerRadius: 7, callbacks: { afterLabel: onDataClick ? (context) => `View ${context.label} issues` : undefined } } },
+                plugins: { legend: { display: type !== "bar", position: "bottom", labels: { color: textColor, usePointStyle: true, pointStyle: "circle", padding: 20, font: { family: "Inter, Segoe UI, sans-serif", size: 13, weight: 600 } } }, tooltip: { padding: 12, cornerRadius: 7, titleFont: { size: 13 }, bodyFont: { size: 13 }, callbacks: { afterLabel: onDataClick ? (context) => `View ${context.label} issues` : undefined } } },
                 scales: type === "bar" ? {
                     x: indexAxis === "y"
-                        ? { beginAtZero: true, ticks: { color: textColor, precision: 0, padding: 8 }, grid: { color: gridColor }, border: { display: false } }
-                        : { ticks: { color: textColor, font: { size: 11, weight: 600 }, maxRotation: 35, minRotation: 0 }, grid: { display: false }, border: { display: false } },
+                        ? { beginAtZero: true, ticks: { color: textColor, precision: 0, padding: 8, font: { size: 12 } }, grid: { color: gridColor }, border: { display: false } }
+                        : { ticks: { color: textColor, font: { size: 12, weight: 600 }, maxRotation: 35, minRotation: 0 }, grid: { display: false }, border: { display: false } },
                     y: indexAxis === "y"
-                        ? { ticks: { color: textColor, autoSkip: false, font: { size: 11, weight: 600 } }, grid: { display: false }, border: { display: false } }
-                        : { beginAtZero: true, ticks: { color: textColor, precision: 0, padding: 8 }, grid: { color: gridColor }, border: { display: false } }
+                        ? { ticks: { color: textColor, autoSkip: false, font: { size: 12, weight: 600 } }, grid: { display: false }, border: { display: false } }
+                        : { beginAtZero: true, ticks: { color: textColor, precision: 0, padding: 8, font: { size: 12 } }, grid: { color: gridColor }, border: { display: false } }
                 } : undefined
             }
         });
