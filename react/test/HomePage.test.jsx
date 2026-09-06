@@ -43,6 +43,20 @@ describe("HomePage live issue presentation", () => {
         renderHome();
         const hero = screen.getByRole("region", { name: "CityVUE introduction" });
         expect(within(hero).getByRole("link", { name: "Report a Concern" })).toHaveAttribute("href", "/report");
+        expect(within(hero).getByRole("link", { name: "Report an Issue", exact: true })).toHaveAttribute("href", "/report");
+        expect(within(hero).getByRole("link", { name: "Call 911 for police or fire emergency" })).toHaveAttribute("href", "tel:911");
+        expect(within(hero).getByRole("link", { name: "Call 240-314-8567 for water or sewer emergency" })).toHaveAttribute("href", "tel:2403148567");
+        const newsLink = within(hero).getByRole("link", { name: "View City of Rockville news alerts" });
+        expect(newsLink).toHaveTextContent("News Alerts");
+        expect(newsLink).toHaveAttribute("href", "https://www.rockvillemd.gov/news/?page=1");
+        expect(newsLink).toHaveAttribute("target", "_blank");
+        expect(newsLink).toHaveAttribute("rel", "noopener noreferrer");
+        expect(screen.queryByText("News & Updates")).not.toBeInTheDocument();
+        for (const title of ["Police or Fire Emergency", "Water/Sewer Emergency"]) {
+            const cardIcon = screen.getByRole("heading", { name: title }).closest("article").querySelector(".home-action-icon i");
+            const heroIcon = within(hero).getByText(title).closest("a").querySelector("i");
+            expect(heroIcon.className).toBe(cardIcon.className);
+        }
         expect(screen.queryByText("Track Updates")).not.toBeInTheDocument();
         expect(screen.queryByText("Request Services")).not.toBeInTheDocument();
         expect(screen.queryByText("Stay Connected")).not.toBeInTheDocument();
