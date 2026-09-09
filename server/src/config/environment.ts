@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { databaseConnectionOptions } from './database-tls.js';
 
 export type NodeEnvironment = 'development' | 'test' | 'production';
 export type DatabaseSslMode = 'disable' | 'require' | 'verify-full';
@@ -8,6 +9,7 @@ export interface EnvironmentVariables {
   PORT: number;
   DATABASE_URL: string;
   DATABASE_SSL_MODE: DatabaseSslMode;
+  DATABASE_SSL_CA_FILE?: string;
   DATABASE_POOL_MAX: number;
   DATABASE_CONNECTION_TIMEOUT_MS: number;
   DATABASE_STATEMENT_TIMEOUT_MS: number;
@@ -39,6 +41,7 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
   DATABASE_SSL_MODE: Joi.string()
     .valid('disable', 'require', 'verify-full')
     .default('disable'),
+  DATABASE_SSL_CA_FILE: Joi.string().trim().min(1).optional(),
   DATABASE_POOL_MAX: Joi.number().integer().min(1).max(100).default(10),
   DATABASE_CONNECTION_TIMEOUT_MS: Joi.number()
     .integer()
@@ -116,18 +119,21 @@ export function validateEnvironment(
   });
 
   if (error) {
+    if (error.details.some((detail) => detail.path[0] === 'DATABASE_URL')) {
+      throw new Error(
+        'Invalid server configuration: DATABASE_URL is required and must be a valid PostgreSQL URL',
+      );
+    }
     throw new Error(`Invalid server configuration: ${error.message}`);
   }
 
   const environment = value as EnvironmentVariables;
-  if (
-    environment.NODE_ENV === 'production' &&
-    environment.DATABASE_SSL_MODE === 'disable'
-  ) {
-    throw new Error(
-      'Invalid server configuration: DATABASE_SSL_MODE cannot be disable in production',
-    );
-  }
+  databaseConnectionOptions({
+    environment: environment.NODE_ENV,
+    url: environment.DATABASE_URL,
+    sslMode: environment.DATABASE_SSL_MODE,
+    caFile: environment.DATABASE_SSL_CA_FILE,
+  });
   if (
     environment.NODE_ENV === 'production' &&
     environment.ENABLE_DEVELOPMENT_STAFF_ACTIONS

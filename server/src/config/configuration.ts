@@ -9,6 +9,7 @@ export interface AppConfiguration {
   database: {
     url: string;
     sslMode: string;
+    caFile?: string;
     poolMax: number;
     connectionTimeoutMs: number;
     statementTimeoutMs: number;
@@ -48,6 +49,9 @@ export function configuration(): AppConfiguration {
     database: {
       url: process.env.DATABASE_URL ?? '',
       sslMode: process.env.DATABASE_SSL_MODE ?? 'disable',
+      ...(process.env.DATABASE_SSL_CA_FILE
+        ? { caFile: process.env.DATABASE_SSL_CA_FILE }
+        : {}),
       poolMax: Number(process.env.DATABASE_POOL_MAX ?? 10),
       connectionTimeoutMs: Number(
         process.env.DATABASE_CONNECTION_TIMEOUT_MS ?? 5000,

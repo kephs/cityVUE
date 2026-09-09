@@ -57,9 +57,17 @@ Migration names use `YYYYMMDDHHMMSS-kebab-case-description.ts`. Phase A contains
 
 Local staff mutation exercises require both `ENABLE_DEVELOPMENT_STAFF_ACTIONS=true` and an active Organization-scoped `DEVELOPMENT_STAFF_ACTOR_ID` created by the development seed. This gate is not authorization and is rejected when `NODE_ENV=production`. Never enable these endpoints in a deployed environment; production staff access still requires Entra authentication and server-enforced RBAC.
 
-Startup validation requires `DATABASE_URL` and validates `NODE_ENV`, `PORT`, `APP_NAME`, `APP_VERSION`, `LOG_LEVEL`, `DATABASE_SSL_MODE`, pool/timeouts, `CORS_ORIGINS`, baseline rate limits, and telemetry placeholders. Production rejects disabled database TLS. `verify-full` preserves certificate validation; never disable certificate validation globally.
+Startup validation requires `DATABASE_URL` and validates `NODE_ENV`, `PORT`, `APP_NAME`, `APP_VERSION`, `LOG_LEVEL`, `DATABASE_SSL_MODE`, pool/timeouts, `CORS_ORIGINS`, baseline rate limits, and telemetry placeholders. The shared database TLS policy requires `DATABASE_SSL_MODE=verify-full` in production for both the API and migration CLI. `require` is rejected in every environment; `disable` remains available only in development/test for local Docker.
 
 CORS uses an explicit comma-separated origin allowlist. `*` is rejected. Development defaults to `http://localhost:5173`; add `https://cityvue-1.web.app` explicitly in a future approved deployment environment.
+
+## Database TLS and CA trust
+
+API and migration connections use the same databaseConnectionOptions policy in src/config/database-tls.ts. DATABASE_URL must have a TCP hostname. URL parameters beginning with ssl or tls (case-insensitive), uselibpqcompat, host, and hostaddr are rejected in every environment, including apparently safe sslmode=verify-full parameters. Remove these options and configure TLS centrally; this prevents pg URL parsing from replacing the application policy. Other query options remain supported.
+
+Without DATABASE_SSL_CA_FILE, verified TLS uses Node's default trusted CA set; OS trust depends on the Node runtime configuration. The actual production certificate chain has not been inspected. For an approved private CA, set DATABASE_SSL_CA_FILE to a readable PEM CA bundle mounted outside the repository and image. A relative path resolves from the process working directory; prefer an absolute path. An explicit bundle replaces Node's default CA list for that connection. Keep it server-side, never in VITE_* or Git. Unreadable, malformed, non-CA, or non-certificate material fails startup with a generic error. A CA file cannot be used with disable. Certificate and hostname verification remain enabled; never bypass verification globally.
+
+Before production activation, validate the real database hostname, certificate chain, mounted CA permissions, and rotation procedure for both API and migration jobs. Current automated checks verify effective pg options without production connections; they do not establish successful production handshakes. No TLS server fixture is included in the existing local PostgreSQL Compose workflow.
 
 ## Database and migrations
 

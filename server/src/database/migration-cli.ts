@@ -10,6 +10,7 @@ import {
 } from 'kysely';
 import { Pool } from 'pg';
 import { validateEnvironment } from '../config/environment.js';
+import { databaseConnectionOptions } from '../config/database-tls.js';
 import type { DatabaseSchema } from './database.types.js';
 
 const migrationsDirectory = path.resolve(process.cwd(), 'migrations');
@@ -19,19 +20,16 @@ function createDatabase(): Kysely<DatabaseSchema> {
   return new Kysely<DatabaseSchema>({
     dialect: new PostgresDialect({
       pool: new Pool({
-        connectionString: environment.DATABASE_URL,
+        ...databaseConnectionOptions({
+          environment: environment.NODE_ENV,
+          url: environment.DATABASE_URL,
+          sslMode: environment.DATABASE_SSL_MODE,
+          caFile: environment.DATABASE_SSL_CA_FILE,
+        }),
         max: environment.DATABASE_POOL_MAX,
         connectionTimeoutMillis: environment.DATABASE_CONNECTION_TIMEOUT_MS,
         statement_timeout: environment.DATABASE_STATEMENT_TIMEOUT_MS,
         application_name: environment.APP_NAME,
-        ...(environment.DATABASE_SSL_MODE === 'disable'
-          ? {}
-          : {
-              ssl: {
-                rejectUnauthorized:
-                  environment.DATABASE_SSL_MODE === 'verify-full',
-              },
-            }),
       }),
     }),
   });

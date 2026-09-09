@@ -4,6 +4,7 @@ import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool, type PoolConfig } from 'pg';
 import type { AppConfiguration } from '../config/configuration.js';
 import { PinoLoggerService } from '../common/logging/pino-logger.service.js';
+import { databaseConnectionOptions } from '../config/database-tls.js';
 import type { DatabaseSchema, DatabaseStatus } from './database.types.js';
 
 function databaseErrorContext(error: unknown): {
@@ -30,9 +31,13 @@ export class DatabaseService implements OnApplicationShutdown {
     config: ConfigService<AppConfiguration, true>,
     private readonly logger: PinoLoggerService,
   ) {
-    const sslMode = config.get('database.sslMode', { infer: true });
     const poolConfig: PoolConfig = {
-      connectionString: config.get('database.url', { infer: true }),
+      ...databaseConnectionOptions({
+        environment: config.get('app.environment', { infer: true }),
+        url: config.get('database.url', { infer: true }),
+        sslMode: config.get('database.sslMode', { infer: true }),
+        caFile: config.get('database.caFile', { infer: true }),
+      }),
       max: config.get('database.poolMax', { infer: true }),
       connectionTimeoutMillis: config.get('database.connectionTimeoutMs', {
         infer: true,
@@ -41,13 +46,6 @@ export class DatabaseService implements OnApplicationShutdown {
         infer: true,
       }),
       application_name: config.get('app.name', { infer: true }),
-      ...(sslMode === 'disable'
-        ? {}
-        : {
-            ssl: {
-              rejectUnauthorized: sslMode === 'verify-full',
-            },
-          }),
     };
 
     this.pool = new Pool(poolConfig);

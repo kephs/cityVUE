@@ -26,7 +26,7 @@ test('production rejects development-only staff actions', () => {
       validateEnvironment({
         ...validEnvironment,
         NODE_ENV: 'production',
-        DATABASE_SSL_MODE: 'require',
+        DATABASE_SSL_MODE: 'verify-full',
         ENABLE_DEVELOPMENT_STAFF_ACTIONS: 'true',
       }),
     /development staff actions cannot be enabled in production/,
@@ -39,7 +39,7 @@ test('production rejects the deterministic development location provider', () =>
       validateEnvironment({
         ...validEnvironment,
         NODE_ENV: 'production',
-        DATABASE_SSL_MODE: 'require',
+        DATABASE_SSL_MODE: 'verify-full',
         LOCATION_ELIGIBILITY_PROVIDER: 'development',
         ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY: 'true',
       }),
@@ -53,7 +53,7 @@ test('production rejects development-only canonical detail reads', () => {
       validateEnvironment({
         ...validEnvironment,
         NODE_ENV: 'production',
-        DATABASE_SSL_MODE: 'require',
+        DATABASE_SSL_MODE: 'verify-full',
         ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS: 'true',
       }),
     /development service request reads cannot be enabled in production/,
@@ -75,7 +75,7 @@ test('configuration validation rejects disabled database TLS in production', () 
         NODE_ENV: 'production',
         DATABASE_SSL_MODE: 'disable',
       }),
-    /DATABASE_SSL_MODE cannot be disable in production/,
+    /DATABASE_SSL_MODE must be verify-full in production/,
   );
 });
 
