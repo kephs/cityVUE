@@ -408,6 +408,8 @@ Do not hard-code environment-specific configuration.
 
 ## Security Principles
 
+The [CityVUE Security Framework](security/SECURITY_FRAMEWORK.md) is the repository security standard for NIST CSF 2.0 alignment, Zero Trust, and OWASP application/API guidance. It defines server-side trust boundaries and distinguishes verified local controls from architectural requirements and future production work.
+
 - Least privilege
 - Defense in depth
 - Server-side authorization

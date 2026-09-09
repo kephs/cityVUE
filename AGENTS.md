@@ -94,13 +94,21 @@ Where supported, adapters may expose consistent operations such as `createReques
 
 ## Authentication and Authorization
 
-Microsoft Entra ID is a planned/candidate technology for City staff authentication.
+Microsoft Entra ID is the intended enterprise identity provider for City staff. Citizen identity remains separate; local implementation does not establish production readiness.
 
 - Follow an approved authentication specification.
 - UI route guards are not sufficient authorization.
 - Protected APIs must independently validate identity and permissions.
 - Never invent tenant IDs, client IDs, secrets, scopes, roles, groups, or redirect URIs.
 - Citizen identity remains TBD; do not automatically design it around workforce Entra accounts.
+
+## Security Governance
+
+- Follow [the CityVUE security framework](docs/security/SECURITY_FRAMEWORK.md); distinguish implemented controls, architectural requirements, and planned work.
+- Preserve server-side authentication, authorization, and validation boundaries; React is never a security boundary.
+- Never expose secrets in client code (including Vite environment values) or commits.
+- Do not weaken authentication, authorization, validation, CORS, TLS, rate limiting, logging sanitation, or error sanitation without explicit justification and review.
+- Identify security-sensitive changes during implementation and add/update tests when security behavior changes.
 
 ## Secrets
 
