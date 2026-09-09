@@ -12,6 +12,7 @@ import { Pool } from 'pg';
 import { validateEnvironment } from '../config/environment.js';
 import { databaseConnectionOptions } from '../config/database-tls.js';
 import type { DatabaseSchema } from './database.types.js';
+import { commandFailure } from '../common/logging/log-sanitization.js';
 
 const migrationsDirectory = path.resolve(process.cwd(), 'migrations');
 
@@ -128,8 +129,6 @@ async function run(): Promise<void> {
 }
 
 run().catch((error: unknown) => {
-  const message =
-    error instanceof Error ? error.message : 'Unknown migration error';
-  process.stderr.write(`Migration command failed: ${message}\n`);
+  process.stderr.write(commandFailure('Migration command failed', error));
   process.exitCode = 1;
 });

@@ -8,6 +8,10 @@ import {
 import type { Request, Response } from 'express';
 import type { RequestWithId } from '../logging/request-logging.middleware.js';
 import { PinoLoggerService } from '../logging/pino-logger.service.js';
+import {
+  requestLogContext,
+  safeErrorContext,
+} from '../logging/log-sanitization.js';
 
 export interface ErrorResponse {
   statusCode: number;
@@ -80,12 +84,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     if (body.statusCode >= 500) {
       this.logger.logger.error(
-        {
-          err: exception,
-          requestId,
-          method: request.method,
-          path: request.path,
-        },
+        requestLogContext(request, {
+          ...safeErrorContext(exception),
+          statusCode: body.statusCode,
+        }),
         'Unhandled request error',
       );
     }

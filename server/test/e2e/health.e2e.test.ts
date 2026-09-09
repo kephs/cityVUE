@@ -43,7 +43,11 @@ test('GET /api/v1/health reports readiness and returns a request ID', async () =
     version: '0.1.0',
     database: 'up',
   });
-  assert.equal(response.headers['x-correlation-id'], 'e2e-request-1234');
+  assert.match(
+    String(response.headers['x-correlation-id']),
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
+  assert.notEqual(response.headers['x-correlation-id'], 'e2e-request-1234');
   assert.equal(response.headers['x-content-type-options'], 'nosniff');
 });
 

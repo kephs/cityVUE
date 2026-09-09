@@ -4,6 +4,7 @@ import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { validateEnvironment } from '../config/environment.js';
 import type { DatabaseSchema } from './database.types.js';
+import { commandFailure } from '../common/logging/log-sanitization.js';
 
 const organizationId = '10000000-0000-4000-8000-000000000001';
 const departments = [
@@ -518,18 +519,22 @@ async function seed(db: Kysely<DatabaseSchema>): Promise<void> {
   });
 }
 
-const environment = validateEnvironment(process.env);
-const db = new Kysely<DatabaseSchema>({
-  dialect: new PostgresDialect({
-    pool: new Pool({ connectionString: environment.DATABASE_URL }),
-  }),
-});
-seed(db)
-  .then(() => process.stdout.write('Development catalog seed complete.\n'))
-  .finally(() => db.destroy())
-  .catch((error: unknown) => {
-    process.stderr.write(
-      `${error instanceof Error ? error.message : 'Seed failed'}\n`,
-    );
-    process.exitCode = 1;
+async function runSeed(): Promise<void> {
+  const environment = validateEnvironment(process.env);
+  const db = new Kysely<DatabaseSchema>({
+    dialect: new PostgresDialect({
+      pool: new Pool({ connectionString: environment.DATABASE_URL }),
+    }),
   });
+  try {
+    await seed(db);
+    process.stdout.write('Development catalog seed complete.\n');
+  } finally {
+    await db.destroy();
+  }
+}
+
+runSeed().catch((error: unknown) => {
+  process.stderr.write(commandFailure('Development seed failed', error));
+  process.exitCode = 1;
+});

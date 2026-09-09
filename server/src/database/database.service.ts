@@ -4,23 +4,9 @@ import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool, type PoolConfig } from 'pg';
 import type { AppConfiguration } from '../config/configuration.js';
 import { PinoLoggerService } from '../common/logging/pino-logger.service.js';
+import { safeErrorContext } from '../common/logging/log-sanitization.js';
 import { databaseConnectionOptions } from '../config/database-tls.js';
 import type { DatabaseSchema, DatabaseStatus } from './database.types.js';
-
-function databaseErrorContext(error: unknown): {
-  errorName: string;
-  errorCode: string;
-} {
-  if (error instanceof Error) {
-    const code = 'code' in error ? error.code : undefined;
-    return {
-      errorName: error.name,
-      errorCode: typeof code === 'string' ? code : 'unknown',
-    };
-  }
-
-  return { errorName: 'UnknownDatabaseError', errorCode: 'unknown' };
-}
 
 @Injectable()
 export class DatabaseService implements OnApplicationShutdown {
@@ -51,7 +37,7 @@ export class DatabaseService implements OnApplicationShutdown {
     this.pool = new Pool(poolConfig);
     this.pool.on('error', (error) => {
       this.logger.logger.error(
-        databaseErrorContext(error),
+        safeErrorContext(error),
         'Idle PostgreSQL client error',
       );
     });
@@ -66,7 +52,7 @@ export class DatabaseService implements OnApplicationShutdown {
       return 'up';
     } catch (error) {
       this.logger.logger.warn(
-        databaseErrorContext(error),
+        safeErrorContext(error),
         'PostgreSQL readiness check failed',
       );
       return 'down';
