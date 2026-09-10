@@ -3,7 +3,7 @@ import { getRecentIssues } from "../../../../assets/js/utils/statistics.js";
 import { getIssueIcon } from "../issues/issueIconPresentation.js";
 import { formatIssueDate, getStatusClassName } from "../issues/issuePresentation.js";
 
-const RECENT_LIMIT = 3;
+const RECENT_LIMIT = 10;
 
 export default function RecentActivity({ issues }) {
     const recentIssues = getRecentIssues(issues, RECENT_LIMIT);

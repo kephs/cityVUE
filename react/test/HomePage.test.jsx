@@ -84,17 +84,31 @@ describe("HomePage live issue presentation", () => {
         expect(screen.getByRole("link", { name: /View All Issues/ })).toHaveAttribute("href", "/issues");
     });
 
-    test("shows the three newest live Issues with safe icons and established edit routes", () => {
+    test("shows all four live Issues newest-first with safe icons and established edit routes", () => {
         renderHome(issues);
         const recent = screen.getByRole("heading", { name: "Recent Issues" }).closest("section");
         expect(within(recent).getByText("Fallen Tree or Branch")).toBeInTheDocument();
         expect(within(recent).getByText("Streetlight Out")).toBeInTheDocument();
         expect(within(recent).getByText("Drainage Concern")).toBeInTheDocument();
-        expect(within(recent).queryByText("Pothole")).not.toBeInTheDocument();
-        expect(within(recent).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/issues", "/issues/newest-closed/edit", "/issues/middle-progress/edit", "/issues/second-open/edit"]);
+        expect(within(recent).getByText("Pothole")).toBeInTheDocument();
+        expect(within(recent).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/issues", "/issues/newest-closed/edit", "/issues/middle-progress/edit", "/issues/second-open/edit", "/issues/older-open/edit"]);
         expect(within(recent).getByText("Fallen Tree or Branch").closest("a").querySelector(".bi-tree")).toBeInTheDocument();
         expect(screen.queryByText("Tree Branch Overhanging Sidewalk")).not.toBeInTheDocument();
         expect(screen.queryByText("Overflowing Trash Bin")).not.toBeInTheDocument();
+    });
+
+    test.each([10, 12])("shows only the ten newest Issues when %i are available", (count) => {
+        renderHome(Array.from({ length: count }, (_, index) => ({
+            ...issues[0],
+            id: `issue-${index + 1}`,
+            title: `Issue ${index + 1}`,
+            dateReported: new Date(Date.UTC(2026, 7, index + 1)).toISOString()
+        })));
+        const recent = screen.getByRole("region", { name: "Recent Issues" });
+        expect(within(recent).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+            "/issues",
+            ...Array.from({ length: 10 }, (_, index) => `/issues/issue-${count - index}/edit`)
+        ]);
     });
 
     test("renders a restrained error without fake metrics when the injected loader throws", () => {
