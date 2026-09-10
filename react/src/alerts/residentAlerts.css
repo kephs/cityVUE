@@ -1,0 +1,12 @@
+.resident-alerts { padding-top: 1rem; padding-bottom: 1rem; display: grid; gap: .75rem; }
+.resident-alert { display: flex; gap: .85rem; padding: 1rem; border: 1px solid var(--bs-border-color); border-left: .35rem solid var(--bs-primary); border-radius: .35rem; color: var(--bs-body-color); background: var(--bs-body-bg); }
+.resident-alert--advisory { border-left-color: var(--bs-info-text-emphasis); }
+.resident-alert--warning { border-left-color: var(--bs-warning-text-emphasis); }
+.resident-alert--critical { border-left-color: var(--bs-danger-text-emphasis); }
+.resident-alert > i { font-size: 1.4rem; }
+.resident-alert > div { min-width: 0; overflow-wrap: anywhere; }
+.resident-alert h2 { font-size: 1.15rem; margin: .15rem 0 .4rem; }
+.resident-alert p { margin: 0 0 .5rem; white-space: pre-wrap; }
+.resident-alert-severity { font-weight: 700; font-size: .8rem; }
+.resident-alert .resident-alert-time { font-size: .8rem; }
+.home-page .resident-alert a { color: var(--bs-link-color); text-decoration: underline; }

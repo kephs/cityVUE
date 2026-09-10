@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
 import { ServiceRequestModule } from './service-request/service-request.module.js';
 import { LocationEligibilityModule } from './location-eligibility/location-eligibility.module.js';
+import { AlertsModule } from './alerts/alerts.module.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { LocationEligibilityModule } from './location-eligibility/location-eligi
     DatabaseModule,
     HealthModule,
     CatalogModule,
+    AlertsModule,
     LocationEligibilityModule,
     ServiceRequestModule,
   ],

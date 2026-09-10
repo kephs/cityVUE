@@ -5,6 +5,7 @@ import ImpactSummary from "./home/ImpactSummary.jsx";
 import QuickActions from "./home/QuickActions.jsx";
 import RecentActivity from "./home/RecentActivity.jsx";
 import "./home/home.css";
+import ResidentAlertBanner from "../alerts/ResidentAlertBanner.jsx";
 
 export default function HomePage({ loadIssues = () => IssueService.getIssues() }) {
     const [readState] = useState(() => {
@@ -18,6 +19,7 @@ export default function HomePage({ loadIssues = () => IssueService.getIssues() }
 
     return (
         <div className="home-page">
+            <ResidentAlertBanner />
             <Hero />
             <div className="home-container home-main-content">
                 <QuickActions />

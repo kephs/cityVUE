@@ -1,4 +1,5 @@
 import type { ColumnType, Generated, Insertable, Selectable } from 'kysely';
+import type { AlertType, AlertSeverity } from '../alerts/alert.dto.js';
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type JsonValue = ColumnType<unknown, unknown, unknown>;
@@ -253,7 +254,31 @@ interface ServiceRequestAssignmentTable {
   created_at: Generated<Timestamp>;
 }
 
+interface ResidentAlertTable {
+  id: Generated<string>;
+  organization_id: string;
+  type: AlertType;
+  severity: AlertSeverity;
+  title: string;
+  message: string;
+  image_url: string | null;
+  link_url: string | null;
+  link_label: string | null;
+  starts_at: Date;
+  expires_at: Date | null;
+  is_active: Generated<boolean>;
+  published_at: Date | null;
+  deactivated_at: Date | null;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  created_by: string | null;
+  updated_by: string | null;
+  published_by: string | null;
+  deactivated_by: string | null;
+}
+
 export interface DatabaseSchema {
+  resident_alert: ResidentAlertTable;
   organization: OrganizationTable;
   department: DepartmentTable;
   division: DivisionTable;
