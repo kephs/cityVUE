@@ -5,6 +5,7 @@ export type NodeEnvironment = 'development' | 'test' | 'production';
 export type DatabaseSslMode = 'disable' | 'require' | 'verify-full';
 
 export interface EnvironmentVariables {
+  AI_TEST_EXECUTION_ENABLED: boolean;
   AI_ENABLED: boolean;
   AI_CHAT_ENABLED: false;
   NODE_ENV: NodeEnvironment;
@@ -37,6 +38,7 @@ export interface EnvironmentVariables {
 }
 
 const environmentSchema = Joi.object<EnvironmentVariables>({
+  AI_TEST_EXECUTION_ENABLED: Joi.boolean().default(false),
   AI_ENABLED: Joi.boolean().truthy('true').falsy('false').default(false),
   AI_CHAT_ENABLED: Joi.boolean().valid(false).default(false),
   NODE_ENV: Joi.string()
@@ -144,6 +146,13 @@ export function validateEnvironment(
   }
 
   const environment = value as EnvironmentVariables;
+  if (
+    environment.AI_TEST_EXECUTION_ENABLED &&
+    (environment.NODE_ENV === 'production' || !environment.AI_ENABLED)
+  )
+    throw new Error(
+      'Invalid server configuration: AI test execution requires non-production AI mode',
+    );
   if (environment.AI_ENABLED && !environment.ENTRA_TENANT_ID) {
     throw new Error(
       'Invalid server configuration: AI_ENABLED requires Entra configuration',

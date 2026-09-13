@@ -9,7 +9,6 @@ import { ConfigService } from '@nestjs/config';
 import { validateEnvironment } from '../../src/config/environment.js';
 import { AiModelRegistry } from '../../src/ai/ai-model-registry.js';
 import { AiPolicyService } from '../../src/ai/ai-policy.service.js';
-import { AiRouterService } from '../../src/ai/ai-router.service.js';
 import type {
   AiGenerationRequest,
   AiModelDescriptor,
@@ -85,11 +84,7 @@ test('disabled workspace exposes only safe status and blocks model reads and rou
   });
   assert.throws(() => subject.models(staff), ServiceUnavailableException);
   assert.throws(
-    () =>
-      new AiRouterService(subject).generate(request, {
-        staff,
-        requestId: 'test',
-      }),
+    () => subject.authorizeGeneration(request, staff),
     ServiceUnavailableException,
   );
 });
@@ -132,18 +127,14 @@ test('registry is empty and metadata projection cannot expose internal secrets',
   assert.deepEqual(policy(true, [internal]).models(staff), [model]);
 });
 
-test('router always evaluates policy; unknown, disabled, auto and even enabled models cannot generate', (t) => {
+test('policy rejects unknown, disabled, auto and ungoverned models', (t) => {
   const network = t.mock.method(globalThis, 'fetch', () => {
     throw new Error('Network is forbidden');
   });
   const subject = policy(true, [model]);
   const evaluation = t.mock.method(subject, 'authorizeGeneration');
   assert.throws(
-    () =>
-      new AiRouterService(subject).generate(request, {
-        staff,
-        requestId: 'test',
-      }),
+    () => subject.authorizeGeneration(request, staff),
     ForbiddenException,
   );
   assert.equal(evaluation.mock.callCount(), 1);
@@ -166,12 +157,8 @@ test('router always evaluates policy; unknown, disabled, auto and even enabled m
     },
   ]);
   assert.throws(
-    () =>
-      new AiRouterService(enabled).generate(request, {
-        staff,
-        requestId: 'test',
-      }),
-    ServiceUnavailableException,
+    () => enabled.authorizeGeneration(request, staff),
+    ForbiddenException,
   );
   assert.equal(network.mock.callCount(), 0);
 });

@@ -1,3 +1,4 @@
+import { aiFailure } from './ai-failure.js';
 import {
   ForbiddenException,
   Injectable,
@@ -64,21 +65,26 @@ export class AiPolicyService {
     request: AiGenerationRequest,
     staff: StaffAccess,
   ): AiModelDescriptor {
-    const models = this.models(staff);
-    const model = models.find(
-      (candidate) => candidate.id === request.selection.modelId,
-    );
+    this.assertWorkspaceAccess(staff);
+    if (!this.status(staff).enabled) throw aiFailure('ai_disabled');
+    const model = this.registry
+      .list()
+      .find((candidate) => candidate.id === request.selection.modelId);
+    if (!model) throw aiFailure('unknown_model');
+    if (!model.enabled || model.availability !== 'available')
+      throw aiFailure('model_disabled');
     if (
-      !model ||
-      !model.enabled ||
-      model.availability !== 'available' ||
       !model.capabilities.includes('text-generation') ||
-      !model.classificationPolicyId
-    ) {
-      throw new ForbiddenException();
-    }
-    // Hard stop even if a registry entry/config is accidentally enabled.
-    // Future approvals, quotas and classification checks belong before this boundary.
-    throw new ServiceUnavailableException();
+      !model.classificationPolicyId ||
+      !model.governance?.staffOnly ||
+      model.governance.classificationPolicyId !==
+        model.classificationPolicyId ||
+      !model.governance.requiredPermissions.includes('ai.workspace.access') ||
+      !model.governance.requiredPermissions.every((permission) =>
+        staff.permissions.includes(permission),
+      )
+    )
+      throw aiFailure('model_policy_denied');
+    return model;
   }
 }

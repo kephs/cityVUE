@@ -302,7 +302,36 @@ interface ResidentAlertTable {
   deactivated_by: string | null;
 }
 
+interface AiUsageTable {
+  id: Generated<string>;
+  request_id: string;
+  organization_id: string;
+  staff_identity_id: string;
+  model_id: string | null;
+  provider_id: string | null;
+  quota_policy_id: string | null;
+  created_at: Timestamp;
+  completed_at: Date | null;
+  policy_decision: 'accepted' | 'denied';
+  outcome:
+    'pending' | 'completed' | 'limited' | 'blocked' | 'failed' | 'denied';
+  failure_category: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  duration_ms: number | null;
+}
+interface AiAuditEventTable {
+  id: Generated<string>;
+  organization_id: string;
+  usage_id: string;
+  event: 'accepted' | 'denied' | 'completed' | 'failed';
+  created_at: Timestamp;
+}
+
 export interface DatabaseSchema {
+  ai_usage: AiUsageTable;
+  ai_audit_event: AiAuditEventTable;
   resident_alert: ResidentAlertTable;
   organization: OrganizationTable;
   department: DepartmentTable;

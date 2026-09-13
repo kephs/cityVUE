@@ -235,11 +235,13 @@ test('AI HTTP boundary retains authentication, RBAC, fail-closed flags, sanitize
           error: 'Internal Server Error',
           requestId,
         });
-        await request(app.getHttpServer())
-          .post('/api/v1/ai/chat')
-          .set('Authorization', 'Bearer allowed')
-          .send({ prompt: 'PROMPT_SENTINEL', content: 'RESPONSE_SENTINEL' })
-          .expect(404);
+        for (const path of ['chat', 'generate', 'test-harness']) {
+          await request(app.getHttpServer())
+            .post('/api/v1/ai/' + path)
+            .set('Authorization', 'Bearer allowed')
+            .send({ prompt: 'PROMPT_SENTINEL', content: 'RESPONSE_SENTINEL' })
+            .expect(404);
+        }
         assert.doesNotMatch(lines.join(''), /SENTINEL|DATABASE_SECRET|Bearer/);
         assert.ok(
           lines.some((line) => {

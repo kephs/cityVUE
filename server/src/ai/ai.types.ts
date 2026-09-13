@@ -1,7 +1,9 @@
+import type { AiModelGovernance } from './ai-governance.types.js';
 import type { StaffAccess } from '../auth/auth.types.js';
 
 /** CityVUE-owned contracts. Adapter credentials and vendor payloads stay private. */
 export interface AiModelDescriptor {
+  governance?: AiModelGovernance;
   id: string;
   displayName: string;
   providerId: string;
@@ -29,13 +31,23 @@ export interface AiGenerationResponse {
   providerId: string;
   content: string;
   status: 'completed' | 'limited' | 'blocked';
-  usage?: { inputTokens?: number; outputTokens?: number };
+  finishReason: 'stop' | 'length' | 'policy';
+  timestamp: string;
+  durationMs: number;
+  usage: {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens: number | null;
+  };
 }
 
 export interface AiProvider {
   readonly providerId: string;
+  readonly kind: 'test' | 'live';
+  readonly modelIds: readonly string[];
+  readonly availability: 'available' | 'unavailable' | 'degraded';
   generate(
     request: AiGenerationRequest,
-    context: AiRequestContext,
+    context: Pick<AiRequestContext, 'requestId'> & { signal: AbortSignal },
   ): Promise<AiGenerationResponse>;
 }

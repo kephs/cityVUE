@@ -139,7 +139,7 @@ HTTP tests use real Nest routing, guards, middleware, exception filtering, DTO/O
 
 React tests cover strict route admission, server denial, disabled/empty state, labelled disabled controls, session/account changes, authenticated API reads and unchanged resident navigation. Existing Node, React, backend unit/E2E, TypeScript, lint and builds remain regression gates. Real PostgreSQL tests require TEST_DATABASE_URL. See the implementation validation report for exact outcomes and skips.
 
-## Future phases / recommended F021
+## Subsequent governance and provider phases
 
 1. Complete Entra consent and live staff authorization UAT; approve AI ownership, permission grants and acceptable use.
 2. Approve data classifications, privacy/records rules, provider procurement/terms, deployment environment and cost limits.
@@ -148,3 +148,5 @@ React tests cover strict route admission, server denial, disabled/empty state, l
 5. Consider persistence, secure uploads, tool integrations and auto-routing separately after their governance and threat models are approved.
 
 F021 should focus first on governance and identity UAT. No provider connection, production enablement or deployment is implied by this recommendation.
+
+F021 now implements the internal governance/metadata lifecycle described in [its report](F021-implementation-report.md). It supersedes F020's internal router hard stop only for explicitly gated test execution; the shipped provider/model registries remain empty, chat remains disabled, and no generation endpoint is added. F022 is the separately reviewed first-provider candidate. The F020 descriptions above record that feature's original implementation.

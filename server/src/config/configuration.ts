@@ -1,5 +1,5 @@
 export interface AppConfiguration {
-  ai: { enabled: boolean; chatEnabled: false };
+  ai: { enabled: boolean; chatEnabled: false; testExecutionEnabled: boolean };
   app: {
     name: string;
     version: string;
@@ -50,6 +50,7 @@ export function configuration(): AppConfiguration {
     ai: {
       enabled: process.env.AI_ENABLED === 'true',
       chatEnabled: false,
+      testExecutionEnabled: process.env.AI_TEST_EXECUTION_ENABLED === 'true',
     },
     app: {
       name: process.env.APP_NAME ?? 'cityvue-api',

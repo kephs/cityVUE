@@ -1,6 +1,8 @@
 # CityVUE — Roadmap
 
-F020 adds a bounded staff AI workspace at `/staff/ai` with Entra-only admission, explicit AI permissions, protected metadata APIs, provider-neutral contracts and policy-enforced routing. It is disabled by default with no inference, provider connection, conversation storage or deployment. See [F020](features/F020-enterprise-ai-workspace-foundation.md) and [ADR-001](decisions/ADR-001-provider-neutral-staff-ai-gateway.md); governance and live identity UAT precede any F021 provider pilot.
+F021 adds an internal provider-neutral execution lifecycle, strict request/response contracts, metadata-only usage/audit persistence, atomic request-quota admission, and model governance. The application registries remain empty; deterministic providers and an HTTP harness exist only in tests. AI/chat remain disabled by default, production test execution is forbidden, and no generation endpoint or live provider is shipped. See [F021](features/F021-implementation-report.md) and [ADR-002](decisions/ADR-002-ai-governance-metadata.md). F022 provider evaluation requires separate review and approval.
+
+F020 adds a bounded staff AI workspace at `/staff/ai` with Entra-only admission, explicit AI permissions, protected metadata APIs, provider-neutral contracts and policy-enforced routing. It is disabled by default with no inference, provider connection, conversation storage or deployment. See [F020](features/F020-enterprise-ai-workspace-foundation.md) and [ADR-001](decisions/ADR-001-provider-neutral-staff-ai-gateway.md); governance and live identity UAT precede any separately approved F022 provider pilot.
 
 - [x] Phase B local Entra authentication and Organization-scoped RBAC foundation (live token UAT pending admin consent; see F018)
 
