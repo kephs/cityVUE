@@ -6,6 +6,7 @@ import NotFoundPage from "../pages/NotFoundPage.jsx";
 import StaffRouteGuard from '../auth/StaffRouteGuard.jsx';
 
 const HomePage = lazy(() => import("../pages/HomePage.jsx"));
+const AIWorkspacePage = lazy(() => import("../ai/AIWorkspacePage.jsx"));
 const IssuesPage = lazy(() => import("../pages/issues/IssuesPage.jsx"));
 const EditIssuePage = lazy(() => import("../pages/issues/EditIssuePage.jsx"));
 const DashboardPage = lazy(() => import("../pages/dashboard/DashboardPage.jsx"));
@@ -25,6 +26,10 @@ const router = createBrowserRouter([
         path: "/",
         element: <App />,
         children: [
+            {
+                path: "staff/ai",
+                element: <StaffRouteGuard requireEntra><AIWorkspacePage /></StaffRouteGuard>
+            },
             {
                 index: true,
                 element: <HomePage />

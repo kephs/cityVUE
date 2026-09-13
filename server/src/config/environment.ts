@@ -5,6 +5,8 @@ export type NodeEnvironment = 'development' | 'test' | 'production';
 export type DatabaseSslMode = 'disable' | 'require' | 'verify-full';
 
 export interface EnvironmentVariables {
+  AI_ENABLED: boolean;
+  AI_CHAT_ENABLED: false;
   NODE_ENV: NodeEnvironment;
   PORT: number;
   DATABASE_URL: string;
@@ -35,6 +37,8 @@ export interface EnvironmentVariables {
 }
 
 const environmentSchema = Joi.object<EnvironmentVariables>({
+  AI_ENABLED: Joi.boolean().truthy('true').falsy('false').default(false),
+  AI_CHAT_ENABLED: Joi.boolean().valid(false).default(false),
   NODE_ENV: Joi.string()
     .valid('development', 'test', 'production')
     .default('development'),
@@ -140,6 +144,11 @@ export function validateEnvironment(
   }
 
   const environment = value as EnvironmentVariables;
+  if (environment.AI_ENABLED && !environment.ENTRA_TENANT_ID) {
+    throw new Error(
+      'Invalid server configuration: AI_ENABLED requires Entra configuration',
+    );
+  }
   const entraValues = [
     environment.ENTRA_TENANT_ID,
     environment.ENTRA_API_CLIENT_ID,

@@ -1,4 +1,6 @@
 export const permissions = [
+  'ai.workspace.access',
+  'ai.administration.access',
   'service_request.view',
   'service_request.assign',
   'service_request.start_work',

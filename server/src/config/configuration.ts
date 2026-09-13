@@ -1,4 +1,5 @@
 export interface AppConfiguration {
+  ai: { enabled: boolean; chatEnabled: false };
   app: {
     name: string;
     version: string;
@@ -46,6 +47,10 @@ export function configuration(): AppConfiguration {
   const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
   return {
+    ai: {
+      enabled: process.env.AI_ENABLED === 'true',
+      chatEnabled: false,
+    },
     app: {
       name: process.env.APP_NAME ?? 'cityvue-api',
       version: process.env.APP_VERSION ?? '0.1.0',

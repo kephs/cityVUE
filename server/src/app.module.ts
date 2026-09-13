@@ -16,6 +16,7 @@ import { ServiceRequestModule } from './service-request/service-request.module.j
 import { LocationEligibilityModule } from './location-eligibility/location-eligibility.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { AlertsModule } from './alerts/alerts.module.js';
+import { AiModule } from './ai/ai.module.js';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AlertsModule } from './alerts/alerts.module.js';
     }),
     DatabaseModule,
     AuthModule,
+    AiModule,
     HealthModule,
     CatalogModule,
     AlertsModule,

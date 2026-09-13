@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+F020 adds a bounded staff AI workspace at `/staff/ai` with Entra-only admission, explicit AI permissions, protected metadata APIs, provider-neutral contracts and policy-enforced routing. It is disabled by default with no inference, provider connection, conversation storage or deployment. See [F020](features/F020-enterprise-ai-workspace-foundation.md) and [ADR-001](decisions/ADR-001-provider-neutral-staff-ai-gateway.md); governance and live identity UAT precede any F021 provider pilot.
+
 Phase B now provides a local Microsoft Entra/MSAL and server-side RBAC foundation. It uses tenant-specific signed-token validation and pre-provisioned `tid`/`oid` StaffIdentity mapping; live delegated-token UAT and production activation remain blocked on pending tenant admin consent. See F018.
 
 Phase F0 adds a local-development-only staff assignment and controlled canonical ServiceRequest workflow foundation. Organization-scoped synthetic staff profiles, explicit memberships, WorkGroups/queues, one-current-assignment history, revision-guarded assignment and workflow commands, and append-only Activity are implemented behind a production-forbidden development-action gate. This is not authentication or authorization: Entra mapping, RBAC, production staff APIs/UI, My Work, notifications, EAM synchronization, and deployment remain deferred. See F017.

@@ -10,7 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import type { AppConfiguration } from '../config/configuration.js';
 import { DatabaseService } from '../database/database.service.js';
-import { PERMISSION_KEY } from './auth.decorators.js';
+import { ENTRA_ONLY_KEY, PERMISSION_KEY } from './auth.decorators.js';
 import { EntraTokenService } from './entra-token.service.js';
 import { StaffAuthorizationService } from './staff-authorization.service.js';
 import type { Permission, StaffAccess } from './auth.types.js';
@@ -43,7 +43,15 @@ export class StaffAccessGuard implements CanActivate {
       request.staffAccess = access;
       return true;
     }
-    if (this.tokens.enabled) throw new UnauthorizedException();
+    if (
+      this.tokens.enabled ||
+      this.reflector.getAllAndOverride<boolean>(ENTRA_ONLY_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ])
+    ) {
+      throw new UnauthorizedException();
+    }
     const read = permission === 'service_request.view';
     const enabled = this.config.get(
       read

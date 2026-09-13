@@ -20,7 +20,7 @@ function publicMessage(status, path, code) {
     return ["server", "CityVUE could not complete the request. Please try again."];
 }
 
-export function createApiClient({ baseUrl, fetchImplementation = fetch, timeoutMs = 10000 }) {
+export function createApiClient({ baseUrl, fetchImplementation = fetch, timeoutMs = 10000, getAccessToken = getStaffAccessToken }) {
     async function request(path, { method = "GET", body, signal, authenticated = false } = {}) {
         const timeoutController = new AbortController();
         const timeout = setTimeout(() => timeoutController.abort("timeout"), timeoutMs);
@@ -29,7 +29,7 @@ export function createApiClient({ baseUrl, fetchImplementation = fetch, timeoutM
         const abortFromCaller = () => timeoutController.abort(signal.reason);
         if (signal && typeof AbortSignal.any !== "function") signal.addEventListener("abort", abortFromCaller, { once: true });
         try {
-            const accessToken = authenticated ? await getStaffAccessToken() : null;
+            const accessToken = authenticated ? await getAccessToken() : null;
             const response = await fetchImplementation(`${baseUrl}${path}`, {
                 method, signal: combinedSignal, headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
                 ...(body ? { body: JSON.stringify(body) } : {})
