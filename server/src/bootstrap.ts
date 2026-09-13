@@ -36,6 +36,12 @@ export function configureApplication(app: INestApplication): void {
       'CityVUE platform health, readiness, and resident service catalog API',
     )
     .setVersion('1')
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      description: 'Microsoft Entra delegated CityVUE API access token',
+    })
     .build();
   const document = SwaggerModule.createDocument(app, openApiConfig);
   SwaggerModule.setup('api/docs', app, document, {

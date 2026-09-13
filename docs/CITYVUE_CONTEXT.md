@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+Phase B now provides a local Microsoft Entra/MSAL and server-side RBAC foundation. It uses tenant-specific signed-token validation and pre-provisioned `tid`/`oid` StaffIdentity mapping; live delegated-token UAT and production activation remain blocked on pending tenant admin consent. See F018.
+
 Phase F0 adds a local-development-only staff assignment and controlled canonical ServiceRequest workflow foundation. Organization-scoped synthetic staff profiles, explicit memberships, WorkGroups/queues, one-current-assignment history, revision-guarded assignment and workflow commands, and append-only Activity are implemented behind a production-forbidden development-action gate. This is not authentication or authorization: Entra mapping, RBAC, production staff APIs/UI, My Work, notifications, EAM synchronization, and deployment remain deferred. See F017.
 
 F016 documents a planning-only production hosting and deployment readiness path. The preferred first-municipality target uses Azure Static Web Apps, Container Apps, Container Registry, PostgreSQL Flexible Server, Key Vault, Entra ID, future Blob Storage, and Application Insights/Azure Monitor, subject to City architecture/security approval and separate Development, Test/QA, and Production boundaries. No infrastructure is provisioned: production remains Firebase Hosting with legacy/localStorage behavior, while the NestJS/PostgreSQL platform remains local. Canonical staff routes still require Entra/RBAC before production exposure. See F016.

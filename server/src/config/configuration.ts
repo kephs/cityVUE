@@ -28,6 +28,13 @@ export interface AppConfiguration {
   catalog: { developmentOrganizationId: string };
   serviceRequestReads: { developmentEnabled: boolean };
   staffActions: { developmentEnabled: boolean; developmentActorId: string };
+  entra: {
+    enabled: boolean;
+    tenantId?: string;
+    apiClientId?: string;
+    expectedAudience?: string;
+    requiredScope: string;
+  };
   locationEligibility: {
     provider: string;
     developmentEnabled: boolean;
@@ -86,6 +93,19 @@ export function configuration(): AppConfiguration {
       developmentActorId:
         process.env.DEVELOPMENT_STAFF_ACTOR_ID ??
         '90000000-0000-4000-8000-000000000001',
+    },
+    entra: {
+      enabled: Boolean(process.env.ENTRA_TENANT_ID),
+      ...(process.env.ENTRA_TENANT_ID
+        ? { tenantId: process.env.ENTRA_TENANT_ID }
+        : {}),
+      ...(process.env.ENTRA_API_CLIENT_ID
+        ? { apiClientId: process.env.ENTRA_API_CLIENT_ID }
+        : {}),
+      ...(process.env.ENTRA_EXPECTED_AUDIENCE
+        ? { expectedAudience: process.env.ENTRA_EXPECTED_AUDIENCE }
+        : {}),
+      requiredScope: process.env.ENTRA_REQUIRED_SCOPE ?? 'access_as_user',
     },
     locationEligibility: {
       provider: process.env.LOCATION_ELIGIBILITY_PROVIDER ?? 'disabled',

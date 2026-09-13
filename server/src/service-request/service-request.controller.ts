@@ -7,6 +7,8 @@ import {
   Param,
   Post,
   Query,
+  UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -16,7 +18,11 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import { CurrentStaff, RequirePermission } from '../auth/auth.decorators.js';
+import { StaffAccessGuard } from '../auth/staff-access.guard.js';
+import type { Permission, StaffAccess } from '../auth/auth.types.js';
 import { CreateServiceRequestService } from './create-service-request.service.js';
 import { GetServiceRequestDetailsService } from './get-service-request-details.service.js';
 import { ListServiceRequestsService } from './list-service-requests.service.js';
@@ -59,6 +65,9 @@ export class ServiceRequestController {
     return this.createRequest.execute(input);
   }
   @Get()
+  @UseGuards(StaffAccessGuard)
+  @RequirePermission('service_request.view')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Development-only canonical staff service request list',
     description:
@@ -66,10 +75,16 @@ export class ServiceRequestController {
   })
   @ApiOkResponse({ type: ServiceRequestListResponseDto })
   @ApiNotFoundResponse({ description: 'Development reads are unavailable' })
-  list(@Query() query: ListServiceRequestsQueryDto) {
-    return this.listRequests.execute(query);
+  list(
+    @Query() query: ListServiceRequestsQueryDto,
+    @CurrentStaff() access: StaffAccess,
+  ) {
+    return this.listRequests.execute(query, access);
   }
   @Get(':serviceRequestId')
+  @UseGuards(StaffAccessGuard)
+  @RequirePermission('service_request.view')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Development-only canonical service request details',
   })
@@ -78,28 +93,42 @@ export class ServiceRequestController {
     description:
       'Unavailable, invalid, missing, or outside the configured Organization',
   })
-  details(@Param('serviceRequestId') id: string) {
-    return this.getDetails.execute(id);
+  details(
+    @Param('serviceRequestId') id: string,
+    @CurrentStaff() access: StaffAccess,
+  ) {
+    return this.getDetails.execute(id, access);
   }
   @Post(':serviceRequestId/assignment')
+  @UseGuards(StaffAccessGuard)
+  @RequirePermission('service_request.assign')
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Development-only staff assignment action' })
   @ApiOkResponse({ type: StaffMutationResponseDto })
   assignment(
     @Param('serviceRequestId') id: string,
     @Body() input: AssignmentActionDto,
+    @CurrentStaff() access: StaffAccess,
   ) {
-    return this.staffActions.assign(id, input);
+    return this.staffActions.assign(id, input, access);
   }
 
   @Post(':serviceRequestId/workflow')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(StaffAccessGuard)
+  @RequirePermission('service_request.view')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Development-only controlled workflow action' })
   @ApiOkResponse({ type: StaffMutationResponseDto })
   workflow(
     @Param('serviceRequestId') id: string,
     @Body() input: WorkflowActionDto,
+    @CurrentStaff() access: StaffAccess,
   ) {
-    return this.staffActions.workflow(id, input);
+    const permission = `service_request.${input.action}` as Permission;
+    if (!access.development && !access.permissions.includes(permission))
+      throw new ForbiddenException('Access denied');
+    return this.staffActions.workflow(id, input, access);
   }
 }

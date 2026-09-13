@@ -5,5 +5,5 @@ import { createApiServiceRequestRepository } from "./serviceRequestRepositories.
 export function createServiceRequestDetailsData({ environment, fetchImplementation } = {}) {
     const config = readResidentIntakeConfig(environment);
     if (config.dataSource !== "api" || !config.developmentReadsEnabled) return { mode: "unavailable" };
-    return { mode: "api", repository: createApiServiceRequestRepository(createApiClient({ baseUrl: config.apiBaseUrl, fetchImplementation })) };
+    return { mode: "api", repository: createApiServiceRequestRepository(createApiClient({ baseUrl: config.apiBaseUrl, fetchImplementation }), { authenticated: config.entra.enabled }) };
 }

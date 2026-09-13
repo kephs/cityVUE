@@ -4,6 +4,7 @@ import type { AppConfiguration } from '../config/configuration.js';
 import { DatabaseService } from '../database/database.service.js';
 import type { ServiceRequestDetailsResponseDto } from './service-request.dto.js';
 import { ServiceRequestRepository } from './service-request.repository.js';
+import type { StaffAccess } from '../auth/auth.types.js';
 
 const uuidV4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -70,16 +71,32 @@ export class GetServiceRequestDetailsService {
     });
   }
 
-  async execute(id: string): Promise<ServiceRequestDetailsResponseDto> {
-    if (!this.enabled || !uuidV4.test(id)) throw new NotFoundException();
+  async execute(
+    id: string,
+    access?: StaffAccess,
+  ): Promise<ServiceRequestDetailsResponseDto> {
+    if ((!access && !this.enabled) || !uuidV4.test(id))
+      throw new NotFoundException();
     const details = await this.database.client
       .transaction()
       .execute((trx) =>
-        this.repository.loadDetails(trx, this.organizationId, id),
+        this.repository.loadDetails(
+          trx,
+          access?.organizationId ?? this.organizationId,
+          id,
+        ),
       );
     if (!details) throw new NotFoundException();
     const { request, answers, contact, location, activity, assignments } =
       details;
+    if (
+      access &&
+      !access.development &&
+      (!access.departmentIds.includes(request.department_id) ||
+        (request.division_id !== null &&
+          !access.divisionIds.includes(request.division_id)))
+    )
+      throw new NotFoundException();
     const mappedAssignments = assignments.map((entry) => ({
       type: entry.assignment_type,
       ...(entry.staff_identity_id

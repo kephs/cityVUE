@@ -27,6 +27,10 @@ export interface EnvironmentVariables {
   LOCATION_ELIGIBILITY_PROVIDER: 'disabled' | 'development';
   ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY: boolean;
   LOCATION_ELIGIBILITY_TIMEOUT_MS: number;
+  ENTRA_TENANT_ID?: string;
+  ENTRA_API_CLIENT_ID?: string;
+  ENTRA_EXPECTED_AUDIENCE?: string;
+  ENTRA_REQUIRED_SCOPE: string;
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
 }
 
@@ -107,6 +111,14 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
     .min(100)
     .max(30000)
     .default(3000),
+  ENTRA_TENANT_ID: Joi.string()
+    .guid({ version: ['uuidv4'] })
+    .optional(),
+  ENTRA_API_CLIENT_ID: Joi.string()
+    .guid({ version: ['uuidv4'] })
+    .optional(),
+  ENTRA_EXPECTED_AUDIENCE: Joi.string().trim().min(1).optional(),
+  ENTRA_REQUIRED_SCOPE: Joi.string().trim().default('access_as_user'),
   OTEL_EXPORTER_OTLP_ENDPOINT: Joi.string().uri().optional(),
 }).unknown(true);
 
@@ -128,6 +140,16 @@ export function validateEnvironment(
   }
 
   const environment = value as EnvironmentVariables;
+  const entraValues = [
+    environment.ENTRA_TENANT_ID,
+    environment.ENTRA_API_CLIENT_ID,
+    environment.ENTRA_EXPECTED_AUDIENCE,
+  ];
+  if (entraValues.some(Boolean) && !entraValues.every(Boolean)) {
+    throw new Error(
+      'Invalid server configuration: all Entra settings must be provided together',
+    );
+  }
   databaseConnectionOptions({
     environment: environment.NODE_ENV,
     url: environment.DATABASE_URL,

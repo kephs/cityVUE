@@ -67,6 +67,24 @@ test('configuration validation rejects a missing database URL', () => {
   );
 });
 
+test('Entra configuration is explicit and all-or-nothing', () => {
+  assert.throws(() =>
+    validateEnvironment({
+      NODE_ENV: 'test',
+      DATABASE_URL: 'postgresql://cityvue:test@localhost/cityvue',
+      ENTRA_TENANT_ID: '11111111-1111-4111-8111-111111111111',
+    }),
+  );
+  const configured = validateEnvironment({
+    NODE_ENV: 'test',
+    DATABASE_URL: 'postgresql://cityvue:test@localhost/cityvue',
+    ENTRA_TENANT_ID: '11111111-1111-4111-8111-111111111111',
+    ENTRA_API_CLIENT_ID: '22222222-2222-4222-8222-222222222222',
+    ENTRA_EXPECTED_AUDIENCE: 'api://22222222-2222-4222-8222-222222222222',
+  });
+  assert.equal(configured.ENTRA_REQUIRED_SCOPE, 'access_as_user');
+});
+
 test('configuration validation rejects disabled database TLS in production', () => {
   assert.throws(
     () =>

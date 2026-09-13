@@ -14,5 +14,11 @@ export function readResidentIntakeConfig(environment = import.meta.env) {
         try { parsed = new URL(apiBaseUrl); } catch { throw new Error("VITE_CITYVUE_API_BASE_URL must be a valid HTTP(S) URL."); }
         if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("VITE_CITYVUE_API_BASE_URL must be a valid HTTP(S) URL.");
     }
-    return { dataSource, apiBaseUrl, developmentReadsEnabled: dataSource === DATA_SOURCES.api && developmentReadsEnabled };
+    const tenantId = String(environment?.VITE_ENTRA_TENANT_ID || '').trim();
+    const webClientId = String(environment?.VITE_ENTRA_WEB_CLIENT_ID || '').trim();
+    const apiScope = String(environment?.VITE_ENTRA_API_SCOPE || '').trim();
+    const entraValues = [tenantId, webClientId, apiScope];
+    if (entraValues.some(Boolean) && !entraValues.every(Boolean)) throw new Error('All CityVUE Entra settings must be configured together.');
+    return { dataSource, apiBaseUrl, developmentReadsEnabled: dataSource === DATA_SOURCES.api && developmentReadsEnabled,
+        entra: { enabled: dataSource === DATA_SOURCES.api && entraValues.every(Boolean), tenantId, webClientId, apiScope } };
 }

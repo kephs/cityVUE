@@ -202,6 +202,7 @@ interface StaffIdentityTable {
   id: string;
   organization_id: string;
   entra_object_id: string | null;
+  entra_tenant_id: Generated<string | null>;
   display_name: string;
   email: string | null;
   active: boolean;
@@ -253,6 +254,30 @@ interface ServiceRequestAssignmentTable {
   reason: string | null;
   created_at: Generated<Timestamp>;
 }
+interface PermissionTable {
+  permission_key: string;
+}
+interface RoleTable {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  active: boolean;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface RolePermissionTable {
+  organization_id: string;
+  role_id: string;
+  permission_key: string;
+}
+interface StaffRoleAssignmentTable {
+  organization_id: string;
+  staff_identity_id: string;
+  role_id: string;
+  active: boolean;
+  created_at: Generated<Timestamp>;
+}
 
 interface ResidentAlertTable {
   id: Generated<string>;
@@ -299,6 +324,10 @@ export interface DatabaseSchema {
   work_group: WorkGroupTable;
   work_group_membership: WorkGroupMembershipTable;
   service_request_assignment: ServiceRequestAssignmentTable;
+  permission: PermissionTable;
+  role: RoleTable;
+  role_permission: RolePermissionTable;
+  staff_role_assignment: StaffRoleAssignmentTable;
 }
 
 export type Organization = Selectable<OrganizationTable>;

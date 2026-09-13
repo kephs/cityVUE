@@ -3,6 +3,7 @@ import { createBrowserRouter, redirect } from "react-router-dom";
 
 import App from "./App.jsx";
 import NotFoundPage from "../pages/NotFoundPage.jsx";
+import StaffRouteGuard from '../auth/StaffRouteGuard.jsx';
 
 const HomePage = lazy(() => import("../pages/HomePage.jsx"));
 const IssuesPage = lazy(() => import("../pages/issues/IssuesPage.jsx"));
@@ -34,19 +35,19 @@ const router = createBrowserRouter([
             },
             {
                 path: "issues",
-                element: <IssuesPage />
+                element: <StaffRouteGuard><IssuesPage /></StaffRouteGuard>
             },
             {
                 path: "issues/:issueId/edit",
-                element: <EditIssuePage />
+                element: <StaffRouteGuard><EditIssuePage /></StaffRouteGuard>
             },
             {
                 path: "issues/:issueId",
-                element: <ServiceRequestDetailsPage />
+                element: <StaffRouteGuard><ServiceRequestDetailsPage /></StaffRouteGuard>
             },
             {
                 path: "dashboard",
-                element: <DashboardPage />
+                element: <StaffRouteGuard><DashboardPage /></StaffRouteGuard>
             },
             {
                 path: "pages/report.html",

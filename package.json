@@ -29,6 +29,7 @@
     "server:test:e2e": "npm --prefix server run test:e2e",
     "server:test:db": "npm --prefix server run test:db",
     "server:lint": "npm --prefix server run lint",
+    "server:format:check": "npm --prefix server run format:check",
     "database:migrate": "npm --prefix server run migration:up",
     "database:migrate:revert": "npm --prefix server run migration:down",
     "database:status": "npm --prefix server run migration:status"
@@ -53,6 +54,8 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.21.0",
+    "@azure/msal-react": "^5.7.0",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
     "chart.js": "4.5.1",

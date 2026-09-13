@@ -10,6 +10,7 @@ import { ListServiceRequestsService } from '../../src/service-request/list-servi
 import type { CreateServiceRequestDto } from '../../src/service-request/service-request.dto.js';
 import { DatabaseService } from '../../src/database/database.service.js';
 import { StaffActionsService } from '../../src/service-request/staff-actions.service.js';
+import { StaffAccessGuard } from '../../src/auth/staff-access.guard.js';
 
 const serviceId = '40000000-0000-4000-8000-000000000001';
 const versionId = '50000000-0000-4000-8000-000000000001';
@@ -77,6 +78,34 @@ before(async () => {
     },
   };
   const module = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideGuard(StaffAccessGuard)
+    .useValue({
+      canActivate: (context: {
+        switchToHttp(): { getRequest(): Record<string, unknown> };
+      }) => {
+        context.switchToHttp().getRequest().staffAccess = {
+          tenantId: null,
+          objectId: null,
+          staffIdentityId: '90000000-0000-4000-8000-000000000001',
+          organizationId: '10000000-0000-4000-8000-000000000001',
+          displayName: 'Alex Example',
+          scopes: [],
+          permissions: [
+            'service_request.view',
+            'service_request.assign',
+            'service_request.start_work',
+            'service_request.hold',
+            'service_request.resume',
+            'service_request.close',
+            'service_request.reopen',
+          ],
+          departmentIds: [],
+          divisionIds: [],
+          development: true,
+        };
+        return true;
+      },
+    })
     .overrideProvider(DatabaseService)
     .useValue({ status: async () => 'up' })
     .overrideProvider(CreateServiceRequestService)

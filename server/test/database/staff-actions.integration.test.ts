@@ -10,10 +10,12 @@ import { up as requestUp } from '../../migrations/20260902010000-create-service-
 import { up as listUp } from '../../migrations/20260902020000-add-service-request-list-indexes.js';
 import { up as eligibilityUp } from '../../migrations/20260902030000-add-location-eligibility-snapshot.js';
 import { up as staffUp } from '../../migrations/20260903010000-add-staff-assignment-workflow-foundation.js';
+import { up as authUp } from '../../migrations/20260903020000-add-entra-rbac-foundation.js';
 import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import { StaffActionsService } from '../../src/service-request/staff-actions.service.js';
+import { StaffAuthorizationService } from '../../src/auth/staff-authorization.service.js';
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -39,6 +41,7 @@ test(
       await listUp(db);
       await eligibilityUp(db);
       await staffUp(db);
+      await authUp(db);
 
       const orgA = randomUUID();
       const orgB = randomUUID();
@@ -214,6 +217,61 @@ test(
         ])
         .execute();
       await db
+        .updateTable('staff_identity')
+        .set({ entra_tenant_id: orgA, entra_object_id: actor })
+        .where('id', '=', actor)
+        .execute();
+      await assert.rejects(
+        db
+          .updateTable('staff_identity')
+          .set({ entra_tenant_id: orgA, entra_object_id: actor })
+          .where('id', '=', foreignStaff)
+          .execute(),
+      );
+      await db
+        .insertInto('permission')
+        .values({ permission_key: 'service_request.view' })
+        .execute();
+      const viewerRole = randomUUID();
+      await db
+        .insertInto('role')
+        .values({
+          id: viewerRole,
+          organization_id: orgA,
+          name: 'Viewer',
+          description: null,
+          active: true,
+        })
+        .execute();
+      await db
+        .insertInto('role_permission')
+        .values({
+          organization_id: orgA,
+          role_id: viewerRole,
+          permission_key: 'service_request.view',
+        })
+        .execute();
+      await db
+        .insertInto('staff_role_assignment')
+        .values({
+          organization_id: orgA,
+          staff_identity_id: actor,
+          role_id: viewerRole,
+          active: true,
+        })
+        .execute();
+      await assert.rejects(
+        db
+          .insertInto('staff_role_assignment')
+          .values({
+            organization_id: orgA,
+            staff_identity_id: foreignStaff,
+            role_id: viewerRole,
+            active: true,
+          })
+          .execute(),
+      );
+      await db
         .insertInto('staff_department_membership')
         .values({
           organization_id: orgA,
@@ -299,6 +357,49 @@ test(
             active: true,
           })
           .execute(),
+      );
+
+      const authorization = new StaffAuthorizationService({
+        client: db,
+      } as DatabaseService);
+      await db
+        .insertInto('staff_department_membership')
+        .values({
+          organization_id: orgA,
+          staff_identity_id: actor,
+          department_id: departmentA,
+          active: true,
+        })
+        .execute();
+      await db
+        .insertInto('staff_division_membership')
+        .values({
+          organization_id: orgA,
+          staff_identity_id: actor,
+          department_id: departmentA,
+          division_id: divisionA,
+          active: true,
+        })
+        .execute();
+      const mapped = await authorization.resolve({
+        tenantId: orgA,
+        objectId: actor,
+        name: 'Actor',
+        scopes: ['access_as_user'],
+        tokenVersion: '2.0',
+      });
+      assert.equal(mapped.organizationId, orgA);
+      assert.deepEqual(mapped.permissions, ['service_request.view']);
+      assert.ok(mapped.departmentIds.includes(departmentA));
+      assert.ok(mapped.divisionIds.includes(divisionA));
+      await assert.rejects(
+        authorization.resolve({
+          tenantId: orgB,
+          objectId: actor,
+          name: 'Wrong tenant',
+          scopes: ['access_as_user'],
+          tokenVersion: '2.0',
+        }),
       );
 
       const config = {

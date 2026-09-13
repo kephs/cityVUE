@@ -1,3 +1,5 @@
+import { getStaffAccessToken } from '../auth/tokenProvider.js';
+
 export class CityVueApiError extends Error {
     constructor(code, message, { status, requestId, cause } = {}) {
         super(message, { cause });
@@ -19,7 +21,7 @@ function publicMessage(status, path, code) {
 }
 
 export function createApiClient({ baseUrl, fetchImplementation = fetch, timeoutMs = 10000 }) {
-    async function request(path, { method = "GET", body, signal } = {}) {
+    async function request(path, { method = "GET", body, signal, authenticated = false } = {}) {
         const timeoutController = new AbortController();
         const timeout = setTimeout(() => timeoutController.abort("timeout"), timeoutMs);
         const combinedSignal = signal && typeof AbortSignal.any === "function"
@@ -27,14 +29,17 @@ export function createApiClient({ baseUrl, fetchImplementation = fetch, timeoutM
         const abortFromCaller = () => timeoutController.abort(signal.reason);
         if (signal && typeof AbortSignal.any !== "function") signal.addEventListener("abort", abortFromCaller, { once: true });
         try {
+            const accessToken = authenticated ? await getStaffAccessToken() : null;
             const response = await fetchImplementation(`${baseUrl}${path}`, {
-                method, signal: combinedSignal, headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
+                method, signal: combinedSignal, headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
                 ...(body ? { body: JSON.stringify(body) } : {})
             });
             const requestId = response.headers?.get?.("x-request-id") || undefined;
             if (!response.ok) {
                 let payload = {};
                 try { payload = await response.json(); } catch { /* safe generic mapping below */ }
+                if (response.status === 401) throw new CityVueApiError('authentication-required','Your staff session has expired. Please sign in again.',{status:401,requestId});
+                if (response.status === 403) throw new CityVueApiError('access-denied',payload?.message === 'CityVUE staff access has not been provisioned' ? 'Your account has not been provisioned for CityVUE staff access.' : 'You do not have permission to access this CityVUE resource.',{status:403,requestId});
                 const [code, message] = publicMessage(response.status, path, payload?.code);
                 throw new CityVueApiError(code, message, { status: response.status, requestId });
             }

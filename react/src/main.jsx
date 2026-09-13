@@ -8,11 +8,12 @@ import { RouterProvider } from "react-router-dom";
 import router from "./app/router.jsx";
 import { ThemeProvider } from "./theme/ThemeProvider.jsx";
 import "./styles.css";
+import { AuthRoot } from './auth/AuthContext.jsx';
 
 createRoot(document.querySelector("#root")).render(
     <StrictMode>
         <ThemeProvider>
-            <RouterProvider router={router} />
+            <AuthRoot><RouterProvider router={router} /></AuthRoot>
         </ThemeProvider>
     </StrictMode>
 );

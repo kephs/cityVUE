@@ -42,6 +42,8 @@ export class ServiceRequestRepository {
       sort: string;
       page: number;
       pageSize: number;
+      allowedDepartmentIds?: string[];
+      allowedDivisionIds?: string[];
     },
   ) {
     const base = () => {
@@ -94,6 +96,19 @@ export class ServiceRequestRepository {
         query = query.where('division.id', '=', options.division);
       if (options.category)
         query = query.where('category.id', '=', options.category);
+      if (options.allowedDepartmentIds)
+        query = query.where(
+          'department.id',
+          'in',
+          options.allowedDepartmentIds,
+        );
+      if (options.allowedDivisionIds)
+        query = query.where((eb) =>
+          eb.or([
+            eb('division.id', 'is', null),
+            eb('division.id', 'in', options.allowedDivisionIds ?? []),
+          ]),
+        );
       return query;
     };
     const countRow = await base()

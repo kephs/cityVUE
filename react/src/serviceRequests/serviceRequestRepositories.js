@@ -9,15 +9,15 @@ export function createLegacyIssueRepository({ saveIssue = (issue) => IssueServic
     } };
 }
 
-export function createApiServiceRequestRepository(apiClient) {
+export function createApiServiceRequestRepository(apiClient, { authenticated = false } = {}) {
     return {
         mode: "api",
         createServiceRequest: (input, options) => apiClient.post("/service-requests", mapIntakeToCreateServiceRequest(input), options),
-        getServiceRequestDetails: (id, options) => apiClient.get(`/service-requests/${encodeURIComponent(id)}`, options),
+        getServiceRequestDetails: (id, options) => apiClient.get(`/service-requests/${encodeURIComponent(id)}`, { ...options, authenticated }),
         listServiceRequests: (query = {}, options) => {
             const params = new URLSearchParams();
             for (const [key, value] of Object.entries(query)) if (value !== "" && value !== undefined) params.set(key, String(value));
-            return apiClient.get(`/service-requests${params.size ? `?${params}` : ""}`, options);
+            return apiClient.get(`/service-requests${params.size ? `?${params}` : ""}`, { ...options, authenticated });
         }
     };
 }

@@ -7,6 +7,7 @@ import type {
   ServiceRequestListResponseDto,
 } from './service-request.dto.js';
 import { ServiceRequestRepository } from './service-request.repository.js';
+import type { StaffAccess } from '../auth/auth.types.js';
 
 @Injectable()
 export class ListServiceRequestsService {
@@ -26,8 +27,9 @@ export class ListServiceRequestsService {
   }
   async execute(
     query: ListServiceRequestsQueryDto,
+    access?: StaffAccess,
   ): Promise<ServiceRequestListResponseDto> {
-    if (!this.enabled) throw new NotFoundException();
+    if (!access && !this.enabled) throw new NotFoundException();
     const normalizedSearch = query.search?.trim();
     const options = {
       ...(query.status ? { status: query.status } : {}),
@@ -42,8 +44,16 @@ export class ListServiceRequestsService {
     };
     const result = await this.repository.listForOrganization(
       this.database.client,
-      this.organizationId,
-      options,
+      access?.organizationId ?? this.organizationId,
+      {
+        ...options,
+        ...(access && !access.development
+          ? {
+              allowedDepartmentIds: access.departmentIds,
+              allowedDivisionIds: access.divisionIds,
+            }
+          : {}),
+      },
     );
     return {
       items: result.rows.map((row) => ({

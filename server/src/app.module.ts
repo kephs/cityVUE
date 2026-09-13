@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module.js';
 import { CatalogModule } from './catalog/catalog.module.js';
 import { ServiceRequestModule } from './service-request/service-request.module.js';
 import { LocationEligibilityModule } from './location-eligibility/location-eligibility.module.js';
+import { AuthModule } from './auth/auth.module.js';
 import { AlertsModule } from './alerts/alerts.module.js';
 
 @Module({
@@ -35,6 +36,7 @@ import { AlertsModule } from './alerts/alerts.module.js';
       ],
     }),
     DatabaseModule,
+    AuthModule,
     HealthModule,
     CatalogModule,
     AlertsModule,

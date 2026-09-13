@@ -18,6 +18,7 @@ import {
   resolveWorkflowTransition,
   validateWorkflowInput,
 } from './service-request.domain.js';
+import type { StaffAccess } from '../auth/auth.types.js';
 
 interface AssignmentSummary {
   type: string;
@@ -53,21 +54,51 @@ export class StaffActionsService {
   private assertRequestId(id: string): void {
     if (!uuidV4.test(id)) throw new NotFoundException();
   }
-  private async assertActor(trx: typeof this.database.client): Promise<void> {
+  private async assertActor(
+    trx: typeof this.database.client,
+    organizationId: string,
+    actorId: string,
+  ): Promise<void> {
     const actor = await trx
       .selectFrom('staff_identity')
       .select('id')
-      .where('organization_id', '=', this.organizationId)
-      .where('id', '=', this.actorId)
+      .where('organization_id', '=', organizationId)
+      .where('id', '=', actorId)
       .where('active', '=', true)
       .executeTakeFirst();
     if (!actor)
       throw new NotFoundException('Development staff actor is unavailable');
   }
+  private async assertScope(
+    trx: typeof this.database.client,
+    id: string,
+    access?: StaffAccess,
+  ): Promise<void> {
+    if (!access || access.development) return;
+    const request = await trx
+      .selectFrom('service_request as request')
+      .innerJoin('category', (join) =>
+        join
+          .onRef('category.id', '=', 'request.category_id')
+          .onRef('category.organization_id', '=', 'request.organization_id'),
+      )
+      .select(['category.department_id', 'category.division_id'])
+      .where('request.organization_id', '=', access.organizationId)
+      .where('request.id', '=', id)
+      .executeTakeFirst();
+    if (
+      !request ||
+      !access.departmentIds.includes(request.department_id) ||
+      (request.division_id !== null &&
+        !access.divisionIds.includes(request.division_id))
+    )
+      throw new NotFoundException();
+  }
   private async bump(
     trx: typeof this.database.client,
     id: string,
     expected: number,
+    organizationId: string,
     status?: string,
   ) {
     const row = await trx
@@ -77,7 +108,7 @@ export class StaffActionsService {
         updated_at: sql`now()`,
         ...(status ? { status } : {}),
       })
-      .where('organization_id', '=', this.organizationId)
+      .where('organization_id', '=', organizationId)
       .where('id', '=', id)
       .where('revision', '=', expected)
       .returning(['id', 'reference_number', 'status', 'revision', 'updated_at'])
@@ -111,23 +142,27 @@ export class StaffActionsService {
   async assign(
     id: string,
     input: AssignmentActionDto,
+    access?: StaffAccess,
   ): Promise<StaffMutationResponseDto> {
-    this.assertEnabled();
+    if (!access) this.assertEnabled();
     this.assertRequestId(id);
+    const organizationId = access?.organizationId ?? this.organizationId;
+    const actorId = access?.staffIdentityId ?? this.actorId;
     const needsTarget = input.assignmentType !== 'unassigned';
     if (needsTarget !== Boolean(input.targetId))
       throw new BadRequestException(
         'Assignment target does not match assignment type',
       );
     return this.database.client.transaction().execute(async (trx) => {
-      await this.assertActor(trx);
+      await this.assertActor(trx, organizationId, actorId);
+      await this.assertScope(trx, id, access);
       const targetId = input.targetId ?? '';
       let summary: AssignmentSummary = { type: input.assignmentType };
       if (input.assignmentType === 'department') {
         const target = await trx
           .selectFrom('department')
           .select(['id', 'name'])
-          .where('organization_id', '=', this.organizationId)
+          .where('organization_id', '=', organizationId)
           .where('id', '=', targetId)
           .where('status', '=', 'active')
           .executeTakeFirst();
@@ -142,7 +177,7 @@ export class StaffActionsService {
         const target = await trx
           .selectFrom('work_group')
           .select(['id', 'name'])
-          .where('organization_id', '=', this.organizationId)
+          .where('organization_id', '=', organizationId)
           .where('id', '=', targetId)
           .where('active', '=', true)
           .executeTakeFirst();
@@ -157,7 +192,7 @@ export class StaffActionsService {
         const target = await trx
           .selectFrom('staff_identity')
           .select(['id', 'display_name'])
-          .where('organization_id', '=', this.organizationId)
+          .where('organization_id', '=', organizationId)
           .where('id', '=', targetId)
           .where('active', '=', true)
           .executeTakeFirst();
@@ -172,15 +207,20 @@ export class StaffActionsService {
       const current = await trx
         .selectFrom('service_request_assignment')
         .select(['assignment_type'])
-        .where('organization_id', '=', this.organizationId)
+        .where('organization_id', '=', organizationId)
         .where('service_request_id', '=', id)
         .where('ended_at', 'is', null)
         .executeTakeFirst();
-      const row = await this.bump(trx, id, input.expectedRevision);
+      const row = await this.bump(
+        trx,
+        id,
+        input.expectedRevision,
+        organizationId,
+      );
       await trx
         .updateTable('service_request_assignment')
         .set({ ended_at: new Date() })
-        .where('organization_id', '=', this.organizationId)
+        .where('organization_id', '=', organizationId)
         .where('service_request_id', '=', id)
         .where('ended_at', 'is', null)
         .execute();
@@ -188,7 +228,7 @@ export class StaffActionsService {
         .insertInto('service_request_assignment')
         .values({
           id: randomUUID(),
-          organization_id: this.organizationId,
+          organization_id: organizationId,
           service_request_id: id,
           assignment_type: input.assignmentType,
           staff_identity_id:
@@ -198,7 +238,7 @@ export class StaffActionsService {
             input.assignmentType === 'department' ? targetId : null,
           ended_at: null,
           assigned_by_actor_type: 'development_staff',
-          assigned_by_staff_identity_id: this.actorId,
+          assigned_by_staff_identity_id: actorId,
           reason: input.reason?.trim() ?? null,
         })
         .execute();
@@ -212,12 +252,12 @@ export class StaffActionsService {
         .insertInto('activity')
         .values({
           id: randomUUID(),
-          organization_id: this.organizationId,
+          organization_id: organizationId,
           service_request_id: id,
           activity_type: activityType,
           actor_type: 'development_staff',
           actor_reference: null,
-          staff_identity_id: this.actorId,
+          staff_identity_id: actorId,
           metadata: {
             previousAssignmentType: current?.assignment_type ?? 'unassigned',
             newAssignmentType: input.assignmentType,
@@ -235,21 +275,31 @@ export class StaffActionsService {
   async workflow(
     id: string,
     input: WorkflowActionDto,
+    access?: StaffAccess,
   ): Promise<StaffMutationResponseDto> {
-    this.assertEnabled();
+    if (!access) this.assertEnabled();
     this.assertRequestId(id);
+    const organizationId = access?.organizationId ?? this.organizationId;
+    const actorId = access?.staffIdentityId ?? this.actorId;
     validateWorkflowInput(input.action, input.reason, input.resolutionSummary);
     return this.database.client.transaction().execute(async (trx) => {
-      await this.assertActor(trx);
+      await this.assertActor(trx, organizationId, actorId);
+      await this.assertScope(trx, id, access);
       const request = await trx
         .selectFrom('service_request')
         .select(['status'])
-        .where('organization_id', '=', this.organizationId)
+        .where('organization_id', '=', organizationId)
         .where('id', '=', id)
         .executeTakeFirst();
       if (!request) throw new NotFoundException();
       const next = resolveWorkflowTransition(request.status, input.action);
-      const row = await this.bump(trx, id, input.expectedRevision, next);
+      const row = await this.bump(
+        trx,
+        id,
+        input.expectedRevision,
+        organizationId,
+        next,
+      );
       const activityTypes = {
         start_work: 'work_started',
         hold: 'work_held',
@@ -261,12 +311,12 @@ export class StaffActionsService {
         .insertInto('activity')
         .values({
           id: randomUUID(),
-          organization_id: this.organizationId,
+          organization_id: organizationId,
           service_request_id: id,
           activity_type: activityTypes[input.action],
           actor_type: 'development_staff',
           actor_reference: null,
-          staff_identity_id: this.actorId,
+          staff_identity_id: actorId,
           metadata: {
             fromStatus: request.status,
             toStatus: next,

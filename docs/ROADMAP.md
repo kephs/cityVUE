@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+- [x] Phase B local Entra authentication and Organization-scoped RBAC foundation (live token UAT pending admin consent; see F018)
+
 - [x] Phase F0 local staff assignment and controlled workflow domain foundation: Organization-scoped development StaffIdentity/explicit memberships, WorkGroups, assignment history, controlled status actions, optimistic concurrency, append-only Activity, and production-forbidden development mutation endpoints. Entra/RBAC, production staff UI/API exposure, notifications, and integrations remain deferred.
 
 - [x] Phase E0 local canonical Location/geographic eligibility foundation: exact-version policy, vendor-neutral provider contract, deterministic production-forbidden test provider, fail-closed decisions, immutable eligible snapshot, safe errors/logging, and no-partial-write coverage. Authoritative City GIS, PostGIS choice, overrides, and deployment remain deferred.

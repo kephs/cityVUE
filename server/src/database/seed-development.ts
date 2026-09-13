@@ -38,6 +38,27 @@ const developmentGroups = [
     'Parks Queue',
   ],
 ] as const;
+const permissionKeys = [
+  'service_request.view',
+  'service_request.assign',
+  'service_request.start_work',
+  'service_request.hold',
+  'service_request.resume',
+  'service_request.close',
+  'service_request.reopen',
+] as const;
+const developmentRoles = [
+  [
+    '92000000-0000-4000-8000-000000000001',
+    'Service Request Coordinator',
+    permissionKeys.slice(0, 5),
+  ],
+  [
+    '92000000-0000-4000-8000-000000000002',
+    'Service Request Supervisor',
+    [...permissionKeys],
+  ],
+] as const;
 const categories = [
   [
     '30000000-0000-4000-8000-000000000001',
@@ -319,6 +340,58 @@ async function seed(db: Kysely<DatabaseSchema>): Promise<void> {
         })),
       )
       .onConflict((oc) => oc.column('id').doNothing())
+      .execute();
+    await trx
+      .insertInto('permission')
+      .values(permissionKeys.map((permission_key) => ({ permission_key })))
+      .onConflict((oc) => oc.column('permission_key').doNothing())
+      .execute();
+    await trx
+      .insertInto('role')
+      .values(
+        developmentRoles.map(([id, name]) => ({
+          id,
+          organization_id: organizationId,
+          name,
+          description:
+            'Synthetic development-only role; not approved City policy.',
+          active: true,
+        })),
+      )
+      .onConflict((oc) => oc.column('id').doNothing())
+      .execute();
+    await trx
+      .insertInto('role_permission')
+      .values(
+        developmentRoles.flatMap(([role_id, , keys]) =>
+          keys.map((permission_key) => ({
+            organization_id: organizationId,
+            role_id,
+            permission_key,
+          })),
+        ),
+      )
+      .onConflict((oc) => oc.columns(['role_id', 'permission_key']).doNothing())
+      .execute();
+    await trx
+      .insertInto('staff_role_assignment')
+      .values([
+        {
+          organization_id: organizationId,
+          staff_identity_id: developmentStaff[0][0],
+          role_id: developmentRoles[0][0],
+          active: true,
+        },
+        {
+          organization_id: organizationId,
+          staff_identity_id: developmentStaff[1][0],
+          role_id: developmentRoles[1][0],
+          active: true,
+        },
+      ])
+      .onConflict((oc) =>
+        oc.columns(['staff_identity_id', 'role_id']).doNothing(),
+      )
       .execute();
     await trx
       .deleteFrom('staff_department_membership')
