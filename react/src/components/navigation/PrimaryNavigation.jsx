@@ -7,7 +7,8 @@ const navigationItems = [
     { label: "Home", to: "/", end: true },
     { label: "Report an Issue", to: "/report" },
     { label: "Issue List", to: "/issues" },
-    { label: "Dashboard", to: "/dashboard" }
+    { label: "Dashboard", to: "/dashboard" },
+    { label: "AI Workspace", to: "/staff/ai" }
 ];
 
 export default function PrimaryNavigation({ isOpen, onNavigate }) {
