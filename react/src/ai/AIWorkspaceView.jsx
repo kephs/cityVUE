@@ -14,23 +14,24 @@ const tasks = [
 ];
 const Icon = ({ name }) => <i className={`bi bi-${name}`} aria-hidden="true" />;
 
-export default function AIWorkspaceView({ status, models }) {
+export default function AIWorkspaceView({ status, models, preview = false }) {
     const [draft, setDraft] = useState('');
     const [notice, setNotice] = useState('');
     const [information, setInformation] = useState(null);
     const infoHeading = useRef(null);
     useEffect(() => { if (information) infoHeading.current?.focus(); }, [information]);
     // F021 exposes metadata only. Metadata changes must never enable execution in this UI.
-    const approvedModels = Array.isArray(models) ? models : [];
+    const approvedModels = !preview && Array.isArray(models) ? models : [];
     const availableModels = approvedModels.filter(model => model.enabled === true && model.availability === 'available');
     const newConversation = () => { setDraft(''); setNotice('Example preview cleared. No conversation has been created or stored.'); };
     const example = (prompt) => { setDraft(prompt); setNotice('Example preview selected. Nothing is sent or stored.'); };
 
     return (
         <section className="ai-workspace" aria-labelledby="ai-workspace-heading">
+            {preview && <div className="ai-preview-banner" role="status"><strong>Demonstration Mode</strong><p className="mb-0">This preview is for stakeholder review only. AI services are not connected. Information entered on this page is not transmitted or stored.</p></div>}
             <header className="ai-page-heading">
                 <div><p className="ai-eyebrow">CITYVUE · STAFF SERVICES</p><h1 id="ai-workspace-heading">AI Workspace</h1><p className="text-body-secondary mb-0">Secure. Responsible. City-Managed AI for Staff.</p></div>
-                <span className="ai-staff-label"><Icon name="shield-lock" /> Staff workspace</span>
+                <span className="ai-staff-label"><Icon name="shield-lock" /> {preview ? 'Stakeholder Preview' : 'Staff workspace'}</span>
             </header>
             <div className="ai-workspace-grid">
                 <aside className="ai-sidebar ai-panel" aria-label="Workspace navigation">
@@ -47,15 +48,15 @@ export default function AIWorkspaceView({ status, models }) {
                 </aside>
                 <div className="ai-main-column">
                     <section className="ai-panel ai-assistant" aria-labelledby="ai-assistant-heading">
-                        <header className="ai-assistant-header"><span className="ai-icon-tile"><Icon name="stars" /></span><div><h2 id="ai-assistant-heading">City AI Assistant (Staff)</h2><p className="text-body-secondary mb-0">Your secure AI workspace for City of Rockville operations.</p></div></header>
-                        <div className="ai-disabled-notice" role="status" id="ai-availability"><Icon name="info-circle" /><div><strong>AI is currently disabled</strong><p className="mb-0">Model selection and chat are unavailable until AI is enabled for City of Rockville staff.</p>{status.enabled === true && <p className="small mb-0 mt-2">Workspace metadata is enabled. Chat is still unavailable.</p>}</div></div>
+                        <header className="ai-assistant-header"><span className="ai-icon-tile"><Icon name="stars" /></span><div><h2 id="ai-assistant-heading">{preview ? 'City AI Assistant (Preview)' : 'City AI Assistant (Staff)'}</h2><p className="text-body-secondary mb-0">Your secure AI workspace for City of Rockville operations.</p></div></header>
+                        <div className="ai-disabled-notice" role="status" id="ai-availability"><Icon name="info-circle" /><div><strong>AI is currently disabled</strong><p className="mb-0">Model selection and chat are unavailable until AI is enabled for City of Rockville staff.</p>{!preview && status.enabled === true && <p className="small mb-0 mt-2">Workspace metadata is enabled. Chat is still unavailable.</p>}</div></div>
                         <section id="ai-examples" className="ai-examples" aria-labelledby="ai-examples-heading"><h3 id="ai-examples-heading">How could AI help you?</h3><p className="text-body-secondary small">Explore a task below. Examples are local previews only.</p><div className="ai-task-grid">{tasks.map(task => <article className="ai-task-card" key={task.title}><Icon name={task.icon} /><h4>{task.title}</h4><p>{task.description}</p>{task.prompts.map(prompt => <button className="ai-prompt-example" type="button" key={prompt} onClick={() => example(prompt)}>{prompt}<Icon name="arrow-up-right" /></button>)}</article>)}</div></section>
                         <div className="ai-composer">
                             <label className="form-label" htmlFor="ai-model">Model</label>
-                            <select className="form-select" id="ai-model" disabled aria-describedby="ai-availability"><option>{availableModels.length ? 'Model execution unavailable' : 'City General AI (Unavailable)'}</option>{approvedModels.map(model => <option key={model.id}>{model.displayName} ({model.enabled && model.availability === 'available' ? 'execution unavailable' : 'unavailable'})</option>)}</select>
+                            <select className="form-select" id="ai-model" disabled aria-describedby="ai-availability"><option>{preview ? 'City General AI — Demo' : availableModels.length ? 'Model execution unavailable' : 'City General AI (Unavailable)'}</option>{approvedModels.map(model => <option key={model.id}>{model.displayName} ({model.enabled && model.availability === 'available' ? 'execution unavailable' : 'unavailable'})</option>)}</select>
                             <label className="form-label mt-3" htmlFor="ai-prompt">Your prompt</label>
-                            <textarea className="form-control" id="ai-prompt" rows="4" value={draft} disabled placeholder="AI is unavailable. Choose an example to preview it here." aria-describedby="ai-availability ai-preview-note" />
-                            <div className="ai-composer-actions"><p className="small text-body-secondary mb-0" id="ai-preview-note"><Icon name="lock" /> Temporary session · No conversation history</p><button className="btn btn-primary" type="button" disabled><Icon name="send" /> Send</button></div>
+                            <textarea className="form-control" id="ai-prompt" rows="4" value={draft} disabled={!preview} onChange={preview ? event => setDraft(event.target.value) : undefined} autoComplete="off" spellCheck={false} placeholder={preview ? "Try a prompt locally. Nothing will be sent or stored." : "AI is unavailable. Choose an example to preview it here."} aria-describedby="ai-availability ai-preview-note" />
+                            <div className="ai-composer-actions"><p className="small text-body-secondary mb-0" id="ai-preview-note"><Icon name="lock" /> {preview ? 'Send disabled — AI not connected' : 'Temporary session · No conversation history'}</p><button className="btn btn-primary" type="button" disabled><Icon name="send" /> Send</button></div>
                             <p className="ai-action-notice small" aria-live="polite">{notice}</p>
                         </div>
                         <p className="ai-disclaimer"><Icon name="info-circle" /> AI can make mistakes. Always verify important information and follow City of Rockville policies and procedures.</p>
@@ -63,7 +64,7 @@ export default function AIWorkspaceView({ status, models }) {
                     <section id="ai-information" className="ai-panel ai-information" hidden={!information} aria-labelledby="ai-information-heading"><h2 id="ai-information-heading" ref={infoHeading} tabIndex="-1">{information}</h2><p className="mb-0">{guidance[information]}</p></section>
                 </div>
                 <aside className="ai-support-column" aria-label="Workspace status and responsible use">
-                    <section className="ai-panel ai-status" aria-labelledby="ai-status-heading"><h2 id="ai-status-heading"><Icon name="activity" /> AI Status</h2><dl><div><dt>AI Status</dt><dd><span className="ai-status-label">Disabled</span></dd></div><div><dt>Provider</dt><dd>{approvedModels.length ? 'Execution unavailable' : 'Not configured'}</dd></div><div><dt>Available Models</dt><dd>{availableModels.length}</dd></div><div><dt>Your Access</dt><dd>Authorized (Staff)</dd></div></dl></section>
+                    <section className="ai-panel ai-status" aria-labelledby="ai-status-heading"><h2 id="ai-status-heading"><Icon name="activity" /> AI Status</h2><dl>{preview ? <><div><dt>AI Status</dt><dd><span className="ai-status-label">Preview Only</span></dd></div><div><dt>Provider</dt><dd>Not connected</dd></div><div><dt>Available Models</dt><dd>Demonstration only</dd></div><div><dt>Authentication</dt><dd>Not required for this preview</dd></div><div><dt>Data transmission</dt><dd>Disabled</dd></div></> : <><div><dt>AI Status</dt><dd><span className="ai-status-label">Disabled</span></dd></div><div><dt>Provider</dt><dd>{approvedModels.length ? 'Execution unavailable' : 'Not configured'}</dd></div><div><dt>Available Models</dt><dd>{availableModels.length}</dd></div><div><dt>Your Access</dt><dd>Authorized (Staff)</dd></div></>}</dl></section>
                     <section className="ai-panel ai-responsible" aria-labelledby="ai-responsible-heading"><h2 id="ai-responsible-heading"><Icon name="shield-check" /> Responsible Use</h2><h3>Keep City data secure</h3><p>Do not enter sensitive, confidential, personal, or restricted information unless future City policy explicitly permits it.</p><h3>Use appropriately</h3><p>Follow City policies and acceptable-use guidance.</p><h3>Verify results</h3><p>AI can be incorrect. Review and verify important information.</p></section>
                     <section className="ai-privacy-note"><Icon name="lock" /><h2>Conversation history is not stored.</h2><p>For privacy and security, chats are not currently persisted. Each session is temporary.</p></section>
                 </aside>

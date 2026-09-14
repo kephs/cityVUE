@@ -3,9 +3,11 @@ import { createBrowserRouter, redirect } from "react-router-dom";
 
 import App from "./App.jsx";
 import NotFoundPage from "../pages/NotFoundPage.jsx";
+import { AuthRoot } from '../auth/AuthContext.jsx';
 import StaffRouteGuard from '../auth/StaffRouteGuard.jsx';
 
 const HomePage = lazy(() => import("../pages/HomePage.jsx"));
+const AIPreviewPage = lazy(() => import("../ai/AIPreviewPage.jsx"));
 const AIWorkspacePage = lazy(() => import("../ai/AIWorkspacePage.jsx"));
 const IssuesPage = lazy(() => import("../pages/issues/IssuesPage.jsx"));
 const EditIssuePage = lazy(() => import("../pages/issues/EditIssuePage.jsx"));
@@ -23,8 +25,13 @@ function redirectLegacyReport({ request }) {
 
 const router = createBrowserRouter([
     {
-        path: "/",
+        path: "/ai-preview",
         element: <App />,
+        children: [{ index: true, element: <AIPreviewPage /> }]
+    },
+    {
+        path: "/",
+        element: <AuthRoot><App /></AuthRoot>,
         children: [
             {
                 path: "staff/ai",

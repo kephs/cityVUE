@@ -57,3 +57,6 @@
 @media (max-width: 1199.98px) { .ai-workspace-grid { grid-template-columns: 200px minmax(0,1fr); } .ai-support-column { grid-column: 2; grid-template-columns: 1fr 1fr; } .ai-privacy-note { grid-column: 1 / -1; } }
 @media (max-width: 767.98px) { .ai-page-heading { align-items: start; flex-direction: column; } .ai-workspace-grid { grid-template-columns: minmax(0,1fr); } .ai-sidebar { min-height: auto; } .ai-section-nav { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); } .ai-sidebar-bottom { display: flex; align-items: center; gap: 1rem; padding-top: 1rem; } .ai-sidebar-bottom p { margin: 0; flex: 1; } .ai-city-logo { max-width: 140px; } .ai-support-column { grid-column: 1; } }
 @media (max-width: 575.98px) { .ai-task-grid, .ai-support-column { grid-template-columns: minmax(0,1fr); } .ai-assistant-header { padding: 1rem; } .ai-disabled-notice { margin: 1rem; } .ai-examples, .ai-composer { padding: 1rem; } .ai-composer-actions { align-items: start; } }
+
+.ai-preview-banner { padding: 1rem 1.25rem; margin-bottom: 1.5rem; border: 1px solid var(--bs-primary-border-subtle); border-radius: var(--cityvue-card-radius); background: var(--bs-primary-bg-subtle); color: var(--bs-primary-text-emphasis); }
+.ai-preview-banner strong { display: block; margin-bottom: .4rem; }

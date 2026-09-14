@@ -7,7 +7,7 @@ import PrimaryNavigation from '../src/components/navigation/PrimaryNavigation.js
 import { useAuth } from '../src/auth/AuthContext.jsx';
 import { loadAIWorkspace } from '../src/ai/aiRepository.js';
 
-vi.mock('../src/auth/AuthContext.jsx', () => ({ useAuth: vi.fn() }));
+vi.mock('../src/auth/AuthContext.jsx', () => ({ useAuth: vi.fn(), AuthRoot: ({ children }) => children }));
 vi.mock('../src/ai/aiRepository.js', () => ({ loadAIWorkspace: vi.fn() }));
 vi.mock('../src/components/theme/ThemeToggle.jsx', () => ({ default: () => <button>Theme</button> }));
 beforeEach(() => {
@@ -74,10 +74,10 @@ test('account changes discard old authorization and recheck server permission', 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/permission/));
 });
 
-test('shared navigation includes the protected AI route without granting access', () => {
+test('shared navigation points to stakeholder preview without granting staff access', () => {
     useAuth.mockReturnValue({ enabled: false, isAuthenticated: false });
     render(<MemoryRouter><PrimaryNavigation /></MemoryRouter>);
-    expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/', '/report', '/issues', '/dashboard', '/staff/ai']);
+    expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/', '/report', '/issues', '/dashboard', '/ai-preview']);
 });
 
 test('registered /staff/ai route renders through the actual application router', async () => {
@@ -128,11 +128,11 @@ test('informational navigation opens accessible guidance and moves focus', async
     }
 });
 
-test.each(['/', '/report', '/issues', '/dashboard', '/staff/ai'])('shared navigation renders AI Workspace from %s with the correct active state', (path) => {
+test.each(['/', '/report', '/issues', '/dashboard', '/staff/ai', '/ai-preview'])('shared navigation renders AI Workspace from %s with the correct active state', (path) => {
     render(<MemoryRouter initialEntries={[path]}><PrimaryNavigation isOpen /></MemoryRouter>);
     const link=screen.getByRole('link',{name:'AI Workspace'});
-    expect(link).toHaveAttribute('href','/staff/ai');
-    if(path==='/staff/ai') expect(link).toHaveAttribute('aria-current','page');
+    expect(link).toHaveAttribute('href','/ai-preview');
+    if(path==='/ai-preview') expect(link).toHaveAttribute('aria-current','page');
     else expect(link).not.toHaveAttribute('aria-current');
 });
 
