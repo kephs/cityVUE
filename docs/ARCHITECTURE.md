@@ -1,5 +1,7 @@
 # CityVUE — Architecture
 
+F025 establishes an internal server geospatial authorization boundary: only guard-resolved StaffAccess from validated workforce identity can yield trusted Organization context, and a dedicated `geospatial.read` policy runs before provider access. No endpoint, provider, permission grant, or GIS persistence is registered. Browser-side organization scope is not authorization; private reads require server authorization before repository access. See [F025](features/F025-trusted-organization-context-geospatial-authorization.md).
+
 F024's local map preview loads neutral `{ organizationId, boundary, requests }` data through a development-only synthetic frontend repository. Scope checks in the browser protect fixture selection only; production geographic reads require a trusted Organization context and server authorization before an API/provider is added. The map renderer accepts validated Polygon/Point GeoJSON; this does not affect canonical Location or eligibility. See [F024](features/F024-organization-scoped-neutral-geospatial-data-foundation.md).
 
 F023 adds a presentation-only MapLibre map at `/map-preview` using bundled synthetic GeoJSON and a local style without tile or geocoding requests. MapLibre is isolated inside a React component; the existing canonical Location and backend eligibility provider remain unchanged and authoritative for intake. See [F023](features/F023-client-neutral-gis-presentation-foundation.md).

@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+F025 establishes the server-side Organization authorization seam for future geospatial reads without exposing an endpoint or provider. Next, separately review the private API route, trusted identity/Organization policy, permission catalog/grants, and approved data source before activation. See [F025](features/F025-trusted-organization-context-geospatial-authorization.md).
+
 F024 separates the map preview from its synthetic data through an Organization-scoped neutral frontend repository with validated Polygon/Point GeoJSON. Backend authorization and approved production GIS data remain future work; no API, persistence, PostGIS, or ArcGIS integration was added. See [F024](features/F024-organization-scoped-neutral-geospatial-data-foundation.md).
 
 F023 completes a local MapLibre presentation foundation with synthetic GeoJSON, a stakeholder preview route, and a no-tile style. Production service areas, basemaps, geocoding, Organization-scoped GIS data, and authorized client adapters remain future work. See [F023](features/F023-client-neutral-gis-presentation-foundation.md).

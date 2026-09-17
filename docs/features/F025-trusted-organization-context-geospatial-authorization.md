@@ -1,0 +1,23 @@
+# F025 — Trusted Organization Context and Geospatial Authorization Foundation
+
+**Status:** Internal server boundary only; no endpoint, provider, production grant, or deployment.
+
+## Trust model
+
+F018 validates a signed Entra access token, issuer/audience, delegated scope, and active `tid`/`oid` StaffIdentity provisioning. The server resolves one Organization ID and effective role permissions from its own Organization-scoped records. `StaffAccessGuard` places that resolved `StaffAccess` on the server request. The F025 `GeospatialAuthorizationService` accepts only this server-owned request property as context, rejects missing or malformed identity/Organization data, and requires `geospatial.read`. It rejects F018 development fallback identities, including in development, so a synthetic actor cannot enter a future private geospatial read. The optional server-generated correlation ID is carried in the context; it is never an authorization input.
+
+**Browser-side organization scope is not an authorization boundary. Private or production organization-scoped resources require trusted server-side organization context and authorization before repository or provider access.** Headers, query parameters, and bodies cannot create `staffAccess`. An optional requested Organization ID is only a hint: it must exactly match the resolved Organization, or the service denies generically without confirming whether another Organization exists. No cross-Organization grant or switching is implemented.
+
+The intended progression is Identity Provider → Trusted Organization Context → Authorization Policy → Geospatial Service → GIS Provider Interface → Configured Provider. `GeospatialReadService` authorizes before calling `GeospatialReadRepository.getMapData(authorizedOrganizationId)`. It is an internal composition seam, deliberately not registered with Nest or exposed through HTTP. A future route must use `@RequireEntra()`, `@RequirePermission('geospatial.read')`, and `@UseGuards(StaffAccessGuard)` and pass the guard-resolved request to the service. No provider may decide caller authorization. The TypeScript request shape by itself is not a security control; the route guard and server-only provenance are required.
+
+The permission key is added to the application allowlist for future effective grants. It is not inserted into the database permission catalog, assigned to a role, or wired to an endpoint in F025. Thus no real principal gains geospatial access from this feature. A later reviewed migration/grant and API design must precede live reads. Automated unit tests inject fictional resolved staff objects directly; they are test data, not an authentication mechanism or bypass. Existing production configuration still rejects development read/action gates and development location providers.
+
+## Data, errors, and privacy
+
+F024's browser-only synthetic map remains unchanged. F025 adds no ArcGIS/Esri adapter, PostGIS, GIS source, persistence, migration, credential, geospatial DTO, or resident Location change. The repository contract takes only the server-authorized Organization ID. Unauthorized and cross-Organization requests fail with generic `UnauthorizedException`/`ForbiddenException('Access denied')` before repository invocation. No data or identity object is logged by this boundary; existing HTTP request correlation and sanitized status/route/error logging remain in place. Operational security audit events and a provider-specific read policy remain future work.
+
+CityVUE independent development does not require or access City of Rockville credentials, systems, non-public data, Entra resources, ArcGIS organization resources, databases, or production infrastructure. Future configured providers could be ArcGIS, PostGIS-backed services, or another approved implementation only after separate authorization and source review.
+
+## Tests and limitations
+
+Focused tests prove an authorized Organization read, missing/invalid context denial, cross-Organization denial, ignored client-supplied IDs, development identity denial, generic errors, and zero provider calls after denial. Full local regression passed: backend unit 115/115, E2E 29/29, React 138/138, and legacy/shared 62/62. Backend typecheck, lint, formatting, backend build, and React build passed. The React build retains existing >500 kB chunk advisories. Seven PostgreSQL tests skipped because `TEST_DATABASE_URL` was not configured; F025 changes no database objects. Local browser inspection confirmed `/map-preview` still renders the fictional area and request list, with outside selection working. There is no HTTP geospatial endpoint to UAT or independently verify yet. The signed-token and StaffIdentity path was not tested against a live tenant in F025.

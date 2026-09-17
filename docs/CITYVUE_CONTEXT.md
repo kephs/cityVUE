@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+F025 adds an internal trusted Organization context and geospatial read authorization service using F018's guard-resolved staff identity. It is unexposed and grants no production permission; a future API must authorize before private provider access. Independent development uses no City credentials, systems, non-public data, Entra resources, ArcGIS organization resources, databases, or production infrastructure. See [F025](features/F025-trusted-organization-context-geospatial-authorization.md).
+
 F024 moves `/map-preview` to an asynchronous Organization-scoped neutral geospatial repository. Its synthetic provider is available only in local Vite development; production builds show an unavailable state. This browser demo does not authorize private data or alter canonical location eligibility. No GIS API, database change, PostGIS, or ArcGIS connection was added. See [F024](features/F024-organization-scoped-neutral-geospatial-data-foundation.md).
 
 F023 adds a client-neutral GIS presentation preview at `/map-preview`: MapLibre renders fictional request points and a fictional service area from local GeoJSON, with an accessible request list and no external map tiles or City GIS access. This is a visual demonstration, not an eligibility or production GIS system. See [F023](features/F023-client-neutral-gis-presentation-foundation.md).

@@ -1,4 +1,5 @@
 export const permissions = [
+  'geospatial.read',
   'ai.workspace.access',
   'ai.administration.access',
   'service_request.view',
