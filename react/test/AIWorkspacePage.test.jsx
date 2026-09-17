@@ -77,7 +77,7 @@ test('account changes discard old authorization and recheck server permission', 
 test('shared navigation points to stakeholder preview without granting staff access', () => {
     useAuth.mockReturnValue({ enabled: false, isAuthenticated: false });
     render(<MemoryRouter><PrimaryNavigation /></MemoryRouter>);
-    expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/', '/report', '/issues', '/dashboard', '/ai-preview']);
+    expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual(['/', '/report', '/issues', '/dashboard', '/ai-preview', '/map-preview']);
 });
 
 test('registered /staff/ai route renders through the actual application router', async () => {

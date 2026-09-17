@@ -9,6 +9,7 @@ import StaffRouteGuard from '../auth/StaffRouteGuard.jsx';
 const HomePage = lazy(() => import("../pages/HomePage.jsx"));
 const AIPreviewPage = lazy(() => import("../ai/AIPreviewPage.jsx"));
 const AdminPreviewPage = lazy(() => import("../admin/AdminPreviewPage.jsx"));
+const MapPreviewPage = lazy(() => import("../map/MapPreviewPage.jsx"));
 const AIWorkspacePage = lazy(() => import("../ai/AIWorkspacePage.jsx"));
 const IssuesPage = lazy(() => import("../pages/issues/IssuesPage.jsx"));
 const EditIssuePage = lazy(() => import("../pages/issues/EditIssuePage.jsx"));
@@ -28,6 +29,11 @@ const router = createBrowserRouter([
     {
         path: "/admin-preview",
         element: <Suspense fallback={<p role="status">Loading admin preview…</p>}><AdminPreviewPage /></Suspense>
+    },
+    {
+        path: "/map-preview",
+        element: <App />,
+        children: [{ index: true, element: <MapPreviewPage /> }]
     },
     {
         path: "/ai-preview",

@@ -1,0 +1,18 @@
+.map-preview { min-width: 0; }
+.map-preview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin: 1.5rem 0; }
+.map-preview-heading .badge { white-space: nowrap; margin-top: .35rem; }
+.map-preview-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr); gap: 1rem; align-items: start; }
+.map-preview-panel { min-width: 0; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: var(--cityvue-card-radius); padding: clamp(1rem, 2vw, 1.5rem); box-shadow: var(--bs-box-shadow-sm); }
+.cityvue-map-frame { position: relative; height: clamp(340px, 48vw, 560px); min-width: 0; overflow: hidden; border: 1px solid var(--bs-border-color); border-radius: .65rem; background: var(--bs-tertiary-bg); }
+.cityvue-map-canvas { width: 100%; height: 100%; }
+.cityvue-map-message { position: absolute; inset: auto .75rem .75rem; z-index: 1; padding: .75rem; margin: 0; background: var(--bs-body-bg); color: var(--bs-body-color); border: 1px solid var(--bs-border-color); border-radius: .4rem; box-shadow: var(--bs-box-shadow-sm); }
+.map-request-list { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
+.map-request-list button { width: 100%; display: grid; gap: .15rem; text-align: left; background: var(--bs-tertiary-bg); color: var(--bs-body-color); border: 2px solid transparent; border-radius: .5rem; padding: .65rem .75rem; }
+.map-request-list button span { color: var(--bs-secondary-color); font-size: .85rem; }
+.map-request-list button.selected { border-color: var(--bs-primary); background: var(--bs-primary-bg-subtle); }
+.map-request-list button:hover { border-color: var(--bs-primary-border-subtle); }
+.map-request-list button:focus-visible { outline: 3px solid #79b5ff; outline-offset: 2px; }
+.map-selection { padding: 1rem; margin-top: 1rem; border-radius: .5rem; background: var(--bs-secondary-bg); }
+.map-preview .maplibregl-ctrl button { min-width: 34px; min-height: 34px; }
+@media (max-width: 900px) { .map-preview-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 575.98px) { .map-preview-heading { flex-direction: column; } .cityvue-map-frame { height: 350px; } }

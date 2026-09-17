@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+F023 completes a local MapLibre presentation foundation with synthetic GeoJSON, a stakeholder preview route, and a no-tile style. Production service areas, basemaps, geocoding, Organization-scoped GIS data, and authorized client adapters remain future work. See [F023](features/F023-client-neutral-gis-presentation-foundation.md).
+
 F022 establishes client-neutral deployment profiles and independent-development isolation through existing backend configuration. It preserves Entra, location eligibility and AI boundaries, and leaves live GIS, enterprise and notification adapters for separately authorized features. Original F020/F021 feature records proposed F022 as a provider pilot; this F022 is architecture isolation, with a provider connection deferred. See [F022](features/F022-client-neutral-architecture-development-isolation.md) and [ADR-003](decisions/ADR-003-client-neutral-platform-isolated-development.md).
 
 F021 adds an internal provider-neutral execution lifecycle, strict request/response contracts, metadata-only usage/audit persistence, atomic request-quota admission, and model governance. The application registries remain empty; deterministic providers and an HTTP harness exist only in tests. AI/chat remain disabled by default, production test execution is forbidden, and no generation endpoint or live provider is shipped. See [F021](features/F021-implementation-report.md) and [ADR-002](decisions/ADR-002-ai-governance-metadata.md). Any live provider evaluation requires separate review and approval.
