@@ -11,6 +11,8 @@ test('configuration validation applies safe platform defaults', () => {
   const environment = validateEnvironment(validEnvironment);
 
   assert.equal(environment.PORT, 3000);
+  assert.equal(environment.CITYVUE_DEPLOYMENT_PROFILE, 'development');
+  assert.equal(environment.CITYVUE_ENABLE_EXTERNAL_IDENTITY, false);
   assert.equal(environment.APP_NAME, 'cityvue-api');
   assert.equal(environment.DATABASE_POOL_MAX, 10);
   assert.equal(environment.CORS_ORIGINS, 'http://localhost:5173');
@@ -18,6 +20,86 @@ test('configuration validation applies safe platform defaults', () => {
   assert.equal(environment.ENABLE_DEVELOPMENT_STAFF_ACTIONS, false);
   assert.equal(environment.LOCATION_ELIGIBILITY_PROVIDER, 'disabled');
   assert.equal(environment.ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY, false);
+});
+
+test('production requires an explicit client deployment profile', () => {
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        DATABASE_SSL_MODE: 'verify-full',
+      }),
+    /explicit client deployment profile/,
+  );
+});
+
+test('development requires explicit opt-in before enabling external Entra identity', () => {
+  const entra = {
+    ENTRA_TENANT_ID: '11111111-1111-4111-8111-111111111111',
+    ENTRA_API_CLIENT_ID: '22222222-2222-4222-8222-222222222222',
+    ENTRA_EXPECTED_AUDIENCE: 'api://22222222-2222-4222-8222-222222222222',
+  };
+  assert.throws(
+    () => validateEnvironment({ ...validEnvironment, ...entra }),
+    /explicit external identity opt-in/,
+  );
+  assert.equal(
+    validateEnvironment({
+      ...validEnvironment,
+      ...entra,
+      CITYVUE_ENABLE_EXTERNAL_IDENTITY: 'true',
+    }).ENTRA_TENANT_ID,
+    entra.ENTRA_TENANT_ID,
+  );
+});
+
+test('client profile rejects development providers and access gates', () => {
+  for (const setting of [
+    { ENABLE_DEVELOPMENT_STAFF_ACTIONS: 'true' },
+    { ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS: 'true' },
+    { ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY: 'true' },
+    { LOCATION_ELIGIBILITY_PROVIDER: 'development' },
+  ]) {
+    assert.throws(
+      () =>
+        validateEnvironment({
+          ...validEnvironment,
+          CITYVUE_DEPLOYMENT_PROFILE: 'client',
+          ...setting,
+        }),
+      /development providers and access gates cannot be enabled in a client profile/,
+    );
+  }
+});
+
+test('deployment profile rejects unknown selection and development opt-in in client profile', () => {
+  assert.throws(() =>
+    validateEnvironment({
+      ...validEnvironment,
+      CITYVUE_DEPLOYMENT_PROFILE: 'other',
+    }),
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...validEnvironment,
+        CITYVUE_DEPLOYMENT_PROFILE: 'client',
+        CITYVUE_ENABLE_EXTERNAL_IDENTITY: 'true',
+      }),
+    /development external identity opt-in is not valid in a client profile/,
+  );
+});
+
+test('external identity opt-in requires Entra configuration', () => {
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...validEnvironment,
+        CITYVUE_ENABLE_EXTERNAL_IDENTITY: 'true',
+      }),
+    /external identity opt-in requires complete Entra configuration/,
+  );
 });
 
 test('production rejects development-only staff actions', () => {

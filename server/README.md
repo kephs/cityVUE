@@ -55,6 +55,8 @@ Migration names use `YYYYMMDDHHMMSS-kebab-case-description.ts`. Phase A contains
 
 ## Configuration
 
+F022 deployment isolation uses `CITYVUE_DEPLOYMENT_PROFILE=development` by default. Production requires an explicit `client` profile. Client profiles reject the existing development staff/read gates and deterministic location provider, including in client test environments. To use a personally controlled Entra test tenant while running a development profile under `NODE_ENV=development`, set `CITYVUE_ENABLE_EXTERNAL_IDENTITY=true` along with the complete existing Entra settings. This opt-in does not verify tenant ownership; never configure client resources for independent development. See [F022](../docs/features/F022-client-neutral-architecture-development-isolation.md).
+
 Local staff mutation exercises require both `ENABLE_DEVELOPMENT_STAFF_ACTIONS=true` and an active Organization-scoped `DEVELOPMENT_STAFF_ACTOR_ID` created by the development seed. This gate is not authorization and is rejected when `NODE_ENV=production`. Never enable these endpoints in a deployed environment; production staff access still requires Entra authentication and server-enforced RBAC.
 
 Startup validation requires `DATABASE_URL` and validates `NODE_ENV`, `PORT`, `APP_NAME`, `APP_VERSION`, `LOG_LEVEL`, `DATABASE_SSL_MODE`, pool/timeouts, `CORS_ORIGINS`, baseline rate limits, and telemetry placeholders. The shared database TLS policy requires `DATABASE_SSL_MODE=verify-full` in production for both the API and migration CLI. `require` is rejected in every environment; `disable` remains available only in development/test for local Docker.

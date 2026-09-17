@@ -32,6 +32,8 @@ The repository is authoritative for exact implementation details.
 
 CityVUE is intended to become a **vendor-neutral citizen-engagement platform**, not a front end exclusively for VUEWorks.
 
+CityVUE is developed as a client-neutral software platform. Client-specific capabilities are supplied through configurable provider/adapter boundaries and deployment configuration. Independent development does not require client production infrastructure, credentials, internal networks, or non-public data. Treat Rockville as a prospective deployment, and use only local, synthetic, public test, or personally controlled resources until separately authorized.
+
 Potential enterprise destinations include VUEWorks, Trimble Cityworks, OpenGov Cartegraph, MGO, VistaShare, and future City systems.
 
 ## Core Vendor-Neutrality Rule
@@ -94,7 +96,7 @@ Where supported, adapters may expose consistent operations such as `createReques
 
 ## Authentication and Authorization
 
-Microsoft Entra ID is the intended enterprise identity provider for City staff. Citizen identity remains separate; local implementation does not establish production readiness.
+Microsoft Entra ID is the implemented optional enterprise workforce identity adapter. Independent development uses no client tenant by default; a future authorized client deployment may use its approved identity resources. Citizen identity remains separate; local implementation does not establish production readiness.
 
 - Follow an approved authentication specification.
 - UI route guards are not sufficient authorization.

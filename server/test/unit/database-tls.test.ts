@@ -17,6 +17,7 @@ import { validateEnvironment } from '../../src/config/environment.js';
 const url = 'postgresql://localhost/cityvue_tls_test';
 const production = {
   NODE_ENV: 'production',
+  CITYVUE_DEPLOYMENT_PROFILE: 'client',
   DATABASE_URL: url,
   DATABASE_SSL_MODE: 'verify-full',
 };

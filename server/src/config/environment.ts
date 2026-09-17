@@ -5,6 +5,8 @@ export type NodeEnvironment = 'development' | 'test' | 'production';
 export type DatabaseSslMode = 'disable' | 'require' | 'verify-full';
 
 export interface EnvironmentVariables {
+  CITYVUE_DEPLOYMENT_PROFILE: 'development' | 'client';
+  CITYVUE_ENABLE_EXTERNAL_IDENTITY: boolean;
   AI_TEST_EXECUTION_ENABLED: boolean;
   AI_ENABLED: boolean;
   AI_CHAT_ENABLED: false;
@@ -38,6 +40,13 @@ export interface EnvironmentVariables {
 }
 
 const environmentSchema = Joi.object<EnvironmentVariables>({
+  CITYVUE_DEPLOYMENT_PROFILE: Joi.string()
+    .valid('development', 'client')
+    .default('development'),
+  CITYVUE_ENABLE_EXTERNAL_IDENTITY: Joi.boolean()
+    .truthy('true')
+    .falsy('false')
+    .default(false),
   AI_TEST_EXECUTION_ENABLED: Joi.boolean().default(false),
   AI_ENABLED: Joi.boolean().truthy('true').falsy('false').default(false),
   AI_CHAT_ENABLED: Joi.boolean().valid(false).default(false),
@@ -147,6 +156,32 @@ export function validateEnvironment(
 
   const environment = value as EnvironmentVariables;
   if (
+    environment.NODE_ENV === 'development' &&
+    environment.CITYVUE_DEPLOYMENT_PROFILE === 'development' &&
+    environment.ENTRA_TENANT_ID &&
+    !environment.CITYVUE_ENABLE_EXTERNAL_IDENTITY
+  ) {
+    throw new Error(
+      'Invalid server configuration: development Entra identity requires explicit external identity opt-in',
+    );
+  }
+  if (
+    environment.CITYVUE_DEPLOYMENT_PROFILE === 'client' &&
+    environment.CITYVUE_ENABLE_EXTERNAL_IDENTITY
+  ) {
+    throw new Error(
+      'Invalid server configuration: development external identity opt-in is not valid in a client profile',
+    );
+  }
+  if (
+    environment.CITYVUE_ENABLE_EXTERNAL_IDENTITY &&
+    !environment.ENTRA_TENANT_ID
+  ) {
+    throw new Error(
+      'Invalid server configuration: external identity opt-in requires complete Entra configuration',
+    );
+  }
+  if (
     environment.AI_TEST_EXECUTION_ENABLED &&
     (environment.NODE_ENV === 'production' || !environment.AI_ENABLED)
   )
@@ -183,6 +218,17 @@ export function validateEnvironment(
     );
   }
   if (
+    environment.CITYVUE_DEPLOYMENT_PROFILE === 'client' &&
+    (environment.ENABLE_DEVELOPMENT_STAFF_ACTIONS ||
+      environment.ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS ||
+      environment.ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY ||
+      environment.LOCATION_ELIGIBILITY_PROVIDER === 'development')
+  ) {
+    throw new Error(
+      'Invalid server configuration: development providers and access gates cannot be enabled in a client profile',
+    );
+  }
+  if (
     environment.NODE_ENV === 'production' &&
     (environment.LOCATION_ELIGIBILITY_PROVIDER === 'development' ||
       environment.ENABLE_DEVELOPMENT_LOCATION_ELIGIBILITY)
@@ -197,6 +243,14 @@ export function validateEnvironment(
   ) {
     throw new Error(
       'Invalid server configuration: development service request reads cannot be enabled in production',
+    );
+  }
+  if (
+    environment.NODE_ENV === 'production' &&
+    environment.CITYVUE_DEPLOYMENT_PROFILE !== 'client'
+  ) {
+    throw new Error(
+      'Invalid server configuration: production requires an explicit client deployment profile',
     );
   }
 

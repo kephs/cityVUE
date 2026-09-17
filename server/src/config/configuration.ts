@@ -1,4 +1,8 @@
 export interface AppConfiguration {
+  deployment: {
+    profile: 'development' | 'client';
+    externalIdentityEnabled: boolean;
+  };
   ai: { enabled: boolean; chatEnabled: false; testExecutionEnabled: boolean };
   app: {
     name: string;
@@ -47,6 +51,12 @@ export function configuration(): AppConfiguration {
   const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
   return {
+    deployment: {
+      profile: (process.env.CITYVUE_DEPLOYMENT_PROFILE ?? 'development') as
+        'development' | 'client',
+      externalIdentityEnabled:
+        process.env.CITYVUE_ENABLE_EXTERNAL_IDENTITY === 'true',
+    },
     ai: {
       enabled: process.env.AI_ENABLED === 'true',
       chatEnabled: false,
