@@ -1,5 +1,10 @@
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { StaffAccess } from '../auth/auth.types.js';
+import { GEOSPATIAL_READ_PERMISSION } from '../auth/auth.types.js';
 
 // Only the server's StaffAccessGuard may populate staffAccess on an HTTP request.
 // A future route must use @RequireEntra(), @RequirePermission('geospatial.read')
@@ -19,6 +24,7 @@ export interface TrustedOrganizationContext {
 const uuidV4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+@Injectable()
 export class GeospatialAuthorizationService {
   authorizeRead(
     request: AuthenticatedGeospatialRequest,
@@ -33,7 +39,7 @@ export class GeospatialAuthorizationService {
       !staff.staffIdentityId ||
       !uuidV4.test(staff.organizationId) ||
       !Array.isArray(staff.permissions) ||
-      !staff.permissions.includes('geospatial.read') ||
+      !staff.permissions.includes(GEOSPATIAL_READ_PERMISSION) ||
       (requestedOrganizationId !== undefined &&
         requestedOrganizationId !== staff.organizationId)
     ) {
@@ -42,7 +48,7 @@ export class GeospatialAuthorizationService {
     return {
       organizationId: staff.organizationId,
       principalId: staff.staffIdentityId,
-      permissions: ['geospatial.read'],
+      permissions: [GEOSPATIAL_READ_PERMISSION],
       ...(request.id && uuidV4.test(request.id)
         ? { requestId: request.id }
         : {}),

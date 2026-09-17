@@ -1,5 +1,7 @@
 # CityVUE — Architecture
 
+F026 exposes `GET /api/v1/geospatial` through the existing Entra-only staff guard, explicit `geospatial.read` permission, and F025 authorization-before-repository service. A catalog migration grants no roles automatically. A narrow neutral Polygon/Point response comes only from a synthetic repository in development/test profile; production/client profiles fail closed. `/map-preview` is unchanged. See [F026](features/F026-protected-geospatial-read-api.md).
+
 F025 establishes an internal server geospatial authorization boundary: only guard-resolved StaffAccess from validated workforce identity can yield trusted Organization context, and a dedicated `geospatial.read` policy runs before provider access. No endpoint, provider, permission grant, or GIS persistence is registered. Browser-side organization scope is not authorization; private reads require server authorization before repository access. See [F025](features/F025-trusted-organization-context-geospatial-authorization.md).
 
 F024's local map preview loads neutral `{ organizationId, boundary, requests }` data through a development-only synthetic frontend repository. Scope checks in the browser protect fixture selection only; production geographic reads require a trusted Organization context and server authorization before an API/provider is added. The map renderer accepts validated Polygon/Point GeoJSON; this does not affect canonical Location or eligibility. See [F024](features/F024-organization-scoped-neutral-geospatial-data-foundation.md).

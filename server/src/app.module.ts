@@ -17,6 +17,7 @@ import { LocationEligibilityModule } from './location-eligibility/location-eligi
 import { AuthModule } from './auth/auth.module.js';
 import { AlertsModule } from './alerts/alerts.module.js';
 import { AiModule } from './ai/ai.module.js';
+import { GeospatialModule } from './geospatial/geospatial.module.js';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AiModule } from './ai/ai.module.js';
     DatabaseModule,
     AuthModule,
     AiModule,
+    GeospatialModule,
     HealthModule,
     CatalogModule,
     AlertsModule,
