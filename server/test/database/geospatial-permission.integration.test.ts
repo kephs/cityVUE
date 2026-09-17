@@ -55,6 +55,15 @@ test(
         await db.selectFrom('permission').selectAll().execute(),
         [],
       );
+      await up(db);
+      assert.deepEqual(
+        await db.selectFrom('permission').selectAll().execute(),
+        [{ permission_key: 'geospatial.read' }],
+      );
+      assert.deepEqual(
+        await db.selectFrom('role_permission').selectAll().execute(),
+        [],
+      );
     } finally {
       await db.destroy();
       await admin.query('drop schema "' + schema + '" cascade');

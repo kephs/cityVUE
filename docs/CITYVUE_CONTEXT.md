@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+F027 adds explicit, guarded provisioning for a personally controlled development identity and Organization-scoped PostgreSQL geospatial grant, plus an isolated database-backed HTTP test. Existing F018/F025/F026 identity, authorization and synthetic GIS boundaries remain in force. Personal Entra is optional development infrastructure, not a platform or City dependency; live UAT awaits external configuration. See [F027](features/F027-controlled-development-identity-geospatial-grant-validation.md).
+
 F026 adds a protected Organization-scoped geospatial read API using existing workforce auth/RBAC and a development-only server synthetic provider. The neutral permission catalog key receives no default grants, and production/client profiles cannot return synthetic data. The browser map preview remains on its F024 repository. No City system, credential, non-public data, database, ArcGIS organization, or production infrastructure was accessed. See [F026](features/F026-protected-geospatial-read-api.md).
 
 F025 adds an internal trusted Organization context and geospatial read authorization service using F018's guard-resolved staff identity. It is unexposed and grants no production permission; a future API must authorize before private provider access. Independent development uses no City credentials, systems, non-public data, Entra resources, ArcGIS organization resources, databases, or production infrastructure. See [F025](features/F025-trusted-organization-context-geospatial-authorization.md).

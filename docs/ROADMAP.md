@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+F027 provides controlled personal-tenant development provisioning and database-backed Organization/permission validation while retaining synthetic GIS. Run live delegated-token UAT only with personally controlled Entra and development PostgreSQL; a future feature may review an approved GIS adapter and client cutover after identity and grant validation. See [F027](features/F027-controlled-development-identity-geospatial-grant-validation.md).
+
 F026 proves a protected, explicit-permission geospatial read path using server-only synthetic data; its catalog migration grants no roles, and production/client data reads remain unavailable. A later feature must review authorized provider data and grants before any production GIS integration or map cutover. See [F026](features/F026-protected-geospatial-read-api.md).
 
 F025 establishes the server-side Organization authorization seam for future geospatial reads without exposing an endpoint or provider. Next, separately review the private API route, trusted identity/Organization policy, permission catalog/grants, and approved data source before activation. See [F025](features/F025-trusted-organization-context-geospatial-authorization.md).
