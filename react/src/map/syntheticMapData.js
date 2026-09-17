@@ -1,3 +1,5 @@
+import { isInsideBoundary, toNeutralLocation } from './geospatialData.js';
+
 // SYNTHETIC TEST DATA near 0°N, 0°E. These are fictional points, not addresses or City GIS data.
 export const syntheticBoundary = {
     type: 'Feature',
@@ -18,24 +20,9 @@ export const syntheticRequests = {
     ]
 };
 
-export function toNeutralLocation(coordinates) {
-    if (!Array.isArray(coordinates) || coordinates.length !== 2 ||
-        !coordinates.every(Number.isFinite)) return null;
-    const [longitude, latitude] = coordinates;
-    if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) return null;
-    return { latitude, longitude };
-}
+export { toNeutralLocation };
 
 // Presentation-only synthetic polygon check. Never use this for service eligibility.
 export function isInsideSyntheticBoundary(location, boundary = syntheticBoundary) {
-    if (!location) return false;
-    const ring = boundary.geometry.coordinates[0];
-    let inside = false;
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        const [xi, yi] = ring[i];
-        const [xj, yj] = ring[j];
-        if ((yi > location.latitude) !== (yj > location.latitude) &&
-            location.longitude < (xj - xi) * (location.latitude - yi) / (yj - yi) + xi) inside = !inside;
-    }
-    return inside;
+    return isInsideBoundary(location, boundary);
 }

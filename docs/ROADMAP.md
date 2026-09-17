@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+F024 separates the map preview from its synthetic data through an Organization-scoped neutral frontend repository with validated Polygon/Point GeoJSON. Backend authorization and approved production GIS data remain future work; no API, persistence, PostGIS, or ArcGIS integration was added. See [F024](features/F024-organization-scoped-neutral-geospatial-data-foundation.md).
+
 F023 completes a local MapLibre presentation foundation with synthetic GeoJSON, a stakeholder preview route, and a no-tile style. Production service areas, basemaps, geocoding, Organization-scoped GIS data, and authorized client adapters remain future work. See [F023](features/F023-client-neutral-gis-presentation-foundation.md).
 
 F022 establishes client-neutral deployment profiles and independent-development isolation through existing backend configuration. It preserves Entra, location eligibility and AI boundaries, and leaves live GIS, enterprise and notification adapters for separately authorized features. Original F020/F021 feature records proposed F022 as a provider pilot; this F022 is architecture isolation, with a provider connection deferred. See [F022](features/F022-client-neutral-architecture-development-isolation.md) and [ADR-003](decisions/ADR-003-client-neutral-platform-isolated-development.md).
