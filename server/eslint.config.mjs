@@ -44,4 +44,12 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-argument': 'off',
     },
   },
+  {
+    ...tseslint.configs.disableTypeChecked,
+    files: ['scripts/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly' },
+      parserOptions: { projectService: false, project: false },
+    },
+  },
 );

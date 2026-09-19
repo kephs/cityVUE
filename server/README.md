@@ -24,6 +24,10 @@ The development values in `.env.example` and `compose.yml` are local-only placeh
 
 From the repository root, `npm run server:dev` starts the backend and `npm run react:start` starts the frontend. Phase A does not connect them.
 
+Backend development uses the existing TypeScript compiler in watch mode with `tsconfig.build.json`, then starts/restarts Node on `dist/main.js` only after a successful complete emit. This preserves Nest constructor decorator metadata, which `tsx` does not emit. Failed builds leave the last successfully started server running until the source is corrected. Ctrl+C closes the compiler watcher and server. Production `npm start` remains unchanged; `tsx` remains available for the existing database CLIs, which do not use Nest dependency injection.
+
+`npm run dev -- --check` performs a bounded compile and full Nest initialization without listening or watching. It uses the normal configuration validation and must receive valid settings; the unit regression runs it with fictional environment values and isolated dotenv discovery. No real Entra login or database provisioning is performed by this check.
+
 ## Platform endpoints
 
 - Readiness: `GET http://localhost:3000/api/v1/health`
