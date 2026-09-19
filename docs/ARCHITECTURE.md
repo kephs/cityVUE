@@ -1,5 +1,7 @@
 # CityVUE — Architecture
 
+F031 adds explicit INTERNAL workflow/routing commands requiring `service_request.internal.update`, with no default grants. Shared effective routing scope constrains F030 reads and mutations; revisions and atomic metadata-only Activity preserve concurrency/audit boundaries. PUBLIC paths remain unchanged. See [F031](features/F031-internal-service-request-lifecycle.md).
+
 F030 adds Entra-only INTERNAL request list/detail reads under `staff/internal-service-requests`, requiring explicit `service_request.internal.read` and trusted Organization/Department/Division scope. Creation grants no read access. Existing PUBLIC reads and internal mutation denial remain unchanged; contact fields are omitted and no default grants are added. See [F030](features/F030-internal-service-request-access-policy.md).
 
 F029 adds explicit public/internal request audience, independent intake channel, and stable staff submitter/requester attribution. Resident intake is server-controlled PUBLIC/WEB; a separate Entra-only staff route requires explicit creation permissions with no default grants. Existing reads and mutations withhold INTERNAL until an internal-access policy is approved. See [F029](features/F029-service-request-audience-assisted-intake-foundation.md).

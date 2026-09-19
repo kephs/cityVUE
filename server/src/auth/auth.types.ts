@@ -8,6 +8,7 @@ export const permissions = [
   'service_request.create',
   'service_request.create_internal',
   'service_request.internal.read',
+  'service_request.internal.update',
   'service_request.assign',
   'service_request.start_work',
   'service_request.hold',

@@ -1,3 +1,5 @@
+import { InternalRequestMutationsController } from './internal-request-mutations.controller.js';
+import { InternalRequestMutationsService } from './internal-request-mutations.service.js';
 import { StaffIntakeController } from './staff-intake.controller.js';
 import { InternalRequestController } from './internal-request.controller.js';
 import { InternalRequestRepository } from './internal-request.repository.js';
@@ -16,9 +18,11 @@ import { StaffActionsService } from './staff-actions.service.js';
     ServiceRequestController,
     StaffIntakeController,
     InternalRequestController,
+    InternalRequestMutationsController,
   ],
   providers: [
     InternalRequestRepository,
+    InternalRequestMutationsService,
     ServiceRequestRepository,
     CreateServiceRequestService,
     GetServiceRequestDetailsService,

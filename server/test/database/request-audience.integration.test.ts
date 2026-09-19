@@ -1,3 +1,7 @@
+import {
+  up as lifecycleUp,
+  down as lifecycleDown,
+} from '../../migrations/20260919020000-add-internal-request-lifecycle.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -205,6 +209,7 @@ test(
           );
         },
       );
+      await lifecycleUp(db);
       await db
         .insertInto('permission')
         .values(
@@ -759,6 +764,7 @@ test(
                 'departmentId',
                 'divisionId',
                 'description',
+                'revision',
               ].sort(),
             );
             assert.equal(
@@ -969,6 +975,405 @@ test(
               db,
             );
             assert.equal(count.rows[0]?.n, 2);
+          },
+        );
+        const workflowPath = `${internalPath}/${internalId}/workflow`;
+        const routingPath = `${internalPath}/${internalId}/routing`;
+        const postAs = (path: string, body: object, actor: string = noGrant) =>
+          request(app.getHttpServer())
+            .post(path)
+            .set('Authorization', `Bearer ${actor}`)
+            .send(body);
+        const start = { expectedRevision: 1, action: 'start_work' };
+        await t.test(
+          'F031 migration adds no grants and safely rolls back/reapplies before use',
+          async () => {
+            assert.equal(
+              (
+                await db
+                  .selectFrom('role_permission')
+                  .selectAll()
+                  .where(
+                    'permission_key',
+                    '=',
+                    'service_request.internal.update',
+                  )
+                  .execute()
+              ).length,
+              0,
+            );
+            await lifecycleDown(db);
+            await lifecycleUp(db);
+          },
+        );
+        await t.test(
+          'F031 denies anonymous, invalid, ordinary staff, creator and read-only mutation',
+          async () => {
+            for (const [path, body] of [
+              [workflowPath, start],
+              [routingPath, { expectedRevision: 1, departmentId: department }],
+            ] as const) {
+              await request(app.getHttpServer())
+                .post(path)
+                .send(body)
+                .expect(401);
+              await postAs(path, body, 'invalid').expect(401);
+              for (const actor of [publicOnly, creator, noGrant, otherStaff])
+                await postAs(path, body, actor).expect(403);
+            }
+          },
+        );
+        for (const actor of [noGrant, otherStaff]) {
+          const role = await db
+            .selectFrom('staff_role_assignment')
+            .selectAll()
+            .where('staff_identity_id', '=', actor)
+            .executeTakeFirstOrThrow();
+          await db
+            .insertInto('role_permission')
+            .values({
+              organization_id: role.organization_id,
+              role_id: role.role_id,
+              permission_key: 'service_request.internal.update',
+            })
+            .execute();
+        }
+        await t.test(
+          'F031 scope forgery and PUBLIC/cross-organization targets fail without mutation',
+          async () => {
+            await postAs(workflowPath, start, otherStaff).expect(404);
+            await postAs(
+              `${internalPath}/${otherInternal}/workflow`,
+              start,
+            ).expect(404);
+            await postAs(`${internalPath}/${publicId}/workflow`, start).expect(
+              404,
+            );
+            await postAs(workflowPath, {
+              ...start,
+              organizationId: org,
+            }).expect(400);
+            await postAs(workflowPath, start, otherStaff)
+              .set('X-Organization-Id', org)
+              .expect(404);
+            for (const extra of [
+              { status: 'closed' },
+              { audience: 'public' },
+              { description: 'forged' },
+              { staffIdentityId: noGrant },
+            ])
+              await postAs(workflowPath, { ...start, ...extra }).expect(400);
+            await postAs(workflowPath, {
+              ...start,
+              action: 'arbitrary',
+            }).expect(400);
+            await postAs(workflowPath, { ...start, action: 'resume' }).expect(
+              409,
+            );
+            await postAs(workflowPath, { ...start, action: 'close' }).expect(
+              400,
+            );
+            await db
+              .updateTable('staff_department_membership')
+              .set({ active: false })
+              .where('staff_identity_id', '=', noGrant)
+              .execute();
+            await postAs(workflowPath, start).expect(404);
+            await db
+              .updateTable('staff_department_membership')
+              .set({ active: true })
+              .where('staff_identity_id', '=', noGrant)
+              .execute();
+          },
+        );
+        await t.test(
+          'F031 workflow is revision guarded, minimally projected and atomically audited',
+          async () => {
+            const responses = await Promise.all([
+              postAs(workflowPath, start),
+              postAs(workflowPath, start),
+            ]);
+            assert.deepEqual(responses.map((r) => r.status).sort(), [200, 409]);
+            const ok = responses.find((r) => r.status === 200);
+            assert.ok(ok);
+            assert.deepEqual(
+              Object.keys(ok.body as object).sort(),
+              [
+                'serviceRequestId',
+                'status',
+                'revision',
+                'updatedAt',
+                'departmentId',
+                'divisionId',
+              ].sort(),
+            );
+            assert.equal(ok.headers['cache-control'], 'no-store');
+            let revision = 2;
+            for (const [action, status] of [
+              ['hold', 'on_hold'],
+              ['resume', 'in_progress'],
+              ['close', 'closed'],
+              ['reopen', 'open'],
+            ] as const) {
+              const response = await postAs(workflowPath, {
+                expectedRevision: revision,
+                action,
+                reason: 'Private operational reason',
+                resolutionSummary: 'Private operational summary',
+              }).expect(200);
+              assert.equal(
+                (response.body as { status: string }).status,
+                status,
+              );
+              revision++;
+            }
+            const audit = await db
+              .selectFrom('activity')
+              .selectAll()
+              .where('service_request_id', '=', internalId)
+              .where('actor_type', '=', 'staff')
+              .execute();
+            const changes = audit.filter(
+              (row) => (row.metadata as { policy?: string }).policy === 'F031',
+            );
+            assert.equal(changes.length, 5);
+            for (const row of changes) {
+              assert.equal(row.organization_id, org);
+              assert.equal(row.staff_identity_id, noGrant);
+              assert.deepEqual(
+                Object.keys(row.metadata as object).sort(),
+                [
+                  'action',
+                  'changedField',
+                  'fromStatus',
+                  'toStatus',
+                  'policy',
+                  'revision',
+                ].sort(),
+              );
+            }
+            assert.equal(
+              JSON.stringify(changes).includes('Private operational'),
+              false,
+            );
+            assert.equal(
+              JSON.stringify(changes).includes('private@example.test'),
+              false,
+            );
+            assert.equal(
+              JSON.stringify(changes).includes(internal.description),
+              false,
+            );
+            await assert.rejects(lifecycleDown(db));
+          },
+        );
+        const targetDepartment = randomUUID(),
+          targetDivision = randomUUID();
+        await db
+          .insertInto('department')
+          .values({
+            id: targetDepartment,
+            organization_id: org,
+            name: 'Synthetic operations',
+            description: null,
+            status: 'active',
+            display_order: 2,
+          })
+          .execute();
+        await db
+          .insertInto('division')
+          .values({
+            id: targetDivision,
+            organization_id: org,
+            department_id: targetDepartment,
+            name: 'Synthetic unit',
+            description: null,
+            status: 'active',
+            display_order: 1,
+          })
+          .execute();
+        await t.test(
+          'F031 routing requires valid same-organization targets and both current/target memberships',
+          async () => {
+            const route = {
+              expectedRevision: 6,
+              departmentId: targetDepartment,
+              divisionId: targetDivision,
+            };
+            await postAs(routingPath, route).expect(404);
+            await postAs(routingPath, {
+              ...route,
+              departmentId: otherDepartment,
+            }).expect(404);
+            await postAs(routingPath, {
+              ...route,
+              departmentId: randomUUID(),
+            }).expect(404);
+            await postAs(routingPath, {
+              ...route,
+              organizationId: otherOrg,
+            }).expect(400);
+            await db
+              .insertInto('staff_department_membership')
+              .values({
+                organization_id: org,
+                staff_identity_id: noGrant,
+                department_id: targetDepartment,
+                active: true,
+              })
+              .execute();
+            await postAs(routingPath, route).expect(404);
+            await db
+              .insertInto('staff_division_membership')
+              .values({
+                organization_id: org,
+                staff_identity_id: noGrant,
+                department_id: targetDepartment,
+                division_id: targetDivision,
+                active: true,
+              })
+              .execute();
+            await postAs(routingPath, {
+              ...route,
+              departmentId: department,
+            }).expect(404);
+            await db
+              .updateTable('division')
+              .set({ status: 'inactive' })
+              .where('id', '=', targetDivision)
+              .execute();
+            await postAs(routingPath, route).expect(404);
+            await db
+              .updateTable('division')
+              .set({ status: 'active' })
+              .where('id', '=', targetDivision)
+              .execute();
+            await postAs(routingPath, route).expect(200);
+            const detail = await getInternal(
+              `${internalPath}/${internalId}`,
+            ).expect(200);
+            assert.equal(
+              (detail.body as { departmentId: string }).departmentId,
+              targetDepartment,
+            );
+            assert.equal(
+              (detail.body as { divisionId: string }).divisionId,
+              targetDivision,
+            );
+            const categoryRow = await db
+              .selectFrom('category')
+              .select('department_id')
+              .where('id', '=', category)
+              .executeTakeFirstOrThrow();
+            assert.equal(categoryRow.department_id, department);
+            await db
+              .updateTable('staff_division_membership')
+              .set({ active: false })
+              .where('staff_identity_id', '=', noGrant)
+              .where('division_id', '=', targetDivision)
+              .execute();
+            await getInternal(`${internalPath}/${internalId}`).expect(404);
+            assert.equal(
+              (
+                (await getInternal(internalPath).expect(200)).body as {
+                  total: number;
+                }
+              ).total,
+              0,
+            );
+            await postAs(workflowPath, {
+              expectedRevision: 7,
+              action: 'start_work',
+            }).expect(404);
+            await postAs(routingPath, {
+              expectedRevision: 7,
+              departmentId: department,
+            }).expect(404);
+            await db
+              .updateTable('staff_division_membership')
+              .set({ active: true })
+              .where('staff_identity_id', '=', noGrant)
+              .where('division_id', '=', targetDivision)
+              .execute();
+            await postAs(routingPath, {
+              expectedRevision: 7,
+              departmentId: department,
+            }).expect(200);
+            const routingAudit = await db
+              .selectFrom('activity')
+              .select('metadata')
+              .where('service_request_id', '=', internalId)
+              .where('activity_type', '=', 'service_request_reassigned')
+              .execute();
+            assert.equal(routingAudit.length, 2);
+            assert.equal(
+              (routingAudit[0]?.metadata as { changedField: string })
+                .changedField,
+              'routing',
+            );
+          },
+        );
+        await t.test(
+          'F031 audit failure rolls back the status/revision and update does not confer read access',
+          async () => {
+            await sql`create function reject_f031_test() returns trigger language plpgsql as $$ begin if NEW.metadata->>'policy'='F031' then raise exception 'synthetic audit failure'; end if; return NEW; end $$`.execute(
+              db,
+            );
+            await sql`create trigger reject_f031_test before insert on activity for each row execute function reject_f031_test()`.execute(
+              db,
+            );
+            try {
+              await postAs(workflowPath, {
+                expectedRevision: 8,
+                action: 'start_work',
+              }).expect(500);
+            } finally {
+              await sql`drop trigger reject_f031_test on activity; drop function reject_f031_test()`.execute(
+                db,
+              );
+            }
+            const row = await db
+              .selectFrom('service_request')
+              .select(['revision', 'status'])
+              .where('id', '=', internalId)
+              .executeTakeFirstOrThrow();
+            assert.equal(row.revision, 8);
+            assert.equal(row.status, 'open');
+            await db
+              .deleteFrom('role_permission')
+              .where('role_id', '=', readerRole.role_id)
+              .where('permission_key', '=', 'service_request.internal.read')
+              .execute();
+            await getInternal(`${internalPath}/${internalId}`).expect(403);
+            await postAs(workflowPath, {
+              expectedRevision: 8,
+              action: 'start_work',
+            }).expect(200);
+            await getInternal(`${publicPath}/${publicId}`).expect(403);
+            await db
+              .deleteFrom('role_permission')
+              .where('role_id', '=', readerRole.role_id)
+              .where('permission_key', '=', 'service_request.internal.update')
+              .execute();
+            await postAs(workflowPath, {
+              expectedRevision: 9,
+              action: 'close',
+              resolutionSummary: 'completed',
+            }).expect(403);
+            await assert.rejects(
+              db
+                .updateTable('service_request')
+                .set({ routed_department_id: otherDepartment })
+                .where('id', '=', internalId)
+                .execute(),
+            );
+            await assert.rejects(
+              db
+                .updateTable('service_request')
+                .set({ routed_department_id: department })
+                .where('id', '=', publicId)
+                .execute(),
+            );
           },
         );
       } finally {

@@ -103,7 +103,7 @@ interface ReferenceSequenceTable {
   last_value: number;
   updated_at: Generated<Timestamp>;
 }
-interface ServiceRequestTable {
+export interface ServiceRequestTable {
   id: string;
   organization_id: string;
   reference_number: string;
@@ -118,6 +118,8 @@ interface ServiceRequestTable {
   intake_channel: Generated<string>;
   submitted_by_staff_identity_id: Generated<string | null>;
   requester_staff_identity_id: Generated<string | null>;
+  routed_department_id: Generated<string | null>;
+  routed_division_id: Generated<string | null>;
   revision: Generated<number>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
