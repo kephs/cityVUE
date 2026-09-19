@@ -84,6 +84,7 @@ export class StaffActionsService {
       )
       .select(['category.department_id', 'category.division_id'])
       .where('request.organization_id', '=', access.organizationId)
+      .where('request.audience', '=', 'public')
       .where('request.id', '=', id)
       .executeTakeFirst();
     if (
@@ -110,6 +111,7 @@ export class StaffActionsService {
       })
       .where('organization_id', '=', organizationId)
       .where('id', '=', id)
+      .where('audience', '=', 'public')
       .where('revision', '=', expected)
       .returning(['id', 'reference_number', 'status', 'revision', 'updated_at'])
       .executeTakeFirst();
@@ -288,6 +290,7 @@ export class StaffActionsService {
       const request = await trx
         .selectFrom('service_request')
         .select(['status'])
+        .where('audience', '=', 'public')
         .where('organization_id', '=', organizationId)
         .where('id', '=', id)
         .executeTakeFirst();

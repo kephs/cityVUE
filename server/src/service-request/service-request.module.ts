@@ -1,3 +1,4 @@
+import { StaffIntakeController } from './staff-intake.controller.js';
 import { Module } from '@nestjs/common';
 import { CreateServiceRequestService } from './create-service-request.service.js';
 import { ServiceRequestController } from './service-request.controller.js';
@@ -9,7 +10,7 @@ import { StaffActionsService } from './staff-actions.service.js';
 
 @Module({
   imports: [LocationEligibilityModule],
-  controllers: [ServiceRequestController],
+  controllers: [ServiceRequestController, StaffIntakeController],
   providers: [
     ServiceRequestRepository,
     CreateServiceRequestService,

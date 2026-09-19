@@ -1,3 +1,5 @@
+import { up as authUp } from '../../migrations/20260903020000-add-entra-rbac-foundation.js';
+import { up as audienceUp } from '../../migrations/20260919000000-add-request-audience-assisted-intake.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -68,6 +70,8 @@ test(
       await listUp(db);
       await eligibilityUp(db);
       await staffUp(db);
+      await authUp(db);
+      await audienceUp(db);
       await db
         .insertInto('organization')
         .values({

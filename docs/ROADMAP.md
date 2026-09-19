@@ -1,5 +1,9 @@
 # CityVUE — Roadmap
 
+F029 adds explicit public/internal request audience, independent intake channel, and stable staff submitter/requester attribution. Resident intake is server-controlled PUBLIC/WEB; a separate Entra-only staff route requires explicit creation permissions with no default grants. Existing reads and mutations withhold INTERNAL until an internal-access policy is approved. See [F029](features/F029-service-request-audience-assisted-intake-foundation.md).
+
+Next planned intake feature: administrator-selectable Issue action to continue normal intake with follow-up questions or redirect to an approved external URL. External redirects are not implemented by F029.
+
 F028 connects `/map-preview` in API mode to the existing authenticated API client and protected geospatial endpoint. The server owns Organization scope; the browser validates the neutral response and fails closed on authentication, authorization, service, or geometry errors. Development legacy/demo mode retains isolated browser fixtures. No backend authorization or GIS provider changes were made. See [F028](features/F028-protected-geospatial-client-integration.md).
 
 F027 provides controlled personal-tenant development provisioning and database-backed Organization/permission validation while retaining synthetic GIS. Run live delegated-token UAT only with personally controlled Entra and development PostgreSQL; a future feature may review an approved GIS adapter and client cutover after identity and grant validation. See [F027](features/F027-controlled-development-identity-geospatial-grant-validation.md).

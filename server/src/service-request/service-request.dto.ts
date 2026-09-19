@@ -93,6 +93,16 @@ export class CreateServiceRequestDto {
   @Type(() => LocationInputDto)
   location?: LocationInputDto;
 }
+// Staff-only contract; public intake deliberately has no classification/actor fields.
+export class CreateStaffServiceRequestDto extends CreateServiceRequestDto {
+  @ApiProperty({ enum: ['public', 'internal'] })
+  @IsIn(['public', 'internal'])
+  audience!: 'public' | 'internal';
+  @ApiProperty({ enum: ['web', 'phone', 'walk_in', 'staff', 'api'] })
+  @IsIn(['web', 'phone', 'walk_in', 'staff', 'api'])
+  intakeChannel!: 'web' | 'phone' | 'walk_in' | 'staff' | 'api';
+}
+
 export class CreateServiceRequestResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ example: 'SR-202609-000001' }) referenceNumber!: string;

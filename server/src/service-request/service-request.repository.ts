@@ -73,6 +73,7 @@ export class ServiceRequestRepository {
             .onRef('division.id', '=', 'category.division_id')
             .onRef('division.organization_id', '=', 'request.organization_id'),
         )
+        .where('request.audience', '=', 'public')
         .where('request.organization_id', '=', organizationId);
       if (options.search) {
         const pattern = `%${options.search.replace(/[\\%_]/g, '\\$&')}%`;
@@ -97,17 +98,17 @@ export class ServiceRequestRepository {
       if (options.category)
         query = query.where('category.id', '=', options.category);
       if (options.allowedDepartmentIds)
-        query = query.where(
-          'department.id',
-          'in',
-          options.allowedDepartmentIds,
-        );
+        query = options.allowedDepartmentIds.length
+          ? query.where('department.id', 'in', options.allowedDepartmentIds)
+          : query.where(sql<boolean>`false`);
       if (options.allowedDivisionIds)
         query = query.where((eb) =>
-          eb.or([
-            eb('division.id', 'is', null),
-            eb('division.id', 'in', options.allowedDivisionIds ?? []),
-          ]),
+          options.allowedDivisionIds?.length
+            ? eb.or([
+                eb('division.id', 'is', null),
+                eb('division.id', 'in', options.allowedDivisionIds ?? []),
+              ])
+            : eb('division.id', 'is', null),
         );
       return query;
     };
@@ -227,6 +228,7 @@ export class ServiceRequestRepository {
         'division.id as division_id',
         'division.name as division_name',
       ])
+      .where('request.audience', '=', 'public')
       .where('request.organization_id', '=', organizationId)
       .where('request.id', '=', serviceRequestId)
       .executeTakeFirst();
@@ -446,6 +448,7 @@ export class ServiceRequestRepository {
       .selectAll()
       .where('organization_id', '=', organizationId)
       .where('reference_number', '=', referenceNumber)
+      .where('audience', '=', 'public')
       .executeTakeFirst();
   }
 }

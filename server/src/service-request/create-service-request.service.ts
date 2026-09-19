@@ -1,5 +1,7 @@
+import type { StaffAccess } from '../auth/auth.types.js';
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,6 +11,7 @@ import type { AppConfiguration } from '../config/configuration.js';
 import { DatabaseService } from '../database/database.service.js';
 import type {
   CreateServiceRequestDto,
+  CreateStaffServiceRequestDto,
   CreateServiceRequestResponseDto,
 } from './service-request.dto.js';
 import {
@@ -61,9 +64,70 @@ export class CreateServiceRequestService {
     input: CreateServiceRequestDto,
     now = new Date(),
   ): Promise<CreateServiceRequestResponseDto> {
+    return this.create(
+      input,
+      {
+        organizationId: this.organizationId,
+        audience: 'public',
+        intakeChannel: 'web',
+        staffId: null,
+      },
+      now,
+    );
+  }
+
+  async executeStaff(
+    input: CreateStaffServiceRequestDto,
+    access: StaffAccess | undefined,
+    now = new Date(),
+  ): Promise<CreateServiceRequestResponseDto> {
+    if (
+      !access ||
+      access.development ||
+      !access.tenantId ||
+      !access.objectId ||
+      !access.permissions.includes('service_request.create') ||
+      (input.audience === 'internal' &&
+        !access.permissions.includes('service_request.create_internal'))
+    )
+      throw new ForbiddenException('Access denied');
+    if (
+      !['public', 'internal'].includes(input.audience) ||
+      !['web', 'phone', 'walk_in', 'staff', 'api'].includes(input.intakeChannel)
+    )
+      throw new BadRequestException('Invalid intake classification');
+    if (
+      input.audience === 'internal' &&
+      (input.reportingIdentity !== 'identified' || input.contact)
+    )
+      throw new BadRequestException(
+        'Internal intake requires the authenticated staff requester without resident contact',
+      );
+    return this.create(
+      input,
+      {
+        organizationId: access.organizationId,
+        audience: input.audience,
+        intakeChannel: input.intakeChannel,
+        staffId: access.staffIdentityId,
+      },
+      now,
+    );
+  }
+
+  private async create(
+    input: CreateServiceRequestDto,
+    context: {
+      organizationId: string;
+      audience: 'public' | 'internal';
+      intakeChannel: string;
+      staffId: string | null;
+    },
+    now: Date,
+  ): Promise<CreateServiceRequestResponseDto> {
     const definition = await this.repository.loadSubmissionDefinition(
       this.database.client,
-      this.organizationId,
+      context.organizationId,
       input.serviceDefinitionId,
       input.serviceDefinitionVersionId,
     );
@@ -76,7 +140,7 @@ export class CreateServiceRequestService {
     validateRequesterPolicy(
       input.reportingIdentity,
       definition.anonymousPolicy,
-      Boolean(input.contact?.name.trim()),
+      context.audience === 'internal' || Boolean(input.contact?.name.trim()),
     );
     validateLocationPolicy(
       definition.locationPolicy,
@@ -175,7 +239,7 @@ export class CreateServiceRequestService {
 
     const eligibilityResult = input.location
       ? await this.eligibility.execute({
-          organizationId: this.organizationId,
+          organizationId: context.organizationId,
           policyType: definition.geographicEligibilityMode,
           policyReference: definition.geographicEligibilityPolicyReference,
           unableToDetermineBehavior: definition.unableToDetermineBehavior,
@@ -192,7 +256,7 @@ export class CreateServiceRequestService {
         .insertInto('service_request')
         .values({
           id: requestId,
-          organization_id: this.organizationId,
+          organization_id: context.organizationId,
           reference_number: referenceNumber,
           service_definition_id: definition.serviceDefinitionId,
           service_definition_version_id: definition.versionId,
@@ -201,6 +265,11 @@ export class CreateServiceRequestService {
           priority: definition.priority,
           description: input.description.trim(),
           reporting_identity: input.reportingIdentity,
+          audience: context.audience,
+          intake_channel: context.intakeChannel,
+          submitted_by_staff_identity_id: context.staffId,
+          requester_staff_identity_id:
+            context.audience === 'internal' ? context.staffId : null,
         })
         .returning(['id', 'reference_number', 'status', 'created_at'])
         .executeTakeFirstOrThrow();
@@ -210,7 +279,7 @@ export class CreateServiceRequestService {
           .insertInto('requester_contact')
           .values({
             id: randomUUID(),
-            organization_id: this.organizationId,
+            organization_id: context.organizationId,
             service_request_id: requestId,
             name: input.contact.name.trim(),
             email: email === '' ? null : (email ?? null),
@@ -222,7 +291,7 @@ export class CreateServiceRequestService {
           .insertInto('location')
           .values({
             id: randomUUID(),
-            organization_id: this.organizationId,
+            organization_id: context.organizationId,
             service_request_id: requestId,
             entered_address: input.location.enteredAddress.trim(),
             normalized_address: null,
@@ -250,7 +319,7 @@ export class CreateServiceRequestService {
           .values(
             persistedAnswers.map((answer) => ({
               id: randomUUID(),
-              organization_id: this.organizationId,
+              organization_id: context.organizationId,
               service_request_id: requestId,
               question_id: answer.id,
               question_key: answer.key,
@@ -276,16 +345,20 @@ export class CreateServiceRequestService {
         .insertInto('activity')
         .values({
           id: randomUUID(),
-          organization_id: this.organizationId,
+          organization_id: context.organizationId,
           service_request_id: requestId,
           activity_type: 'service_request_created',
-          actor_type:
-            input.reportingIdentity === 'anonymous'
+          staff_identity_id: context.staffId,
+          actor_type: context.staffId
+            ? 'staff'
+            : input.reportingIdentity === 'anonymous'
               ? 'anonymous_resident'
               : 'identified_resident',
           actor_reference: null,
           metadata: {
             referenceNumber,
+            audience: context.audience,
+            intakeChannel: context.intakeChannel,
             ...(eligibilityResult
               ? {
                   locationEligibility: {

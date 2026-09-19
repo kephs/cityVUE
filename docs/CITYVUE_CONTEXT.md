@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+F029 adds explicit public/internal request audience, independent intake channel, and stable staff submitter/requester attribution. Resident intake is server-controlled PUBLIC/WEB; a separate Entra-only staff route requires explicit creation permissions with no default grants. Existing reads and mutations withhold INTERNAL until an internal-access policy is approved. See [F029](features/F029-service-request-audience-assisted-intake-foundation.md).
+
 F028 connects `/map-preview` in API mode to the existing authenticated API client and protected geospatial endpoint. The server owns Organization scope; the browser validates the neutral response and fails closed on authentication, authorization, service, or geometry errors. Development legacy/demo mode retains isolated browser fixtures. No backend authorization or GIS provider changes were made. See [F028](features/F028-protected-geospatial-client-integration.md).
 
 F027 adds explicit, guarded provisioning for a personally controlled development identity and Organization-scoped PostgreSQL geospatial grant, plus an isolated database-backed HTTP test. Existing F018/F025/F026 identity, authorization and synthetic GIS boundaries remain in force. Personal Entra is optional development infrastructure, not a platform or City dependency; live UAT awaits external configuration. See [F027](features/F027-controlled-development-identity-geospatial-grant-validation.md).

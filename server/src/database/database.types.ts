@@ -114,6 +114,10 @@ interface ServiceRequestTable {
   priority: string;
   description: string;
   reporting_identity: string;
+  audience: Generated<string>;
+  intake_channel: Generated<string>;
+  submitted_by_staff_identity_id: Generated<string | null>;
+  requester_staff_identity_id: Generated<string | null>;
   revision: Generated<number>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;

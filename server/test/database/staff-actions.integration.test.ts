@@ -1,3 +1,4 @@
+import { up as audienceUp } from '../../migrations/20260919000000-add-request-audience-assisted-intake.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -49,6 +50,7 @@ test(
       await eligibilityUp(db);
       await staffUp(db);
       await authUp(db);
+      await audienceUp(db);
 
       const orgA = randomUUID();
       const orgB = randomUUID();
