@@ -1,4 +1,6 @@
 import { StaffIntakeController } from './staff-intake.controller.js';
+import { InternalRequestController } from './internal-request.controller.js';
+import { InternalRequestRepository } from './internal-request.repository.js';
 import { Module } from '@nestjs/common';
 import { CreateServiceRequestService } from './create-service-request.service.js';
 import { ServiceRequestController } from './service-request.controller.js';
@@ -10,8 +12,13 @@ import { StaffActionsService } from './staff-actions.service.js';
 
 @Module({
   imports: [LocationEligibilityModule],
-  controllers: [ServiceRequestController, StaffIntakeController],
+  controllers: [
+    ServiceRequestController,
+    StaffIntakeController,
+    InternalRequestController,
+  ],
   providers: [
+    InternalRequestRepository,
     ServiceRequestRepository,
     CreateServiceRequestService,
     GetServiceRequestDetailsService,

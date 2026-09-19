@@ -22,6 +22,11 @@ import { DatabaseService } from '../../src/database/database.service.js';
 import { EntraTokenService } from '../../src/auth/entra-token.service.js';
 import { ServiceRequestRepository } from '../../src/service-request/service-request.repository.js';
 
+import {
+  up as internalReadUp,
+  down as internalReadDown,
+} from '../../migrations/20260919010000-add-internal-request-read-permission.js';
+
 const url = process.env.TEST_DATABASE_URL;
 test(
   'F029 database-backed intake enforces audience, identity, permissions and read isolation',
@@ -599,6 +604,349 @@ test(
               .executeTakeFirstOrThrow();
             assert.equal(unchanged.revision, 1);
             assert.equal(unchanged.status, 'open');
+          },
+        );
+        const internalPath = '/api/v1/staff/internal-service-requests';
+        const getInternal = (path: string, actor: string = noGrant) =>
+          request(app.getHttpServer())
+            .get(path)
+            .set('Authorization', `Bearer ${actor}`);
+        await t.test(
+          'F030 permission migration grants nothing and supports ungranted rollback',
+          async () => {
+            await internalReadUp(db);
+            assert.equal(
+              (
+                await db
+                  .selectFrom('role_permission')
+                  .selectAll()
+                  .where('permission_key', '=', 'service_request.internal.read')
+                  .execute()
+              ).length,
+              0,
+            );
+            await internalReadDown(db);
+            await internalReadUp(db);
+          },
+        );
+        await t.test(
+          'F030 anonymous, invalid, unprovisioned and creator identities have no internal read access',
+          async () => {
+            for (const path of [
+              internalPath,
+              `${internalPath}/${internalId}`,
+            ]) {
+              await request(app.getHttpServer()).get(path).expect(401);
+              await getInternal(path, 'invalid').expect(401);
+              await getInternal(path, randomUUID()).expect(403);
+              for (const actor of [creator, publicOnly, noGrant])
+                await getInternal(path, actor).expect(403);
+            }
+          },
+        );
+        const readerRole = await db
+          .selectFrom('staff_role_assignment')
+          .select('role_id')
+          .where('staff_identity_id', '=', noGrant)
+          .executeTakeFirstOrThrow();
+        for (const actor of [noGrant, otherStaff]) {
+          const assignment = await db
+            .selectFrom('staff_role_assignment')
+            .selectAll()
+            .where('staff_identity_id', '=', actor)
+            .executeTakeFirstOrThrow();
+          await db
+            .insertInto('role_permission')
+            .values({
+              organization_id: assignment.organization_id,
+              role_id: assignment.role_id,
+              permission_key: 'service_request.internal.read',
+            })
+            .execute();
+        }
+        const otherDepartment = randomUUID(),
+          otherCategory = randomUUID(),
+          otherService = randomUUID(),
+          otherVersion = randomUUID(),
+          otherInternal = randomUUID();
+        await sql`insert into department(id,organization_id,name,status,display_order)
+          values(${otherDepartment},${otherOrg},'Other fictional department','active',1);
+        `.execute(db);
+        await sql`insert into category(id,organization_id,department_id,name,description,icon_key,aliases,keywords,status,display_order)
+          select ${otherCategory},${otherOrg},${otherDepartment},name,description,icon_key,aliases,keywords,status,display_order from category where id=${category}`.execute(
+          db,
+        );
+        await sql`insert into service_definition(id,organization_id,category_id,service_key,status)
+          values(${otherService},${otherOrg},${otherCategory},'other-test','active')`.execute(
+          db,
+        );
+        await sql`insert into service_definition_version(id,organization_id,service_definition_id,version_number,name,resident_description,icon_key,aliases,keywords,default_priority,location_policy,geographic_eligibility_mode,anonymous_reporting_policy,status,published_at)
+          select ${otherVersion},${otherOrg},${otherService},1,name,resident_description,icon_key,aliases,keywords,default_priority,location_policy,geographic_eligibility_mode,anonymous_reporting_policy,status,published_at from service_definition_version where id=${version}`.execute(
+          db,
+        );
+        await db
+          .insertInto('staff_department_membership')
+          .values({
+            organization_id: otherOrg,
+            staff_identity_id: otherStaff,
+            department_id: otherDepartment,
+            active: true,
+          })
+          .execute();
+        await db
+          .insertInto('service_request')
+          .values({
+            id: otherInternal,
+            organization_id: otherOrg,
+            reference_number: 'SR-200001-000002',
+            service_definition_id: otherService,
+            service_definition_version_id: otherVersion,
+            category_id: otherCategory,
+            status: 'open',
+            priority: 'medium',
+            description: 'Other organization internal request',
+            reporting_identity: 'identified',
+            audience: 'internal',
+            intake_channel: 'staff',
+            submitted_by_staff_identity_id: otherStaff,
+            requester_staff_identity_id: otherStaff,
+          })
+          .execute();
+        await t.test(
+          'F030 authorized internal list/count/detail are scoped and omit protected contact fields',
+          async () => {
+            // Defense against a future/imported contact row: the read projection must never join it.
+            await db
+              .insertInto('requester_contact')
+              .values({
+                organization_id: org,
+                service_request_id: internalId,
+                id: randomUUID(),
+                name: 'Protected contact',
+                email: 'private@example.test',
+              })
+              .execute();
+            const list = await getInternal(internalPath).expect(200);
+            const body = list.body as {
+              total: number;
+              items: { serviceRequestId: string }[];
+            };
+            assert.equal(body.total, 1);
+            assert.deepEqual(
+              body.items.map((row) => row.serviceRequestId),
+              [internalId],
+            );
+            assert.equal(list.headers['cache-control'], 'no-store');
+            const detail = await getInternal(
+              `${internalPath}/${internalId}`,
+            ).expect(200);
+            assert.equal(
+              (detail.body as { description: string }).description,
+              internal.description,
+            );
+            assert.deepEqual(
+              Object.keys(detail.body as object).sort(),
+              [
+                'serviceRequestId',
+                'referenceNumber',
+                'audience',
+                'status',
+                'priority',
+                'createdAt',
+                'updatedAt',
+                'issueName',
+                'categoryId',
+                'departmentId',
+                'divisionId',
+                'description',
+              ].sort(),
+            );
+            assert.equal(
+              JSON.stringify(detail.body).includes('private@example.test'),
+              false,
+            );
+            await getInternal(`${internalPath}/${publicId}`).expect(404);
+            const publicList = await getInternal(publicPath).expect(200);
+            assert.equal((publicList.body as { total: number }).total, 3);
+            assert.equal(
+              JSON.stringify(publicList.body).includes(internalId),
+              false,
+            );
+            await getInternal(`${publicPath}/${internalId}`).expect(404);
+            // This grant alone does not unlock existing PUBLIC/contact details.
+            await db
+              .deleteFrom('role_permission')
+              .where('role_id', '=', readerRole.role_id)
+              .where('permission_key', '=', 'service_request.view')
+              .execute();
+            await getInternal(`${publicPath}/${publicId}`).expect(403);
+            await getInternal(`${internalPath}/${internalId}`).expect(200);
+            await assert.rejects(internalReadDown(db));
+          },
+        );
+        await t.test(
+          'F030 cross-organization and forged query/header/body scope cannot reveal internal records',
+          async () => {
+            await getInternal(
+              `${internalPath}/${internalId}`,
+              otherStaff,
+            ).expect(404);
+            const otherList = await getInternal(
+              internalPath,
+              otherStaff,
+            ).expect(200);
+            assert.equal((otherList.body as { total: number }).total, 1);
+            assert.equal(
+              JSON.stringify(otherList.body).includes(internalId),
+              false,
+            );
+            await getInternal(`${internalPath}/${otherInternal}`).expect(404);
+            await getInternal(
+              `${internalPath}/${otherInternal}`,
+              otherStaff,
+            ).expect(200);
+            for (const path of [
+              internalPath,
+              `${internalPath}/${internalId}`,
+            ]) {
+              for (const extra of [
+                { organizationId: org },
+                { audience: 'internal' },
+                { staffIdentityId: noGrant },
+              ])
+                await getInternal(path, otherStaff).query(extra).expect(400);
+              const forged = await getInternal(path, otherStaff)
+                .set('X-Organization-Id', org)
+                .send({ organizationId: org, staffIdentityId: noGrant })
+                .expect(path === internalPath ? 200 : 404);
+              assert.equal(
+                JSON.stringify(forged.body).includes(internalId),
+                false,
+              );
+            }
+            await getInternal(`${internalPath}/invalid`).expect(404);
+            await getInternal(internalPath).query({ page: 0 }).expect(400);
+            await getInternal(internalPath)
+              .query({ pageSize: 101 })
+              .expect(400);
+            const page = await getInternal(internalPath)
+              .query({ page: 2, pageSize: 1 })
+              .expect(200);
+            assert.equal((page.body as { total: number }).total, 1);
+            assert.deepEqual((page.body as { items: unknown[] }).items, []);
+          },
+        );
+        await t.test(
+          'F030 division scope and Entra-only admission cannot be bypassed',
+          async () => {
+            const division = randomUUID();
+            await db
+              .insertInto('division')
+              .values({
+                id: division,
+                organization_id: org,
+                department_id: department,
+                name: 'Fictional division',
+                description: null,
+                status: 'active',
+                display_order: 1,
+              })
+              .execute();
+            await db
+              .updateTable('category')
+              .set({ division_id: division })
+              .where('id', '=', category)
+              .execute();
+            await getInternal(`${internalPath}/${internalId}`).expect(404);
+            assert.equal(
+              (
+                (await getInternal(internalPath).expect(200)).body as {
+                  total: number;
+                }
+              ).total,
+              0,
+            );
+            await db
+              .insertInto('staff_division_membership')
+              .values({
+                organization_id: org,
+                staff_identity_id: noGrant,
+                division_id: division,
+                department_id: department,
+                active: true,
+              })
+              .execute();
+            await getInternal(`${internalPath}/${internalId}`).expect(200);
+            await db
+              .updateTable('category')
+              .set({ division_id: null })
+              .where('id', '=', category)
+              .execute();
+            const tokens = app.get(EntraTokenService);
+            Reflect.set(tokens, 'enabled', false);
+            try {
+              await request(app.getHttpServer()).get(internalPath).expect(401);
+              await request(app.getHttpServer())
+                .get(`${internalPath}/${internalId}`)
+                .expect(401);
+            } finally {
+              Reflect.set(tokens, 'enabled', true);
+            }
+          },
+        );
+        await t.test(
+          'F030 department membership, organization status and permission revocation fail closed',
+          async () => {
+            await db
+              .updateTable('staff_department_membership')
+              .set({ active: false })
+              .where('staff_identity_id', '=', noGrant)
+              .execute();
+            await getInternal(`${internalPath}/${internalId}`).expect(404);
+            assert.equal(
+              (
+                (await getInternal(internalPath).expect(200)).body as {
+                  total: number;
+                }
+              ).total,
+              0,
+            );
+            await db
+              .updateTable('staff_department_membership')
+              .set({ active: true })
+              .where('staff_identity_id', '=', noGrant)
+              .execute();
+            await db
+              .updateTable('organization')
+              .set({ status: 'inactive' })
+              .where('id', '=', org)
+              .execute();
+            await getInternal(`${internalPath}/${internalId}`).expect(404);
+            assert.equal(
+              (
+                (await getInternal(internalPath).expect(200)).body as {
+                  total: number;
+                }
+              ).total,
+              0,
+            );
+            await db
+              .updateTable('organization')
+              .set({ status: 'active' })
+              .where('id', '=', org)
+              .execute();
+            await db
+              .updateTable('staff_role_assignment')
+              .set({ active: false })
+              .where('staff_identity_id', '=', noGrant)
+              .execute();
+            await getInternal(internalPath).expect(403);
+            await getInternal(`${internalPath}/${internalId}`).expect(403);
+            await db
+              .updateTable('staff_role_assignment')
+              .set({ active: true })
+              .where('staff_identity_id', '=', noGrant)
+              .execute();
           },
         );
         await t.test(
