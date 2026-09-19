@@ -7,8 +7,11 @@ import { isInsideSyntheticBoundary, syntheticBoundary, syntheticRequests, toNeut
 import { validateMapData } from '../src/map/geospatialData.js';
 import { createPreviewGeospatialRepository, createSyntheticGeospatialRepository, PREVIEW_ORGANIZATION_ID } from '../src/map/geospatialRepository.js';
 import { ThemeProvider } from '../src/theme/ThemeProvider.jsx';
+import { AuthRoot } from '../src/auth/AuthContext.jsx';
 
 const maps = vi.hoisted(() => ({ instances: [], fail: false }));
+const auth = vi.hoisted(() => ({ enabled: true, isAuthenticated: true, account: { homeAccountId: 'fictional-account' }, signIn: vi.fn(), signOut: vi.fn() }));
+vi.mock('../src/auth/AuthContext.jsx', async importOriginal => { const actual = await importOriginal(); return { ...actual, AuthRoot: vi.fn(actual.AuthRoot), useAuth: () => auth }; });
 vi.mock('maplibre-gl', () => ({
     setWorkerUrl: vi.fn(),
     NavigationControl: class {},
@@ -23,7 +26,7 @@ vi.mock('maplibre-gl', () => ({
 }));
 vi.mock('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url', () => ({ default: '/assets/mock-map-worker.js' }));
 
-beforeEach(() => { maps.instances.length = 0; maps.fail = false; });
+beforeEach(() => { maps.instances.length = 0; maps.fail = false; auth.enabled = true; auth.isAuthenticated = true; auth.account = { homeAccountId: 'fictional-account' }; auth.signIn.mockClear(); auth.signOut.mockClear(); });
 afterEach(() => vi.restoreAllMocks());
 
 test('synthetic fixtures include inside and outside requests and use a neutral location shape', () => {
@@ -128,6 +131,7 @@ test('preview loads through the repository and handles unavailable or invalid da
 });
 
 test('preview route uses the existing app layout and navigation', async () => {
+    AuthRoot.mockClear();
     maps.fail = true;
     window.history.replaceState({}, '', '/map-preview');
     const { default: router } = await import('../src/app/router.jsx');
@@ -135,5 +139,142 @@ test('preview route uses the existing app layout and navigation', async () => {
     const view = render(<ThemeProvider><RouterProvider router={router} /></ThemeProvider>);
     expect(await screen.findByRole('heading', { name: 'Service requests in context' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Map Preview' })).toHaveAttribute('aria-current', 'page');
+    expect(AuthRoot).toHaveBeenCalled();
     view.unmount(); router.dispose();
+});
+
+const apiEnvironment = { DEV: true, VITE_CITYVUE_DATA_SOURCE: 'api', VITE_CITYVUE_API_BASE_URL: 'http://localhost:3000/api/v1' };
+function apiData() {
+    return structuredClone({ organizationId: 'server-owned-organization', boundary: syntheticBoundary, requests: {
+        type: 'FeatureCollection', features: [{ ...syntheticRequests.features[0], properties: { ...syntheticRequests.features[0].properties, id: 'protected-1', title: 'Protected request' } }]
+    } });
+}
+function apiRepository(fetchImplementation, options = {}) {
+    return createPreviewGeospatialRepository({ environment: apiEnvironment, fetchImplementation, getAccessToken: async () => 'fictional-test-token', ...options });
+}
+function reply(status, body = {}) { return { ok: status === 200, status, headers: new Headers(), json: async () => body }; }
+function renderApi(repository) { return render(<ThemeProvider><MapPreviewPage repository={repository} organizationId="untrusted-browser-hint" /></ThemeProvider>); }
+
+test('API mode authenticates the protected request without a browser Organization hint', async () => {
+    const fetcher = vi.fn(async () => reply(200, apiData()));
+    const repository = apiRepository(fetcher);
+    renderApi(repository);
+    expect(await screen.findByRole('button', { name: /Protected request/ })).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledWith('http://localhost:3000/api/v1/geospatial', expect.objectContaining({ headers: { Accept: 'application/json', Authorization: 'Bearer fictional-test-token' }, signal: expect.any(AbortSignal) }));
+    expect(maps.instances[0].options.style.sources.boundary.data.features[0].geometry.type).toBe('Polygon');
+    expect(maps.instances[0].options.style.sources.requests.data.features[0].properties.title).toBe('Protected request');
+    expect(screen.queryByText(/SYNTHETIC TEST DATA/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Streetlight concern/ })).not.toBeInTheDocument();
+});
+
+test('API loading exposes an accessible status and no fixture data', async () => {
+    let resolve;
+    renderApi(apiRepository(() => new Promise(done => { resolve = done; })));
+    expect(screen.getByText('Loading map data…')).toHaveAttribute('role', 'status');
+    expect(maps.instances).toHaveLength(0);
+    await act(async () => {});
+    await act(async () => resolve(reply(200, apiData())));
+    expect(screen.getByRole('button', { name: /Protected request/ })).toBeInTheDocument();
+});
+
+test.each([401, 403, 500])('API HTTP %s is safe, distinct and never falls back to fixtures', async status => {
+    renderApi(apiRepository(async () => reply(status, { message: 'private-server-token-detail' })));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(status === 401 ? 'Your session is not available' : status === 403 ? "You don't currently have access" : 'Map data is temporarily unavailable');
+    expect(document.body.textContent).not.toContain('private-server-token-detail');
+    expect(maps.instances).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /Streetlight concern/ })).not.toBeInTheDocument();
+    expect(auth.signOut).not.toHaveBeenCalled();
+    if (status === 401) { fireEvent.click(screen.getByRole('button', { name: 'Sign in again' })); expect(auth.signIn).toHaveBeenCalledTimes(1); }
+    else expect(screen.queryByRole('button', { name: 'Sign in again' })).not.toBeInTheDocument();
+});
+
+test('API network failure is sanitized and retry recovers', async () => {
+    const fetcher = vi.fn().mockRejectedValueOnce(new Error('private-network-details')).mockResolvedValueOnce(reply(200, apiData()));
+    renderApi(apiRepository(fetcher));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Map data is temporarily unavailable');
+    expect(document.body.textContent).not.toContain('private-network-details');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('button', { name: /Protected request/ })).toBeInTheDocument();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+test('API timeout fails closed', async () => {
+    const fetcher = (_url, { signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('timeout detail')), { once: true }));
+    renderApi(apiRepository(fetcher, { timeoutMs: 5 }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Map data is temporarily unavailable');
+    expect(maps.instances).toHaveLength(0);
+});
+
+test.each(['missing', 'geometry', 'coordinates', 'json'])('API rejects malformed %s data before rendering', async kind => {
+    const data = apiData();
+    if (kind === 'missing') delete data.organizationId;
+    if (kind === 'geometry') data.boundary.geometry.type = 'MultiPolygon';
+    if (kind === 'coordinates') data.requests.features[0].geometry.coordinates = [999, 0];
+    const response = reply(200, data);
+    if (kind === 'json') response.json = async () => { throw new Error('invalid JSON private detail'); };
+    renderApi(apiRepository(async () => response));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Map data is temporarily unavailable');
+    expect(maps.instances).toHaveLength(0);
+});
+
+test('subsequent 403 clears protected map and selection without logout or demo fallback', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(reply(200, apiData())).mockResolvedValueOnce(reply(403));
+    renderApi(apiRepository(fetcher));
+    const selected = await screen.findByRole('button', { name: /Protected request/ });
+    fireEvent.click(selected);
+    expect(selected).toHaveAttribute('aria-pressed', 'true');
+    const map = maps.instances[0];
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh map data' }));
+    expect(screen.queryByRole('button', { name: /Protected request/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent("You don't currently have access");
+    expect(map.remove).toHaveBeenCalledTimes(1);
+    expect(auth.signOut).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Streetlight concern/)).not.toBeInTheDocument();
+});
+
+test.each(['signed-out', 'unconfigured'])('API %s never requests protected or demo data', async state => {
+    auth.isAuthenticated = state !== 'signed-out'; auth.enabled = state !== 'unconfigured';
+    const fetcher = vi.fn(); renderApi(apiRepository(fetcher));
+    await act(async () => {});
+    expect(fetcher).not.toHaveBeenCalled(); expect(maps.instances).toHaveLength(0);
+    if (state === 'signed-out') { fireEvent.click(screen.getByRole('button', { name: 'Sign in' })); expect(auth.signIn).toHaveBeenCalledTimes(1); }
+    else expect(screen.getByRole('status')).toHaveTextContent('Map sign-in is not configured');
+});
+
+test('account switch removes data and ignores a pending response from the previous account', async () => {
+    let finishOld;
+    const fetcher = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; })).mockResolvedValueOnce(reply(403));
+    const repository = apiRepository(fetcher); const view = renderApi(repository);
+    await act(async () => {});
+    auth.account = { homeAccountId: 'different-fictional-account' };
+    view.rerender(<ThemeProvider><MapPreviewPage repository={repository} /></ThemeProvider>);
+    expect(await screen.findByRole('alert')).toHaveTextContent("You don't currently have access");
+    await act(async () => finishOld(reply(200, apiData())));
+    expect(screen.queryByRole('button', { name: /Protected request/ })).not.toBeInTheDocument();
+    expect(maps.instances).toHaveLength(0);
+});
+
+test('sign-out unmounts already rendered protected data immediately', async () => {
+    const repository = apiRepository(async () => reply(200, apiData()));
+    const view = renderApi(repository);
+    expect(await screen.findByRole('button', { name: /Protected request/ })).toBeInTheDocument();
+    const map = maps.instances[0];
+    auth.isAuthenticated = false;
+    view.rerender(<ThemeProvider><MapPreviewPage repository={repository} /></ThemeProvider>);
+    expect(screen.getByRole('heading', { name: 'Staff sign-in required' })).toBeInTheDocument();
+    expect(screen.queryByText('Protected request')).not.toBeInTheDocument();
+    expect(map.remove).toHaveBeenCalledTimes(1);
+});
+
+test('theme recreation reapplies the selected map point after the new style loads', () => {
+    const props = { boundary: syntheticBoundary, requests: syntheticRequests, selectedId: 'sample-102', onSelect: vi.fn(), onLocationSelect: vi.fn() };
+    const view = render(<CityVUEMap {...props} theme="dark" />);
+    act(() => maps.instances[0].emit('load'));
+    view.rerender(<CityVUEMap {...props} theme="light" />);
+    const replacement = maps.instances[1];
+    expect(screen.getByText('Loading synthetic map…')).toBeInTheDocument();
+    act(() => replacement.emit('load'));
+    expect(replacement.setFilter).toHaveBeenCalledWith('selected-point', ['==', ['get', 'id'], 'sample-102']);
+    expect(screen.queryByText('Loading synthetic map…')).not.toBeInTheDocument();
 });

@@ -27,7 +27,7 @@ function mapStyle(boundary, requests, theme) {
     };
 }
 
-export default function CityVUEMap({ boundary, requests, selectedId, theme, onSelect, onLocationSelect }) {
+export default function CityVUEMap({ boundary, requests, selectedId, theme, onSelect, onLocationSelect, demo = true }) {
     const container = useRef(null);
     const mapInstance = useRef(null);
     const callbacks = useRef({ onSelect, onLocationSelect });
@@ -38,6 +38,7 @@ export default function CityVUEMap({ boundary, requests, selectedId, theme, onSe
         let map;
         let resizeObserver;
         let loadTimeout;
+        setState('loading');
         try {
             maplibregl.setWorkerUrl(workerUrl);
             map = new maplibregl.Map({
@@ -81,7 +82,7 @@ export default function CityVUEMap({ boundary, requests, selectedId, theme, onSe
 
     return <div className="cityvue-map-frame">
         <div ref={container} className="cityvue-map-canvas" aria-hidden="true" />
-        {state === 'loading' && <p className="cityvue-map-message" role="status">Loading synthetic map…</p>}
-        {state === 'error' && <p className="cityvue-map-message" role="alert">The interactive map is unavailable. Use the sample request list beside it.</p>}
+        {state === 'loading' && <p className="cityvue-map-message" role="status">{demo ? 'Loading synthetic map…' : 'Loading map…'}</p>}
+        {state === 'error' && <p className="cityvue-map-message" role="alert">The interactive map is unavailable. Use the {demo ? 'sample request' : 'request'} list beside it.</p>}
     </div>;
 }

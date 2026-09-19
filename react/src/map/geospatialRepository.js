@@ -1,5 +1,6 @@
 import { validateMapData } from './geospatialData.js';
-import { syntheticBoundary, syntheticRequests } from './syntheticMapData.js';
+import { createApiClient } from '../api/apiClient.js';
+import { readResidentIntakeConfig } from '../config/runtimeConfig.js';
 
 // Demo scope mirrors the local seed. Browser scope is never an authorization boundary.
 export const PREVIEW_ORGANIZATION_ID = '10000000-0000-4000-8000-000000000001';
@@ -15,8 +16,24 @@ export function createSyntheticGeospatialRepository({ organizationId, boundary, 
     };
 }
 
-export function createPreviewGeospatialRepository() {
+export function createApiGeospatialRepository(client) {
+    return {
+        mode: 'api',
+        async loadMapData(_organizationId, { signal } = {}) {
+            const data = await client.get('/geospatial', { authenticated: true, signal });
+            // Scope comes from the verified server response, never a browser hint.
+            return validateMapData(data, data?.organizationId);
+        }
+    };
+}
+
+export function createPreviewGeospatialRepository({ environment = import.meta.env, ...clientOptions } = {}) {
+    const config = readResidentIntakeConfig(environment);
+    if (config.dataSource === 'api') return createApiGeospatialRepository(createApiClient({ ...clientOptions, baseUrl: config.apiBaseUrl }));
     // A production/client build cannot serve the bundled development fixture.
-    if (!import.meta.env.DEV) return { loadMapData: async () => { throw new Error('Geographic data unavailable'); } };
-    return createSyntheticGeospatialRepository({ organizationId: PREVIEW_ORGANIZATION_ID, boundary: syntheticBoundary, requests: syntheticRequests });
+    return { mode: 'demo', async loadMapData(organizationId, options) {
+        if (!environment.DEV) throw new Error('Geographic data unavailable');
+        const { syntheticBoundary, syntheticRequests } = await import('./syntheticMapData.js');
+        return createSyntheticGeospatialRepository({ organizationId: PREVIEW_ORGANIZATION_ID, boundary: syntheticBoundary, requests: syntheticRequests }).loadMapData(organizationId, options);
+    } };
 }

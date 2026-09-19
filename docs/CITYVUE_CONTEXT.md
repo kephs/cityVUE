@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+F028 connects `/map-preview` in API mode to the existing authenticated API client and protected geospatial endpoint. The server owns Organization scope; the browser validates the neutral response and fails closed on authentication, authorization, service, or geometry errors. Development legacy/demo mode retains isolated browser fixtures. No backend authorization or GIS provider changes were made. See [F028](features/F028-protected-geospatial-client-integration.md).
+
 F027 adds explicit, guarded provisioning for a personally controlled development identity and Organization-scoped PostgreSQL geospatial grant, plus an isolated database-backed HTTP test. Existing F018/F025/F026 identity, authorization and synthetic GIS boundaries remain in force. Personal Entra is optional development infrastructure, not a platform or City dependency; live UAT awaits external configuration. See [F027](features/F027-controlled-development-identity-geospatial-grant-validation.md).
 
 F026 adds a protected Organization-scoped geospatial read API using existing workforce auth/RBAC and a development-only server synthetic provider. The neutral permission catalog key receives no default grants, and production/client profiles cannot return synthetic data. The browser map preview remains on its F024 repository. No City system, credential, non-public data, database, ArcGIS organization, or production infrastructure was accessed. See [F026](features/F026-protected-geospatial-read-api.md).

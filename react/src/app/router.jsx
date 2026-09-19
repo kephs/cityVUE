@@ -31,11 +31,6 @@ const router = createBrowserRouter([
         element: <Suspense fallback={<p role="status">Loading admin preview…</p>}><AdminPreviewPage /></Suspense>
     },
     {
-        path: "/map-preview",
-        element: <App />,
-        children: [{ index: true, element: <MapPreviewPage /> }]
-    },
-    {
         path: "/ai-preview",
         element: <App />,
         children: [{ index: true, element: <AIPreviewPage /> }]
@@ -44,6 +39,10 @@ const router = createBrowserRouter([
         path: "/",
         element: <AuthRoot><App /></AuthRoot>,
         children: [
+            {
+                path: 'map-preview',
+                element: <MapPreviewPage />
+            },
             {
                 path: "staff/ai",
                 element: <StaffRouteGuard requireEntra><AIWorkspacePage /></StaffRouteGuard>

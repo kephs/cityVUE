@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+F028 connects `/map-preview` in API mode to the existing authenticated API client and protected geospatial endpoint. The server owns Organization scope; the browser validates the neutral response and fails closed on authentication, authorization, service, or geometry errors. Development legacy/demo mode retains isolated browser fixtures. No backend authorization or GIS provider changes were made. See [F028](features/F028-protected-geospatial-client-integration.md).
+
 F027 provides controlled personal-tenant development provisioning and database-backed Organization/permission validation while retaining synthetic GIS. Run live delegated-token UAT only with personally controlled Entra and development PostgreSQL; a future feature may review an approved GIS adapter and client cutover after identity and grant validation. See [F027](features/F027-controlled-development-identity-geospatial-grant-validation.md).
 
 F026 proves a protected, explicit-permission geospatial read path using server-only synthetic data; its catalog migration grants no roles, and production/client data reads remain unavailable. A later feature must review authorized provider data and grants before any production GIS integration or map cutover. See [F026](features/F026-protected-geospatial-read-api.md).
