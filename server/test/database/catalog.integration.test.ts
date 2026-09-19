@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
+import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
 import {
   down,
   up,
@@ -19,6 +20,12 @@ test(
   async () => {
     const schema = `catalog_${randomUUID().replaceAll('-', '')}`;
     const admin = new Pool({ connectionString: url });
+    try {
+      await prepareDatabaseExtensions(admin);
+    } catch (error) {
+      await admin.end();
+      throw error;
+    }
     await admin.query(`create schema "${schema}"`);
     const db = new Kysely<DatabaseSchema>({
       dialect: new PostgresDialect({

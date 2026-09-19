@@ -6,6 +6,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
+import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
 import request from 'supertest';
 import { up as catalogUp } from '../../migrations/20260902000000-create-organization-service-catalog.js';
 import { up as requestUp } from '../../migrations/20260902010000-create-service-request-foundation.js';
@@ -45,6 +46,12 @@ test(
     delete process.env.ENTRA_EXPECTED_AUDIENCE;
     const schema = `geospatial_grant_${randomUUID().replaceAll('-', '')}`;
     const admin = new Pool({ connectionString: url });
+    try {
+      await prepareDatabaseExtensions(admin);
+    } catch (error) {
+      await admin.end();
+      throw error;
+    }
     await admin.query(`create schema "${schema}"`);
     const db = new Kysely<DatabaseSchema>({
       dialect: new PostgresDialect({

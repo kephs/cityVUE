@@ -18,6 +18,8 @@ Use a separately controlled `TEST_DATABASE_URL` for `npm run test:db`; tests cre
 
 ## Deployment boundary
 
+Database tests prepare `pgcrypto` in the shared `public` schema before running migrations in disposable schemas. A database-scoped advisory transaction lock serializes only extension setup across test processes; test files remain concurrent. An existing extension in another schema fails setup rather than being moved or dropped automatically. This prevents concurrent `CREATE EXTENSION IF NOT EXISTS` catalog races and prevents test-schema cleanup from removing the shared extension. Production migrations are unchanged. The extension regression checks concurrent setup, concurrent isolated migration apply/rollback/reapply, and preservation of the extension after schema cleanup.
+
 | Development profile | Future client profile |
 | --- | --- |
 | Personally controlled Entra tenant | Client-approved identity provider/adapter |

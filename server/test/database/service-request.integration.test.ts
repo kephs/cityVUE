@@ -4,6 +4,7 @@ import test from 'node:test';
 import type { ConfigService } from '@nestjs/config';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
+import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
 import { up as catalogUp } from '../../migrations/20260902000000-create-organization-service-catalog.js';
 import {
   down as requestDown,
@@ -45,6 +46,12 @@ test(
   async () => {
     const schema = `request_${randomUUID().replaceAll('-', '')}`;
     const admin = new Pool({ connectionString: url });
+    try {
+      await prepareDatabaseExtensions(admin);
+    } catch (error) {
+      await admin.end();
+      throw error;
+    }
     await admin.query(`create schema "${schema}"`);
     const db = new Kysely<DatabaseSchema>({
       dialect: new PostgresDialect({

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
+import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
 import { up as catalogUp } from '../../migrations/20260902000000-create-organization-service-catalog.js';
 import { up as requestUp } from '../../migrations/20260902010000-create-service-request-foundation.js';
 import { up as eligibilityUp } from '../../migrations/20260902030000-add-location-eligibility-snapshot.js';
@@ -21,6 +22,12 @@ test(
   async () => {
     const schema = 'ai_' + randomUUID().replaceAll('-', '');
     const admin = new Pool({ connectionString: url });
+    try {
+      await prepareDatabaseExtensions(admin);
+    } catch (error) {
+      await admin.end();
+      throw error;
+    }
     await admin.query('create schema "' + schema + '"');
     const db = new Kysely<DatabaseSchema>({
       dialect: new PostgresDialect({

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
+import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
 import { ConfigService } from '@nestjs/config';
 import type { AppConfiguration } from '../../src/config/configuration.js';
 import { up as catalogUp } from '../../migrations/20260902000000-create-organization-service-catalog.js';
@@ -31,6 +32,12 @@ test(
   async (t) => {
     const schema = 'ai_governance_' + randomUUID().replaceAll('-', '');
     const admin = new Pool({ connectionString: url });
+    try {
+      await prepareDatabaseExtensions(admin);
+    } catch (error) {
+      await admin.end();
+      throw error;
+    }
     await admin.query('create schema "' + schema + '"');
     const db = new Kysely<DatabaseSchema>({
       dialect: new PostgresDialect({

@@ -5,6 +5,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
+import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
 import { up as catalogUp } from '../../migrations/20260902000000-create-organization-service-catalog.js';
 import { up as requestUp } from '../../migrations/20260902010000-create-service-request-foundation.js';
 import { up as listUp } from '../../migrations/20260902020000-add-service-request-list-indexes.js';
@@ -25,6 +26,12 @@ test(
   async () => {
     const schema = `staff_${randomUUID().replaceAll('-', '')}`;
     const admin = new Pool({ connectionString: url });
+    try {
+      await prepareDatabaseExtensions(admin);
+    } catch (error) {
+      await admin.end();
+      throw error;
+    }
     await admin.query(`create schema "${schema}"`);
     const db = new Kysely<DatabaseSchema>({
       dialect: new PostgresDialect({
