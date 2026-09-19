@@ -16,7 +16,11 @@ import { up as authUp } from '../../migrations/20260903020000-add-entra-rbac-fou
 import { up as permissionUp } from '../../migrations/20260917000000-add-geospatial-read-permission.js';
 import { DatabaseService } from '../../src/database/database.service.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
-import { provisionDevelopmentGeospatialGrant } from '../../src/database/development-geospatial-grant.js';
+import {
+  provisionDevelopmentGeospatialGrant,
+  revokeDevelopmentGeospatialGrant,
+} from '../../src/database/development-geospatial-grant.js';
+import { StaffAuthorizationService } from '../../src/auth/staff-authorization.service.js';
 import { EntraTokenService } from '../../src/auth/entra-token.service.js';
 import {
   SyntheticGeospatialRepository,
@@ -201,11 +205,144 @@ test(
           provider.mock.calls.map((call) => call.arguments[0]),
           [SYNTHETIC_ORGANIZATION_A, SYNTHETIC_ORGANIZATION_B],
         );
-        await db
-          .updateTable('staff_role_assignment')
-          .set({ active: false })
-          .where('organization_id', '=', SYNTHETIC_ORGANIZATION_A)
+        // A second reader in A and an unrelated role must survive exact revocation.
+        await provisionDevelopmentGeospatialGrant(db, {
+          tenantId,
+          objectId: memberId,
+          organizationId: SYNTHETIC_ORGANIZATION_A,
+          grant: true,
+        });
+        const staffBefore = await db
+          .selectFrom('staff_identity')
+          .selectAll()
+          .orderBy('id')
           .execute();
+        const targetStaff = staffBefore.find(
+          (staff) => staff.entra_object_id === readerId,
+        );
+        assert.ok(targetStaff);
+        const unrelatedRole = randomUUID();
+        await db
+          .insertInto('role')
+          .values({
+            id: unrelatedRole,
+            organization_id: SYNTHETIC_ORGANIZATION_A,
+            name: 'unrelated-test-role',
+            active: true,
+          })
+          .execute();
+        await db
+          .insertInto('permission')
+          .values({ permission_key: 'service_request.view' })
+          .execute();
+        await db
+          .insertInto('role_permission')
+          .values({
+            organization_id: SYNTHETIC_ORGANIZATION_A,
+            role_id: unrelatedRole,
+            permission_key: 'service_request.view',
+          })
+          .execute();
+        await db
+          .insertInto('staff_role_assignment')
+          .values({
+            organization_id: SYNTHETIC_ORGANIZATION_A,
+            staff_identity_id: targetStaff.id,
+            role_id: unrelatedRole,
+            active: true,
+          })
+          .execute();
+        const rolesBefore = await db
+          .selectFrom('role')
+          .selectAll()
+          .orderBy('id')
+          .execute();
+        const permissionsBefore = await db
+          .selectFrom('role_permission')
+          .selectAll()
+          .orderBy('role_id')
+          .orderBy('permission_key')
+          .execute();
+        const assignmentsBefore = await db
+          .selectFrom('staff_role_assignment')
+          .selectAll()
+          .orderBy('staff_identity_id')
+          .orderBy('role_id')
+          .execute();
+        const target = {
+          tenantId,
+          objectId: readerId,
+          organizationId: SYNTHETIC_ORGANIZATION_A,
+        };
+        for (const invalid of [
+          { ...target, organizationId: SYNTHETIC_ORGANIZATION_B },
+          { ...target, objectId: unassignedId },
+          { ...target, tenantId: unassignedId },
+          { ...target, objectId: 'invalid' },
+        ])
+          await assert.rejects(revokeDevelopmentGeospatialGrant(db, invalid));
+        assert.deepEqual(
+          await db
+            .selectFrom('staff_role_assignment')
+            .selectAll()
+            .orderBy('staff_identity_id')
+            .orderBy('role_id')
+            .execute(),
+          assignmentsBefore,
+        );
+        await revokeDevelopmentGeospatialGrant(db, target);
+        await revokeDevelopmentGeospatialGrant(db, target);
+        assert.deepEqual(
+          await db
+            .selectFrom('staff_identity')
+            .selectAll()
+            .orderBy('id')
+            .execute(),
+          staffBefore,
+        );
+        assert.deepEqual(
+          await db.selectFrom('role').selectAll().orderBy('id').execute(),
+          rolesBefore,
+        );
+        assert.deepEqual(
+          await db
+            .selectFrom('role_permission')
+            .selectAll()
+            .orderBy('role_id')
+            .orderBy('permission_key')
+            .execute(),
+          permissionsBefore,
+        );
+        assert.ok(
+          await db
+            .selectFrom('permission')
+            .selectAll()
+            .where('permission_key', '=', 'geospatial.read')
+            .executeTakeFirst(),
+        );
+        assert.deepEqual(
+          await db
+            .selectFrom('staff_role_assignment')
+            .selectAll()
+            .orderBy('staff_identity_id')
+            .orderBy('role_id')
+            .execute(),
+          assignmentsBefore.map((row) =>
+            row.staff_identity_id === targetStaff.id &&
+            row.role_id !== unrelatedRole
+              ? { ...row, active: false }
+              : row,
+          ),
+        );
+        const access = await app.get(StaffAuthorizationService).resolve({
+          tenantId,
+          objectId: readerId,
+          name: 'Synthetic reader',
+          scopes: ['access_as_user'],
+          tokenVersion: '2.0',
+        });
+        assert.deepEqual(access.permissions, ['service_request.view']);
+        assert.equal(access.organizationId, SYNTHETIC_ORGANIZATION_A);
         await request(app.getHttpServer())
           .get(path)
           .set('Authorization', 'Bearer ' + readerId)
