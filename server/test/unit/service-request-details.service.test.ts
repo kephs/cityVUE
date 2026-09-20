@@ -107,9 +107,9 @@ test('details service assembles snapshots, typed values, requester, location, an
   assert.equal(details.answers[1].displayValue, 'Saved retired label');
   assert.deepEqual(details.requester, {
     anonymous: false,
-    name: 'Alex Example',
-    email: 'resident@example.test',
   });
+  assert.ok(!JSON.stringify(details).includes('Alex Example'));
+  assert.ok(!JSON.stringify(details).includes('resident@example.test'));
   assert.equal(details.location?.enteredAddress, '123 Test Street');
   assert.deepEqual(details.activity[0]?.metadata, {
     referenceNumber: 'SR-202609-000001',

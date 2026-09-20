@@ -7,7 +7,15 @@ import { InternalRequestMutationsService } from './internal-request-mutations.se
 import { StaffIntakeController } from './staff-intake.controller.js';
 import { InternalRequestController } from './internal-request.controller.js';
 import { InternalRequestRepository } from './internal-request.repository.js';
-import { Module } from '@nestjs/common';
+import {
+  Module,
+  type MiddlewareConsumer,
+  type NestModule,
+} from '@nestjs/common';
+import { PublicRequestContactController } from './public-request-contact.controller.js';
+import { RequestContactPrivacyMiddleware } from './request-contact-privacy.middleware.js';
+import { RequestContactController } from './request-contact.controller.js';
+import { RequestContactService } from './request-contact.service.js';
 import { CreateServiceRequestService } from './create-service-request.service.js';
 import { ServiceRequestController } from './service-request.controller.js';
 import { ServiceRequestRepository } from './service-request.repository.js';
@@ -19,6 +27,8 @@ import { StaffActionsService } from './staff-actions.service.js';
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    RequestContactController,
+    PublicRequestContactController,
     RequestOwnershipController,
     ReferenceConfigurationController,
     ServiceRequestController,
@@ -27,6 +37,7 @@ import { StaffActionsService } from './staff-actions.service.js';
     InternalRequestMutationsController,
   ],
   providers: [
+    RequestContactService,
     RequestOwnershipService,
     ReferenceConfigurationService,
     InternalRequestRepository,
@@ -39,4 +50,10 @@ import { StaffActionsService } from './staff-actions.service.js';
   ],
   exports: [CreateServiceRequestService, ServiceRequestRepository],
 })
-export class ServiceRequestModule {}
+export class ServiceRequestModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(RequestContactPrivacyMiddleware)
+      .forRoutes(RequestContactController, PublicRequestContactController);
+  }
+}

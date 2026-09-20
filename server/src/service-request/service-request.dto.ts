@@ -141,8 +141,6 @@ export class ServiceRequestDetailsResponseDto {
   @ApiPropertyOptional({ type: Object }) location?: Record<string, unknown>;
   @ApiProperty({ type: Object }) requester!: {
     anonymous: boolean;
-    name?: string;
-    email?: string;
   };
   @ApiProperty({ type: [Object] }) activity!: {
     type: string;

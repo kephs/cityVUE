@@ -8,6 +8,7 @@ import {
 } from "../../components/ui/RequestPresentation.jsx";
 import RequestOwnership, { TargetLabel } from "./RequestOwnership.jsx";
 import RequestActivity from "./RequestActivity.jsx";
+import RequesterContact from "./RequesterContact.jsx";
 import WorkflowNarrativeForm from "./WorkflowNarrativeForm.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -348,6 +349,14 @@ function RequestList({ repository, onSignIn }) {
   );
 }
 function RequestDetail({ repository, id, onSignIn }) {
+  const [contactState, setContactState] = useState(null);
+  const contactController = useRef(null);
+  const clearContact = useCallback(() => {
+    contactController.current?.abort();
+    contactController.current = null;
+    setContactState(null);
+  }, []);
+  useEffect(() => () => contactController.current?.abort(), [repository, id]);
   const [state, setState] = useState(null),
     [retry, setRetry] = useState(0),
     [notice, setNotice] = useState(""),
@@ -358,11 +367,15 @@ function RequestDetail({ repository, id, onSignIn }) {
   const [narrativeAction, setNarrativeAction] = useState(null),
     [narrativeError, setNarrativeError] = useState("");
   const narrativeTrigger = useRef(null);
-  const accessFailure = useCallback((error) => {
-    setState({ error });
-    setNarrativeAction(null);
-    setRouting(false);
-  }, []);
+  const accessFailure = useCallback(
+    (error) => {
+      clearContact();
+      setState({ error });
+      setNarrativeAction(null);
+      setRouting(false);
+    },
+    [clearContact],
+  );
   const heading = useRef(null),
     routeButton = useRef(null),
     inFlight = useRef(false),
@@ -376,20 +389,50 @@ function RequestDetail({ repository, id, onSignIn }) {
       repository.options(signal),
     ]);
     if (signal.aborted) return null;
+    if (!data.canReadContact) clearContact();
     setState({ data, options });
     setDepartment(data.departmentId);
     setDivision(data.divisionId || "");
     return data;
   };
+  const loadContact = async () => {
+    if (!state?.data?.canReadContact || contactController.current) return;
+    const request = new AbortController();
+    contactController.current = request;
+    setContactState({ loading: true });
+    try {
+      const data = await repository.contact(id, request.signal);
+      if (!request.signal.aborted) setContactState({ data });
+    } catch (error) {
+      if (request.signal.aborted) return;
+      if ([401, 404].includes(error.status)) accessFailure(error);
+      else if (error.status === 403) {
+        setContactState({ protected: true });
+        // Recheck the parent too: loss of internal.read must clear the whole request.
+        try {
+          await read(controller.current.signal);
+        } catch (parentError) {
+          if (!request.signal.aborted) accessFailure(parentError);
+        }
+      } else setContactState({ error: true });
+    } finally {
+      if (contactController.current === request)
+        contactController.current = null;
+    }
+  };
   useEffect(() => {
     const request = new AbortController();
     controller.current = request;
     setState(null);
+    clearContact();
     read(request.signal).catch((error) => {
       if (!request.signal.aborted) setState({ error });
     });
     return () => request.abort();
   }, [repository, id, retry]);
+  useEffect(() => {
+    if (state?.error) clearContact();
+  }, [state?.error, clearContact]);
   useEffect(() => {
     if (state?.data) heading.current?.focus();
   }, [state?.data]);
@@ -572,8 +615,8 @@ function RequestDetail({ repository, id, onSignIn }) {
                 <div>
                   <strong>Internal Request</strong>
                   <p>
-                    This is an internal request. Resident contact information is
-                    not displayed.
+                    This is an internal request. Requester contact requires
+                    separate permission.
                   </p>
                 </div>
               </aside>
@@ -587,6 +630,11 @@ function RequestDetail({ repository, id, onSignIn }) {
                 onAccessFailure={accessFailure}
               />
             </ContentCard>
+            <RequesterContact
+              canRead={row.canReadContact}
+              state={contactState}
+              onLoad={loadContact}
+            />
             <ContentCard className="request-issue-details">
               <SectionHeading icon="tag">Issue Details</SectionHeading>
               <dl className="request-metadata">

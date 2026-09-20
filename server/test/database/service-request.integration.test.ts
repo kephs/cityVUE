@@ -455,9 +455,10 @@ test(
       const identifiedReadModel = await reader.execute(identified.id);
       assert.deepEqual(identifiedReadModel.requester, {
         anonymous: false,
-        name: 'Alex Example',
-        email: 'resident@example.test',
       });
+      assert.ok(
+        !JSON.stringify(identifiedReadModel).includes('resident@example.test'),
+      );
       const listed = await listReader.execute({
         search: 'pOtHoLe',
         department,

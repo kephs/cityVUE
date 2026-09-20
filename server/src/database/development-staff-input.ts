@@ -2,13 +2,19 @@ import type { Permission } from '../auth/auth.types.js';
 import { validateEnvironment } from '../config/environment.js';
 
 /** Local tooling manifest only. Never imported by runtime authorization. */
-export const developmentStaffPermissions = [
+const fullUatOperatorPermissions = [
   'service_request.create',
   'service_request.create_internal',
   'service_request.internal.read',
+  'service_request.contact.read',
   'service_request.internal.update',
   'catalog.issue_action.manage',
   'service_request.reference.manage',
+] as const satisfies readonly Permission[];
+
+export const developmentStaffPermissions = [
+  ...fullUatOperatorPermissions,
+  'service_request.view',
   'geospatial.read',
 ] as const satisfies readonly Permission[];
 
@@ -21,9 +27,7 @@ export const developmentStaffBundles = {
   CATALOG_ADMIN_TESTER: ['catalog.issue_action.manage'],
   REFERENCE_ADMIN_TESTER: ['service_request.reference.manage'],
   INTAKE_TESTER: ['service_request.create', 'service_request.create_internal'],
-  FULL_UAT_OPERATOR: developmentStaffPermissions.filter(
-    (permission) => permission !== 'geospatial.read',
-  ),
+  FULL_UAT_OPERATOR: fullUatOperatorPermissions,
 } as const satisfies Record<string, readonly Permission[]>;
 
 export const developmentOrganization = {

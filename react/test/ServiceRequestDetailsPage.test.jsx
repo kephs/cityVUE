@@ -21,7 +21,10 @@ function renderPage(data) {
 test("renders the complete canonical read model with persisted answer snapshots", async () => {
     renderPage({ mode: "api", repository: { getServiceRequestDetails: vi.fn(async () => details) } });
     expect(await screen.findByRole("heading", { level: 1, name: "Pothole" })).toBeInTheDocument();
-    for (const text of ["SR-202609-000123", "Public Works", "Streets", "Roads & Streets", "Synthetic request description", "Is the roadway blocked?", "No", "123 Test Street", "Alex Example", "resident@example.test", "Service Request Created"]) expect(screen.getByText(text)).toBeInTheDocument();
+    for (const text of ["SR-202609-000123", "Public Works", "Streets", "Roads & Streets", "Synthetic request description", "Is the roadway blocked?", "No", "123 Test Street", "Service Request Created"]) expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.getByText("Protected")).toBeInTheDocument();
+    expect(screen.queryByText("Alex Example")).not.toBeInTheDocument();
+    expect(screen.queryByText("resident@example.test")).not.toBeInTheDocument();
 });
 
 test("renders anonymous requester and omits optional sections safely", async () => {

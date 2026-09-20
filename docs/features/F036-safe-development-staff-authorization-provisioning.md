@@ -30,16 +30,16 @@ The existing seeded `CityVUE Development Municipality` is pinned by ID, name and
 
 ## Permissions and bundles
 
-Only these existing permissions are available: `service_request.create`, `service_request.create_internal`, `service_request.internal.read`, `service_request.internal.update`, `catalog.issue_action.manage`, `service_request.reference.manage`, and optional explicitly selected `geospatial.read`. Unknown/typo/wildcard keys are rejected and never inserted into the permission catalog.
+The development manifest accepts: `service_request.create`, `service_request.create_internal`, `service_request.internal.read`, `service_request.contact.read`, `service_request.internal.update`, `catalog.issue_action.manage`, `service_request.reference.manage`, and optional explicitly selected `service_request.view` or `geospatial.read`. Unknown/typo/wildcard keys are rejected and never inserted into the permission catalog.
 
-| Bundle                    | Explicit expansion                                             |
-| ------------------------- | -------------------------------------------------------------- |
-| INTERNAL_REQUEST_READER   | service_request.internal.read                                  |
-| INTERNAL_REQUEST_OPERATOR | service_request.internal.read, service_request.internal.update |
-| INTAKE_TESTER             | service_request.create, service_request.create_internal        |
-| CATALOG_ADMIN_TESTER      | catalog.issue_action.manage                                    |
-| REFERENCE_ADMIN_TESTER    | service_request.reference.manage                               |
-| FULL_UAT_OPERATOR         | All six non-geospatial permissions above                       |
+| Bundle                    | Explicit expansion                                              |
+| ------------------------- | --------------------------------------------------------------- |
+| INTERNAL_REQUEST_READER   | service_request.internal.read                                   |
+| INTERNAL_REQUEST_OPERATOR | service_request.internal.read, service_request.internal.update  |
+| INTAKE_TESTER             | service_request.create, service_request.create_internal         |
+| CATALOG_ADMIN_TESTER      | catalog.issue_action.manage                                     |
+| REFERENCE_ADMIN_TESTER    | service_request.reference.manage                                |
+| FULL_UAT_OPERATOR         | The first seven permissions above; excludes view and geospatial |
 
 Bundles exist only in the local tooling manifest. Runtime sees individual ordinary permission rows, never bundle names. Changing a bundle definition does not change existing grants. PUBLIC assisted creation uses create; INTERNAL creation additionally requires create_internal. Neither grants read/update. Catalog management remains scope-constrained; reference administration is Organization-wide. Geospatial is excluded from the comprehensive UAT bundle because normal request intake does not require its protected map-preview endpoint.
 
@@ -117,7 +117,6 @@ No F036 database migration required. Personal reqro_dev retains 16 applied migra
 
 Production staff/role administration, invitations, Entra group mapping, SCIM, approval workflows and durable grant audit history require separate designs. F036 is not a production onboarding tool or an ownership proof for arbitrary configured resources. It adds no default grant, permission UI, client integration, notification, resident-contact access, PUBLIC staff workspace or F037 feature.
 
-
 ## F037 operational target setup extension
 
 After F037 migration and automated validation, `setup-operations` can explicitly create/reuse fictional operational reviewer roles, compatible existing work groups, and the selected principal's operational memberships. It uses the same required development profile, personal tenant confirmation, exact local database identity, existing fictional Organization and explicitly selected scopes. Department/Division memberships must already exist; this command never grants permissions or creates staff identities.
@@ -130,3 +129,15 @@ node --env-file=.env --env-file=.env.f036 node_modules/tsx/dist/cli.mjs src/data
 ```
 
 Equivalent package command with environment already loaded: `npm run dev:staff:setup-operations -- --dry-run` / `--confirm`. Dry run performs zero writes. Setup is transactional and idempotent under the same Organization lock as grant provisioning. It rejects inactive existing memberships instead of silently reactivating them. Synthetic memberships may be explicitly retained for future UAT. No bulk operational-target cleanup or production membership-management capability is introduced; the existing targeted permission deprovision command remains separate. See F037 for operational eligibility and the final UAT state.
+
+## F039 contact permission runbook addition
+
+F039 adds `service_request.contact.read` to the known manifest and FULL_UAT_OPERATOR. The previous six-permission expansion did not include contact. Stored grants never change from a bundle edit; explicit provisioning is required after the F039 migration. Other bundles and optional geospatial behavior remain unchanged.
+
+To grant/revoke contact alone with the already selected fictional principal, Organization and scopes, set `F036_PERMISSIONS=service_request.contact.read` in the command process and unset `F036_BUNDLE`. Run the existing `dev:staff:provision -- --dry-run`, then `--confirm`; use `dev:staff:deprovision` with the same flags to revoke only contact. Keep all identity/configuration in ignored local files. Ordinary read/update and unrelated grants must remain. No re-login is needed: subsequent protected requests resolve current database grants. See F039 for the approved PUBLIC UAT procedure and final recorded grant state.
+
+### F039 optional PUBLIC-view UAT selection
+
+The existing `service_request.view` permission can be selected individually using `F036_PERMISSIONS=service_request.view` and no F036_BUNDLE. It enables existing scoped PUBLIC list/detail APIs as well as the parent-read key for the dedicated PUBLIC contact endpoint. It does not grant contact access by itself. The FULL_UAT_OPERATOR bundle remains exactly seven permissions, including contact.read but excluding view and geospatial. No bundle is automatically reprovisioned.
+
+For the approved F039 populated-contact UAT, capture the original grants, confirm view is absent, run the normal dry run and explicit provision, and preserve the selected fictional scopes. After UAT, use the same individual selection with targeted deprovisioning, and verify PUBLIC list/detail/contact denial through normal authenticated APIs. Retain contact.read and the original six grants. Do not remove unrelated/pre-existing grants. No F040 workspace or production administration is introduced.

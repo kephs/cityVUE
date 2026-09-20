@@ -253,9 +253,17 @@ export class InternalRequestRepository {
     // Authorize even malformed lookups. No contacts, identities or activity joins.
     const query = this.projection(access);
     if (!uuid.test(id)) return undefined;
-    return query
+    const row = await query
       .select(['request.description', 'request.revision'])
       .where('request.id', '=', id)
       .executeTakeFirst();
+    return row
+      ? {
+          ...row,
+          canReadContact:
+            access?.permissions.includes('service_request.contact.read') ===
+            true,
+        }
+      : undefined;
   }
 }

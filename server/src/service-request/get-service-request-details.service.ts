@@ -87,8 +87,7 @@ export class GetServiceRequestDetailsService {
         ),
       );
     if (!details) throw new NotFoundException();
-    const { request, answers, contact, location, activity, assignments } =
-      details;
+    const { request, answers, location, activity, assignments } = details;
     if (
       access &&
       !access.development &&
@@ -187,14 +186,7 @@ export class GetServiceRequestDetailsService {
             },
           }
         : {}),
-      requester:
-        request.reporting_identity === 'anonymous'
-          ? { anonymous: true }
-          : {
-              anonymous: false,
-              ...(contact?.name ? { name: contact.name } : {}),
-              ...(contact?.email ? { email: contact.email } : {}),
-            },
+      requester: { anonymous: request.reporting_identity === 'anonymous' },
       ...(currentAssignment ? { currentAssignment } : {}),
       assignmentHistory: mappedAssignments,
       activity: activity.map((entry) => ({

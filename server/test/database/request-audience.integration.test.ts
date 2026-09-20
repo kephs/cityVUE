@@ -1,4 +1,10 @@
 import { checkRequestOwnership } from './request-ownership-checks.js';
+import { checkRequestContact } from './request-contact-checks.js';
+import { checkPublicRequestContact } from './public-request-contact-checks.js';
+import {
+  PinoLoggerService,
+  createOperationalLogger,
+} from '../../src/common/logging/pino-logger.service.js';
 import {
   up as ownershipUp,
   down as ownershipDown,
@@ -419,7 +425,20 @@ test(
         import('../../src/app.module.js'),
         import('../../src/bootstrap.js'),
       ]);
+      const contactLogs: string[] = [];
+      const safeLogger = Object.assign(
+        Object.create(PinoLoggerService.prototype) as PinoLoggerService,
+        {
+          logger: createOperationalLogger(
+            'info',
+            { service: 'cityvue-api', version: 'test', environment: 'test' },
+            { write: (line) => contactLogs.push(line) },
+          ),
+        },
+      );
       const module = await Test.createTestingModule({ imports: [AppModule] })
+        .overrideProvider(PinoLoggerService)
+        .useValue(safeLogger)
         .overrideProvider(DatabaseService)
         .useValue({ client: db, status: async () => 'up' })
         .overrideProvider(EntraTokenService)
@@ -831,14 +850,23 @@ test(
             const before = await getInternal(
               `${internalPath}/${internalId}`,
             ).expect(200);
-            assert.equal(before.body.serviceLocation, null);
+            assert.equal(
+              (before.body as Record<string, unknown>).serviceLocation,
+              null,
+            );
             const catalog = await db
               .selectFrom('service_definition_version')
               .select('icon_key')
               .where('id', '=', version)
               .executeTakeFirstOrThrow();
-            assert.equal(before.body.issueIcon, catalog.icon_key);
-            assert.equal(typeof before.body.categoryName, 'string');
+            assert.equal(
+              (before.body as Record<string, unknown>).issueIcon,
+              catalog.icon_key,
+            );
+            assert.equal(
+              typeof (before.body as Record<string, unknown>).categoryName,
+              'string',
+            );
             await sql`insert into location(organization_id,service_request_id,entered_address,normalized_address) values(${org},${internalId},'Fictional training site','123 Fictional Training Lane')`.execute(
               db,
             );
@@ -847,16 +875,26 @@ test(
                 `${internalPath}/${internalId}`,
               ).expect(200);
               assert.equal(
-                detail.body.serviceLocation,
+                (detail.body as Record<string, unknown>).serviceLocation,
                 '123 Fictional Training Lane',
               );
-              assert.equal(detail.body.contact, undefined);
+              assert.equal(
+                (detail.body as Record<string, unknown>).contact,
+                undefined,
+              );
               const list = await getInternal(internalPath).expect(200);
               assert.equal(
-                list.body.items.find(
+                (
+                  list.body as {
+                    items: {
+                      serviceRequestId: string;
+                      serviceLocation: string;
+                    }[];
+                  }
+                ).items.find(
                   (r: { serviceRequestId: string }) =>
                     r.serviceRequestId === internalId,
-                ).serviceLocation,
+                )?.serviceLocation,
                 '123 Fictional Training Lane',
               );
               await getInternal(`${internalPath}/${otherInternal}`).expect(404);
@@ -867,8 +905,13 @@ test(
                 .where('service_request_id', '=', internalId)
                 .execute();
               assert.equal(
-                (await getInternal(`${internalPath}/${internalId}`).expect(200))
-                  .body.serviceLocation,
+                (
+                  (
+                    await getInternal(`${internalPath}/${internalId}`).expect(
+                      200,
+                    )
+                  ).body as Record<string, unknown>
+                ).serviceLocation,
                 'Fictional training site',
               );
             } finally {
@@ -933,6 +976,7 @@ test(
                 'divisionName',
                 'description',
                 'revision',
+                'canReadContact',
               ].sort(),
             );
             assert.equal(
@@ -2162,6 +2206,36 @@ test(
           department,
           targetDepartment,
           targetDivision,
+        });
+        await checkRequestContact(t, {
+          app,
+          db,
+          org,
+          creator,
+          publicOnly,
+          noGrant,
+          otherOrg,
+          otherInternal,
+          publicId,
+          internalPayload: internal,
+          department,
+          targetDepartment,
+          targetDivision,
+          logs: contactLogs,
+        });
+        await checkPublicRequestContact(t, {
+          app,
+          db,
+          org,
+          creator,
+          otherOrg,
+          otherInternal,
+          internalId,
+          publicPayload: assisted,
+          department,
+          targetDepartment,
+          targetDivision,
+          logs: contactLogs,
         });
       } finally {
         await app.close();

@@ -83,6 +83,7 @@ test('F036 bundles expand to existing explicit permissions without geospatial or
       'service_request.create',
       'service_request.create_internal',
       'service_request.internal.read',
+      'service_request.contact.read',
       'service_request.internal.update',
       'catalog.issue_action.manage',
       'service_request.reference.manage',
@@ -93,10 +94,16 @@ test('F036 bundles expand to existing explicit permissions without geospatial or
     'all',
     'reqro.admin.*',
     'service_request.internal.reed',
+    'service_request.contact.reed',
+    'service_request.veiw',
     '',
   ])
     assert.throws(() => selectedDevelopmentPermissions(invalid, undefined));
   assert.throws(() => selectedDevelopmentPermissions(undefined, '__proto__'));
+  assert.deepEqual(
+    selectedDevelopmentPermissions('service_request.view', undefined),
+    ['service_request.view'],
+  );
   assert.throws(() =>
     selectedDevelopmentPermissions('geospatial.read', 'FULL_UAT_OPERATOR'),
   );

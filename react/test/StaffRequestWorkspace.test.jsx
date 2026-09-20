@@ -9,6 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { beforeEach, expect, test, vi } from "vitest";
+import { StrictMode } from "react";
 import InternalRequestWorkspace from "../src/staff/requests/InternalRequestWorkspace.jsx";
 import StaffRequestsPage from "../src/staff/requests/StaffRequestsPage.jsx";
 import { useAuth } from "../src/auth/AuthContext.jsx";
@@ -44,6 +45,9 @@ let repository;
 beforeEach(() => {
   vi.clearAllMocks();
   repository = {
+    contact: vi
+      .fn()
+      .mockResolvedValue({ name: "Alex Example", email: "alex@example.com" }),
     watchers: vi.fn().mockResolvedValue({ items: [], watchingSelf: false }),
     targets: vi.fn().mockResolvedValue({ items: [] }),
     assign: vi.fn().mockResolvedValue({}),
@@ -95,6 +99,161 @@ function Jump() {
   );
 }
 
+test("F039 protected detail never fetches or hides contact values in DOM", async () => {
+  show(`/staff/requests/${id}`);
+  await screen.findByText("Protected");
+  expect(repository.contact).not.toHaveBeenCalled();
+  expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "View requester contact" }),
+  ).not.toBeInTheDocument();
+});
+
+test("F039 explicit view is single-flight in Strict Mode and workflow refresh does not re-audit contact", async () => {
+  repository.detail.mockResolvedValue({ ...row, canReadContact: true });
+  let resolve;
+  repository.contact.mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  render(
+    <StrictMode>
+      <MemoryRouter initialEntries={[`/staff/requests/${id}`]}>
+        <Routes>
+          <Route
+            path="/staff/requests/:requestId"
+            element={<InternalRequestWorkspace repository={repository} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </StrictMode>,
+  );
+  const view = await screen.findByRole("button", {
+    name: "View requester contact",
+  });
+  expect(repository.contact).not.toHaveBeenCalled();
+  fireEvent.click(view);
+  fireEvent.click(view);
+  expect(repository.contact).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("Loading requester contact…")).toBeInTheDocument();
+  await act(async () =>
+    resolve({ name: "Alex Example", email: "alex@example.com" }),
+  );
+  expect(screen.getByText("alex@example.com")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Start Work" }));
+  await screen.findByText("Request moved to Open.");
+  expect(repository.contact).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("alex@example.com")).toBeInTheDocument();
+});
+
+test.each([403, 401, 404, 500])(
+  "F039 contact response %s clears old values with safe independent errors",
+  async (status) => {
+    repository.detail.mockResolvedValue({ ...row, canReadContact: true });
+    show(`/staff/requests/${id}`);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "View requester contact" }),
+    );
+    await screen.findByText("alex@example.com");
+    repository.contact.mockRejectedValue({
+      status,
+      message: "alex@example.com private error",
+    });
+    if (status === 403)
+      repository.detail.mockResolvedValue({ ...row, canReadContact: false });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh requester contact" }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument(),
+    );
+    if (status === 403) {
+      await screen.findByText("Protected");
+      expect(
+        screen.getByRole("heading", { name: row.issueName }),
+      ).toBeInTheDocument();
+    } else if (status === 500) {
+      await screen.findByText(
+        "Requester contact could not be loaded. Please try again.",
+      );
+      expect(
+        screen.getByRole("heading", { name: row.issueName }),
+      ).toBeInTheDocument();
+    } else
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("heading", { name: row.issueName }),
+        ).not.toBeInTheDocument(),
+      );
+    expect(screen.queryByText(/private error/)).not.toBeInTheDocument();
+  },
+);
+
+test("F039 contact denial plus parent denial clears whole protected request", async () => {
+  repository.detail.mockResolvedValue({ ...row, canReadContact: true });
+  show(`/staff/requests/${id}`);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "View requester contact" }),
+  );
+  await screen.findByText("alex@example.com");
+  repository.detail.mockRejectedValue({ status: 403 });
+  repository.contact.mockRejectedValue({ status: 403 });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Refresh requester contact" }),
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("heading", { name: row.issueName }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
+});
+
+test("F039 navigation aborts late contact and clears request A before B resolves", async () => {
+  repository.detail
+    .mockResolvedValueOnce({ ...row, canReadContact: true })
+    .mockReturnValue(new Promise(() => {}));
+  let resolve;
+  repository.contact.mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  show(`/staff/requests/${id}`);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "View requester contact" }),
+  );
+  const signal = repository.contact.mock.calls[0][1];
+  fireEvent.click(screen.getByRole("button", { name: "Other request" }));
+  expect(signal.aborted).toBe(true);
+  await act(async () =>
+    resolve({ name: "Alex Example", email: "alex@example.com" }),
+  );
+  expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
+  expect(screen.getByText("Loading request…")).toBeInTheDocument();
+});
+
+test("F039 sign-out removes populated contact from DOM", async () => {
+  repository.detail.mockResolvedValue({ ...row, canReadContact: true });
+  const view = show(`/staff/requests/${id}`, true);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "View requester contact" }),
+  );
+  await screen.findByText("alex@example.com");
+  useAuth.mockReturnValue({
+    enabled: true,
+    isAuthenticated: false,
+    signIn: vi.fn(),
+  });
+  view.rerender(
+    <MemoryRouter>
+      <StaffRequestsPage />
+    </MemoryRouter>,
+  );
+  expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
+});
+
 test("F038 detail is Issue-first with configured icon and authorized location", async () => {
   repository.detail.mockResolvedValue({
     ...row,
@@ -129,7 +288,7 @@ test("F038 detail is Issue-first with configured icon and authorized location", 
     ).toBeInTheDocument();
   expect(
     screen.getByText(
-      "This is an internal request. Resident contact information is not displayed.",
+      "This is an internal request. Requester contact requires separate permission.",
     ),
   ).toBeInTheDocument();
 });

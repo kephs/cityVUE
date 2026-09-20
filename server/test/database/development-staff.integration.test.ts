@@ -574,6 +574,84 @@ test(
         },
       );
       await t.test(
+        'F039 contact permission requires explicit provisioning and supports targeted revocation',
+        async () => {
+          const before = await state();
+          const selected: DevelopmentStaffSelection = {
+            ...input,
+            permissions: ['service_request.contact.read'],
+          };
+          assert.ok(
+            !(await auth.resolve(principal)).permissions.includes(
+              'service_request.contact.read',
+            ),
+          );
+          await changeDevelopmentStaffGrants(db, selected, 'provision', true);
+          assert.deepEqual(await state(), before);
+          await changeDevelopmentStaffGrants(db, selected, 'provision', false);
+          await changeDevelopmentStaffGrants(db, selected, 'provision', false);
+          assert.deepEqual((await auth.resolve(principal)).permissions.sort(), [
+            'geospatial.read',
+            'service_request.contact.read',
+          ]);
+          await changeDevelopmentStaffGrants(
+            db,
+            selected,
+            'deprovision',
+            false,
+          );
+          assert.deepEqual((await auth.resolve(principal)).permissions, [
+            'geospatial.read',
+          ]);
+          const after = await state();
+          assert.deepEqual(after.service_request, before.service_request);
+          assert.deepEqual(
+            after.request_operational_activity,
+            before.request_operational_activity,
+          );
+        },
+      );
+      await t.test(
+        'F039 temporary PUBLIC view is explicit and targeted removal preserves contact permission and data',
+        async () => {
+          const contact = {
+            ...input,
+            permissions: ['service_request.contact.read'],
+          } as DevelopmentStaffSelection;
+          const view = {
+            ...input,
+            permissions: ['service_request.view'],
+          } as DevelopmentStaffSelection;
+          await changeDevelopmentStaffGrants(db, contact, 'provision', false);
+          const before = await state();
+          await changeDevelopmentStaffGrants(db, view, 'provision', true);
+          assert.deepEqual(await state(), before);
+          for (let repeat = 0; repeat < 2; repeat++)
+            await changeDevelopmentStaffGrants(db, view, 'provision', false);
+          assert.deepEqual((await auth.resolve(principal)).permissions.sort(), [
+            'geospatial.read',
+            'service_request.contact.read',
+            'service_request.view',
+          ]);
+          await changeDevelopmentStaffGrants(db, view, 'deprovision', false);
+          assert.deepEqual((await auth.resolve(principal)).permissions.sort(), [
+            'geospatial.read',
+            'service_request.contact.read',
+          ]);
+          const after = await state();
+          for (const key of [
+            'staff_identity',
+            'staff_department_membership',
+            'staff_division_membership',
+            'service_request',
+            'activity',
+            'request_operational_activity',
+          ])
+            assert.deepEqual(after[key], before[key]);
+          await changeDevelopmentStaffGrants(db, contact, 'deprovision', false);
+        },
+      );
+      await t.test(
         'externally altered or shared F036 role fails closed',
         async () => {
           const role = await db

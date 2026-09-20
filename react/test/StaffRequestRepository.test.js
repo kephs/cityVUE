@@ -1,6 +1,30 @@
 import { expect, test, vi } from "vitest";
 import { createStaffRequestRepository } from "../src/staff/requests/requestRepository.js";
 const id = "10000000-0000-4000-8000-000000000001";
+test("F039 contact uses explicit protected projection and authenticated request", async () => {
+  const client = {
+    get: vi.fn().mockResolvedValue({
+      name: "Alex Example",
+      email: null,
+      phone: "not in schema",
+      actor: "private",
+    }),
+  };
+  const repo = createStaffRequestRepository({ client });
+  expect(await repo.contact(id)).toEqual({ name: "Alex Example", email: null });
+  expect(client.get).toHaveBeenCalledWith(
+    `/staff/internal-service-requests/${id}/contact`,
+    expect.objectContaining({ authenticated: true }),
+  );
+  for (const data of [
+    { name: {}, email: null },
+    { name: null },
+    { name: "x".repeat(201), email: null },
+  ]) {
+    client.get.mockResolvedValue(data);
+    await expect(repo.contact(id)).rejects.toThrow(/unavailable/);
+  }
+});
 const row = {
   serviceRequestId: id,
   audience: "internal",

@@ -456,6 +456,13 @@
 .workspace-feedback {
   border-radius: var(--radius-card);
 }
+.request-contact dd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.request-contact dt {
+  margin-top: var(--space-3);
+}
 @media (max-width: 1199.98px) {
   .request-detail-grid {
     grid-template-columns: minmax(0, 1fr);

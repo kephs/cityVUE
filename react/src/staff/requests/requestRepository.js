@@ -66,7 +66,13 @@ function project(row, detail = false) {
     divisionName: row.divisionName,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    ...(detail ? { description: row.description, revision: row.revision } : {}),
+    ...(detail
+      ? {
+          description: row.description,
+          revision: row.revision,
+          canReadContact: row.canReadContact === true,
+        }
+      : {}),
   };
 }
 export function createStaffRequestRepository({ getAccessToken, client } = {}) {
@@ -85,6 +91,19 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
     return `${root}/${id}`;
   };
   return {
+    async contact(id, signal) {
+      const data = await api.get(`${path(id)}/contact`, options(signal));
+      if (
+        !data ||
+        !["name", "email"].every(
+          (key) => data[key] === null || typeof data[key] === "string",
+        ) ||
+        (data.name?.length ?? 0) > 200 ||
+        (data.email?.length ?? 0) > 320
+      )
+        throw invalid();
+      return { name: data.name, email: data.email };
+    },
     async list(filters, signal) {
       const query = new URLSearchParams();
       for (const key of [
