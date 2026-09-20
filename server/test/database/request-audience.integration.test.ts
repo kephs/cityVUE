@@ -1,4 +1,8 @@
 import {
+  up as actionUp,
+  down as actionDown,
+} from '../../migrations/20260919030000-add-issue-action.js';
+import {
   up as lifecycleUp,
   down as lifecycleDown,
 } from '../../migrations/20260919020000-add-internal-request-lifecycle.js';
@@ -210,6 +214,7 @@ test(
         },
       );
       await lifecycleUp(db);
+      await actionUp(db);
       await db
         .insertInto('permission')
         .values(
@@ -1374,6 +1379,215 @@ test(
                 .where('id', '=', publicId)
                 .execute(),
             );
+          },
+        );
+        const configPath = `/api/v1/staff/catalog/issues/${service}/action`;
+        await t.test(
+          'F032 defaults existing Issues to intake, grants nothing and supports unused rollback/reapply',
+          async () => {
+            const row = await db
+              .selectFrom('service_definition')
+              .selectAll()
+              .where('id', '=', service)
+              .executeTakeFirstOrThrow();
+            assert.equal(row.action_type, 'internal_intake');
+            assert.equal(row.redirect_url, null);
+            assert.equal(
+              (
+                await db
+                  .selectFrom('role_permission')
+                  .selectAll()
+                  .where('permission_key', '=', 'catalog.issue_action.manage')
+                  .execute()
+              ).length,
+              0,
+            );
+            await actionDown(db);
+            await actionUp(db);
+          },
+        );
+        const external = {
+          actionType: 'external_redirect',
+          expectedRevision: 1,
+          destination: 'https://example.com/service?allowed=value',
+        };
+        await t.test(
+          'F032 unauthorized/creator/request-operation identities cannot manage catalog actions',
+          async () => {
+            await request(app.getHttpServer())
+              .post(configPath)
+              .send(external)
+              .expect(401);
+            for (const actor of [creator, noGrant, otherStaff])
+              await postAs(configPath, external, actor).expect(403);
+          },
+        );
+        await db
+          .insertInto('role_permission')
+          .values({
+            organization_id: org,
+            role_id: readerRole.role_id,
+            permission_key: 'catalog.issue_action.manage',
+          })
+          .execute();
+        const questionId = randomUUID();
+        // Published questions are immutable: add a question to a new draft version, then publish it.
+        const actionVersion = randomUUID();
+        await sql`insert into service_definition_version(id,organization_id,service_definition_id,version_number,name,resident_description,icon_key,aliases,keywords,default_priority,location_policy,geographic_eligibility_mode,anonymous_reporting_policy,status)
+          select ${actionVersion},organization_id,service_definition_id,2,name,resident_description,icon_key,aliases,keywords,default_priority,location_policy,geographic_eligibility_mode,anonymous_reporting_policy,'draft' from service_definition_version where id=${version}`.execute(
+          db,
+        );
+        await db
+          .insertInto('question')
+          .values({
+            id: questionId,
+            organization_id: org,
+            service_definition_version_id: actionVersion,
+            question_key: 'followup',
+            label: 'Synthetic follow-up',
+            help_text: null,
+            question_type: 'short_text',
+            is_required: false,
+            display_order: 1,
+            validation_metadata: null,
+            visibility_condition: null,
+            status: 'active',
+          })
+          .execute();
+        await db
+          .updateTable('service_definition_version')
+          .set({ status: 'published', published_at: new Date() })
+          .where('id', '=', actionVersion)
+          .execute();
+        await db
+          .updateTable('service_definition')
+          .set({ current_published_version_id: actionVersion })
+          .where('id', '=', service)
+          .execute();
+        await t.test(
+          'F032 explicit catalog administration validates URL, scope and expected revision',
+          async () => {
+            await postAs(configPath, {
+              ...external,
+              organizationId: otherOrg,
+            }).expect(400);
+            await postAs(
+              `/api/v1/staff/catalog/issues/${otherService}/action`,
+              external,
+            ).expect(404);
+            for (const destination of [
+              'javascript:alert(1)',
+              'data:text/html,test',
+              'file:///etc/passwd',
+              'http://example.com',
+              'https://a:b@example.com',
+            ])
+              await postAs(configPath, { ...external, destination }).expect(
+                400,
+              );
+            await postAs(configPath, external).expect(200);
+            await postAs(configPath, external).expect(409);
+            await assert.rejects(actionDown(db));
+            await assert.rejects(
+              db
+                .updateTable('service_definition')
+                .set({ action_type: 'invalid' })
+                .where('id', '=', service)
+                .execute(),
+            );
+          },
+        );
+        await t.test(
+          'F032 redirects suppress but preserve questions and reject direct resident/staff submission including old versions',
+          async () => {
+            await request(app.getHttpServer())
+              .get('/api/v1/staff/catalog/issues/invalid')
+              .set('Authorization', `Bearer ${creator}`)
+              .expect(400);
+            const catalog = await request(app.getHttpServer())
+              .get(`/api/v1/catalog/issues/${service}`)
+              .expect(200);
+            const detail = catalog.body as {
+              actionType: string;
+              questions: unknown[];
+              redirect: { destination: string };
+            };
+            assert.equal(detail.actionType, 'external_redirect');
+            assert.deepEqual(detail.questions, []);
+            assert.equal(detail.redirect.destination, external.destination);
+            const staffCatalog = await request(app.getHttpServer())
+              .get(`/api/v1/staff/catalog/issues/${service}`)
+              .set('Authorization', `Bearer ${creator}`)
+              .expect(200);
+            assert.deepEqual(
+              (staffCatalog.body as { questions: unknown[] }).questions,
+              [],
+            );
+            assert.equal(
+              (
+                await db
+                  .selectFrom('question')
+                  .select('id')
+                  .where('id', '=', questionId)
+                  .execute()
+              ).length,
+              1,
+            );
+            const before = await db
+              .selectFrom('service_request')
+              .select('id')
+              .execute();
+            await request(app.getHttpServer())
+              .post(publicPath)
+              .send(base)
+              .expect(409);
+            for (const payload of [assisted, internal])
+              await postAs(staffPath, payload, creator).expect(409);
+            for (const extra of [
+              { actionType: 'internal_intake' },
+              { redirectUrl: 'https://evil.example' },
+              { organizationId: otherOrg },
+            ]) {
+              await request(app.getHttpServer())
+                .post(publicPath)
+                .send({ ...base, ...extra })
+                .expect(400);
+              await postAs(
+                staffPath,
+                { ...assisted, ...extra },
+                creator,
+              ).expect(400);
+            }
+            assert.equal(
+              (await db.selectFrom('service_request').select('id').execute())
+                .length,
+              before.length,
+            );
+            await postAs(configPath, {
+              actionType: 'internal_intake',
+              expectedRevision: 2,
+            }).expect(200);
+            const restored = await request(app.getHttpServer())
+              .get(`/api/v1/catalog/issues/${service}`)
+              .expect(200);
+            assert.equal(
+              (restored.body as { questions: unknown[] }).questions.length,
+              1,
+            );
+            assert.equal(
+              (restored.body as { redirect?: unknown }).redirect,
+              undefined,
+            );
+            await request(app.getHttpServer())
+              .post(publicPath)
+              .send({
+                ...base,
+                serviceDefinitionVersionId: actionVersion,
+                answers: [{ questionId, value: 'preserved' }],
+              })
+              .expect(201);
+            await postAs(staffPath, assisted, creator).expect(201);
+            await postAs(staffPath, internal, creator).expect(201);
           },
         );
       } finally {

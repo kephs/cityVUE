@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+F032 adds explicit Issue handling (`internal_intake` / `external_redirect`) on existing ServiceDefinitions, a separate protected catalog action API, HTTPS validation and a neutral resident handoff. Both resident/staff creation enforce persisted action; questions are preserved across mode changes. No default grants or vendor integration. See [F032](features/F032-issue-action-external-redirect-foundation.md).
+
 F031 adds explicit INTERNAL workflow/routing commands requiring `service_request.internal.update`, with no default grants. Shared effective routing scope constrains F030 reads and mutations; revisions and atomic metadata-only Activity preserve concurrency/audit boundaries. PUBLIC paths remain unchanged. See [F031](features/F031-internal-service-request-lifecycle.md).
 
 F030 adds Entra-only INTERNAL request list/detail reads under `staff/internal-service-requests`, requiring explicit `service_request.internal.read` and trusted Organization/Department/Division scope. Creation grants no read access. Existing PUBLIC reads and internal mutation denial remain unchanged; contact fields are omitted and no default grants are added. See [F030](features/F030-internal-service-request-access-policy.md).

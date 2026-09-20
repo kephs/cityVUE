@@ -1,3 +1,7 @@
+import { up as requestUp } from '../../migrations/20260902010000-create-service-request-foundation.js';
+import { up as staffUp } from '../../migrations/20260903010000-add-staff-assignment-workflow-foundation.js';
+import { up as authUp } from '../../migrations/20260903020000-add-entra-rbac-foundation.js';
+import { up as actionUp } from '../../migrations/20260919030000-add-issue-action.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -37,6 +41,10 @@ test(
     });
     try {
       await up(db);
+      await requestUp(db);
+      await staffUp(db);
+      await authUp(db);
+      await actionUp(db);
       const org1 = randomUUID();
       const org2 = randomUUID();
       const department1 = randomUUID();

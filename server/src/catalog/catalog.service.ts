@@ -1,3 +1,4 @@
+import { issueActionProjection } from './issue-action.domain.js';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AppConfiguration } from '../config/configuration.js';
@@ -53,18 +54,23 @@ export class CatalogService {
       id: row.id,
       name: row.name,
       description: row.resident_description,
+      ...issueActionProjection(row),
       iconKey: row.icon_key,
     }));
   }
   async getIssue(id: string): Promise<IssueDetailDto> {
-    const record = await this.repository.getPublishedIssue(
-      this.organizationId,
-      id,
-    );
+    return this.getIssueForOrganization(this.organizationId, id);
+  }
+  async getIssueForOrganization(
+    organizationId: string,
+    id: string,
+  ): Promise<IssueDetailDto> {
+    const record = await this.repository.getPublishedIssue(organizationId, id);
     if (!record) throw new NotFoundException('Issue not found');
     const { issue, questions, options } = record;
     return {
       id: issue.id,
+      ...issueActionProjection(issue),
       name: issue.name,
       description: issue.resident_description,
       iconKey: issue.icon_key,

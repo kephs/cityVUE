@@ -42,6 +42,11 @@ interface ServiceDefinitionTable {
   service_key: string;
   status: string;
   current_published_version_id: string | null;
+  action_type: Generated<string>;
+  redirect_url: Generated<string | null>;
+  redirect_message: Generated<string | null>;
+  redirect_label: Generated<string | null>;
+  action_revision: Generated<number>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }

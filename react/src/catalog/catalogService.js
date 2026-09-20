@@ -56,6 +56,7 @@ export function isQuestionVisible(question, answers = {}) {
 }
 
 export function getVisibleQuestions(service, answers = {}) {
+    if (service?.actionType === "external_redirect") return [];
     return [...(service?.questions || [])]
         .sort((a, b) => a.displayOrder - b.displayOrder)
         .filter((question) => isQuestionVisible(question, answers));

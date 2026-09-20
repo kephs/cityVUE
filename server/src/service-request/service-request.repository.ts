@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
 
@@ -347,6 +347,7 @@ export class ServiceRequestRepository {
         'org.id as organization_id',
         'org.default_business_timezone',
         'service.id as service_id',
+        'service.action_type',
         'service.category_id',
         'version.id as version_id',
         'version.default_priority',
@@ -365,6 +366,10 @@ export class ServiceRequestRepository {
       .where('version.status', '=', 'published')
       .executeTakeFirst();
     if (!definition) return undefined;
+    if (definition.action_type !== 'internal_intake')
+      throw new ConflictException(
+        'This Issue is handled by an external service',
+      );
     const questions = await trx
       .selectFrom('question')
       .select([

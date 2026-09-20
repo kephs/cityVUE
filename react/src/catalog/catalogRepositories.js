@@ -1,3 +1,4 @@
+import { normalizeIssueAction } from "./issueAction.js";
 import { getActiveCategories, getServicesByCategory, getServiceById } from "./catalogService.js";
 
 const accents = ["blue", "amber", "cyan", "green", "emerald"];
@@ -26,11 +27,12 @@ export function normalizeApiIssues(rows, categoryId) {
 export function normalizeApiDefinition(row, categoryId) {
     const keyToId = new Map((row.questions || []).map((question) => [question.key, question.id]));
     return {
+        ...normalizeIssueAction(row),
         id: row.id, categoryId, serviceDefinitionVersionId: row.serviceDefinitionVersionId,
         name: row.name, citizenDescription: row.description, icon: iconClass(row.iconKey, "bi-megaphone"),
         defaultPriority: row.defaultPriority, locationRequirement: row.locationPolicy.replaceAll("_", "-"),
         anonymousPolicy: row.anonymousReportingPolicy.replaceAll("_", "-"), status: "active",
-        questions: (row.questions || []).map((question, index) => ({
+        questions: (row.actionType === "external_redirect" ? [] : (row.questions || [])).map((question, index) => ({
             id: question.id, key: question.key, label: question.label, helpText: question.helpText,
             type: question.type.replaceAll("_", "-"), required: question.required, displayOrder: index,
             options: (question.options || []).map((option) => ({ id: option.id, value: option.key, label: option.label })),

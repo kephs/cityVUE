@@ -66,6 +66,10 @@ export class CatalogRepository {
       )
       .select([
         'service.id',
+        'service.action_type',
+        'service.redirect_url',
+        'service.redirect_message',
+        'service.redirect_label',
         'version.name',
         'version.resident_description',
         'version.icon_key',
@@ -103,6 +107,10 @@ export class CatalogRepository {
       )
       .select([
         'service.id',
+        'service.action_type',
+        'service.redirect_url',
+        'service.redirect_message',
+        'service.redirect_label',
         'version.id as version_id',
         'version.version_number',
         'version.name',
@@ -120,6 +128,8 @@ export class CatalogRepository {
       .where('version.status', '=', 'published')
       .executeTakeFirst();
     if (!issue) return undefined;
+    if (issue.action_type === 'external_redirect')
+      return { issue, questions: [], options: [] };
     const questions = await this.database.client
       .selectFrom('question')
       .select([

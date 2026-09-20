@@ -13,6 +13,13 @@ export class CategoryDto {
 }
 
 export class IssueSummaryDto {
+  @ApiProperty({ enum: ['internal_intake', 'external_redirect'] })
+  actionType!: string;
+  @ApiPropertyOptional({ type: Object }) redirect?: {
+    destination: string;
+    message: string;
+    label: string;
+  };
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty() name!: string;
   @ApiProperty() description!: string;

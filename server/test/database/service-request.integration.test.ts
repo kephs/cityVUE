@@ -1,3 +1,4 @@
+import { up as actionUp } from '../../migrations/20260919030000-add-issue-action.js';
 import { up as authUp } from '../../migrations/20260903020000-add-entra-rbac-foundation.js';
 import { up as audienceUp } from '../../migrations/20260919000000-add-request-audience-assisted-intake.js';
 import assert from 'node:assert/strict';
@@ -72,6 +73,7 @@ test(
       await staffUp(db);
       await authUp(db);
       await audienceUp(db);
+      await actionUp(db);
       await db
         .insertInto('organization')
         .values({

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { expect, test, vi } from "vitest";
@@ -63,4 +63,39 @@ test.each([
     expect(await screen.findByRole("alert")).toHaveTextContent(message);
     expect(screen.getByText("Resident-only description")).toBeInTheDocument();
     expect(screen.queryByText(/provider|layer|endpoint/i)).not.toBeInTheDocument();
+});
+
+
+test("external Issue displays a keyboard-accessible handoff, suppresses questions, and never submits", async () => {
+    const user = userEvent.setup(); const create = vi.fn();
+    const repositories = apiRepositories(create);
+    repositories.catalog.loadDefinition.mockResolvedValue({ ...service, actionType: "external_redirect", redirect: { destination: "https://example.com/service?allowed=value", message: "Use the external service.", label: "Continue to External Service" }, questions: [{ id: "hidden", label: "Hidden follow-up", required: true }] });
+    render(<MemoryRouter><ReportIssuePage repositories={repositories} /></MemoryRouter>);
+    await user.click(await screen.findByRole("radio", { name: /Roads/ }));
+    await user.click(await screen.findByRole("radio", { name: /Pothole/ }));
+    expect(await screen.findByRole("heading", { name: "Continue to External Service" })).toBeInTheDocument();
+    expect(screen.queryByText("Hidden follow-up")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Submit Request" })).not.toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Continue to External Service/ });
+    expect(link).toHaveAttribute("href", "https://example.com/service?allowed=value");
+    expect(link).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(link).not.toHaveAttribute("target");
+    await waitFor(() => expect(screen.getByRole("heading", {name:"Continue to External Service"})).toHaveFocus());
+    await user.tab(); expect(screen.getByRole("button", {name:"Go Back"})).toHaveFocus();
+    await user.tab(); expect(link).toHaveFocus();
+    link.addEventListener("click", event => event.preventDefault(), {once:true}); await user.keyboard("{Enter}");
+    expect(create).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", {name:"Go Back"}));
+    expect(await screen.findByRole("heading", {name:"Choose an Issue"})).toBeInTheDocument();
+    expect(screen.queryByRole("link",{name:/Continue to External Service/})).not.toBeInTheDocument();
+    expect(create).not.toHaveBeenCalled();
+});
+
+test("unsafe catalog redirect data fails closed without a navigation control", async () => {
+    const user = userEvent.setup(); const repositories = apiRepositories(vi.fn());
+    repositories.catalog.loadDefinition.mockResolvedValue({...service,actionType:"external_redirect",redirect:{destination:"javascript:alert(1)"}});
+    render(<MemoryRouter><ReportIssuePage repositories={repositories} /></MemoryRouter>);
+    await user.click(await screen.findByRole("radio",{name:/Roads/})); await user.click(await screen.findByRole("radio",{name:/Pothole/}));
+    expect(await screen.findByRole("alert")).toHaveTextContent("temporarily unavailable");
+    expect(screen.queryByRole("link",{name:/External/})).not.toBeInTheDocument();
 });

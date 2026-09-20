@@ -1,6 +1,7 @@
 import type { StaffAccess } from '../auth/auth.types.js';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -248,6 +249,18 @@ export class CreateServiceRequestService {
         })
       : null;
     return this.database.client.transaction().execute(async (trx) => {
+      // Serialize action changes against final submission, including stale published versions.
+      const action = await trx
+        .selectFrom('service_definition')
+        .select('action_type')
+        .where('organization_id', '=', context.organizationId)
+        .where('id', '=', definition.serviceDefinitionId)
+        .forShare()
+        .executeTakeFirst();
+      if (action?.action_type !== 'internal_intake')
+        throw new ConflictException(
+          'This Issue is handled by an external service',
+        );
       const period = periodKeyFor(now, definition.businessTimezone);
       const sequence = await this.repository.allocateReference(trx, period);
       const referenceNumber = formatReferenceNumber(period, sequence);
