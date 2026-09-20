@@ -1,4 +1,9 @@
 import {
+  normalizeOperationalNarrative,
+  workflowActivityTypes,
+  type RequestActivityType,
+} from './request-activity.domain.js';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -81,6 +86,9 @@ export class InternalRequestMutationsService {
       let departmentId = current.departmentId;
       let divisionId = current.divisionId;
       let activityType: string;
+      let operationalType: RequestActivityType;
+      let narrative: string | null = null;
+      let scopeSnapshot = {};
       let metadata: Record<string, string | number | null>;
       if (operation === 'workflow' && 'action' in input) {
         // Reuse existing validation, but never persist operational free text in audit.
@@ -89,6 +97,12 @@ export class InternalRequestMutationsService {
           input.reason,
           input.resolutionSummary,
         );
+        narrative = normalizeOperationalNarrative(
+          input.action,
+          input.reason,
+          input.resolutionSummary,
+        );
+        operationalType = workflowActivityTypes[input.action];
         status = resolveWorkflowTransition(current.status, input.action);
         const types = {
           start_work: 'work_started',
@@ -140,6 +154,39 @@ export class InternalRequestMutationsService {
           divisionId === current.divisionId
         )
           throw new ConflictException('Request already has this route');
+        operationalType = 'request_routed';
+        const snapshot = async (dept: string, div: string | null) => {
+          const d = await trx
+            .selectFrom('department')
+            .select('name')
+            .where('organization_id', '=', access.organizationId)
+            .where('id', '=', dept)
+            .forShare()
+            .executeTakeFirstOrThrow();
+          const v = div
+            ? await trx
+                .selectFrom('division')
+                .select('name')
+                .where('organization_id', '=', access.organizationId)
+                .where('department_id', '=', dept)
+                .where('id', '=', div)
+                .forShare()
+                .executeTakeFirstOrThrow()
+            : null;
+          return { department: d.name, division: v?.name ?? null };
+        };
+        const from = await snapshot(current.departmentId, current.divisionId);
+        const to = await snapshot(departmentId, divisionId);
+        scopeSnapshot = {
+          from_department_id: current.departmentId,
+          from_division_id: current.divisionId,
+          to_department_id: departmentId,
+          to_division_id: divisionId,
+          from_department_name: from.department,
+          from_division_name: from.division,
+          to_department_name: to.department,
+          to_division_name: to.division,
+        };
         activityType = 'service_request_reassigned';
         metadata = {
           action: 'route',
@@ -188,6 +235,21 @@ export class InternalRequestMutationsService {
           staff_identity_id: access.staffIdentityId,
           actor_reference: null,
           metadata: { ...metadata, policy: 'F031', revision: row.revision },
+        })
+        .execute();
+      await trx
+        .insertInto('request_operational_activity')
+        .values({
+          organization_id: access.organizationId,
+          service_request_id: id,
+          activity_type: operationalType,
+          actor_type: 'staff',
+          staff_identity_id: access.staffIdentityId,
+          request_revision: row.revision,
+          from_status: operation === 'workflow' ? current.status : null,
+          to_status: operation === 'workflow' ? status : null,
+          narrative,
+          ...scopeSnapshot,
         })
         .execute();
       return {

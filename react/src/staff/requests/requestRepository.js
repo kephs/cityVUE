@@ -91,6 +91,60 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         hasPreviousPage: data.hasPreviousPage === true,
       };
     },
+    async activity(id, page, signal) {
+      const data = await api.get(
+        `${path(id)}/activity?page=${page}&pageSize=25`,
+        options(signal),
+      );
+      const types = [
+        "request_created",
+        "work_started",
+        "placed_on_hold",
+        "work_resumed",
+        "request_closed",
+        "request_reopened",
+        "request_routed",
+      ];
+      if (
+        !Array.isArray(data?.items) ||
+        !Number.isInteger(data.page) ||
+        data.items.length > 25
+      )
+        throw invalid();
+      return {
+        page: data.page,
+        hasPreviousPage: data.hasPreviousPage === true,
+        hasNextPage: data.hasNextPage === true,
+        items: data.items.map((row) => {
+          if (
+            !uuid.test(row.id) ||
+            !types.includes(row.type) ||
+            !["Staff member", "System", "Resident"].includes(
+              row.actorDisplay,
+            ) ||
+            typeof row.occurredAt !== "string" ||
+            (row.narrative !== null && typeof row.narrative !== "string")
+          )
+            throw invalid();
+          return Object.fromEntries(
+            [
+              "id",
+              "type",
+              "occurredAt",
+              "actorDisplay",
+              "fromStatus",
+              "toStatus",
+              "fromDepartment",
+              "fromDivision",
+              "toDepartment",
+              "toDivision",
+              "narrative",
+              "intakeChannel",
+            ].map((key) => [key, row[key]]),
+          );
+        }),
+      };
+    },
     async detail(id, signal) {
       return project(await api.get(path(id), options(signal)), true);
     },

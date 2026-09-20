@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
@@ -43,6 +44,12 @@ let repository;
 beforeEach(() => {
   vi.clearAllMocks();
   repository = {
+    activity: vi.fn().mockResolvedValue({
+      items: [],
+      page: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    }),
     list: vi.fn().mockResolvedValue({
       items: [row],
       total: 1,
@@ -245,7 +252,7 @@ test.each([
   ["in_progress", null],
   ["closed", null],
   ["cancelled", null],
-])("approved workflow UI subset for %s", async (status, action) => {
+])("complete F035 workflow controls for %s", async (status, action) => {
   repository.detail.mockResolvedValue({ ...row, status });
   show(`/staff/requests/${id}`);
   await screen.findByRole("heading", { name: row.referenceNumber });
@@ -255,11 +262,21 @@ test.each([
     expect(
       screen.queryByRole("button", { name: /Start Work|Resume Work/ }),
     ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", {
-      name: /Place On Hold|Close Request|Reopen Request/,
-    }),
-  ).not.toBeInTheDocument();
+  const expected = {
+    open: ["Close Request"],
+    in_progress: ["Place On Hold", "Close Request"],
+    on_hold: ["Close Request"],
+    closed: ["Reopen Request"],
+    cancelled: [],
+  }[status];
+  for (const label of ["Place On Hold", "Close Request", "Reopen Request"]) {
+    if (expected.includes(label))
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    else
+      expect(
+        screen.queryByRole("button", { name: label }),
+      ).not.toBeInTheDocument();
+  }
 });
 test("read-only capability does not infer mutation rights", async () => {
   repository.options.mockResolvedValue({
@@ -426,4 +443,272 @@ test("expired API session uses established sign-in action and hides detail", asy
   expect(
     screen.queryByText(/Fictional protected description/),
   ).not.toBeInTheDocument();
+});
+
+const event = (type = "request_created", narrative = null) => ({
+  id: other,
+  type,
+  narrative,
+  occurredAt: row.createdAt,
+  actorDisplay: "Staff member",
+  fromStatus: null,
+  toStatus: null,
+  intakeChannel: "staff",
+});
+test("activity loading, plain-text narrative, safe actor, routing and older pages", async () => {
+  let resolve;
+  repository.activity.mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  show(`/staff/requests/${id}`);
+  await screen.findByText("Loading activity…");
+  await act(async () =>
+    resolve({
+      items: [
+        {
+          ...event(
+            "placed_on_hold",
+            "<script>alert('x')</script>\nFictional Unicode café",
+          ),
+          fromStatus: "in_progress",
+          toStatus: "on_hold",
+        },
+      ],
+      page: 1,
+      hasNextPage: true,
+    }),
+  );
+  expect(screen.getByText("Placed on hold")).toBeInTheDocument();
+  expect(
+    screen.getByText("Staff member", { exact: false }),
+  ).toBeInTheDocument();
+  expect(document.querySelector("script")).toBeNull();
+  repository.activity.mockResolvedValue({
+    items: [
+      {
+        ...event("request_routed"),
+        fromDepartment: "Fictional Old",
+        toDepartment: "Fictional New",
+        toDivision: "District A",
+      },
+    ],
+    page: 2,
+    hasPreviousPage: true,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Older activity" }));
+  await screen.findByText("Fictional New / District A");
+  expect(
+    screen.getByRole("heading", { name: "Request Activity" }),
+  ).toHaveFocus();
+  expect(repository.activity).toHaveBeenLastCalledWith(
+    id,
+    2,
+    expect.any(AbortSignal),
+  );
+});
+test("activity-specific failure preserves detail and retry, authorization loss clears it", async () => {
+  repository.activity
+    .mockRejectedValueOnce({ status: 500 })
+    .mockRejectedValue({ status: 403 });
+  show(`/staff/requests/${id}`);
+  await screen.findByText("Activity could not be loaded.");
+  expect(
+    screen.getByRole("heading", { name: row.referenceNumber }),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry activity" }));
+  await screen.findByText(/do not have permission/);
+  expect(
+    screen.queryByRole("heading", { name: row.referenceNumber }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Request Activity" }),
+  ).not.toBeInTheDocument();
+});
+test("empty history and long narrative disclosure are safe", async () => {
+  repository.detail
+    .mockResolvedValueOnce(row)
+    .mockResolvedValue({ ...row, status: "in_progress", revision: 2 });
+  repository.activity
+    .mockResolvedValueOnce({ items: [], page: 1 })
+    .mockResolvedValue({
+      items: [event("request_closed", "Fictional resolution ".repeat(70))],
+      page: 1,
+    });
+  show(`/staff/requests/${id}`);
+  await screen.findByText("No activity has been recorded for this request.");
+  fireEvent.click(screen.getByRole("button", { name: "Start Work" }));
+  await screen.findByText("Read narrative");
+  expect(document.querySelector(".activity-narrative")).toHaveTextContent(
+    "Fictional resolution",
+  );
+});
+test.each([
+  [
+    "in_progress",
+    "hold",
+    "Place On Hold",
+    "Hold reason",
+    "on_hold",
+    "placed_on_hold",
+  ],
+  ["open", "close", "Close Request", "Resolution", "closed", "request_closed"],
+  [
+    "closed",
+    "reopen",
+    "Reopen Request",
+    "Reopen reason",
+    "open",
+    "request_reopened",
+  ],
+])(
+  "narrative action %s validates and refreshes authoritative activity",
+  async (status, action, label, field, next, type) => {
+    repository.detail
+      .mockResolvedValueOnce({ ...row, status })
+      .mockResolvedValue({ ...row, status: next, revision: 2 });
+    repository.activity
+      .mockResolvedValueOnce({
+        items: [event("request_closed", "Prior resolution")],
+        page: 1,
+      })
+      .mockResolvedValue({
+        items: [
+          event(type, "Fictional new narrative"),
+          { ...event("request_closed", "Prior resolution"), id: dept },
+        ],
+        page: 1,
+      });
+    show(`/staff/requests/${id}`);
+    fireEvent.click(await screen.findByRole("button", { name: label }));
+    const form = screen.getByRole("form", { name: label });
+    const input = within(form).getByRole("textbox", {
+      name: `${field} (required)`,
+    });
+    expect(input).toHaveFocus();
+    expect(input).toBeRequired();
+    expect(input).toHaveAttribute(
+      "maxlength",
+      action === "close" ? "2000" : "500",
+    );
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.submit(form);
+    expect(repository.workflow).not.toHaveBeenCalled();
+    expect(within(form).getByRole("alert")).toHaveTextContent(
+      "Enter meaningful text",
+    );
+    fireEvent.change(input, { target: { value: "Fictional new narrative" } });
+    fireEvent.submit(form);
+    await screen.findByText("Fictional new narrative", {
+      selector: ".activity-narrative",
+    });
+    expect(screen.getByText("Prior resolution")).toBeInTheDocument();
+    expect(repository.workflow).toHaveBeenCalledWith(
+      id,
+      {
+        action,
+        expectedRevision: 1,
+        [action === "close" ? "resolutionSummary" : "reason"]:
+          "Fictional new narrative",
+      },
+      expect.any(AbortSignal),
+    );
+    expect(repository.activity).toHaveBeenCalledTimes(2);
+  },
+);
+test("narrative cancel and Escape restore focus without mutation", async () => {
+  show(`/staff/requests/${id}`);
+  const trigger = await screen.findByRole("button", { name: "Close Request" });
+  fireEvent.click(trigger);
+  const input = screen.getByRole("textbox");
+  fireEvent.change(input, { target: { value: "Unsubmitted fictional text" } });
+  fireEvent.keyDown(input, { key: "Escape" });
+  await waitFor(() => expect(trigger).toHaveFocus());
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(repository.workflow).not.toHaveBeenCalled();
+});
+test.each([400, 500])(
+  "recoverable narrative error %s preserves draft and no fake timeline entry",
+  async (status) => {
+    repository.workflow.mockRejectedValue({ status });
+    show(`/staff/requests/${id}`);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Close Request" }),
+    );
+    const form = screen.getByRole("form", { name: "Close Request" });
+    fireEvent.change(within(form).getByRole("textbox"), {
+      target: { value: "Fictional retry text" },
+    });
+    fireEvent.submit(form);
+    await waitFor(() =>
+      expect(within(form).getByRole("alert")).not.toBeEmptyDOMElement(),
+    );
+    expect(within(form).getByRole("textbox")).toHaveValue(
+      "Fictional retry text",
+    );
+    expect(repository.detail).toHaveBeenCalledTimes(1);
+    expect(repository.activity).toHaveBeenCalledTimes(1);
+  },
+);
+test.each([401, 403, 409])(
+  "narrative failure %s clears draft and never automatically replays",
+  async (status) => {
+    repository.workflow.mockRejectedValue({ status });
+    show(`/staff/requests/${id}`);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Close Request" }),
+    );
+    const form = screen.getByRole("form", { name: "Close Request" });
+    fireEvent.change(within(form).getByRole("textbox"), {
+      target: { value: "Fictional private draft" },
+    });
+    fireEvent.submit(form);
+    if (status === 409)
+      await screen.findByText(/latest information has been loaded/);
+    else await screen.findByRole("alert");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(repository.workflow).toHaveBeenCalledTimes(1);
+  },
+);
+test("narrative pending prevents duplicate submissions and waits for server confirmation", async () => {
+  let finish;
+  repository.workflow.mockImplementation(
+    () =>
+      new Promise((r) => {
+        finish = r;
+      }),
+  );
+  show(`/staff/requests/${id}`);
+  fireEvent.click(await screen.findByRole("button", { name: "Close Request" }));
+  const form = screen.getByRole("form", { name: "Close Request" });
+  fireEvent.change(within(form).getByRole("textbox"), {
+    target: { value: "Fictional resolution" },
+  });
+  fireEvent.submit(form);
+  fireEvent.submit(form);
+  expect(repository.workflow).toHaveBeenCalledTimes(1);
+  expect(within(form).getByRole("button", { name: "Saving…" })).toBeDisabled();
+  expect(
+    screen.getByText("Open", { selector: ".request-status" }),
+  ).toBeInTheDocument();
+  await act(async () => finish({}));
+});
+
+test("completed narrative command with failed detail refresh shows retry without replaying draft", async () => {
+  repository.detail
+    .mockResolvedValueOnce(row)
+    .mockRejectedValue({ status: 500 });
+  show(`/staff/requests/${id}`);
+  fireEvent.click(await screen.findByRole("button", { name: "Close Request" }));
+  const form = screen.getByRole("form", { name: "Close Request" });
+  fireEvent.change(within(form).getByRole("textbox"), {
+    target: { value: "Fictional completed resolution" },
+  });
+  fireEvent.submit(form);
+  await screen.findByText(/temporarily unavailable/);
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(repository.workflow).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText("Loading request…")).not.toBeInTheDocument();
 });

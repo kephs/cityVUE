@@ -1,3 +1,8 @@
+import { checkOperationalActivity } from './request-activity-checks.js';
+import {
+  up as operationalUp,
+  down as operationalDown,
+} from '../../migrations/20260919050000-add-request-operational-activity.js';
 import { up as referenceUp } from '../../migrations/20260919040000-configure-request-references.js';
 import {
   up as actionUp,
@@ -217,6 +222,49 @@ test(
       await lifecycleUp(db);
       await actionUp(db);
       await referenceUp(db);
+      await operationalUp(db);
+      await t.test(
+        'F035 baseline migration preserves requests and safely rolls back/reapplies before use',
+        async () => {
+          const parents = await db
+            .selectFrom('service_request')
+            .selectAll()
+            .orderBy('id')
+            .execute();
+          const baseline = await db
+            .selectFrom('request_operational_activity')
+            .selectAll()
+            .execute();
+          assert.equal(baseline.length, parents.length);
+          for (const event of baseline) {
+            const parent = parents.find(
+              (row) => row.id === event.service_request_id,
+            );
+            assert.ok(parent);
+            assert.equal(event.organization_id, parent.organization_id);
+            assert.equal(
+              new Date(event.occurred_at as unknown as string).getTime(),
+              new Date(parent.created_at as unknown as string).getTime(),
+            );
+            assert.equal(event.is_baseline, true);
+            assert.equal(event.actor_type, 'system');
+            assert.equal(event.narrative, null);
+            assert.equal(event.staff_identity_id, null);
+            assert.equal(event.from_status, null);
+            assert.equal(event.to_status, null);
+          }
+          await operationalDown(db);
+          await operationalUp(db);
+          assert.deepEqual(
+            await db
+              .selectFrom('service_request')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+            parents,
+          );
+        },
+      );
       await db
         .insertInto('permission')
         .values(
@@ -1541,6 +1589,11 @@ test(
               .selectFrom('service_request')
               .select('id')
               .execute();
+            const operationalBefore = await db
+              .selectFrom('request_operational_activity')
+              .selectAll()
+              .orderBy('id')
+              .execute();
             const counterBefore = await db
               .selectFrom('service_request_reference_sequence')
               .selectAll()
@@ -1568,6 +1621,14 @@ test(
                 creator,
               ).expect(400);
             }
+            assert.deepEqual(
+              await db
+                .selectFrom('request_operational_activity')
+                .selectAll()
+                .orderBy('id')
+                .execute(),
+              operationalBefore,
+            );
             assert.equal(
               (await db.selectFrom('service_request').select('id').execute())
                 .length,
@@ -1961,6 +2022,20 @@ test(
             await getInternal(internalPath).expect(403);
           },
         );
+        await checkOperationalActivity(t, {
+          app,
+          db,
+          org,
+          creator,
+          publicOnly,
+          otherOrg,
+          otherInternal,
+          publicId,
+          internalPayload: internal,
+          department,
+          targetDepartment,
+          targetDivision,
+        });
       } finally {
         await app.close();
       }

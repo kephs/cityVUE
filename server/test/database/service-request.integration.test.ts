@@ -1,3 +1,4 @@
+import { up as operationalUp } from '../../migrations/20260919050000-add-request-operational-activity.js';
 import { up as referenceUp } from '../../migrations/20260919040000-configure-request-references.js';
 import { up as actionUp } from '../../migrations/20260919030000-add-issue-action.js';
 import { up as authUp } from '../../migrations/20260903020000-add-entra-rbac-foundation.js';
@@ -76,6 +77,7 @@ test(
       await audienceUp(db);
       await actionUp(db);
       await referenceUp(db);
+      await operationalUp(db);
       await db
         .insertInto('organization')
         .values({

@@ -62,6 +62,21 @@ export class InternalRequestListQueryDto {
   pageSize?: number;
 }
 
+export class InternalActivityQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1000000)
+  page?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
+}
+
 @ApiTags('service requests')
 @ApiBearerAuth()
 @RequireEntra()
@@ -92,6 +107,21 @@ export class InternalRequestController {
   @Header('Cache-Control', 'no-store')
   options(@CurrentStaff() access: StaffAccess) {
     return this.repository.workspaceOptions(access);
+  }
+
+  @Get(':serviceRequestId/activity')
+  @Header('Cache-Control', 'no-store')
+  activity(
+    @Param('serviceRequestId') id: string,
+    @Query() query: InternalActivityQueryDto,
+    @CurrentStaff() access: StaffAccess,
+  ) {
+    return this.repository.activity(
+      access,
+      id,
+      query.page ?? 1,
+      query.pageSize ?? 25,
+    );
   }
 
   @Get(':serviceRequestId')

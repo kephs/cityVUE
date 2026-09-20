@@ -1,3 +1,4 @@
+import type { RequestActivityType } from '../service-request/request-activity.domain.js';
 import type { ColumnType, Generated, Insertable, Selectable } from 'kysely';
 import type { AlertType, AlertSeverity } from '../alerts/alert.dto.js';
 
@@ -209,6 +210,29 @@ interface AnswerTable {
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
+interface RequestOperationalActivityTable {
+  id: Generated<string>;
+  organization_id: string;
+  service_request_id: string;
+  activity_type: RequestActivityType;
+  actor_type: 'staff' | 'resident' | 'anonymous_resident' | 'system';
+  staff_identity_id: Generated<string | null>;
+  occurred_at: Timestamp;
+  request_revision: Generated<number | null>;
+  is_baseline: Generated<boolean>;
+  from_status: Generated<string | null>;
+  to_status: Generated<string | null>;
+  from_department_id: Generated<string | null>;
+  from_division_id: Generated<string | null>;
+  to_department_id: Generated<string | null>;
+  to_division_id: Generated<string | null>;
+  from_department_name: Generated<string | null>;
+  from_division_name: Generated<string | null>;
+  to_department_name: Generated<string | null>;
+  to_division_name: Generated<string | null>;
+  narrative: Generated<string | null>;
+  intake_channel: Generated<string | null>;
+}
 interface ActivityTable {
   id: string;
   organization_id: string;
@@ -370,6 +394,7 @@ export interface DatabaseSchema {
   location: LocationTable;
   answer: AnswerTable;
   activity: ActivityTable;
+  request_operational_activity: RequestOperationalActivityTable;
   staff_identity: StaffIdentityTable;
   staff_department_membership: StaffDepartmentMembershipTable;
   staff_division_membership: StaffDivisionMembershipTable;

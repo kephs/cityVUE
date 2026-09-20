@@ -51,3 +51,33 @@ test("UUID route is validated and capability must be literal true", async () => 
   expect(client.get).not.toHaveBeenCalled();
   expect((await repo.options()).canUpdate).toBe(false);
 });
+
+test("activity uses protected bounded endpoint and drops identity/audit extras", async () => {
+  const event = {
+    id,
+    type: "request_created",
+    occurredAt: "2026-09-19T12:00:00Z",
+    actorDisplay: "Staff member",
+    narrative: null,
+    staffIdentityId: "secret",
+    metadata: { audit: "private" },
+  };
+  const client = {
+    get: vi
+      .fn()
+      .mockResolvedValue({ items: [event], page: 1, hasNextPage: false }),
+  };
+  const repo = createStaffRequestRepository({ client });
+  const data = await repo.activity(id, 1);
+  expect(client.get).toHaveBeenCalledWith(
+    `/staff/internal-service-requests/${id}/activity?page=1&pageSize=25`,
+    expect.objectContaining({ authenticated: true }),
+  );
+  expect(data.items[0]).not.toHaveProperty("staffIdentityId");
+  expect(data.items[0]).not.toHaveProperty("metadata");
+  client.get.mockResolvedValue({
+    items: [{ ...event, type: "arbitrary_comment" }],
+    page: 1,
+  });
+  await expect(repo.activity(id, 1)).rejects.toThrow(/unavailable/);
+});

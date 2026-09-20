@@ -1,3 +1,4 @@
+import { up as operationalUp } from '../../migrations/20260919050000-add-request-operational-activity.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -236,6 +237,7 @@ test(
         divisionIds: [],
         development: false,
       });
+      await operationalUp(db);
       const create = (seed: typeof a, date = '2026-09-15T12:00:00Z') =>
         new CreateServiceRequestService(
           { get: () => seed.org } as never,

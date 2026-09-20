@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { sql } from 'kysely';
 import type { StaffAccess } from '../auth/auth.types.js';
 import { DatabaseService } from '../database/database.service.js';
@@ -164,6 +164,65 @@ export class InternalRequestRepository {
             .execute()
         : [];
     return { canUpdate, departments, divisions };
+  }
+
+  async activity(
+    access: StaffAccess | undefined,
+    id: string,
+    page: number,
+    pageSize: number,
+  ) {
+    assertInternalReadAccess(access);
+    if (!uuid.test(id)) throw new NotFoundException();
+    // One repeatable-read snapshot keeps request admission and history scope consistent.
+    return this.database.client
+      .transaction()
+      .setIsolationLevel('repeatable read')
+      .execute(async (trx) => {
+        const parent = await internalRequestScope(trx, access)
+          .select('request.id')
+          .where('request.id', '=', id)
+          .executeTakeFirst();
+        if (!parent) throw new NotFoundException();
+        const rows = await trx
+          .selectFrom('request_operational_activity')
+          .select([
+            'id',
+            'activity_type as type',
+            'occurred_at as occurredAt',
+            'actor_type as actorType',
+            'from_status as fromStatus',
+            'to_status as toStatus',
+            'from_department_name as fromDepartment',
+            'from_division_name as fromDivision',
+            'to_department_name as toDepartment',
+            'to_division_name as toDivision',
+            'narrative',
+            'intake_channel as intakeChannel',
+          ])
+          .where('organization_id', '=', access.organizationId)
+          .where('service_request_id', '=', id)
+          .orderBy('occurred_at', 'desc')
+          .orderBy('id', 'desc')
+          .limit(pageSize + 1)
+          .offset((page - 1) * pageSize)
+          .execute();
+        return {
+          items: rows.slice(0, pageSize).map(({ actorType, ...row }) => ({
+            ...row,
+            actorDisplay:
+              actorType === 'staff'
+                ? 'Staff member'
+                : actorType === 'system'
+                  ? 'System'
+                  : 'Resident',
+          })),
+          page,
+          pageSize,
+          hasPreviousPage: page > 1,
+          hasNextPage: rows.length > pageSize,
+        };
+      });
   }
 
   async details(access: StaffAccess | undefined, id: string) {

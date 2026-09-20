@@ -385,6 +385,23 @@ export class CreateServiceRequestService {
           },
         })
         .execute();
+      await trx
+        .insertInto('request_operational_activity')
+        .values({
+          organization_id: context.organizationId,
+          service_request_id: requestId,
+          activity_type: 'request_created',
+          actor_type: context.staffId
+            ? 'staff'
+            : input.reportingIdentity === 'anonymous'
+              ? 'anonymous_resident'
+              : 'resident',
+          staff_identity_id: context.staffId,
+          occurred_at: new Date(created.created_at as unknown as string),
+          request_revision: 1,
+          intake_channel: context.intakeChannel,
+        })
+        .execute();
       return {
         id: created.id,
         referenceNumber: created.reference_number,

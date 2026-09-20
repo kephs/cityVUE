@@ -1,5 +1,7 @@
 # CityVUE — Architecture
 
+F035 adds separate append-only operational request history, atomic creation/workflow/routing events, protected paginated INTERNAL timelines, and durable Hold/Close/Reopen narratives. Existing metadata-only audit and F029–F034 authorization remain intact; no grants are added. See [F035](features/F035-service-request-activity-operational-history.md).
+
 F034 adds an authenticated INTERNAL staff request workspace with scoped reference/status/hierarchy filters, server-provided update/routing options, Start/Resume actions, and revision-aware refresh. Hold/Close/Reopen UI is explicitly deferred pending durable narrative storage. No migration or grants are introduced; authenticated live staff UAT remains pending. See [F034](features/F034-staff-internal-request-workspace.md).
 
 F033 evolves request references into Organization-scoped configurable policies and atomic bigint counters, retaining persisted immutable references, safe historical collision checks and explicit `service_request.reference.manage` authorization without default grants. UUID identity and F029–F032 boundaries remain unchanged. See [F033](features/F033-configurable-service-request-reference-numbers.md).

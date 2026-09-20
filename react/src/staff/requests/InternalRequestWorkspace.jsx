@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import RequestActivity from "./RequestActivity.jsx";
+import WorkflowNarrativeForm from "./WorkflowNarrativeForm.jsx";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { statusLabels, workspaceError } from "./requestRepository.js";
 import "./staffRequests.css";
@@ -325,6 +327,14 @@ function RequestDetail({ repository, id, onSignIn }) {
     [routing, setRouting] = useState(false),
     [department, setDepartment] = useState(""),
     [division, setDivision] = useState("");
+  const [narrativeAction, setNarrativeAction] = useState(null),
+    [narrativeError, setNarrativeError] = useState("");
+  const narrativeTrigger = useRef(null);
+  const accessFailure = useCallback((error) => {
+    setState({ error });
+    setNarrativeAction(null);
+    setRouting(false);
+  }, []);
   const heading = useRef(null),
     routeButton = useRef(null),
     inFlight = useRef(false),
@@ -360,7 +370,9 @@ function RequestDetail({ repository, id, onSignIn }) {
     inFlight.current = true;
     setBusy(true);
     setNotice("");
+    setNarrativeError("");
     const signal = controller.current.signal;
+    let commandCompleted = false;
     try {
       await repository[operation](
         id,
@@ -368,7 +380,9 @@ function RequestDetail({ repository, id, onSignIn }) {
         signal,
       );
       if (signal.aborted) return;
+      commandCompleted = true;
       setRouting(false);
+      setNarrativeAction(null);
       setState(null);
       const fresh = await read(signal);
       if (fresh)
@@ -379,6 +393,15 @@ function RequestDetail({ repository, id, onSignIn }) {
         );
     } catch (error) {
       if (signal.aborted) return;
+      if (
+        !commandCompleted &&
+        narrativeAction &&
+        ![401, 403, 404, 409].includes(error.status)
+      ) {
+        setNarrativeError(workspaceError(error));
+        return;
+      }
+      setNarrativeAction(null);
       setRouting(false);
       setState(null);
       if (error.status === 409) {
@@ -486,7 +509,7 @@ function RequestDetail({ repository, id, onSignIn }) {
                   {routineAction && (
                     <button
                       className="btn btn-primary"
-                      disabled={busy}
+                      disabled={busy || Boolean(narrativeAction)}
                       onClick={() =>
                         mutate("workflow", { action: routineAction[0] })
                       }
@@ -494,22 +517,65 @@ function RequestDetail({ repository, id, onSignIn }) {
                       {routineAction[1]}
                     </button>
                   )}
+                  {(["open", "in_progress", "on_hold"].includes(row.status)
+                    ? [
+                        ...(row.status === "in_progress" ? ["hold"] : []),
+                        "close",
+                      ]
+                    : row.status === "closed"
+                      ? ["reopen"]
+                      : []
+                  ).map((action) => (
+                    <button
+                      key={action}
+                      className="btn btn-secondary"
+                      disabled={busy || Boolean(narrativeAction)}
+                      onClick={(e) => {
+                        narrativeTrigger.current = e.currentTarget;
+                        setRouting(false);
+                        setNarrativeError("");
+                        setNarrativeAction(action);
+                      }}
+                    >
+                      {
+                        {
+                          hold: "Place On Hold",
+                          close: "Close Request",
+                          reopen: "Reopen Request",
+                        }[action]
+                      }
+                    </button>
+                  ))}
                   {row.status !== "cancelled" && (
                     <button
                       ref={routeButton}
                       className="btn btn-secondary"
-                      disabled={busy}
+                      disabled={busy || Boolean(narrativeAction)}
                       onClick={() => setRouting(true)}
                     >
                       Route Request
                     </button>
                   )}
                 </div>
-                <p className="text-body-secondary">
-                  {row.status === "cancelled"
-                    ? "Cancelled requests have no workflow actions."
-                    : "Hold, Close, and Reopen are not available in this workspace yet. Operational notes are not currently saved."}
-                </p>
+                {row.status === "cancelled" && (
+                  <p>Cancelled requests have no workflow actions.</p>
+                )}
+                {narrativeAction && (
+                  <WorkflowNarrativeForm
+                    key={narrativeAction}
+                    action={narrativeAction}
+                    busy={busy}
+                    error={narrativeError}
+                    onCancel={() => {
+                      setNarrativeAction(null);
+                      setNarrativeError("");
+                      requestAnimationFrame(() =>
+                        narrativeTrigger.current?.focus(),
+                      );
+                    }}
+                    onSubmit={(input) => mutate("workflow", input)}
+                  />
+                )}
                 {routing && (
                   <form
                     className="routing-form"
@@ -566,6 +632,12 @@ function RequestDetail({ repository, id, onSignIn }) {
               </>
             )}
           </section>
+          <RequestActivity
+            key={`${id}:${row.revision}`}
+            repository={repository}
+            id={id}
+            onAccessFailure={accessFailure}
+          />
         </article>
       )}
     </>
