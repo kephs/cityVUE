@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+F033 evolves request references into Organization-scoped configurable policies and atomic bigint counters, retaining persisted immutable references, safe historical collision checks and explicit `service_request.reference.manage` authorization without default grants. UUID identity and F029–F032 boundaries remain unchanged. See [F033](features/F033-configurable-service-request-reference-numbers.md).
+
 F032 adds explicit Issue handling (`internal_intake` / `external_redirect`) on existing ServiceDefinitions, a separate protected catalog action API, HTTPS validation and a neutral resident handoff. Both resident/staff creation enforce persisted action; questions are preserved across mode changes. No default grants or vendor integration. See [F032](features/F032-issue-action-external-redirect-foundation.md).
 
 F031 adds explicit INTERNAL workflow/routing commands requiring `service_request.internal.update`, with no default grants. Shared effective routing scope constrains F030 reads and mutations; revisions and atomic metadata-only Activity preserve concurrency/audit boundaries. PUBLIC paths remain unchanged. See [F031](features/F031-internal-service-request-lifecycle.md).

@@ -1,11 +1,14 @@
+import {
+  formatReferenceNumber,
+  periodKeyFor,
+  defaultReferencePolicy,
+} from '../../src/service-request/reference-policy.domain.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import {
   conditionMatches,
-  formatReferenceNumber,
   normalizeAnswer,
-  periodKeyFor,
   validateLocationPolicy,
   validateRequesterPolicy,
   resolveWorkflowTransition,
@@ -13,10 +16,21 @@ import {
 } from '../../src/service-request/service-request.domain.js';
 
 test('formats canonical references and rejects invalid components', () => {
-  assert.equal(formatReferenceNumber('202609', 1), 'SR-202609-000001');
-  assert.equal(formatReferenceNumber('202609', 999999), 'SR-202609-999999');
-  assert.throws(() => formatReferenceNumber('20269', 1));
-  assert.throws(() => formatReferenceNumber('202609', 1000000));
+  assert.equal(
+    formatReferenceNumber(defaultReferencePolicy, '202609', 1n),
+    'SR-202609-000001',
+  );
+  assert.equal(
+    formatReferenceNumber(defaultReferencePolicy, '202609', 999999n),
+    'SR-202609-999999',
+  );
+  assert.throws(() =>
+    formatReferenceNumber(defaultReferencePolicy, '20269', 1n),
+  );
+  assert.equal(
+    formatReferenceNumber(defaultReferencePolicy, '202609', 1000000n),
+    'SR-202609-1000000',
+  );
 });
 test('calculates the month in the Organization business timezone', () => {
   const instant = new Date('2026-10-01T03:30:00Z');

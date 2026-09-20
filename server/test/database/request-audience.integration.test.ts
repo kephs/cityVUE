@@ -1,3 +1,4 @@
+import { up as referenceUp } from '../../migrations/20260919040000-configure-request-references.js';
 import {
   up as actionUp,
   down as actionDown,
@@ -215,6 +216,7 @@ test(
       );
       await lifecycleUp(db);
       await actionUp(db);
+      await referenceUp(db);
       await db
         .insertInto('permission')
         .values(
@@ -1537,6 +1539,12 @@ test(
               .selectFrom('service_request')
               .select('id')
               .execute();
+            const counterBefore = await db
+              .selectFrom('service_request_reference_sequence')
+              .selectAll()
+              .orderBy('organization_id')
+              .orderBy('period_key')
+              .execute();
             await request(app.getHttpServer())
               .post(publicPath)
               .send(base)
@@ -1563,6 +1571,15 @@ test(
                 .length,
               before.length,
             );
+            assert.deepEqual(
+              await db
+                .selectFrom('service_request_reference_sequence')
+                .selectAll()
+                .orderBy('organization_id')
+                .orderBy('period_key')
+                .execute(),
+              counterBefore,
+            );
             await postAs(configPath, {
               actionType: 'internal_intake',
               expectedRevision: 2,
@@ -1588,6 +1605,191 @@ test(
               .expect(201);
             await postAs(staffPath, assisted, creator).expect(201);
             await postAs(staffPath, internal, creator).expect(201);
+          },
+        );
+        await t.test(
+          'F033 reference configuration is Entra-only, explicit-permission and trusted-Organization scoped',
+          async () => {
+            const path =
+              '/api/v1/staff/service-request-reference-configuration';
+            await request(app.getHttpServer()).get(path).expect(401);
+            const proposed = {
+              prefix: 'REQ',
+              dateComponent: 'year',
+              resetPolicy: 'yearly',
+              separator: '-',
+              sequenceWidth: 8,
+              expectedRevision: 1,
+            };
+            for (const who of [creator, publicOnly, noGrant]) {
+              await request(app.getHttpServer())
+                .get(path)
+                .set('Authorization', `Bearer ${who}`)
+                .expect(403);
+              await request(app.getHttpServer())
+                .post(path)
+                .set('Authorization', `Bearer ${who}`)
+                .send(proposed)
+                .expect(403);
+            }
+            assert.equal(
+              (
+                await db
+                  .selectFrom('role_permission')
+                  .selectAll()
+                  .where(
+                    'permission_key',
+                    '=',
+                    'service_request.reference.manage',
+                  )
+                  .execute()
+              ).length,
+              0,
+            );
+            // Prove other administrative/request permissions do not imply reference management.
+            const roleRow = await db
+              .selectFrom('staff_role_assignment')
+              .select('role_id')
+              .where('staff_identity_id', '=', creator)
+              .executeTakeFirstOrThrow();
+            for (const key of [
+              'service_request.internal.read',
+              'service_request.internal.update',
+              'catalog.issue_action.manage',
+            ])
+              await db
+                .insertInto('role_permission')
+                .values({
+                  organization_id: org,
+                  role_id: roleRow.role_id,
+                  permission_key: key,
+                })
+                .onConflict((oc) => oc.doNothing())
+                .execute();
+            await request(app.getHttpServer())
+              .get(path)
+              .set('Authorization', `Bearer ${creator}`)
+              .expect(403);
+            await db
+              .insertInto('role_permission')
+              .values({
+                organization_id: org,
+                role_id: roleRow.role_id,
+                permission_key: 'service_request.reference.manage',
+              })
+              .execute();
+            const beforeOther = await db
+              .selectFrom('service_request_reference_config')
+              .selectAll()
+              .where('organization_id', '=', otherOrg)
+              .executeTakeFirstOrThrow();
+            const get = await request(app.getHttpServer())
+              .get(path)
+              .set('Authorization', `Bearer ${creator}`)
+              .expect(200);
+            assert.equal((get.body as { revision: number }).revision, 1);
+            for (const changed of [
+              { prefix: 'unsafe\n' },
+              { separator: '/' },
+              { sequenceWidth: 0 },
+              { dateComponent: 'none' },
+              { resetPolicy: 'unknown' },
+              { organizationId: otherOrg },
+              { nextSequence: 123 },
+              { referenceNumber: 'CHOSEN' },
+            ])
+              await request(app.getHttpServer())
+                .post(path)
+                .set('Authorization', `Bearer ${creator}`)
+                .send({ ...proposed, ...changed })
+                .expect(400);
+            await request(app.getHttpServer())
+              .post(path)
+              .set('Authorization', `Bearer ${creator}`)
+              .send({})
+              .expect(400);
+            await request(app.getHttpServer())
+              .post(path)
+              .set('Authorization', `Bearer ${creator}`)
+              .send(proposed)
+              .expect(200);
+            await request(app.getHttpServer())
+              .post(path)
+              .set('Authorization', `Bearer ${creator}`)
+              .send(proposed)
+              .expect(409);
+            const scoped = await request(app.getHttpServer())
+              .get(`${path}?organizationId=${otherOrg}`)
+              .set('Authorization', `Bearer ${creator}`)
+              .expect(200);
+            assert.equal((scoped.body as { prefix: string }).prefix, 'REQ');
+            assert.deepEqual(
+              await db
+                .selectFrom('service_request_reference_config')
+                .selectAll()
+                .where('organization_id', '=', otherOrg)
+                .executeTakeFirstOrThrow(),
+              beforeOther,
+            );
+            await request(app.getHttpServer())
+              .get(`${path}/${otherOrg}`)
+              .set('Authorization', `Bearer ${creator}`)
+              .expect(404);
+            // F032 preserved question must still be answered for this version.
+            const definition = await request(app.getHttpServer())
+              .get(`/api/v1/catalog/issues/${service}`)
+              .expect(200);
+            const detail = definition.body as {
+              publishedVersionId: string;
+              questions: { id: string }[];
+            };
+            const current = await db
+              .selectFrom('service_definition')
+              .select('current_published_version_id')
+              .where('id', '=', service)
+              .executeTakeFirstOrThrow();
+            const submission = {
+              ...base,
+              serviceDefinitionVersionId: current.current_published_version_id,
+              answers: detail.questions.map((q) => ({
+                questionId: q.id,
+                value: 'F033 synthetic',
+              })),
+            };
+            const refs: string[] = [];
+            for (const [endpoint, payload, who] of [
+              [publicPath, submission, null],
+              [
+                staffPath,
+                { ...assisted, ...submission, reportingIdentity: 'identified' },
+                creator,
+              ],
+              [
+                staffPath,
+                { ...internal, ...submission, reportingIdentity: 'identified' },
+                creator,
+              ],
+            ] as const) {
+              const call = request(app.getHttpServer()).post(endpoint);
+              if (who) call.set('Authorization', `Bearer ${who}`);
+              const result = await call.send(payload).expect(201);
+              refs.push(
+                (result.body as { referenceNumber: string }).referenceNumber,
+              );
+            }
+            assert.deepEqual(
+              refs.map((r) => r.slice(-8)),
+              ['00000001', '00000002', '00000003'],
+            );
+            for (const fields of [
+              { referenceNumber: 'CUSTOM' },
+              { nextSequence: 999 },
+              { organizationId: otherOrg },
+            ])
+              await request(app.getHttpServer())
+                .post(publicPath)
+                .send({ ...submission, ...fields })
+                .expect(400);
           },
         );
       } finally {

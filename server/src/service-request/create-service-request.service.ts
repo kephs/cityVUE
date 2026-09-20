@@ -17,9 +17,7 @@ import type {
 } from './service-request.dto.js';
 import {
   conditionMatches,
-  formatReferenceNumber,
   normalizeAnswer,
-  periodKeyFor,
   validateLocationPolicy,
   validateRequesterPolicy,
   type CanonicalAnswerValue,
@@ -261,9 +259,12 @@ export class CreateServiceRequestService {
         throw new ConflictException(
           'This Issue is handled by an external service',
         );
-      const period = periodKeyFor(now, definition.businessTimezone);
-      const sequence = await this.repository.allocateReference(trx, period);
-      const referenceNumber = formatReferenceNumber(period, sequence);
+      const referenceNumber = await this.repository.allocateReference(
+        trx,
+        context.organizationId,
+        now,
+        definition.businessTimezone,
+      );
       const requestId = randomUUID();
       const created = await trx
         .insertInto('service_request')

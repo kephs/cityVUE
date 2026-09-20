@@ -1,3 +1,5 @@
+import { ReferenceConfigurationController } from './reference-configuration.controller.js';
+import { ReferenceConfigurationService } from './reference-configuration.service.js';
 import { InternalRequestMutationsController } from './internal-request-mutations.controller.js';
 import { InternalRequestMutationsService } from './internal-request-mutations.service.js';
 import { StaffIntakeController } from './staff-intake.controller.js';
@@ -15,12 +17,14 @@ import { StaffActionsService } from './staff-actions.service.js';
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    ReferenceConfigurationController,
     ServiceRequestController,
     StaffIntakeController,
     InternalRequestController,
     InternalRequestMutationsController,
   ],
   providers: [
+    ReferenceConfigurationService,
     InternalRequestRepository,
     InternalRequestMutationsService,
     ServiceRequestRepository,

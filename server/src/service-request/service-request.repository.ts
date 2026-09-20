@@ -1,3 +1,4 @@
+import { allocateConfiguredReference } from './reference-policy.repository.js';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
@@ -430,17 +431,11 @@ export class ServiceRequestRepository {
 
   async allocateReference(
     trx: Transaction<DatabaseSchema>,
-    periodKey: string,
-  ): Promise<number> {
-    const result = await sql<{
-      last_value: number;
-    }>`insert into service_request_reference_sequence(period_key,last_value) values (${periodKey},1)
-      on conflict(period_key) do update set last_value=service_request_reference_sequence.last_value+1, updated_at=now()
-      returning last_value`.execute(trx);
-    const value = result.rows[0]?.last_value;
-    if (!value || value > 999999)
-      throw new Error('Monthly service request reference capacity exhausted');
-    return value;
+    organizationId: string,
+    now: Date,
+    zone: string,
+  ): Promise<string> {
+    return allocateConfiguredReference(trx, organizationId, now, zone);
   }
 
   async findByReference(

@@ -44,37 +44,6 @@ export type SupportedQuestionType =
   'short_text' | 'long_text' | 'number' | 'yes_no' | 'single_select';
 export type CanonicalAnswerValue = string | number | boolean;
 
-export function periodKeyFor(date: Date, timeZone: string): string {
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-    }).formatToParts(date);
-    const year = parts.find((part) => part.type === 'year')?.value;
-    const month = parts.find((part) => part.type === 'month')?.value;
-    if (!year || !month) throw new Error('Missing date part');
-    return `${year}${month}`;
-  } catch {
-    throw new Error(`Invalid Organization business timezone: ${timeZone}`);
-  }
-}
-
-export function formatReferenceNumber(
-  periodKey: string,
-  value: number,
-): string {
-  if (
-    !/^\d{6}$/.test(periodKey) ||
-    !Number.isInteger(value) ||
-    value < 1 ||
-    value > 999999
-  ) {
-    throw new Error('Invalid service request reference components');
-  }
-  return `SR-${periodKey}-${String(value).padStart(6, '0')}`;
-}
-
 export function conditionMatches(
   actual: CanonicalAnswerValue | undefined,
   expected: unknown,

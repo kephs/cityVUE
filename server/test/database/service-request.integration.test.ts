@@ -1,3 +1,4 @@
+import { up as referenceUp } from '../../migrations/20260919040000-configure-request-references.js';
 import { up as actionUp } from '../../migrations/20260919030000-add-issue-action.js';
 import { up as authUp } from '../../migrations/20260903020000-add-entra-rbac-foundation.js';
 import { up as audienceUp } from '../../migrations/20260919000000-add-request-audience-assisted-intake.js';
@@ -74,6 +75,7 @@ test(
       await authUp(db);
       await audienceUp(db);
       await actionUp(db);
+      await referenceUp(db);
       await db
         .insertInto('organization')
         .values({
@@ -581,7 +583,7 @@ test(
             .where('period_key', '=', '202610')
             .executeTakeFirstOrThrow()
         ).last_value,
-        14,
+        '14',
       );
 
       await assert.rejects(

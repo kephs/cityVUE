@@ -103,9 +103,20 @@ interface QuestionOptionTable {
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
 }
+interface ReferenceConfigTable {
+  organization_id: string;
+  prefix: Generated<string>;
+  date_component: Generated<string>;
+  sequence_width: Generated<number>;
+  reset_policy: Generated<string>;
+  separator: Generated<string>;
+  revision: Generated<number>;
+  updated_at: Generated<Timestamp>;
+}
 interface ReferenceSequenceTable {
+  organization_id: string;
   period_key: string;
-  last_value: number;
+  last_value: string;
   updated_at: Generated<Timestamp>;
 }
 export interface ServiceRequestTable {
@@ -353,6 +364,7 @@ export interface DatabaseSchema {
   question: QuestionTable;
   question_option: QuestionOptionTable;
   service_request_reference_sequence: ReferenceSequenceTable;
+  service_request_reference_config: ReferenceConfigTable;
   service_request: ServiceRequestTable;
   requester_contact: RequesterContactTable;
   location: LocationTable;
