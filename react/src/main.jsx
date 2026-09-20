@@ -8,6 +8,8 @@ import { RouterProvider } from "react-router-dom";
 import router from "./app/router.jsx";
 import { ThemeProvider } from "./theme/ThemeProvider.jsx";
 import "./styles.css";
+import "./theme/designTokens.css";
+import "./components/ui/primitives.css";
 
 createRoot(document.querySelector("#root")).render(
     <StrictMode>

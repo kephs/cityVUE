@@ -1,0 +1,216 @@
+[data-bs-theme] {
+  --bs-body-bg: var(--surface-card);
+  --bs-body-color: var(--text-primary);
+  --bs-secondary-color: var(--text-muted);
+  --bs-tertiary-bg: var(--surface-page);
+  --bs-secondary-bg: var(--surface-subtle);
+  --bs-border-color: var(--border-default);
+}
+body {
+  font-size: var(--font-body);
+  line-height: var(--line-body);
+}
+.ui-brand-logo {
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+  margin-right: var(--space-2);
+}
+.ui-card,
+.app-shell .card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+.ui-card {
+  padding: var(--space-5);
+  min-width: 0;
+}
+.ui-section-heading {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: var(--font-section);
+  font-weight: var(--weight-heading);
+  margin-bottom: var(--space-4);
+}
+.ui-issue-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-card);
+  background: var(--surface-subtle);
+  color: var(--text-primary);
+  font-size: 1.35rem;
+}
+.ui-issue-icon--large {
+  width: 5rem;
+  height: 5rem;
+  border-radius: var(--radius-pill);
+  font-size: 2.4rem;
+}
+.ui-location {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+  font-size: 1.1rem;
+  margin-block: var(--space-3);
+}
+.ui-reference {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--font-small);
+  color: var(--text-secondary);
+}
+.ui-reference-value {
+  background: var(--surface-subtle);
+  border-radius: var(--radius-control);
+  padding-inline: var(--space-2);
+  overflow-wrap: anywhere;
+  font-weight: var(--weight-label);
+}
+.tone-open {
+  --tone: var(--status-open);
+  --tone-bg: var(--status-open-bg);
+}
+.tone-work {
+  --tone: var(--status-work);
+  --tone-bg: var(--status-work-bg);
+}
+.tone-hold {
+  --tone: var(--status-hold);
+  --tone-bg: var(--status-hold-bg);
+}
+.tone-closed {
+  --tone: var(--status-closed);
+  --tone-bg: var(--status-closed-bg);
+}
+.tone-cancelled {
+  --tone: var(--status-cancelled);
+  --tone-bg: var(--status-cancelled-bg);
+}
+.tone-routing {
+  --tone: var(--activity-routing);
+  --tone-bg: var(--activity-routing-bg);
+}
+.tone-assignment {
+  --tone: var(--activity-assignment);
+  --tone-bg: var(--activity-assignment-bg);
+}
+.tone-created {
+  --tone: var(--activity-created);
+  --tone-bg: var(--activity-created-bg);
+}
+.tone-watcher {
+  --tone: var(--activity-watcher);
+  --tone-bg: var(--activity-watcher-bg);
+}
+.ui-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--tone-bg);
+  color: var(--tone);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-small);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.app-shell .btn {
+  border-radius: var(--radius-control);
+  font-weight: var(--weight-label);
+}
+.app-shell .btn-primary {
+  --bs-btn-bg: var(--brand-primary);
+  --bs-btn-border-color: var(--brand-primary);
+  --bs-btn-hover-bg: var(--brand-primary-hover);
+  --bs-btn-hover-border-color: var(--brand-primary-hover);
+  --bs-btn-active-bg: var(--brand-primary-hover);
+  --bs-btn-active-border-color: var(--brand-primary-hover);
+  --bs-btn-color: var(--brand-on-primary);
+  --bs-btn-hover-color: var(--brand-on-primary);
+}
+.app-shell .btn-secondary {
+  --bs-btn-color: var(--text-primary);
+  --bs-btn-bg: var(--surface-subtle);
+  --bs-btn-border-color: var(--border-default);
+  --bs-btn-hover-color: var(--text-primary);
+  --bs-btn-hover-bg: var(--surface-card);
+  --bs-btn-hover-border-color: var(--text-secondary);
+  --bs-btn-disabled-color: var(--text-muted);
+  --bs-btn-disabled-bg: var(--surface-subtle);
+  --bs-btn-disabled-border-color: var(--border-default);
+}
+.app-shell
+  :where(
+    button,
+    a,
+    input,
+    select,
+    textarea,
+    summary,
+    [tabindex]
+  ):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.app-shell .form-control,
+.app-shell .form-select {
+  border-radius: var(--radius-control);
+  border-color: var(--border-default);
+}
+.app-shell h1 {
+  font-size: var(--font-title);
+  font-weight: var(--weight-heading);
+}
+.react-site-header {
+  background: var(--brand-primary);
+  color: var(--brand-on-primary);
+}
+.react-site-header :focus-visible {
+  outline-color: var(--brand-on-primary);
+}
+.react-site-header .navbar-brand {
+  min-width: 0;
+  max-width: min(22rem, 70%);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1199.98px) {
+  .react-site-header .navbar-expand-xl {
+    flex-wrap: wrap;
+  }
+  .react-site-header .navbar-collapse {
+    flex-basis: 100%;
+    padding-block: var(--space-4);
+  }
+  .react-site-header .navbar-collapse.collapse:not(.show) {
+    display: none;
+  }
+  .react-site-header .navbar-nav {
+    align-items: stretch;
+  }
+}
+@media (max-width: 575.98px) {
+  .ui-card {
+    padding: var(--space-4);
+  }
+  .ui-issue-icon--large {
+    width: 3.5rem;
+    height: 3.5rem;
+    font-size: 1.75rem;
+  }
+}
+
+.app-shell {
+  background: var(--surface-page);
+  color: var(--text-primary);
+}

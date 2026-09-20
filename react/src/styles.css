@@ -2,7 +2,7 @@
     --cityvue-content-max: 1440px;
     --cityvue-page-gutter: clamp(0.75rem, 2.5vw, 2rem);
     --cityvue-control-height: 46px;
-    --cityvue-card-radius: 1rem;
+    --cityvue-card-radius: var(--radius-card);
     --cityvue-section-gap: clamp(1.25rem, 2vw, 2rem);
 }
 
@@ -88,18 +88,15 @@ body {
 }
 
 :where(a, button):focus-visible {
-    outline: 3px solid #79b5ff;
+    outline: 3px solid var(--focus-ring);
     outline-offset: 3px;
 }
 
 @media (min-width: 992px) {
     html { font-size: 17px; }
-    .react-site-header .navbar-collapse {
-        display: flex !important;
-    }
 }
 
-@media (max-width: 991.98px) {
+@media (max-width: 1199.98px) {
     :root { --cityvue-page-gutter: clamp(0.75rem, 3vw, 1.25rem); }
     .react-site-header .navbar-collapse {
         padding-block: 0.75rem 1rem;

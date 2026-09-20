@@ -1,19 +1,13 @@
+import { activityPresentation } from "../../components/ui/presentation.js";
+import { StatusBadge } from "../../components/ui/RequestPresentation.jsx";
 import { useEffect, useRef, useState } from "react";
 import { statusLabels } from "./requestRepository.js";
-export const activityLabels = {
-  request_assigned: "Request assigned",
-  request_reassigned: "Request reassigned",
-  request_unassigned: "Request unassigned",
-  watcher_added: "Watcher added",
-  watcher_removed: "Watcher removed",
-  request_created: "Request created",
-  work_started: "Work started",
-  placed_on_hold: "Placed on hold",
-  work_resumed: "Work resumed",
-  request_closed: "Request closed",
-  request_reopened: "Request reopened",
-  request_routed: "Request routed",
-};
+export const activityLabels = Object.fromEntries(
+  Object.entries(activityPresentation).map(([type, meta]) => [
+    type,
+    meta.label,
+  ]),
+);
 export default function RequestActivity({ repository, id, onAccessFailure }) {
   const [page, setPage] = useState(1),
     [retry, setRetry] = useState(0),
@@ -44,11 +38,12 @@ export default function RequestActivity({ repository, id, onAccessFailure }) {
   const current = state?.page === page ? state : null;
   return (
     <section
-      className="request-activity"
+      className="request-activity ui-card"
       aria-labelledby="request-activity-heading"
     >
       <h3 id="request-activity-heading" ref={heading} tabIndex="-1">
-        Request Activity
+        <i className="bi bi-clock-history" aria-hidden="true" /> Request
+        Activity
       </h3>
       <p className="text-body-secondary">Newest activity first</p>
       {!current && <p role="status">Loading activity…</p>}
@@ -70,84 +65,123 @@ export default function RequestActivity({ repository, id, onAccessFailure }) {
           )}
           <ol className="request-activity-list">
             {current.data.items.map((event) => (
-              <li key={event.id}>
-                <h4>{activityLabels[event.type]}</h4>
-                <p className="activity-attribution">
-                  <time dateTime={event.occurredAt}>
-                    {new Date(event.occurredAt).toLocaleString()}
-                  </time>{" "}
-                  · {event.actorDisplay}
-                </p>
-                {event.fromStatus && (
-                  <p>
-                    {statusLabels[event.fromStatus]} →{" "}
-                    {statusLabels[event.toStatus]}
+              <li
+                key={event.id}
+                className={`activity-item tone-${activityPresentation[event.type]?.tone || "created"}`}
+              >
+                <span className="activity-marker" aria-hidden="true">
+                  <i
+                    className={`bi bi-${activityPresentation[event.type]?.icon || "file-earmark-text"}`}
+                  />
+                </span>
+                <div className="activity-content">
+                  <h4>{activityLabels[event.type] || "Recorded activity"}</h4>
+                  <p className="activity-attribution">
+                    <time dateTime={event.occurredAt}>
+                      {new Date(event.occurredAt).toLocaleString()}
+                    </time>{" "}
+                    · {event.actorDisplay}
                   </p>
-                )}
-                {event.type === "request_routed" && (
-                  <dl>
-                    <dt>From</dt>
-                    <dd>
-                      {event.fromDepartment}
-                      {event.fromDivision ? ` / ${event.fromDivision}` : ""}
-                    </dd>
-                    <dt>To</dt>
-                    <dd>
-                      {event.toDepartment}
-                      {event.toDivision ? ` / ${event.toDivision}` : ""}
-                    </dd>
-                  </dl>
-                )}
-                {event.fromTargetName && (
-                  <p>
-                    Previous{" "}
-                    {
-                      { staff: "staff member", role: "role", group: "team" }[
-                        event.fromTargetType
-                      ]
-                    }
-                    : {event.fromTargetName}
-                  </p>
-                )}
-                {event.toTargetName && (
-                  <p>
-                    {
-                      { staff: "Staff", role: "Role", group: "Team" }[
-                        event.toTargetType
-                      ]
-                    }
-                    : {event.toTargetName}
-                  </p>
-                )}
-                {event.intakeChannel && (
-                  <p>
-                    Intake:{" "}
-                    {{
-                      web: "Web",
-                      phone: "Phone",
-                      walk_in: "In person",
-                      staff: "Staff",
-                      api: "API",
-                    }[event.intakeChannel] || "Recorded intake"}
-                  </p>
-                )}
-                {event.narrative && (
-                  <>
-                    <strong>
-                      {event.type === "request_closed"
-                        ? "Resolution"
-                        : "Reason"}
-                    </strong>
-                    {event.narrative.length > 1000 ? (
-                      <details>
-                        <summary>Read narrative</summary>
+                  {event.fromStatus && (
+                    <p>
+                      {statusLabels[event.fromStatus]} →{" "}
+                      <StatusBadge value={event.toStatus} />
+                    </p>
+                  )}
+                  {event.type === "request_routed" && (
+                    <dl>
+                      <dt>From</dt>
+                      <dd>
+                        {event.fromDepartment}
+                        {event.fromDivision ? ` / ${event.fromDivision}` : ""}
+                      </dd>
+                      <dt>To</dt>
+                      <dd>
+                        {event.toDepartment}
+                        {event.toDivision ? ` / ${event.toDivision}` : ""}
+                      </dd>
+                    </dl>
+                  )}
+                  {(event.fromTargetName || event.toTargetName) && (
+                    <dl className="activity-targets">
+                      {event.fromTargetName && (
+                        <div>
+                          <dt>
+                            {event.type === "request_reassigned"
+                              ? "From"
+                              : event.type === "watcher_removed"
+                                ? "Watcher removed"
+                                : "Previous assignment"}
+                          </dt>
+                          <dd>
+                            {event.fromTargetName}{" "}
+                            <span className="text-body-secondary">
+                              ·{" "}
+                              {
+                                { staff: "Staff", role: "Role", group: "Team" }[
+                                  event.fromTargetType
+                                ]
+                              }
+                            </span>
+                          </dd>
+                        </div>
+                      )}
+                      {event.toTargetName && (
+                        <div>
+                          <dt>
+                            {event.type === "request_reassigned"
+                              ? "To"
+                              : event.type === "watcher_added"
+                                ? "Watcher"
+                                : "Assigned to"}
+                          </dt>
+                          <dd>
+                            {event.toTargetName}{" "}
+                            <span className="text-body-secondary">
+                              ·{" "}
+                              {
+                                { staff: "Staff", role: "Role", group: "Team" }[
+                                  event.toTargetType
+                                ]
+                              }
+                            </span>
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  )}
+                  {event.intakeChannel && (
+                    <p>
+                      Intake:{" "}
+                      {{
+                        web: "Web",
+                        phone: "Phone",
+                        walk_in: "In person",
+                        staff: "Staff",
+                        api: "API",
+                      }[event.intakeChannel] || "Recorded intake"}
+                    </p>
+                  )}
+                  {event.narrative && (
+                    <div className="activity-narrative-card">
+                      <strong>
+                        {event.type === "request_closed"
+                          ? "Resolution"
+                          : "Reason"}
+                      </strong>
+                      {event.narrative.length > 1000 ? (
+                        <details>
+                          <summary>Read narrative</summary>
+                          <p className="activity-narrative">
+                            {event.narrative}
+                          </p>
+                        </details>
+                      ) : (
                         <p className="activity-narrative">{event.narrative}</p>
-                      </details>
-                    ) : (
-                      <p className="activity-narrative">{event.narrative}</p>
-                    )}
-                  </>
-                )}
+                      )}
+                    </div>
+                  )}
+                </div>
               </li>
             ))}
           </ol>

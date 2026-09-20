@@ -826,6 +826,60 @@ test(
           })
           .execute();
         await t.test(
+          'F038 presentation fields use authorized catalog and service location only',
+          async () => {
+            const before = await getInternal(
+              `${internalPath}/${internalId}`,
+            ).expect(200);
+            assert.equal(before.body.serviceLocation, null);
+            const catalog = await db
+              .selectFrom('service_definition_version')
+              .select('icon_key')
+              .where('id', '=', version)
+              .executeTakeFirstOrThrow();
+            assert.equal(before.body.issueIcon, catalog.icon_key);
+            assert.equal(typeof before.body.categoryName, 'string');
+            await sql`insert into location(organization_id,service_request_id,entered_address,normalized_address) values(${org},${internalId},'Fictional training site','123 Fictional Training Lane')`.execute(
+              db,
+            );
+            try {
+              const detail = await getInternal(
+                `${internalPath}/${internalId}`,
+              ).expect(200);
+              assert.equal(
+                detail.body.serviceLocation,
+                '123 Fictional Training Lane',
+              );
+              assert.equal(detail.body.contact, undefined);
+              const list = await getInternal(internalPath).expect(200);
+              assert.equal(
+                list.body.items.find(
+                  (r: { serviceRequestId: string }) =>
+                    r.serviceRequestId === internalId,
+                ).serviceLocation,
+                '123 Fictional Training Lane',
+              );
+              await getInternal(`${internalPath}/${otherInternal}`).expect(404);
+              await getInternal(`${internalPath}/${publicId}`).expect(404);
+              await db
+                .updateTable('location')
+                .set({ normalized_address: null })
+                .where('service_request_id', '=', internalId)
+                .execute();
+              assert.equal(
+                (await getInternal(`${internalPath}/${internalId}`).expect(200))
+                  .body.serviceLocation,
+                'Fictional training site',
+              );
+            } finally {
+              await db
+                .deleteFrom('location')
+                .where('service_request_id', '=', internalId)
+                .execute();
+            }
+          },
+        );
+        await t.test(
           'F030 authorized internal list/count/detail are scoped and omit protected contact fields',
           async () => {
             // Defense against a future/imported contact row: the read projection must never join it.
@@ -869,6 +923,9 @@ test(
                 'createdAt',
                 'updatedAt',
                 'issueName',
+                'issueIcon',
+                'categoryName',
+                'serviceLocation',
                 'categoryId',
                 'departmentId',
                 'divisionId',

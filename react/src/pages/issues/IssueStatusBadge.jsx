@@ -1,6 +1,2 @@
-import { getStatusClassName } from "./issuePresentation.js";
-
-export default function IssueStatusBadge({ status }) {
-    const displayStatus = status || "Open";
-    return <span className={`badge ${getStatusClassName(status)}`}>{displayStatus}</span>;
-}
+import { StatusBadge } from "../../components/ui/RequestPresentation.jsx";
+export default function IssueStatusBadge({status}) { return <StatusBadge value={status || "Open"} />; }

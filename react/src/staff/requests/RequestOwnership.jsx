@@ -5,6 +5,10 @@ export const targetLabels = { staff: "Staff", role: "Role", group: "Team" };
 export function TargetLabel({ target }) {
   return target ? (
     <>
+      <i
+        className={`bi bi-${{ staff: "person", role: "person-badge", group: "people" }[target.type] || "person"}`}
+        aria-hidden="true"
+      />{" "}
       {target.displayName} · {targetLabels[target.type]}
       {target.active === false ? " (inactive)" : ""}
     </>

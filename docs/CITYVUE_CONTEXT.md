@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+F038 establishes a reusable visual language for Reqro, the current client-neutral platform direction, while retaining CityVUE application/repository naming. The approved Service Request detail concept informs an Issue-first staff workspace with real configured icons/location, shared semantic status/activity presentation, responsive navigation and light/dark tokens. Existing fictional data and F029–F037 security behavior remain intact. No production logo adoption or historical rename occurred. Older surface normalization is explicitly partial; see [F038](features/F038-unified-ui-design-system-experience-refresh.md).
+
 F037 adds server-authorized STAFF/operational ROLE/Team ownership, explicit watchers and reader self-watch, scoped operational views, and atomic assignment/watch history. Operational membership and ownership grant no permissions. Existing work groups and F036 local safety boundaries are reused; notifications and production administration remain deferred. See [F037](features/F037-assignment-ownership-watchers-foundation.md).
 
 F036 adds explicit local development staff provisioning, read-only inspection/dry-run and targeted deprovisioning using existing Entra mappings and PostgreSQL RBAC. Personal database/profile checks fail closed; runtime authorization, default grants and production HTTP surfaces are unchanged. See [F036](features/F036-safe-development-staff-authorization-provisioning.md).

@@ -9,7 +9,7 @@ export default function AppLayout({ children }) {
         : "container flex-grow-1 py-4 py-md-5";
 
     return (
-        <div className="app-shell d-flex min-vh-100 flex-column bg-body-tertiary text-body">
+        <div className="app-shell d-flex min-vh-100 flex-column">
             <a className="skip-link" href="#main-content">Skip to main content</a>
             <SiteHeader />
             <main className={mainClassName} id="main-content" tabIndex="-1">

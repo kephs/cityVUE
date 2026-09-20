@@ -94,6 +94,62 @@ function Jump() {
     </button>
   );
 }
+
+test("F038 detail is Issue-first with configured icon and authorized location", async () => {
+  repository.detail.mockResolvedValue({
+    ...row,
+    issueIcon: "signpost-split",
+    categoryName: "Fictional Services",
+    serviceLocation: "123 Fictional Service Lane",
+  });
+  const { container } = show(`/staff/requests/${id}`);
+  const heading = await screen.findByRole("heading", {
+    name: row.issueName,
+    level: 2,
+  });
+  const reference = screen.getByText(row.referenceNumber);
+  expect(
+    heading.compareDocumentPosition(reference) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    container.querySelector(".request-identity .bi-signpost-split"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("123 Fictional Service Lane")).toBeInTheDocument();
+  for (const title of [
+    "Description",
+    "Assignment",
+    "Watchers",
+    "Issue Details",
+    "Actions",
+    "Request Activity",
+  ])
+    expect(
+      await screen.findByRole("heading", { name: title }),
+    ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "This is an internal request. Resident contact information is not displayed.",
+    ),
+  ).toBeInTheDocument();
+});
+test("F038 absent location stays absent and unsafe icon falls back without contact substitution", async () => {
+  repository.detail.mockResolvedValue({
+    ...row,
+    issueIcon: "<svg onload=alert(1)>",
+    contact: { address: "Never display contact address" },
+  });
+  const { container } = show(`/staff/requests/${id}`);
+  await screen.findByRole("heading", { name: row.issueName });
+  expect(container.querySelector(".ui-location")).toBeNull();
+  expect(
+    container.querySelector(".request-identity .bi-file-earmark-text"),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByText("Never display contact address"),
+  ).not.toBeInTheDocument();
+  expect(container.querySelector("svg")).toBeNull();
+});
 function show(path = "/staff/requests", secured = false) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -126,7 +182,7 @@ function show(path = "/staff/requests", secured = false) {
 test("list has loading, semantic references/status/department/date and no UUID primary display", async () => {
   show();
   expect(screen.getByText("Loading requests…")).toBeInTheDocument();
-  await screen.findByRole("link", { name: row.referenceNumber });
+  await screen.findByRole("link", { name: row.issueName });
   expect(screen.getByRole("table")).toHaveAccessibleName(
     /Internal Service Requests/,
   );
@@ -146,13 +202,11 @@ test.each([
 ])("opaque reference %s appears unparsed", async (reference) => {
   repository.detail.mockResolvedValue({ ...row, referenceNumber: reference });
   show(`/staff/requests/${id}`);
-  expect(
-    await screen.findByRole("heading", { name: reference }),
-  ).toBeInTheDocument();
+  expect(await screen.findByText(reference)).toBeInTheDocument();
 });
 test("detail deep link displays plain text without contact or interpreted markup", async () => {
   const view = show(`/staff/requests/${id}`);
-  await screen.findByRole("heading", { name: row.referenceNumber });
+  await screen.findByRole("heading", { name: row.issueName });
   expect(screen.getByText(/<script>/)).toBeInTheDocument();
   expect(view.container.querySelector("script")).toBeNull();
   expect(repository.detail).toHaveBeenCalledWith(id, expect.any(AbortSignal));
@@ -172,7 +226,7 @@ test("long description is available through semantic disclosure", async () => {
 });
 test("search and status apply only on submit, reset and preserve link filter state", async () => {
   show();
-  await screen.findByRole("link", { name: row.referenceNumber });
+  await screen.findByRole("link", { name: row.issueName });
   fireEvent.change(screen.getByLabelText("Reference"), {
     target: { value: "CASE" },
   });
@@ -187,7 +241,7 @@ test("search and status apply only on submit, reset and preserve link filter sta
       expect.any(AbortSignal),
     ),
   );
-  const link = await screen.findByRole("link", { name: row.referenceNumber });
+  const link = await screen.findByRole("link", { name: row.issueName });
   expect(link.getAttribute("href")).toContain("search=CASE");
   fireEvent.click(screen.getByRole("button", { name: "Reset" }));
   await waitFor(() =>
@@ -206,7 +260,7 @@ test("server pagination changes page without loading all records", async () => {
     hasNextPage: true,
   });
   show();
-  await screen.findByRole("link", { name: row.referenceNumber });
+  await screen.findByRole("link", { name: row.issueName });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await waitFor(() =>
     expect(repository.list).toHaveBeenLastCalledWith(
@@ -250,7 +304,7 @@ test("list failure has safe retry and no protected rows", async () => {
   show();
   await screen.findByRole("alert");
   expect(
-    screen.queryByRole("link", { name: row.referenceNumber }),
+    screen.queryByRole("link", { name: row.issueName }),
   ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
 });
@@ -263,7 +317,7 @@ test.each([
 ])("complete F035 workflow controls for %s", async (status, action) => {
   repository.detail.mockResolvedValue({ ...row, status });
   show(`/staff/requests/${id}`);
-  await screen.findByRole("heading", { name: row.referenceNumber });
+  await screen.findByRole("heading", { name: row.issueName });
   if (action)
     expect(screen.getByRole("button", { name: action })).toBeInTheDocument();
   else
@@ -375,7 +429,7 @@ test("switching UUID clears prior request while inaccessible detail loads", asyn
     .mockResolvedValueOnce(row)
     .mockImplementation(() => new Promise(() => {}));
   show(`/staff/requests/${id}`);
-  await screen.findByRole("heading", { name: row.referenceNumber });
+  await screen.findByRole("heading", { name: row.issueName });
   fireEvent.click(screen.getByRole("button", { name: "Other request" }));
   expect(
     screen.queryByText(/Fictional protected description/),
@@ -384,7 +438,7 @@ test("switching UUID clears prior request while inaccessible detail loads", asyn
 });
 test("authentication is required, and sign-out removes protected content", async () => {
   const view = show(`/staff/requests/${id}`, true);
-  await screen.findByRole("heading", { name: row.referenceNumber });
+  await screen.findByRole("heading", { name: row.issueName });
   useAuth.mockReturnValue({
     enabled: true,
     isAuthenticated: false,
@@ -524,12 +578,12 @@ test("activity-specific failure preserves detail and retry, authorization loss c
   show(`/staff/requests/${id}`);
   await screen.findByText("Activity could not be loaded.");
   expect(
-    screen.getByRole("heading", { name: row.referenceNumber }),
+    screen.getByRole("heading", { name: row.issueName }),
   ).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Retry activity" }));
   await screen.findByText(/do not have permission/);
   expect(
-    screen.queryByRole("heading", { name: row.referenceNumber }),
+    screen.queryByRole("heading", { name: row.issueName }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("heading", { name: "Request Activity" }),
@@ -970,7 +1024,7 @@ test.each(["mine", "team", "watching"])(
   async (view) => {
     const user = userEvent.setup();
     show("/staff/requests?status=open&page=3&search=CASE-00000001");
-    await screen.findByRole("link", { name: row.referenceNumber });
+    await screen.findByRole("link", { name: row.issueName });
     await user.selectOptions(screen.getByLabelText("Request view"), view);
     await waitFor(() =>
       expect(repository.list).toHaveBeenLastCalledWith(
@@ -983,7 +1037,7 @@ test.each(["mine", "team", "watching"])(
         expect.anything(),
       ),
     );
-    const link = await screen.findByRole("link", { name: row.referenceNumber });
+    const link = await screen.findByRole("link", { name: row.issueName });
     expect(link.getAttribute("href")).toContain(`view=${view}`);
   },
 );

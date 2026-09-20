@@ -55,6 +55,11 @@ function project(row, detail = false) {
     referenceNumber: row.referenceNumber,
     status: row.status,
     issueName: row.issueName,
+    issueIcon: typeof row.issueIcon === "string" ? row.issueIcon : null,
+    categoryName:
+      typeof row.categoryName === "string" ? row.categoryName : null,
+    serviceLocation:
+      typeof row.serviceLocation === "string" ? row.serviceLocation : null,
     departmentId: row.departmentId,
     departmentName: row.departmentName,
     divisionId: row.divisionId,

@@ -1,7 +1,8 @@
+import { StatusBadge } from "../../components/ui/RequestPresentation.jsx";
 import { Link } from "react-router-dom";
 import { getRecentIssues } from "../../../../assets/js/utils/statistics.js";
 import { getIssueIcon } from "../issues/issueIconPresentation.js";
-import { formatIssueDate, getStatusClassName } from "../issues/issuePresentation.js";
+import { formatIssueDate } from "../issues/issuePresentation.js";
 
 const RECENT_LIMIT = 10;
 
@@ -26,7 +27,7 @@ export default function RecentActivity({ issues }) {
                             <span>{issue.location || "Location unavailable"}</span>
                         </div>
                         <time dateTime={issue.dateReported || undefined}>{displayDate}</time>
-                        <span className={`badge ${getStatusClassName(issue.status)}`}>{issue.status || "Open"}</span>
+                        <StatusBadge value={issue.status || "Open"} />
                         <i className="bi bi-chevron-right home-row-arrow" aria-hidden="true"></i>
                     </Link>;
                 })}

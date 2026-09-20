@@ -106,6 +106,13 @@ export class InternalRequestRepository {
         'request.created_at as createdAt',
         'request.updated_at as updatedAt',
         'version.name as issueName',
+        'version.icon_key as issueIcon',
+        'category.name as categoryName',
+        sql<
+          string | null
+        >`(select coalesce(nullif(btrim(l.normalized_address), ''), nullif(btrim(l.entered_address), '')) from location l where l.organization_id=request.organization_id and l.service_request_id=request.id limit 1)`.as(
+          'serviceLocation',
+        ),
         'category.id as categoryId',
         internalDepartment.as('departmentId'),
         internalDivision.as('divisionId'),

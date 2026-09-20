@@ -1,8 +1,9 @@
+import { safeIssueIcon } from "../components/ui/presentation.js";
 import { normalizeIssueAction } from "./issueAction.js";
 import { getActiveCategories, getServicesByCategory, getServiceById } from "./catalogService.js";
 
 const accents = ["blue", "amber", "cyan", "green", "emerald"];
-const iconClass = (key, fallback) => key ? `bi-${key.replace(/^bi-/, "")}` : fallback;
+const iconClass = (key) => safeIssueIcon(key);
 
 export function createFixtureCatalogRepository() {
     const initialCategories = getActiveCategories();

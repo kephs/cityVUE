@@ -1,0 +1,88 @@
+:root,
+[data-bs-theme="light"] {
+  --brand-primary: #075bd8;
+  --brand-primary-hover: #0649ad;
+  --brand-accent: #217867;
+  --brand-on-primary: #ffffff;
+  --surface-page: #f4f7fb;
+  --surface-card: #ffffff;
+  --surface-subtle: #edf1f6;
+  --text-primary: #17243a;
+  --text-secondary: #46556b;
+  --text-muted: #526176;
+  --border-default: #d8e0e9;
+  --focus-ring: #064fc3;
+  --shadow-card: 0 2px 8px #15243a06;
+  --shadow-overlay: 0 12px 36px #15243a20;
+  --status-open: #17643a;
+  --status-open-bg: #def4e5;
+  --status-work: #164c9a;
+  --status-work-bg: #e3edff;
+  --status-hold: #77500b;
+  --status-hold-bg: #fff1cc;
+  --status-closed: #a3293b;
+  --status-closed-bg: #ffe7ea;
+  --status-cancelled: #58616f;
+  --status-cancelled-bg: #e9edf2;
+  --activity-routing: #6634a5;
+  --activity-routing-bg: #f0e7ff;
+  --activity-assignment: #12646d;
+  --activity-assignment-bg: #dff3f4;
+  --activity-created: #45566f;
+  --activity-created-bg: #eaf0f7;
+  --activity-watcher: #546077;
+  --activity-watcher-bg: #edf0f5;
+}
+[data-bs-theme="dark"] {
+  --brand-primary: #1d5dcb;
+  --brand-primary-hover: #174fae;
+  --brand-accent: #78d7bd;
+  --surface-page: #111824;
+  --surface-card: #1b2534;
+  --surface-subtle: #253144;
+  --text-primary: #edf3fc;
+  --text-secondary: #c2cede;
+  --text-muted: #adbbd0;
+  --border-default: #3e4d63;
+  --focus-ring: #a7ccff;
+  --shadow-card: 0 2px 8px #00000020;
+  --shadow-overlay: 0 12px 36px #00000060;
+  --status-open: #a1e7b8;
+  --status-open-bg: #203e30;
+  --status-work: #bad5ff;
+  --status-work-bg: #223958;
+  --status-hold: #f6d789;
+  --status-hold-bg: #433821;
+  --status-closed: #ffb5c0;
+  --status-closed-bg: #482d38;
+  --status-cancelled: #d0d6e0;
+  --status-cancelled-bg: #303947;
+  --activity-routing: #d7baff;
+  --activity-routing-bg: #392b50;
+  --activity-assignment: #9be0e5;
+  --activity-assignment-bg: #223e46;
+  --activity-created: #c3d3ea;
+  --activity-created-bg: #2b3a4f;
+  --activity-watcher: #c4cee0;
+  --activity-watcher-bg: #303c4f;
+}
+:root {
+  --font-body: 1rem;
+  --font-small: 0.875rem;
+  --font-section: 1.25rem;
+  --font-title: clamp(1.6rem, 2vw, 2rem);
+  --font-issue: clamp(1.75rem, 2.4vw, 2.25rem);
+  --weight-label: 600;
+  --weight-heading: 750;
+  --line-body: 1.6;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --radius-control: 0.5rem;
+  --radius-card: 0.75rem;
+  --radius-pill: 100rem;
+}
