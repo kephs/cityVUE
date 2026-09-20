@@ -116,3 +116,17 @@ No F036 database migration required. Personal reqro_dev retains 16 applied migra
 ## Deferred work
 
 Production staff/role administration, invitations, Entra group mapping, SCIM, approval workflows and durable grant audit history require separate designs. F036 is not a production onboarding tool or an ownership proof for arbitrary configured resources. It adds no default grant, permission UI, client integration, notification, resident-contact access, PUBLIC staff workspace or F037 feature.
+
+
+## F037 operational target setup extension
+
+After F037 migration and automated validation, `setup-operations` can explicitly create/reuse fictional operational reviewer roles, compatible existing work groups, and the selected principal's operational memberships. It uses the same required development profile, personal tenant confirmation, exact local database identity, existing fictional Organization and explicitly selected scopes. Department/Division memberships must already exist; this command never grants permissions or creates staff identities.
+
+From `server`, with the same ignored local configuration documented above:
+
+```powershell
+node --env-file=.env --env-file=.env.f036 node_modules/tsx/dist/cli.mjs src/database/development-staff-cli.ts setup-operations --dry-run
+node --env-file=.env --env-file=.env.f036 node_modules/tsx/dist/cli.mjs src/database/development-staff-cli.ts setup-operations --confirm
+```
+
+Equivalent package command with environment already loaded: `npm run dev:staff:setup-operations -- --dry-run` / `--confirm`. Dry run performs zero writes. Setup is transactional and idempotent under the same Organization lock as grant provisioning. It rejects inactive existing memberships instead of silently reactivating them. Synthetic memberships may be explicitly retained for future UAT. No bulk operational-target cleanup or production membership-management capability is introduced; the existing targeted permission deprovision command remains separate. See F037 for operational eligibility and the final UAT state.

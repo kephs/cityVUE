@@ -1,3 +1,5 @@
+import { setupDevelopmentOperationalTargets } from '../../src/database/development-operational-targets.js';
+import { up as ownershipUp } from '../../migrations/20260920000000-add-assignment-watchers.js';
 import { up as eligibilityUp } from '../../migrations/20260902030000-add-location-eligibility-snapshot.js';
 import { up as audienceUp } from '../../migrations/20260919000000-add-request-audience-assisted-intake.js';
 import { up as lifecycleUp } from '../../migrations/20260919020000-add-internal-request-lifecycle.js';
@@ -132,6 +134,7 @@ test(
         audienceUp,
         lifecycleUp,
         operationalUp,
+        ownershipUp,
       ])
         await migrate(db);
       await db
@@ -594,6 +597,102 @@ test(
             changeDevelopmentStaffGrants(db, input, 'deprovision', false),
           );
           assert.deepEqual(await state(), before);
+        },
+      );
+      await t.test(
+        'F037 explicit operational setup is read-only in dry run, idempotent, atomic and grants no RBAC',
+        async () => {
+          await db
+            .insertInto('staff_department_membership')
+            .values({
+              organization_id: input.organizationId,
+              staff_identity_id: staffId,
+              department_id: departmentId,
+              active: true,
+            })
+            .onConflict((oc) =>
+              oc
+                .columns(['staff_identity_id', 'department_id'])
+                .doUpdateSet({ active: true }),
+            )
+            .execute();
+          await db
+            .insertInto('staff_division_membership')
+            .values({
+              organization_id: input.organizationId,
+              staff_identity_id: staffId,
+              department_id: departmentId,
+              division_id: divisionId,
+              active: true,
+            })
+            .onConflict((oc) =>
+              oc
+                .columns(['staff_identity_id', 'division_id'])
+                .doUpdateSet({ active: true }),
+            )
+            .execute();
+          const opState = async () => ({
+            rbac: await state(),
+            roles: await db
+              .selectFrom('operational_role')
+              .selectAll()
+              .execute(),
+            groups: await db.selectFrom('work_group').selectAll().execute(),
+            roleMembers: await db
+              .selectFrom('operational_role_membership')
+              .selectAll()
+              .execute(),
+            groupMembers: await db
+              .selectFrom('work_group_membership')
+              .selectAll()
+              .execute(),
+          });
+          const before = await opState();
+          await setupDevelopmentOperationalTargets(db, input, true);
+          assert.deepEqual(await opState(), before);
+          for (const bad of [
+            { ...input, tenantId: randomUUID() },
+            { ...input, staffId: randomUUID() },
+            { ...input, organizationId: randomUUID() },
+            {
+              ...input,
+              scopes: [{ departmentId: otherDepartment, divisionId }],
+            },
+          ])
+            await assert.rejects(
+              setupDevelopmentOperationalTargets(db, bad, false),
+            );
+          assert.deepEqual(await opState(), before);
+          await sql`create function fail_op_member() returns trigger language plpgsql as $$ begin raise exception 'synthetic failure'; end $$; create trigger fail_op_member before insert on work_group_membership for each row execute function fail_op_member()`.execute(
+            db,
+          );
+          await assert.rejects(
+            setupDevelopmentOperationalTargets(db, input, false),
+          );
+          assert.deepEqual(await opState(), before);
+          await sql`drop trigger fail_op_member on work_group_membership; drop function fail_op_member()`.execute(
+            db,
+          );
+          await Promise.all(
+            Array.from({ length: 3 }, () =>
+              setupDevelopmentOperationalTargets(db, input, false),
+            ),
+          );
+          const after = await opState();
+          assert.equal(after.roles.length, 1);
+          assert.equal(after.groups.length, 1);
+          assert.equal(after.roleMembers.length, 1);
+          assert.equal(after.groupMembers.length, 1);
+          assert.deepEqual(after.rbac, before.rbac);
+          await setupDevelopmentOperationalTargets(db, input, false);
+          assert.deepEqual(await opState(), after);
+          const access = await auth.resolve(principal);
+          assert.ok(
+            !access.permissions.includes('service_request.internal.read'),
+          );
+          assert.ok(
+            !access.permissions.includes('service_request.internal.update'),
+          );
         },
       );
     } finally {

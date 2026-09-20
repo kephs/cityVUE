@@ -1,3 +1,4 @@
+import { assignmentProjection, operationalView } from './ownership-targets.js';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { sql } from 'kysely';
 import type { StaffAccess } from '../auth/auth.types.js';
@@ -18,6 +19,7 @@ export function assertInternalReadAccess(
 }
 
 export interface InternalRequestFilters {
+  view?: string;
   search?: string;
   status?: string;
   departmentId?: string;
@@ -43,6 +45,15 @@ export class InternalRequestRepository {
     filters: InternalRequestFilters = {},
   ) {
     let query = this.scoped(access);
+    assertInternalReadAccess(access);
+    if (filters.view)
+      query = query.where(
+        operationalView(
+          filters.view,
+          access.organizationId,
+          access.staffIdentityId,
+        ),
+      );
     if (filters.status)
       query = query.where('request.status', '=', filters.status);
     if (filters.departmentId)
@@ -63,6 +74,7 @@ export class InternalRequestRepository {
     access: StaffAccess | undefined,
     filters: InternalRequestFilters = {},
   ) {
+    assertInternalReadAccess(access);
     return this.filtered(access, filters)
       .innerJoin('department as effective_department', (join) =>
         join
@@ -83,6 +95,7 @@ export class InternalRequestRepository {
           .on('effective_division.id', '=', internalDivision),
       )
       .select([
+        assignmentProjection(access.organizationId).as('assignment'),
         'effective_department.name as departmentName',
         'effective_division.name as divisionName',
         'request.id as serviceRequestId',
@@ -199,6 +212,10 @@ export class InternalRequestRepository {
             'to_division_name as toDivision',
             'narrative',
             'intake_channel as intakeChannel',
+            'from_target_type as fromTargetType',
+            'from_target_name as fromTargetName',
+            'to_target_type as toTargetType',
+            'to_target_name as toTargetName',
           ])
           .where('organization_id', '=', access.organizationId)
           .where('service_request_id', '=', id)

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { statusLabels } from "./requestRepository.js";
 export const activityLabels = {
+  request_assigned: "Request assigned",
+  request_reassigned: "Request reassigned",
+  request_unassigned: "Request unassigned",
+  watcher_added: "Watcher added",
+  watcher_removed: "Watcher removed",
   request_created: "Request created",
   work_started: "Work started",
   placed_on_hold: "Placed on hold",
@@ -92,6 +97,27 @@ export default function RequestActivity({ repository, id, onAccessFailure }) {
                       {event.toDivision ? ` / ${event.toDivision}` : ""}
                     </dd>
                   </dl>
+                )}
+                {event.fromTargetName && (
+                  <p>
+                    Previous{" "}
+                    {
+                      { staff: "staff member", role: "role", group: "team" }[
+                        event.fromTargetType
+                      ]
+                    }
+                    : {event.fromTargetName}
+                  </p>
+                )}
+                {event.toTargetName && (
+                  <p>
+                    {
+                      { staff: "Staff", role: "Role", group: "Team" }[
+                        event.toTargetType
+                      ]
+                    }
+                    : {event.toTargetName}
+                  </p>
                 )}
                 {event.intakeChannel && (
                   <p>

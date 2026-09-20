@@ -1,3 +1,5 @@
+import { RequestOwnershipController } from './request-ownership.controller.js';
+import { RequestOwnershipService } from './request-ownership.service.js';
 import { ReferenceConfigurationController } from './reference-configuration.controller.js';
 import { ReferenceConfigurationService } from './reference-configuration.service.js';
 import { InternalRequestMutationsController } from './internal-request-mutations.controller.js';
@@ -17,6 +19,7 @@ import { StaffActionsService } from './staff-actions.service.js';
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    RequestOwnershipController,
     ReferenceConfigurationController,
     ServiceRequestController,
     StaffIntakeController,
@@ -24,6 +27,7 @@ import { StaffActionsService } from './staff-actions.service.js';
     InternalRequestMutationsController,
   ],
   providers: [
+    RequestOwnershipService,
     ReferenceConfigurationService,
     InternalRequestRepository,
     InternalRequestMutationsService,

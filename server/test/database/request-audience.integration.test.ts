@@ -1,3 +1,8 @@
+import { checkRequestOwnership } from './request-ownership-checks.js';
+import {
+  up as ownershipUp,
+  down as ownershipDown,
+} from '../../migrations/20260920000000-add-assignment-watchers.js';
 import { checkOperationalActivity } from './request-activity-checks.js';
 import {
   up as operationalUp,
@@ -262,6 +267,54 @@ test(
               .orderBy('id')
               .execute(),
             parents,
+          );
+        },
+      );
+      await t.test(
+        'F037 migration preserves existing data and supports unused rollback/reapply',
+        async () => {
+          const before = await db
+            .selectFrom('service_request')
+            .selectAll()
+            .orderBy('id')
+            .execute();
+          const events = await db
+            .selectFrom('request_operational_activity')
+            .select(['id', 'activity_type', 'occurred_at'])
+            .orderBy('id')
+            .execute();
+          await ownershipUp(db);
+          assert.deepEqual(
+            await db
+              .selectFrom('service_request_assignment')
+              .selectAll()
+              .execute(),
+            [],
+          );
+          assert.deepEqual(
+            await db
+              .selectFrom('service_request_watcher')
+              .selectAll()
+              .execute(),
+            [],
+          );
+          await ownershipDown(db);
+          await ownershipUp(db);
+          assert.deepEqual(
+            await db
+              .selectFrom('service_request')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+            before,
+          );
+          assert.deepEqual(
+            await db
+              .selectFrom('request_operational_activity')
+              .select(['id', 'activity_type', 'occurred_at'])
+              .orderBy('id')
+              .execute(),
+            events,
           );
         },
       );
@@ -809,6 +862,7 @@ test(
               [
                 'serviceRequestId',
                 'referenceNumber',
+                'assignment',
                 'audience',
                 'status',
                 'priority',
@@ -2028,6 +2082,22 @@ test(
           org,
           creator,
           publicOnly,
+          otherOrg,
+          otherInternal,
+          publicId,
+          internalPayload: internal,
+          department,
+          targetDepartment,
+          targetDivision,
+        });
+        await checkRequestOwnership(t, {
+          app,
+          db,
+          org,
+          creator,
+          publicOnly,
+          noGrant,
+          otherStaff,
           otherOrg,
           otherInternal,
           publicId,

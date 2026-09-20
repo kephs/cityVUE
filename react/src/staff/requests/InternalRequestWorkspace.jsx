@@ -1,3 +1,4 @@
+import RequestOwnership, { TargetLabel } from "./RequestOwnership.jsx";
 import RequestActivity from "./RequestActivity.jsx";
 import WorkflowNarrativeForm from "./WorkflowNarrativeForm.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -93,6 +94,7 @@ function RequestList({ repository, onSignIn }) {
   const [params, setParams] = useSearchParams();
   const page = Math.max(1, Math.min(1000000, Number(params.get("page")) || 1));
   const filters = {
+    view: params.get("view") || "all",
     search: params.get("search") || "",
     status: params.get("status") || "",
     departmentId: params.get("departmentId") || "",
@@ -127,6 +129,7 @@ function RequestList({ repository, onSignIn }) {
   const apply = (next) => {
     const query = new URLSearchParams();
     for (const field of [
+      "view",
       "search",
       "status",
       "departmentId",
@@ -137,6 +140,7 @@ function RequestList({ repository, onSignIn }) {
     setParams(query);
   };
   const filtered = Boolean(
+    filters.view !== "all" ||
     filters.search ||
     filters.status ||
     filters.departmentId ||
@@ -152,6 +156,24 @@ function RequestList({ repository, onSignIn }) {
           apply({ ...draft, page: 1 });
         }}
       >
+        <div>
+          <label htmlFor="request-view">Request view</label>
+          <select
+            id="request-view"
+            className="form-select"
+            value={draft.view || "all"}
+            onChange={(e) => {
+              const next = { ...draft, view: e.target.value, page: 1 };
+              setDraft(next);
+              apply(next);
+            }}
+          >
+            <option value="all">All Requests</option>
+            <option value="mine">My Requests</option>
+            <option value="team">My Team</option>
+            <option value="watching">Watching</option>
+          </select>
+        </div>
         <div className="request-search">
           <label htmlFor="request-search">Reference</label>
           <input
@@ -254,6 +276,7 @@ function RequestList({ repository, onSignIn }) {
                   <th scope="col">Reference / Issue</th>
                   <th scope="col">Status</th>
                   <th scope="col">Department / Division</th>
+                  <th scope="col">Assignment</th>
                   <th scope="col">Created</th>
                 </tr>
               </thead>
@@ -279,6 +302,9 @@ function RequestList({ repository, onSignIn }) {
                           {row.divisionName}
                         </span>
                       )}
+                    </td>
+                    <td data-label="Assignment">
+                      <TargetLabel target={row.assignment} />
                     </td>
                     <td data-label="Created">
                       <time dateTime={row.createdAt}>
@@ -366,7 +392,13 @@ function RequestDetail({ repository, id, onSignIn }) {
     if (state?.data) heading.current?.focus();
   }, [state?.data]);
   const mutate = async (operation, input) => {
-    if (inFlight.current || !state?.data || !state.options.canUpdate) return;
+    if (
+      inFlight.current ||
+      !state?.data ||
+      (!state.options.canUpdate &&
+        !["watchSelf", "unwatchSelf"].includes(operation))
+    )
+      return;
     inFlight.current = true;
     setBusy(true);
     setNotice("");
@@ -387,9 +419,25 @@ function RequestDetail({ repository, id, onSignIn }) {
       const fresh = await read(signal);
       if (fresh)
         setNotice(
-          operation === "route"
-            ? "Request routed successfully."
-            : `Request moved to ${statusLabels[fresh.status]}.`,
+          [
+            "assign",
+            "unassign",
+            "addWatcher",
+            "removeWatcher",
+            "watchSelf",
+            "unwatchSelf",
+          ].includes(operation)
+            ? {
+                assign: "Assignment updated.",
+                unassign: "Request unassigned.",
+                addWatcher: "Watcher added.",
+                removeWatcher: "Watcher removed.",
+                watchSelf: "You are now watching this request.",
+                unwatchSelf: "You stopped watching this request.",
+              }[operation]
+            : operation === "route"
+              ? "Request routed successfully."
+              : `Request moved to ${statusLabels[fresh.status]}.`,
         );
     } catch (error) {
       if (signal.aborted) return;
@@ -499,6 +547,15 @@ function RequestDetail({ repository, id, onSignIn }) {
               <p>{row.description}</p>
             )}
           </section>
+          <RequestOwnership
+            repository={repository}
+            id={id}
+            row={row}
+            canUpdate={state.options.canUpdate}
+            busy={busy || Boolean(narrativeAction) || routing}
+            onMutate={mutate}
+            onAccessFailure={accessFailure}
+          />
           <section className="request-actions">
             <h3>Actions</h3>
             {!state.options.canUpdate ? (

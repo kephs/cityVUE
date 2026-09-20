@@ -1,3 +1,4 @@
+import { clearIneligibleAssignment } from './request-ownership.service.js';
 import {
   normalizeOperationalNarrative,
   workflowActivityTypes,
@@ -252,6 +253,15 @@ export class InternalRequestMutationsService {
           ...scopeSnapshot,
         })
         .execute();
+      if (operation === 'routing')
+        await clearIneligibleAssignment(
+          trx,
+          access,
+          id,
+          departmentId,
+          divisionId,
+          row.revision,
+        );
       return {
         serviceRequestId: row.id,
         status: row.status,

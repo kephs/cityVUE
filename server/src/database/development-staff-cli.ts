@@ -1,3 +1,4 @@
+import { setupDevelopmentOperationalTargets } from './development-operational-targets.js';
 import 'reflect-metadata';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
@@ -17,7 +18,8 @@ async function run() {
   const [command, ...flags] = process.argv.slice(2);
   if (command === '--help' || flags.includes('--help')) {
     process.stdout.write(`F036 personal development staff tooling
-Commands: inspect | provision | deprovision
+Commands: inspect | provision | deprovision | setup-operations
+setup-operations explicitly creates/reuses fictional operational roles/teams and memberships for the selected existing scopes. It changes no permissions.
 Flags: --dry-run (read-only), --confirm (explicit write)
 Set NODE_ENV=development, CITYVUE_DEPLOYMENT_PROFILE=development,
 CITYVUE_ENABLE_EXTERNAL_IDENTITY=true and existing Entra settings.
@@ -34,7 +36,9 @@ Identity, requests, activity, catalog and unrelated roles are preserved.
     return;
   }
   if (
-    !['inspect', 'provision', 'deprovision'].includes(command ?? '') ||
+    !['inspect', 'provision', 'deprovision', 'setup-operations'].includes(
+      command ?? '',
+    ) ||
     flags.some((flag) => !['--dry-run', '--confirm'].includes(flag)) ||
     new Set(flags).size !== flags.length ||
     (flags.includes('--dry-run') && flags.includes('--confirm'))
@@ -126,6 +130,30 @@ Identity, requests, activity, catalog and unrelated roles are preserved.
     const staffId = process.env.F036_STAFF_ID ?? '';
     if (!developmentUuid.test(staffId))
       throw new Error('Explicit staff ID required');
+    if (command === 'setup-operations') {
+      const result = await setupDevelopmentOperationalTargets(
+        db,
+        {
+          tenantId,
+          staffId,
+          organizationId: process.env.F036_ORGANIZATION_ID ?? '',
+          scopes: selectedDevelopmentScopes(process.env.F036_SCOPES),
+        },
+        dryRun,
+      );
+      process.stdout.write(
+        JSON.stringify(
+          {
+            profile: 'development',
+            database: 'localhost:5432 / reqro_dev / reqro_dev_user',
+            ...result,
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+      return;
+    }
     const result = await changeDevelopmentStaffGrants(
       db,
       {

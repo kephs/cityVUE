@@ -44,6 +44,14 @@ let repository;
 beforeEach(() => {
   vi.clearAllMocks();
   repository = {
+    watchers: vi.fn().mockResolvedValue({ items: [], watchingSelf: false }),
+    targets: vi.fn().mockResolvedValue({ items: [] }),
+    assign: vi.fn().mockResolvedValue({}),
+    unassign: vi.fn().mockResolvedValue({}),
+    addWatcher: vi.fn().mockResolvedValue({}),
+    removeWatcher: vi.fn().mockResolvedValue({}),
+    watchSelf: vi.fn().mockResolvedValue({}),
+    unwatchSelf: vi.fn().mockResolvedValue({}),
     activity: vi.fn().mockResolvedValue({
       items: [],
       page: 1,
@@ -712,3 +720,270 @@ test("completed narrative command with failed detail refresh shows retry without
   expect(repository.workflow).toHaveBeenCalledTimes(1);
   expect(screen.queryByText("Loading request…")).not.toBeInTheDocument();
 });
+
+test.each(["staff", "role", "group"])(
+  "F037 shows %s assignment and watcher as escaped text",
+  async (type) => {
+    const targetValue = {
+      type,
+      id: other,
+      displayName: "Fictional <script>target</script>",
+      active: true,
+    };
+    repository.detail.mockResolvedValue({ ...row, assignment: targetValue });
+    repository.watchers.mockResolvedValue({
+      items: [targetValue],
+      watchingSelf: false,
+    });
+    show(`/staff/requests/${id}`);
+    expect(
+      await screen.findByRole("heading", { name: "Assignment" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", {
+        name: "Remove watcher: Fictional <script>target</script>",
+      }),
+    ).toBeInTheDocument();
+    expect(document.querySelector("script")).toBeNull();
+    expect(screen.queryByText(/@example/)).not.toBeInTheDocument();
+  },
+);
+
+test.each(["staff", "role", "group"])(
+  "F037 assigns eligible %s with revision and authoritative refresh",
+  async (type) => {
+    const user = userEvent.setup();
+    const targetValue = {
+      type,
+      id: other,
+      displayName: "Fictional selected target",
+      active: true,
+    };
+    repository.targets.mockResolvedValue({ items: [targetValue] });
+    show(`/staff/requests/${id}`);
+    await user.click(
+      await screen.findByRole("button", { name: "Assign Request" }),
+    );
+    await user.selectOptions(screen.getByLabelText("Target type"), type);
+    await user.selectOptions(
+      await screen.findByLabelText("Eligible target"),
+      other,
+    );
+    repository.detail.mockResolvedValue({
+      ...row,
+      revision: 2,
+      assignment: targetValue,
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Confirm assignment" }),
+    );
+    await waitFor(() =>
+      expect(repository.assign).toHaveBeenCalledWith(
+        id,
+        { targetType: type, targetId: other, expectedRevision: 1 },
+        expect.anything(),
+      ),
+    );
+    expect(await screen.findByText("Assignment updated.")).toBeInTheDocument();
+    expect(repository.detail).toHaveBeenCalledTimes(2);
+    expect(repository.activity).toHaveBeenCalledTimes(2);
+  },
+);
+
+test("F037 picker search, no-results, errors, keyboard cancel and focus return", async () => {
+  const user = userEvent.setup();
+  show(`/staff/requests/${id}`);
+  const trigger = await screen.findByRole("button", { name: "Assign Request" });
+  await user.click(trigger);
+  expect(screen.getByLabelText("Target type")).toHaveFocus();
+  expect(
+    await screen.findByText("No eligible targets found."),
+  ).toBeInTheDocument();
+  await user.type(screen.getByLabelText("Search eligible targets"), "reviewer");
+  await user.click(screen.getByRole("button", { name: "Search targets" }));
+  await waitFor(() =>
+    expect(repository.targets).toHaveBeenLastCalledWith(
+      id,
+      "staff",
+      "reviewer",
+      expect.anything(),
+    ),
+  );
+  repository.targets.mockRejectedValue({ status: 500 });
+  await user.click(screen.getByRole("button", { name: "Search targets" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Targets could not be loaded",
+  );
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(trigger).toHaveFocus());
+  expect(
+    screen.queryByRole("form", { name: "Choose assignment" }),
+  ).not.toBeInTheDocument();
+});
+
+test("F037 read-only users can self-watch but cannot manage other targets", async () => {
+  repository.options.mockResolvedValue({
+    canUpdate: false,
+    departments: [],
+    divisions: [],
+  });
+  const user = userEvent.setup();
+  show(`/staff/requests/${id}`);
+  const watch = await screen.findByRole("button", {
+    name: "Watch this request",
+  });
+  expect(
+    screen.queryByRole("button", { name: "Assign Request" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Add Watcher" }),
+  ).not.toBeInTheDocument();
+  repository.watchers.mockResolvedValue({
+    items: [{ type: "staff", id: other, displayName: "Fictional staff" }],
+    watchingSelf: true,
+  });
+  repository.detail.mockResolvedValue({ ...row, revision: 2 });
+  await user.click(watch);
+  await waitFor(() =>
+    expect(repository.watchSelf).toHaveBeenCalledWith(
+      id,
+      { expectedRevision: 1 },
+      expect.anything(),
+    ),
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Stop watching" }),
+  );
+  await waitFor(() =>
+    expect(repository.unwatchSelf).toHaveBeenCalledWith(
+      id,
+      { expectedRevision: 2 },
+      expect.anything(),
+    ),
+  );
+});
+
+test("F037 add/remove watchers refreshes from API and preserves separate assignment", async () => {
+  const user = userEvent.setup(),
+    targetValue = {
+      type: "role",
+      id: other,
+      displayName: "Fictional reviewer",
+    };
+  repository.targets.mockResolvedValue({ items: [targetValue] });
+  show(`/staff/requests/${id}`);
+  await user.click(await screen.findByRole("button", { name: "Add Watcher" }));
+  await user.selectOptions(screen.getByLabelText("Target type"), "role");
+  await user.selectOptions(
+    await screen.findByLabelText("Eligible target"),
+    other,
+  );
+  repository.watchers.mockResolvedValue({
+    items: [targetValue],
+    watchingSelf: false,
+  });
+  repository.detail.mockResolvedValue({ ...row, revision: 2 });
+  await user.click(screen.getByRole("button", { name: "Confirm watcher" }));
+  await waitFor(() =>
+    expect(repository.addWatcher).toHaveBeenCalledWith(
+      id,
+      { targetType: "role", targetId: other, expectedRevision: 1 },
+      expect.anything(),
+    ),
+  );
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Remove watcher: Fictional reviewer",
+    }),
+  );
+  await waitFor(() =>
+    expect(repository.removeWatcher).toHaveBeenCalledWith(
+      id,
+      { targetType: "role", targetId: other, expectedRevision: 2 },
+      expect.anything(),
+    ),
+  );
+  expect(repository.assign).not.toHaveBeenCalled();
+});
+
+test("F037 unassign and duplicate watcher conflict reload authoritative state", async () => {
+  const user = userEvent.setup();
+  repository.detail.mockResolvedValue({
+    ...row,
+    assignment: { type: "group", id: other, displayName: "Fictional team" },
+  });
+  show(`/staff/requests/${id}`);
+  await user.click(
+    await screen.findByRole("button", { name: "Unassign Request" }),
+  );
+  await waitFor(() =>
+    expect(repository.unassign).toHaveBeenCalledWith(
+      id,
+      { expectedRevision: 1 },
+      expect.anything(),
+    ),
+  );
+  repository.watchSelf.mockRejectedValue({ status: 409 });
+  await user.click(
+    await screen.findByRole("button", { name: "Watch this request" }),
+  );
+  expect(
+    await screen.findByText(/latest information has been loaded/),
+  ).toBeInTheDocument();
+  expect(repository.detail).toHaveBeenCalledTimes(3);
+});
+
+test("F037 pending mutation prevents rapid duplicate commands", async () => {
+  let finish;
+  repository.watchSelf.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  show(`/staff/requests/${id}`);
+  const button = await screen.findByRole("button", {
+    name: "Watch this request",
+  });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(repository.watchSelf).toHaveBeenCalledTimes(1);
+  expect(button).toBeDisabled();
+  await act(async () => finish({}));
+});
+
+test.each([401, 403, 404])(
+  "F037 watcher authorization failure %s clears protected detail",
+  async (status) => {
+    repository.watchers.mockRejectedValue({ status });
+    show(`/staff/requests/${id}`);
+    await screen.findByRole("alert");
+    expect(screen.queryByText(row.description)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Assignment" }),
+    ).not.toBeInTheDocument();
+  },
+);
+
+test.each(["mine", "team", "watching"])(
+  "F037 %s view composes and resets page",
+  async (view) => {
+    const user = userEvent.setup();
+    show("/staff/requests?status=open&page=3&search=CASE-00000001");
+    await screen.findByRole("link", { name: row.referenceNumber });
+    await user.selectOptions(screen.getByLabelText("Request view"), view);
+    await waitFor(() =>
+      expect(repository.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          view,
+          status: "open",
+          page: 1,
+          search: "CASE-00000001",
+        }),
+        expect.anything(),
+      ),
+    );
+    const link = await screen.findByRole("link", { name: row.referenceNumber });
+    expect(link.getAttribute("href")).toContain(`view=${view}`);
+  },
+);

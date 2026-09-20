@@ -34,6 +34,7 @@ import { StaffAccessGuard } from '../auth/staff-access.guard.js';
 import { InternalRequestRepository } from './internal-request.repository.js';
 
 export class InternalRequestListQueryDto {
+  @IsOptional() @IsIn(['all', 'mine', 'team', 'watching']) view?: string;
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -15,6 +15,22 @@ const invalid = () =>
     "invalid-response",
     "Request information is unavailable.",
   );
+function targetProjection(value) {
+  if (
+    !value ||
+    !["staff", "role", "group"].includes(value.type) ||
+    !uuid.test(value.id) ||
+    typeof value.displayName !== "string" ||
+    value.displayName.length > 200
+  )
+    throw invalid();
+  return {
+    type: value.type,
+    id: value.id,
+    displayName: value.displayName,
+    ...(typeof value.active === "boolean" ? { active: value.active } : {}),
+  };
+}
 function project(row, detail = false) {
   if (
     !row ||
@@ -34,6 +50,7 @@ function project(row, detail = false) {
   )
     throw invalid();
   return {
+    assignment: row.assignment ? targetProjection(row.assignment) : null,
     serviceRequestId: row.serviceRequestId,
     referenceNumber: row.referenceNumber,
     status: row.status,
@@ -66,6 +83,7 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
     async list(filters, signal) {
       const query = new URLSearchParams();
       for (const key of [
+        "view",
         "search",
         "status",
         "departmentId",
@@ -97,6 +115,11 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         options(signal),
       );
       const types = [
+        "request_assigned",
+        "request_reassigned",
+        "request_unassigned",
+        "watcher_added",
+        "watcher_removed",
         "request_created",
         "work_started",
         "placed_on_hold",
@@ -140,11 +163,52 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
               "toDivision",
               "narrative",
               "intakeChannel",
+              "fromTargetType",
+              "fromTargetName",
+              "toTargetType",
+              "toTargetName",
             ].map((key) => [key, row[key]]),
           );
         }),
       };
     },
+    async targets(id, type, search, signal) {
+      const query = new URLSearchParams({ type, search });
+      const data = await api.get(
+        `${path(id)}/assignment-targets?${query}`,
+        options(signal),
+      );
+      if (!Array.isArray(data?.items) || data.items.length > 25)
+        throw invalid();
+      return { items: data.items.map(targetProjection) };
+    },
+    async watchers(id, signal) {
+      const data = await api.get(`${path(id)}/watchers`, options(signal));
+      if (
+        !Array.isArray(data?.items) ||
+        data.items.length > 100 ||
+        typeof data.watchingSelf !== "boolean"
+      )
+        throw invalid();
+      return {
+        items: data.items.map(targetProjection),
+        watchingSelf: data.watchingSelf,
+      };
+    },
+    ...Object.fromEntries(
+      Object.entries({
+        assign: "assignment",
+        unassign: "assignment/remove",
+        addWatcher: "watchers",
+        removeWatcher: "watchers/remove",
+        watchSelf: "watch-self",
+        unwatchSelf: "unwatch-self",
+      }).map(([name, suffix]) => [
+        name,
+        (id, input, signal) =>
+          api.post(`${path(id)}/${suffix}`, input, options(signal)),
+      ]),
+    ),
     async detail(id, signal) {
       return project(await api.get(path(id), options(signal)), true);
     },

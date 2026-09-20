@@ -10,6 +10,11 @@ export const workflowActivityTypes = {
 } as const satisfies Record<WorkflowAction, string>;
 
 export type RequestActivityType =
+  | 'request_assigned'
+  | 'request_reassigned'
+  | 'request_unassigned'
+  | 'watcher_added'
+  | 'watcher_removed'
   | 'request_created'
   | 'request_routed'
   | (typeof workflowActivityTypes)[WorkflowAction];

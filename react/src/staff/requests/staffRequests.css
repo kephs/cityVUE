@@ -320,3 +320,39 @@
 .request-detail > header > div {
   min-width: 0;
 }
+
+.request-ownership section {
+  margin-block: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.ownership-picker {
+  padding: 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  margin-block: 1rem;
+}
+.ownership-picker fieldset {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+.ownership-picker select,
+.ownership-picker input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.watcher-list {
+  padding-left: 1.25rem;
+}
+.watcher-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block: 0.65rem;
+}
+.watcher-list span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

@@ -211,6 +211,11 @@ interface AnswerTable {
   updated_at: Generated<Timestamp>;
 }
 interface RequestOperationalActivityTable {
+  from_target_type: Generated<string | null>;
+  from_target_name: Generated<string | null>;
+  to_target_type: Generated<string | null>;
+  to_target_name: Generated<string | null>;
+  event_index: Generated<number>;
   id: Generated<string>;
   organization_id: string;
   service_request_id: string;
@@ -286,6 +291,7 @@ interface WorkGroupMembershipTable {
   updated_at: Generated<Timestamp>;
 }
 interface ServiceRequestAssignmentTable {
+  operational_role_id: Generated<string | null>;
   id: string;
   organization_id: string;
   service_request_id: string;
@@ -375,7 +381,28 @@ interface AiAuditEventTable {
   created_at: Timestamp;
 }
 
+type OperationalRoleTable = Omit<WorkGroupTable, 'description' | 'updated_at'>;
+interface OperationalRoleMembershipTable extends Omit<
+  WorkGroupMembershipTable,
+  'work_group_id' | 'updated_at'
+> {
+  operational_role_id: string;
+}
+interface ServiceRequestWatcherTable {
+  id: Generated<string>;
+  organization_id: string;
+  service_request_id: string;
+  target_type: string;
+  staff_identity_id: string | null;
+  operational_role_id: string | null;
+  work_group_id: string | null;
+  created_by_staff_identity_id: string;
+  created_at: Generated<Timestamp>;
+}
 export interface DatabaseSchema {
+  operational_role: OperationalRoleTable;
+  operational_role_membership: OperationalRoleMembershipTable;
+  service_request_watcher: ServiceRequestWatcherTable;
   ai_usage: AiUsageTable;
   ai_audit_event: AiAuditEventTable;
   resident_alert: ResidentAlertTable;
