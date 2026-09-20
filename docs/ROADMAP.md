@@ -1,5 +1,7 @@
 # CityVUE — Roadmap
 
+F036 adds explicit local development staff provisioning, read-only inspection/dry-run and targeted deprovisioning using existing Entra mappings and PostgreSQL RBAC. Personal database/profile checks fail closed; runtime authorization, default grants and production HTTP surfaces are unchanged. See [F036](features/F036-safe-development-staff-authorization-provisioning.md).
+
 F035 adds separate append-only operational request history, atomic creation/workflow/routing events, protected paginated INTERNAL timelines, and durable Hold/Close/Reopen narratives. Existing metadata-only audit and F029–F034 authorization remain intact; no grants are added. See [F035](features/F035-service-request-activity-operational-history.md).
 
 F034 adds an authenticated INTERNAL staff request workspace with scoped reference/status/hierarchy filters, server-provided update/routing options, Start/Resume actions, and revision-aware refresh. Hold/Close/Reopen UI is explicitly deferred pending durable narrative storage. No migration or grants are introduced; authenticated live staff UAT remains pending. See [F034](features/F034-staff-internal-request-workspace.md).

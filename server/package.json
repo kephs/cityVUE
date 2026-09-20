@@ -25,7 +25,10 @@
     "migration:status": "tsx src/database/migration-cli.ts status",
     "seed:development": "tsx src/database/seed-development.ts",
     "provision:geospatial:development": "tsx src/database/provision-development-geospatial.ts",
-    "revoke:geospatial:development": "tsx src/database/revoke-development-geospatial.ts"
+    "revoke:geospatial:development": "tsx src/database/revoke-development-geospatial.ts",
+    "dev:staff:inspect": "tsx src/database/development-staff-cli.ts inspect",
+    "dev:staff:provision": "tsx src/database/development-staff-cli.ts provision",
+    "dev:staff:deprovision": "tsx src/database/development-staff-cli.ts deprovision"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -114,3 +114,17 @@ The future deployment boundary remains: API and later worker in Azure Container 
 - Compression pending response-size evidence
 - OpenTelemetry SDK/exporter activation
 - React API cutover and deployment
+
+## Explicit personal-development staff authorization (F036)
+
+Use the [F036 operator runbook](../docs/features/F036-safe-development-staff-authorization-provisioning.md) for `dev:staff:inspect`, `dev:staff:provision` and `dev:staff:deprovision`. These separate commands require explicit development profile, personal-tenant confirmation and the verified local reqro_dev database. They never run during sign-in, startup or migrations. Dry-run is read-only; writes require `--confirm`. No default grants or production administration API are added.
+
+The commands read process environment. To load deliberately selected ignored local files with Node, use (from `server/`):
+
+```text
+node --env-file=.env --env-file=.env.f036 node_modules/tsx/dist/cli.mjs src/database/development-staff-cli.ts inspect
+node --env-file=.env --env-file=.env.f036 node_modules/tsx/dist/cli.mjs src/database/development-staff-cli.ts provision --dry-run
+node --env-file=.env --env-file=.env.f036 node_modules/tsx/dist/cli.mjs src/database/development-staff-cli.ts provision --confirm
+```
+
+Keep `.env.f036` ignored and private. It contains only the explicitly selected personal tenant confirmation, internal principal ID, fictional Organization/scopes and permission selection described in the runbook. Never put tokens in it. Substitute `deprovision` for targeted removal after a reviewed dry run.
