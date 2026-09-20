@@ -14,7 +14,16 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import {
   CurrentStaff,
   RequireEntra,
@@ -25,6 +34,17 @@ import { StaffAccessGuard } from '../auth/staff-access.guard.js';
 import { InternalRequestRepository } from './internal-request.repository.js';
 
 export class InternalRequestListQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsIn(['open', 'in_progress', 'on_hold', 'closed', 'cancelled'])
+  status?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID('4') departmentId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID('4') divisionId?: string;
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @IsOptional()
   @Type(() => Number)
@@ -60,7 +80,18 @@ export class InternalRequestController {
     @Query() query: InternalRequestListQueryDto,
     @CurrentStaff() access: StaffAccess,
   ) {
-    return this.repository.list(access, query.page ?? 1, query.pageSize ?? 25);
+    return this.repository.list(
+      access,
+      query.page ?? 1,
+      query.pageSize ?? 25,
+      query,
+    );
+  }
+
+  @Get('workspace-options')
+  @Header('Cache-Control', 'no-store')
+  options(@CurrentStaff() access: StaffAccess) {
+    return this.repository.workspaceOptions(access);
   }
 
   @Get(':serviceRequestId')

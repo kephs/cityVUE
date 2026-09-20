@@ -15,7 +15,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
-import request from 'supertest';
+import request, { type Response as TestResponse } from 'supertest';
 import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
 import { up as catalogUp } from '../../migrations/20260902000000-create-organization-service-catalog.js';
 import { up as requestUp } from '../../migrations/20260902010000-create-service-request-foundation.js';
@@ -770,6 +770,8 @@ test(
                 'categoryId',
                 'departmentId',
                 'divisionId',
+                'departmentName',
+                'divisionName',
                 'description',
                 'revision',
               ].sort(),
@@ -1790,6 +1792,173 @@ test(
                 .post(publicPath)
                 .send({ ...submission, ...fields })
                 .expect(400);
+          },
+        );
+        await t.test(
+          'F034 scoped filters, search, paging and safe hierarchy/capability metadata',
+          async () => {
+            // F031 deliberately revoked this fixture's read grant. Restore only
+            // the explicit read grant inside the isolated integration schema.
+            await db
+              .insertInto('role_permission')
+              .values({
+                organization_id: org,
+                role_id: readerRole.role_id,
+                permission_key: 'service_request.internal.read',
+              })
+              .execute();
+            const optionsPath = `${internalPath}/workspace-options`;
+            await request(app.getHttpServer()).get(optionsPath).expect(401);
+            await getInternal(optionsPath, publicOnly).expect(403);
+            const options = await getInternal(optionsPath)
+              .expect(200)
+              .expect('Cache-Control', 'no-store');
+            const scope = options.body as {
+              canUpdate: boolean;
+              departments: { id: string; name: string }[];
+              divisions: { id: string; departmentId: string }[];
+            };
+            assert.equal(scope.canUpdate, false);
+            assert.ok(scope.departments.some((d) => d.id === department));
+            assert.ok(scope.departments.every((d) => d.id !== otherDepartment));
+            assert.ok(
+              scope.divisions.every((d) =>
+                scope.departments.some(
+                  (parent) => parent.id === d.departmentId,
+                ),
+              ),
+            );
+            assert.equal(
+              (
+                (await getInternal(optionsPath, creator).expect(200)).body as {
+                  canUpdate: boolean;
+                }
+              ).canUpdate,
+              true,
+            );
+            const first = await getInternal(
+              `${internalPath}?page=1&pageSize=1`,
+            ).expect(200);
+            const payload = first.body as {
+              items: {
+                serviceRequestId: string;
+                referenceNumber: string;
+                status: string;
+                departmentId: string;
+                divisionId: string | null;
+              }[];
+              total: number;
+            };
+            const item = payload.items[0];
+            assert.ok(item);
+            const byReference = await getInternal(
+              `${internalPath}?search=${encodeURIComponent(item.referenceNumber)}`,
+            ).expect(200);
+            assert.equal(
+              (byReference.body as { items: unknown[] }).items.length,
+              1,
+            );
+            const scopedRow = (
+              byReference.body as { items: Record<string, unknown>[] }
+            ).items[0];
+            assert.ok(scopedRow);
+            assert.equal(scopedRow.description, undefined);
+            assert.equal(scopedRow.contact, undefined);
+            assert.equal(typeof scopedRow.departmentName, 'string');
+            for (const query of [
+              `status=${item.status}`,
+              `departmentId=${item.departmentId}`,
+              ...(item.divisionId ? [`divisionId=${item.divisionId}`] : []),
+            ]) {
+              const filtered: TestResponse = await getInternal(
+                `${internalPath}?search=${encodeURIComponent(item.referenceNumber)}&${query}`,
+              ).expect(200);
+              assert.equal((filtered.body as { total: number }).total, 1);
+            }
+            for (const query of [
+              `departmentId=${otherDepartment}`,
+              `divisionId=${randomUUID()}`,
+              'search=%25',
+              'search=%27%20OR%201%3D1',
+            ]) {
+              const filtered: TestResponse = await getInternal(
+                `${internalPath}?${query}`,
+              ).expect(200);
+              assert.equal((filtered.body as { total: number }).total, 0);
+            }
+            const one = await getInternal(
+              `${internalPath}?page=1&pageSize=1`,
+            ).expect(200);
+            assert.deepEqual(one.body, first.body);
+            const two = await getInternal(
+              `${internalPath}?page=2&pageSize=1`,
+            ).expect(200);
+            assert.notDeepEqual(
+              (two.body as { items: unknown[] }).items,
+              payload.items,
+            );
+            for (const query of [
+              'page=0',
+              'page=-1',
+              'pageSize=0',
+              'pageSize=101',
+              'status=unknown',
+              'sort=description',
+              'departmentId=invalid',
+              `organizationId=${otherOrg}`,
+              `search=${'x'.repeat(101)}`,
+            ])
+              await getInternal(`${internalPath}?${query}`).expect(400);
+            await getInternal(`${internalPath}/${publicId}`).expect(404);
+            await getInternal(`${internalPath}/${otherInternal}`).expect(404);
+            const sameRefId = randomUUID();
+            await db
+              .insertInto('service_request')
+              .values({
+                id: sameRefId,
+                organization_id: otherOrg,
+                reference_number: item.referenceNumber,
+                service_definition_id: otherService,
+                service_definition_version_id: otherVersion,
+                category_id: otherCategory,
+                status: 'open',
+                priority: 'medium',
+                description: 'F034 fictional other Organization',
+                reporting_identity: 'identified',
+                audience: 'internal',
+                intake_channel: 'staff',
+                submitted_by_staff_identity_id: otherStaff,
+                requester_staff_identity_id: otherStaff,
+              })
+              .execute();
+            const own = await getInternal(
+              `${internalPath}?search=${encodeURIComponent(item.referenceNumber)}`,
+            ).expect(200);
+            assert.deepEqual(
+              (own.body as { items: { serviceRequestId: string }[] }).items.map(
+                (r) => r.serviceRequestId,
+              ),
+              [item.serviceRequestId],
+            );
+            const other = await getInternal(
+              `${internalPath}?search=${encodeURIComponent(item.referenceNumber)}`,
+              otherStaff,
+            ).expect(200);
+            assert.deepEqual(
+              (
+                other.body as { items: { serviceRequestId: string }[] }
+              ).items.map((r) => r.serviceRequestId),
+              [sameRefId],
+            );
+            await getInternal(`${internalPath}/${sameRefId}`).expect(404);
+            // Revocation is observed on the next options/read call, never trusted from a browser flag.
+            await db
+              .deleteFrom('role_permission')
+              .where('role_id', '=', readerRole.role_id)
+              .where('permission_key', '=', 'service_request.internal.read')
+              .execute();
+            await getInternal(optionsPath).expect(403);
+            await getInternal(internalPath).expect(403);
           },
         );
       } finally {

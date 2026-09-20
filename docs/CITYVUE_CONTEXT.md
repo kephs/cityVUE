@@ -1,5 +1,7 @@
 # CityVUE — Project Context
 
+F034 adds an authenticated INTERNAL staff request workspace with scoped reference/status/hierarchy filters, server-provided update/routing options, Start/Resume actions, and revision-aware refresh. Hold/Close/Reopen UI is explicitly deferred pending durable narrative storage. No migration or grants are introduced; authenticated live staff UAT remains pending. See [F034](features/F034-staff-internal-request-workspace.md).
+
 F033 evolves request references into Organization-scoped configurable policies and atomic bigint counters, retaining persisted immutable references, safe historical collision checks and explicit `service_request.reference.manage` authorization without default grants. UUID identity and F029–F032 boundaries remain unchanged. See [F033](features/F033-configurable-service-request-reference-numbers.md).
 
 F032 adds explicit Issue handling (`internal_intake` / `external_redirect`) on existing ServiceDefinitions, a separate protected catalog action API, HTTPS validation and a neutral resident handoff. Both resident/staff creation enforce persisted action; questions are preserved across mode changes. No default grants or vendor integration. See [F032](features/F032-issue-action-external-redirect-foundation.md).

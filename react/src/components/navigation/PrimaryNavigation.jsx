@@ -29,6 +29,7 @@ export default function PrimaryNavigation({ isOpen, onNavigate }) {
                         </NavLink>
                     </li>
                 ))}
+                {auth.enabled && auth.isAuthenticated && <li className="nav-item"><NavLink className={({isActive})=>`nav-link${isActive ? ' active' : ''}`} to="/staff/requests" onClick={onNavigate}>Service Requests</NavLink></li>}
                 <li className="nav-item ms-lg-3 mt-2 mt-lg-0"><ThemeToggle /></li>
                 {auth.enabled && <li className="nav-item ms-lg-2 mt-2 mt-lg-0 d-flex align-items-center gap-2">
                     {auth.isAuthenticated && <span className="navbar-text text-white">{auth.displayName}</span>}

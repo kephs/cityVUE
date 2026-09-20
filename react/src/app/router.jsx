@@ -6,6 +6,7 @@ import NotFoundPage from "../pages/NotFoundPage.jsx";
 import { AuthRoot } from '../auth/AuthContext.jsx';
 import StaffRouteGuard from '../auth/StaffRouteGuard.jsx';
 
+const StaffRequestsPage = lazy(() => import("../staff/requests/StaffRequestsPage.jsx"));
 const HomePage = lazy(() => import("../pages/HomePage.jsx"));
 const AIPreviewPage = lazy(() => import("../ai/AIPreviewPage.jsx"));
 const AdminPreviewPage = lazy(() => import("../admin/AdminPreviewPage.jsx"));
@@ -39,6 +40,8 @@ const router = createBrowserRouter([
         path: "/",
         element: <AuthRoot><App /></AuthRoot>,
         children: [
+            { path: "staff/requests", element: <StaffRequestsPage /> },
+            { path: "staff/requests/:requestId", element: <StaffRequestsPage /> },
             {
                 path: 'map-preview',
                 element: <MapPreviewPage />
