@@ -13,6 +13,19 @@ import { StaffActionsService } from '../../src/service-request/staff-actions.ser
 import { StaffAccessGuard } from '../../src/auth/staff-access.guard.js';
 
 const serviceId = '40000000-0000-4000-8000-000000000001';
+test('F041 development/legacy staff bypass cannot read or create Notes; all denied responses are no-store', async () => {
+  const path =
+    '/api/v1/staff/service-requests/80000000-0000-4000-8000-000000000001/notes';
+  await request(app.getHttpServer())
+    .get(path)
+    .expect(403)
+    .expect('Cache-Control', 'no-store');
+  await request(app.getHttpServer())
+    .post(path)
+    .send({ body: 'F041 fictional E2E note' })
+    .expect(403)
+    .expect('Cache-Control', 'no-store');
+});
 const versionId = '50000000-0000-4000-8000-000000000001';
 const base = {
   serviceDefinitionId: serviceId,

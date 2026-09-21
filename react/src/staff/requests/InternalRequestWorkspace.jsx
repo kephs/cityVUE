@@ -10,6 +10,7 @@ import {
 import RequestOwnership, { TargetLabel } from "./RequestOwnership.jsx";
 import RequestActivity from "./RequestActivity.jsx";
 import RequesterContact from "./RequesterContact.jsx";
+import InternalNotes from "./InternalNotes.jsx";
 import WorkflowNarrativeForm from "./WorkflowNarrativeForm.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -406,6 +407,25 @@ function RequestDetail({ repository, id, onSignIn }) {
     routeButton = useRef(null),
     inFlight = useRef(false),
     controller = useRef(null);
+  const notesAccessFailure = useCallback(
+    async (error) => {
+      if (error.status !== 403) {
+        accessFailure(error);
+        return;
+      }
+      // A Notes permission denial must not suppress an independently readable parent/contact.
+      try {
+        const signal = controller.current?.signal;
+        const data = await repository.detail(id, signal);
+        if (signal?.aborted) return;
+        if (!data.canReadContact) clearContact();
+        setState((current) => (current?.data ? { ...current, data } : current));
+      } catch (parentError) {
+        if (!controller.current?.signal.aborted) accessFailure(parentError);
+      }
+    },
+    [repository, id, accessFailure, clearContact],
+  );
   useEffect(() => {
     if (routing) document.getElementById("route-department")?.focus();
   }, [routing]);
@@ -699,6 +719,13 @@ function RequestDetail({ repository, id, onSignIn }) {
               canRead={row.canReadContact}
               state={contactState}
               onLoad={loadContact}
+            />
+            <InternalNotes
+              repository={repository}
+              id={id}
+              canRead={capabilities.canReadNotes}
+              canCreate={capabilities.canCreateNotes}
+              onAccessFailure={notesAccessFailure}
             />
             <ContentCard className="request-issue-details">
               <SectionHeading icon="tag">Issue Details</SectionHeading>

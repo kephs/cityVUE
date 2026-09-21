@@ -77,5 +77,9 @@ export function requestCapabilities(
     canManageWatchers: permitted('watchers'),
     canWatchSelf: permitted('self_watch'),
     canReadContact: access.permissions.includes('service_request.contact.read'),
+    canReadNotes: access.permissions.includes('service_request.note.read'),
+    canCreateNotes:
+      access.permissions.includes('service_request.note.read') &&
+      access.permissions.includes('service_request.note.create'),
   };
 }

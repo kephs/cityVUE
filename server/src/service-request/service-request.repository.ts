@@ -261,7 +261,10 @@ export class ServiceRequestRepository {
         ])
         .where('organization_id', '=', organizationId)
         .where('service_request_id', '=', serviceRequestId)
-        .where('activity_type', '!=', 'service_request_contact_viewed')
+        .where('activity_type', 'not in', [
+          'service_request_contact_viewed',
+          'service_request_internal_note_created',
+        ])
         .orderBy('occurred_at')
         .orderBy('id')
         .execute(),

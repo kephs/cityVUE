@@ -399,7 +399,19 @@ interface ServiceRequestWatcherTable {
   created_by_staff_identity_id: string;
   created_at: Generated<Timestamp>;
 }
+export interface RequestInternalNoteTable {
+  id: Generated<string>;
+  organization_id: string;
+  service_request_id: string;
+  author_staff_identity_id: string;
+  author_display_name: string;
+  submission_key: string;
+  body: string;
+  created_at: Timestamp;
+}
+
 export interface DatabaseSchema {
+  request_internal_note: RequestInternalNoteTable;
   operational_role: OperationalRoleTable;
   operational_role_membership: OperationalRoleMembershipTable;
   service_request_watcher: ServiceRequestWatcherTable;

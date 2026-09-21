@@ -116,6 +116,8 @@ test("F040 mixed results retain audience, allowlist audience filters and derive 
     canManageWatchers: true,
     canRoute: true,
     canReadContact: false,
+    canReadNotes: false,
+    canCreateNotes: false,
     canWatchSelf: false,
   });
   expect(detail).not.toHaveProperty("permissions");

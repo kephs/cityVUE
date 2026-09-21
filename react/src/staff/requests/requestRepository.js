@@ -15,6 +15,25 @@ const invalid = () =>
     "invalid-response",
     "Request information is unavailable.",
   );
+function noteProjection(row) {
+  if (
+    !row ||
+    !uuid.test(row.id) ||
+    typeof row.body !== "string" ||
+    row.body.length > 4000 ||
+    typeof row.author?.displayName !== "string" ||
+    row.author.displayName.length > 200 ||
+    typeof row.createdAt !== "string" ||
+    !Number.isFinite(Date.parse(row.createdAt))
+  )
+    throw invalid();
+  return {
+    id: row.id,
+    body: row.body,
+    author: { displayName: row.author.displayName },
+    createdAt: row.createdAt,
+  };
+}
 function targetProjection(value) {
   if (
     !value ||
@@ -92,6 +111,8 @@ function project(row, detail = false) {
                 "canManageWatchers",
                 "canWatchSelf",
                 "canReadContact",
+                "canReadNotes",
+                "canCreateNotes",
               ].map((key) => [key, row.capabilities?.[key] === true]),
             ),
           },
@@ -115,6 +136,39 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
     return `${root}/${id}`;
   };
   return {
+    async notes(id, cursor, signal) {
+      const query = new URLSearchParams({ pageSize: "25" });
+      if (cursor) query.set("cursor", cursor);
+      const data = await api.get(`${path(id)}/notes?${query}`, options(signal));
+      if (
+        !Array.isArray(data?.items) ||
+        data.items.length > 25 ||
+        data.pageSize !== 25 ||
+        typeof data.hasMore !== "boolean" ||
+        !(
+          data.nextCursor === null ||
+          (typeof data.nextCursor === "string" &&
+            /^[A-Za-z0-9_-]{1,256}$/.test(data.nextCursor))
+        ) ||
+        data.hasMore !== Boolean(data.nextCursor)
+      )
+        throw invalid();
+      return {
+        items: data.items.map(noteProjection),
+        hasMore: data.hasMore,
+        nextCursor: data.nextCursor,
+      };
+    },
+    async createNote(id, body, submissionKey, signal) {
+      if (!uuid.test(submissionKey)) throw invalid();
+      return noteProjection(
+        await api.post(
+          `${path(id)}/notes`,
+          { body },
+          { ...options(signal), idempotencyKey: submissionKey },
+        ),
+      );
+    },
     async contact(id, signal, audience = "internal") {
       path(id);
       if (!["public", "internal"].includes(audience)) throw invalid();

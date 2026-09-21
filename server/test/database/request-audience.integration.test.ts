@@ -2,6 +2,7 @@ import { checkRequestOwnership } from './request-ownership-checks.js';
 import { checkRequestContact } from './request-contact-checks.js';
 import { checkPublicRequestContact } from './public-request-contact-checks.js';
 import { checkStaffWorkspace } from './staff-workspace-checks.js';
+import { checkRequestNotes } from './request-note-checks.js';
 import {
   PinoLoggerService,
   createOperationalLogger,
@@ -2248,6 +2249,19 @@ test(
           org,
           creator,
           otherOrg,
+          otherInternal,
+          department,
+          targetDepartment,
+          targetDivision,
+          publicPayload: assisted,
+          internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkRequestNotes(t, {
+          app,
+          db,
+          org,
+          creator,
           otherInternal,
           department,
           targetDepartment,

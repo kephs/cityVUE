@@ -24,10 +24,15 @@ import { GetServiceRequestDetailsService } from './get-service-request-details.s
 import { ListServiceRequestsService } from './list-service-requests.service.js';
 import { LocationEligibilityModule } from '../location-eligibility/location-eligibility.module.js';
 import { StaffActionsService } from './staff-actions.service.js';
+import { RequestNoteController } from './request-note.controller.js';
+import { RequestNoteService } from './request-note.service.js';
+import { RequestNoteRepository } from './request-note.repository.js';
+import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.js';
 
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    RequestNoteController,
     RequestContactController,
     PublicRequestContactController,
     RequestOwnershipController,
@@ -39,6 +44,8 @@ import { StaffActionsService } from './staff-actions.service.js';
     InternalRequestMutationsController,
   ],
   providers: [
+    RequestNoteService,
+    RequestNoteRepository,
     RequestContactService,
     RequestOwnershipService,
     ReferenceConfigurationService,
@@ -54,6 +61,9 @@ import { StaffActionsService } from './staff-actions.service.js';
 })
 export class ServiceRequestModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(RequestNotePrivacyMiddleware)
+      .forRoutes(RequestNoteController);
     consumer
       .apply(RequestContactPrivacyMiddleware)
       .forRoutes(RequestContactController, PublicRequestContactController);

@@ -55,6 +55,18 @@ let repository;
 beforeEach(() => {
   vi.clearAllMocks();
   repository = {
+    notes: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: other,
+          body: "F041 fictional collaboration",
+          author: { displayName: "Fictional note author" },
+          createdAt: "2026-09-20T12:00:00Z",
+        },
+      ],
+      nextCursor: null,
+    }),
+    createNote: vi.fn(),
     contact: vi
       .fn()
       .mockResolvedValue({ name: "Alex Example", email: "alex@example.com" }),
@@ -109,9 +121,138 @@ function Jump() {
   );
 }
 
+test.each(["public", "internal"])(
+  "F041 shared Notes appears on %s detail without mixing Activity or contact",
+  async (audience) => {
+    repository.detail.mockResolvedValue({
+      ...row,
+      audience,
+      capabilities: {
+        ...row.capabilities,
+        canReadNotes: true,
+        canCreateNotes: true,
+      },
+    });
+    const { container } = show(`/staff/requests/${id}`);
+    await screen.findByText("F041 fictional collaboration");
+    expect(
+      screen.getByRole("heading", { name: "Internal Notes" }),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".request-activity")).not.toHaveTextContent(
+      "F041 fictional collaboration",
+    );
+    expect(container.querySelector(".request-contact")).not.toHaveTextContent(
+      "F041 fictional collaboration",
+    );
+    expect(
+      screen.getByText(
+        "You don't have permission to view requester contact information.",
+      ),
+    ).toBeInTheDocument();
+    expect(repository.contact).not.toHaveBeenCalled();
+  },
+);
+
+test("F041 Notes permission denial refreshes capabilities while preserving parent and loaded contact", async () => {
+  repository.detail.mockResolvedValue({
+    ...row,
+    canReadContact: true,
+    capabilities: {
+      ...row.capabilities,
+      canReadNotes: true,
+      canCreateNotes: true,
+    },
+  });
+  show(`/staff/requests/${id}`);
+  await screen.findByText("F041 fictional collaboration");
+  fireEvent.click(
+    screen.getByRole("button", { name: "View requester contact" }),
+  );
+  await screen.findByText("alex@example.com");
+  repository.notes.mockRejectedValue({ status: 403 });
+  repository.detail.mockResolvedValue({
+    ...row,
+    canReadContact: true,
+    capabilities: {
+      ...row.capabilities,
+      canReadNotes: false,
+      canCreateNotes: false,
+    },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Refresh notes" }));
+  await screen.findByText("You don't have permission to view internal notes.");
+  expect(
+    screen.getByRole("heading", { name: row.issueName }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("alex@example.com")).toBeInTheDocument();
+  expect(
+    screen.queryByText("F041 fictional collaboration"),
+  ).not.toBeInTheDocument();
+});
+
+test.each([401, 404])(
+  "F041 Notes response %i clears the inaccessible parent/contact/Notes",
+  async (status) => {
+    repository.detail.mockResolvedValue({
+      ...row,
+      canReadContact: true,
+      capabilities: { ...row.capabilities, canReadNotes: true },
+    });
+    show(`/staff/requests/${id}`);
+    await screen.findByText("F041 fictional collaboration");
+    fireEvent.click(
+      screen.getByRole("button", { name: "View requester contact" }),
+    );
+    await screen.findByText("alex@example.com");
+    repository.notes.mockRejectedValue({ status });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh notes" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByText("F041 fictional collaboration"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: row.issueName }),
+    ).not.toBeInTheDocument();
+  },
+);
+
+test("F041 sign-out removes Notes and in-memory draft from the real workspace", async () => {
+  repository.detail.mockResolvedValue({
+    ...row,
+    capabilities: {
+      ...row.capabilities,
+      canReadNotes: true,
+      canCreateNotes: true,
+    },
+  });
+  const view = show(`/staff/requests/${id}`, true);
+  await screen.findByText("F041 fictional collaboration");
+  fireEvent.change(screen.getByLabelText("Internal Note"), {
+    target: { value: "Fictional draft removed on sign-out" },
+  });
+  useAuth.mockReturnValue({
+    enabled: true,
+    isAuthenticated: false,
+    signIn: vi.fn(),
+  });
+  view.rerender(
+    <MemoryRouter>
+      <StaffRequestsPage />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.queryByText("F041 fictional collaboration"),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+});
+
 test("F039 protected detail never fetches or hides contact values in DOM", async () => {
   show(`/staff/requests/${id}`);
-  await screen.findByText("Protected");
+  await screen.findByText(
+    "You don't have permission to view requester contact information.",
+  );
   expect(repository.contact).not.toHaveBeenCalled();
   expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
   expect(
@@ -179,7 +320,9 @@ test.each([403, 401, 404, 500])(
       expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument(),
     );
     if (status === 403) {
-      await screen.findByText("Protected");
+      await screen.findByText(
+        "You don't have permission to view requester contact information.",
+      );
       expect(
         screen.getByRole("heading", { name: row.issueName }),
       ).toBeInTheDocument();
@@ -1398,5 +1541,9 @@ test("F040 PUBLIC-to-INTERNAL navigation clears contact, ownership and history b
   ).not.toBeInTheDocument();
   await act(async () => resolveNext({ ...row, serviceRequestId: other }));
   await screen.findByText("Internal request");
-  expect(screen.getByText("Protected")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "You don't have permission to view requester contact information.",
+    ),
+  ).toBeInTheDocument();
 });

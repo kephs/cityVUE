@@ -72,7 +72,7 @@ test('F036 rejects unsafe database metadata before connecting, including URL opt
     assert.throws(() => assertDevelopmentDatabaseUrl(value));
 });
 
-test('F036/F040 bundles expand to approved explicit permissions without geospatial or wildcard defaults', () => {
+test('F036/F041 bundles expand to approved explicit permissions without geospatial or wildcard defaults', () => {
   assert.deepEqual(
     selectedDevelopmentPermissions(undefined, 'INTERNAL_REQUEST_READER'),
     ['service_request.internal.read'],
@@ -84,6 +84,8 @@ test('F036/F040 bundles expand to approved explicit permissions without geospati
       'service_request.create_internal',
       'service_request.internal.read',
       'service_request.contact.read',
+      'service_request.note.read',
+      'service_request.note.create',
       'service_request.internal.update',
       'catalog.issue_action.manage',
       'service_request.reference.manage',
@@ -104,6 +106,9 @@ test('F036/F040 bundles expand to approved explicit permissions without geospati
     'reqro.admin.*',
     'service_request.internal.reed',
     'service_request.contact.reed',
+    'service_request.notes.read',
+    'service_request.note.update',
+    'service_request.note.delete',
     'service_request.veiw',
     'service_request.routes',
     'service_request.watchers.admin',

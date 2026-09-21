@@ -11,6 +11,8 @@ export const permissions = [
   'service_request.create_internal',
   'service_request.internal.read',
   'service_request.contact.read',
+  'service_request.note.read',
+  'service_request.note.create',
   'service_request.internal.update',
   'service_request.assign',
   'service_request.route',
