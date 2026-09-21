@@ -214,3 +214,22 @@ body {
   background: var(--surface-page);
   color: var(--text-primary);
 }
+.ui-audience {
+  display: inline-block;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-control);
+  font-size: var(--font-small);
+  font-weight: var(--weight-label);
+  line-height: 1.4;
+  margin-block: var(--space-2);
+}
+.ui-audience--public {
+  color: var(--audience-public);
+  background: var(--audience-public-bg);
+}
+.ui-audience--internal {
+  color: var(--audience-internal);
+  background: var(--audience-internal-bg);
+}

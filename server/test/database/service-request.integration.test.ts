@@ -3,6 +3,7 @@ import { up as referenceUp } from '../../migrations/20260919040000-configure-req
 import { up as actionUp } from '../../migrations/20260919030000-add-issue-action.js';
 import { up as authUp } from '../../migrations/20260903020000-add-entra-rbac-foundation.js';
 import { up as audienceUp } from '../../migrations/20260919000000-add-request-audience-assisted-intake.js';
+import { up as lifecycleUp } from '../../migrations/20260919020000-add-internal-request-lifecycle.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -75,6 +76,7 @@ test(
       await staffUp(db);
       await authUp(db);
       await audienceUp(db);
+      await lifecycleUp(db);
       await actionUp(db);
       await referenceUp(db);
       await operationalUp(db);

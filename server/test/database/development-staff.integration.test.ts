@@ -30,6 +30,7 @@ import { StaffAuthorizationService } from '../../src/auth/staff-authorization.se
 import {
   developmentOrganization,
   developmentStaffPermissions,
+  selectedDevelopmentPermissions,
 } from '../../src/database/development-staff-input.js';
 import {
   changeDevelopmentStaffGrants,
@@ -649,6 +650,53 @@ test(
           ])
             assert.deepEqual(after[key], before[key]);
           await changeDevelopmentStaffGrants(db, contact, 'deprovision', false);
+        },
+      );
+      await t.test(
+        'F040 approved sixteen-permission bundle remains explicit, read-only in dry run, idempotent and targeted on removal',
+        async () => {
+          const before = await state();
+          const selected: DevelopmentStaffSelection = {
+            ...input,
+            permissions: selectedDevelopmentPermissions(
+              undefined,
+              'FULL_UAT_OPERATOR',
+            ),
+          };
+          assert.equal(selected.permissions.length, 16);
+          assert.deepEqual((await auth.resolve(principal)).permissions, [
+            'geospatial.read',
+          ]);
+          await changeDevelopmentStaffGrants(db, selected, 'provision', true);
+          assert.deepEqual(await state(), before);
+          await Promise.all([
+            changeDevelopmentStaffGrants(db, selected, 'provision', false),
+            changeDevelopmentStaffGrants(db, selected, 'provision', false),
+          ]);
+          assert.deepEqual(
+            (await auth.resolve(principal)).permissions.sort(),
+            [...selected.permissions, 'geospatial.read'].sort(),
+          );
+          const provisioned = await state();
+          await changeDevelopmentStaffGrants(db, selected, 'provision', false);
+          assert.deepEqual(await state(), provisioned);
+          await changeDevelopmentStaffGrants(
+            db,
+            selected,
+            'deprovision',
+            false,
+          );
+          assert.deepEqual((await auth.resolve(principal)).permissions, [
+            'geospatial.read',
+          ]);
+          const after = await state();
+          for (const key of [
+            'staff_identity',
+            'service_request',
+            'activity',
+            'request_operational_activity',
+          ])
+            assert.deepEqual(after[key], before[key]);
         },
       );
       await t.test(

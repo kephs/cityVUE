@@ -28,6 +28,16 @@ const id = "10000000-0000-4000-8000-000000000001",
   target = "20000000-0000-4000-8000-000000000002",
   division = "30000000-0000-4000-8000-000000000001";
 const row = {
+  audience: "internal",
+  intakeChannel: "staff",
+  capabilities: {
+    workflowActions: ["start_work", "hold", "resume", "close", "reopen"],
+    canRoute: true,
+    canAssign: true,
+    canManageWatchers: true,
+    canWatchSelf: true,
+    canReadContact: false,
+  },
   serviceRequestId: id,
   referenceNumber: "CASE-00000001",
   status: "open",
@@ -343,7 +353,7 @@ test("list has loading, semantic references/status/department/date and no UUID p
   expect(screen.getByText("Loading requests…")).toBeInTheDocument();
   await screen.findByRole("link", { name: row.issueName });
   expect(screen.getByRole("table")).toHaveAccessibleName(
-    /Internal Service Requests/,
+    /Service Requests available to you/,
   );
   expect(
     screen.getByText("Open", { selector: ".request-status" }),
@@ -500,6 +510,16 @@ test.each([
   }
 });
 test("read-only capability does not infer mutation rights", async () => {
+  repository.detail.mockResolvedValue({
+    ...row,
+    capabilities: {
+      ...row.capabilities,
+      workflowActions: [],
+      canRoute: false,
+      canAssign: false,
+      canManageWatchers: false,
+    },
+  });
   repository.options.mockResolvedValue({
     canUpdate: false,
     departments: [],
@@ -1020,6 +1040,7 @@ test("F037 picker search, no-results, errors, keyboard cancel and focus return",
       "staff",
       "reviewer",
       expect.anything(),
+      "assignment",
     ),
   );
   repository.targets.mockRejectedValue({ status: 500 });
@@ -1035,6 +1056,16 @@ test("F037 picker search, no-results, errors, keyboard cancel and focus return",
 });
 
 test("F037 read-only users can self-watch but cannot manage other targets", async () => {
+  repository.detail.mockResolvedValue({
+    ...row,
+    capabilities: {
+      ...row.capabilities,
+      workflowActions: [],
+      canRoute: false,
+      canAssign: false,
+      canManageWatchers: false,
+    },
+  });
   repository.options.mockResolvedValue({
     canUpdate: false,
     departments: [],
@@ -1200,3 +1231,172 @@ test.each(["mine", "team", "watching"])(
     expect(link.getAttribute("href")).toContain(`view=${view}`);
   },
 );
+
+test("F040 mixed list exposes readable audience labels, secondary references and no contact", async () => {
+  repository.list.mockResolvedValue({
+    items: [
+      row,
+      {
+        ...row,
+        serviceRequestId: other,
+        audience: "public",
+        referenceNumber: "PUBLIC-OPAQUE-0001",
+        issueName: "Fictional street sign",
+        contact: { email: "never-in-list@example.com" },
+      },
+    ],
+    total: 2,
+    page: 1,
+    pageSize: 25,
+  });
+  show();
+  await screen.findByText("Public request");
+  expect(screen.getByText("Internal request")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Fictional street sign" }),
+  ).toHaveAttribute(
+    "href",
+    expect.stringContaining(`/staff/requests/${other}`),
+  );
+  expect(screen.getByText("PUBLIC-OPAQUE-0001")).toBeInTheDocument();
+  expect(
+    screen.queryByText("never-in-list@example.com"),
+  ).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Audience")).toHaveValue("all");
+});
+
+test.each(["public", "internal", "all"])(
+  "F040 %s audience selection narrows existing filters and resets global pagination",
+  async (audience) => {
+    const user = userEvent.setup();
+    show(
+      "/staff/requests?audience=public&view=watching&status=open&search=OPAQUE&page=4",
+    );
+    await screen.findByRole("link", { name: row.issueName });
+    await user.selectOptions(screen.getByLabelText("Audience"), audience);
+    await waitFor(() =>
+      expect(repository.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          audience,
+          view: "watching",
+          status: "open",
+          search: "OPAQUE",
+          page: 1,
+        }),
+        expect.anything(),
+      ),
+    );
+    expect(
+      (await screen.findByRole("link", { name: row.issueName })).getAttribute(
+        "href",
+      ),
+    ).toContain(`audience=${audience}`);
+  },
+);
+
+test.each(["public", "internal"])(
+  "F040 empty %s audience does not imply Organization-wide absence",
+  async (audience) => {
+    repository.list.mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 25,
+    });
+    show(`/staff/requests?audience=${audience}`);
+    expect(
+      await screen.findByRole("heading", {
+        name: `No ${audience === "public" ? "Public" : "Internal"} requests match your filters.`,
+      }),
+    ).toBeInTheDocument();
+  },
+);
+
+test("F040 PUBLIC detail uses shared hierarchy and on-demand PUBLIC contact; per-action capabilities remain independent", async () => {
+  repository.detail.mockResolvedValue({
+    ...row,
+    audience: "public",
+    intakeChannel: "phone",
+    canReadContact: true,
+    capabilities: {
+      ...row.capabilities,
+      workflowActions: ["close"],
+      canRoute: false,
+      canAssign: true,
+      canManageWatchers: false,
+    },
+  });
+  const user = userEvent.setup();
+  show(`/staff/requests/${id}`);
+  expect(await screen.findByText("Public request")).toBeInTheDocument();
+  expect(screen.getByText("Phone")).toBeInTheDocument();
+  expect(screen.queryByText("Internal Request")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: row.issueName }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Close Request" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Assign Request" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Add Watcher" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Start Work" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Route Request" }),
+  ).not.toBeInTheDocument();
+  expect(repository.contact).not.toHaveBeenCalled();
+  await user.click(
+    screen.getByRole("button", { name: "View requester contact" }),
+  );
+  await screen.findByText("alex@example.com");
+  expect(repository.contact).toHaveBeenCalledWith(
+    id,
+    expect.anything(),
+    "public",
+  );
+});
+
+test("F040 PUBLIC-to-INTERNAL navigation clears contact, ownership and history before the next detail resolves", async () => {
+  const first = {
+    ...row,
+    audience: "public",
+    canReadContact: true,
+    assignment: { type: "role", id, displayName: "Fictional first owner" },
+  };
+  let resolveNext;
+  repository.detail.mockResolvedValueOnce(first).mockReturnValue(
+    new Promise((resolve) => {
+      resolveNext = resolve;
+    }),
+  );
+  render(
+    <MemoryRouter initialEntries={[`/staff/requests/${id}`]}>
+      <Jump />
+      <Routes>
+        <Route
+          path="/staff/requests/:requestId"
+          element={<InternalRequestWorkspace repository={repository} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const user = userEvent.setup();
+  await user.click(
+    await screen.findByRole("button", { name: "View requester contact" }),
+  );
+  await screen.findByText("alex@example.com");
+  await user.click(screen.getByRole("button", { name: "Other request" }));
+  expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Fictional first owner/)).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Request Activity" }),
+  ).not.toBeInTheDocument();
+  await act(async () => resolveNext({ ...row, serviceRequestId: other }));
+  await screen.findByText("Internal request");
+  expect(screen.getByText("Protected")).toBeInTheDocument();
+});

@@ -18,6 +18,14 @@ export function StatusBadge({ value }) {
     </span>
   );
 }
+export function AudienceBadge({ value }) {
+  if (!["public", "internal"].includes(value)) return null;
+  return (
+    <span className={`ui-audience ui-audience--${value}`}>
+      {value === "public" ? "Public request" : "Internal request"}
+    </span>
+  );
+}
 export function IssueIcon({ icon, size = "compact" }) {
   return (
     <span

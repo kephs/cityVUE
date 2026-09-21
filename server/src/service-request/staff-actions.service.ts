@@ -19,6 +19,11 @@ import {
   validateWorkflowInput,
 } from './service-request.domain.js';
 import type { StaffAccess } from '../auth/auth.types.js';
+import {
+  assertStaffRequestRead,
+  staffRequestScope,
+} from './staff-request-scope.js';
+import { InternalRequestMutationsService } from './internal-request-mutations.service.js';
 
 interface AssignmentSummary {
   type: string;
@@ -36,6 +41,9 @@ export class StaffActionsService {
   constructor(
     config: ConfigService<AppConfiguration, true>,
     private readonly database: DatabaseService,
+    private readonly mutations: InternalRequestMutationsService = new InternalRequestMutationsService(
+      database,
+    ),
   ) {
     this.organizationId = config.get('catalog.developmentOrganizationId', {
       infer: true,
@@ -75,25 +83,15 @@ export class StaffActionsService {
     access?: StaffAccess,
   ): Promise<void> {
     if (!access || access.development) return;
-    const request = await trx
-      .selectFrom('service_request as request')
-      .innerJoin('category', (join) =>
-        join
-          .onRef('category.id', '=', 'request.category_id')
-          .onRef('category.organization_id', '=', 'request.organization_id'),
-      )
-      .select(['category.department_id', 'category.division_id'])
-      .where('request.organization_id', '=', access.organizationId)
+    assertStaffRequestRead(access, 'public');
+    const request = await staffRequestScope(trx, access)
+      .select('request.id')
       .where('request.audience', '=', 'public')
       .where('request.id', '=', id)
+      .forUpdate('request')
+      .forShare(['category', 'organization'])
       .executeTakeFirst();
-    if (
-      !request ||
-      !access.departmentIds.includes(request.department_id) ||
-      (request.division_id !== null &&
-        !access.divisionIds.includes(request.division_id))
-    )
-      throw new NotFoundException();
+    if (!request) throw new NotFoundException();
   }
   private async bump(
     trx: typeof this.database.client,
@@ -279,6 +277,19 @@ export class StaffActionsService {
     input: WorkflowActionDto,
     access?: StaffAccess,
   ): Promise<StaffMutationResponseDto> {
+    if (access && !access.development) {
+      this.assertRequestId(id);
+      const result = await this.mutations.workflow(id, input, access, 'public');
+      if (result.referenceNumber === undefined)
+        throw new Error('PUBLIC mutation reference projection is unavailable');
+      return {
+        serviceRequestId: result.serviceRequestId,
+        referenceNumber: result.referenceNumber,
+        status: result.status,
+        revision: result.revision,
+        updatedAt: result.updatedAt as unknown as Date | string,
+      };
+    }
     if (!access) this.assertEnabled();
     this.assertRequestId(id);
     const organizationId = access?.organizationId ?? this.organizationId;

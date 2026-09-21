@@ -2,6 +2,7 @@ import { allocateConfiguredReference } from './reference-policy.repository.js';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { sql, type Kysely, type Transaction } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
+import { requestDepartment, requestDivision } from './staff-request-scope.js';
 
 export interface CatalogSubmissionDefinition {
   organizationId: string;
@@ -62,7 +63,7 @@ export class ServiceRequestRepository {
         )
         .innerJoin('department as department', (join) =>
           join
-            .onRef('department.id', '=', 'category.department_id')
+            .on('department.id', '=', requestDepartment)
             .onRef(
               'department.organization_id',
               '=',
@@ -71,7 +72,7 @@ export class ServiceRequestRepository {
         )
         .leftJoin('division as division', (join) =>
           join
-            .onRef('division.id', '=', 'category.division_id')
+            .on('division.id', '=', requestDivision)
             .onRef('division.organization_id', '=', 'request.organization_id'),
         )
         .where('request.audience', '=', 'public')
@@ -201,12 +202,12 @@ export class ServiceRequestRepository {
       )
       .innerJoin('department as department', (join) =>
         join
-          .onRef('department.id', '=', 'category.department_id')
+          .on('department.id', '=', requestDepartment)
           .onRef('department.organization_id', '=', 'request.organization_id'),
       )
       .leftJoin('division as division', (join) =>
         join
-          .onRef('division.id', '=', 'category.division_id')
+          .on('division.id', '=', requestDivision)
           .onRef('division.organization_id', '=', 'request.organization_id'),
       )
       .select([

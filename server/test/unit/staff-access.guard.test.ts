@@ -11,7 +11,11 @@ import type { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
-import { PERMISSION_KEY } from '../../src/auth/auth.decorators.js';
+import {
+  ANY_PERMISSION_KEY,
+  ENTRA_ONLY_KEY,
+  PERMISSION_KEY,
+} from '../../src/auth/auth.decorators.js';
 import type { StaffAccess } from '../../src/auth/auth.types.js';
 import type { EntraTokenService } from '../../src/auth/entra-token.service.js';
 import { StaffAuthorizationService } from '../../src/auth/staff-authorization.service.js';
@@ -35,6 +39,7 @@ function fixture({
   granted = true,
   validToken = true,
   provisioned = true,
+  grantedPermissions = access.permissions,
 } = {}) {
   const database = {
     get client(): never {
@@ -52,7 +57,7 @@ function fixture({
   const authorization = new StaffAuthorizationService(database);
   authorization.resolve = async () => {
     if (!provisioned) throw new ForbiddenException();
-    return { ...access, permissions: granted ? access.permissions : [] };
+    return { ...access, permissions: granted ? grantedPermissions : [] };
   };
   const config = { get: () => false } as unknown as ConfigService<
     AppConfiguration,
@@ -124,4 +129,70 @@ test('unconfigured identity does not implicitly enable development access', asyn
     f.guard.canActivate(f.context().context),
     NotFoundException,
   );
+});
+
+test('F040 explicit Entra union admission accepts either read permission without granting the other', async () => {
+  for (const grantedPermissions of [
+    ['service_request.view'],
+    ['service_request.internal.read'],
+    ['service_request.view', 'service_request.internal.read'],
+    [],
+    ['service_request.contact.read'],
+  ] as StaffAccess['permissions'][]) {
+    const f = fixture({ grantedPermissions });
+    const ctx = f.context('Bearer test');
+    const handler = ctx.context.getHandler();
+    Reflect.deleteMetadata(PERMISSION_KEY, handler);
+    Reflect.defineMetadata(ENTRA_ONLY_KEY, true, handler);
+    Reflect.defineMetadata(
+      ANY_PERMISSION_KEY,
+      ['service_request.view', 'service_request.internal.read'],
+      handler,
+    );
+    if (
+      grantedPermissions.some(
+        (key) =>
+          key === 'service_request.view' ||
+          key === 'service_request.internal.read',
+      )
+    ) {
+      assert.equal(await f.guard.canActivate(ctx.context), true);
+      assert.deepEqual(
+        ctx.request.staffAccess?.permissions,
+        grantedPermissions,
+      );
+    } else
+      await assert.rejects(
+        f.guard.canActivate(ctx.context),
+        ForbiddenException,
+      );
+  }
+});
+
+test('F040 union admission fails closed for anonymous, malformed and ambiguous annotations', async () => {
+  for (const mode of [
+    'anonymous',
+    'missing-entra',
+    'empty',
+    'ambiguous',
+    'missing-policy',
+  ]) {
+    const f = fixture({ enabled: false });
+    const ctx = f.context(mode === 'anonymous' ? undefined : 'Bearer test');
+    const handler = ctx.context.getHandler();
+    if (mode !== 'ambiguous') Reflect.deleteMetadata(PERMISSION_KEY, handler);
+    if (mode !== 'missing-entra')
+      Reflect.defineMetadata(ENTRA_ONLY_KEY, true, handler);
+    if (mode !== 'missing-policy')
+      Reflect.defineMetadata(
+        ANY_PERMISSION_KEY,
+        mode === 'empty' ? [] : ['service_request.view'],
+        handler,
+      );
+    await assert.rejects(
+      f.guard.canActivate(ctx.context),
+      mode === 'anonymous' ? UnauthorizedException : ForbiddenException,
+    );
+    assert.equal(ctx.request.staffAccess, undefined);
+  }
 });

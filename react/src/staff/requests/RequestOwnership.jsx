@@ -40,18 +40,26 @@ function TargetPicker({
     const controller = new AbortController();
     setState(null);
     setSelected("");
-    repository.targets(id, type, submitted, controller.signal).then(
-      (data) => {
-        if (!controller.signal.aborted) setState({ data });
-      },
-      (error) => {
-        if (controller.signal.aborted) return;
-        if ([401, 403, 404].includes(error.status)) onAccessFailure(error);
-        else setState({ error });
-      },
-    );
+    repository
+      .targets(
+        id,
+        type,
+        submitted,
+        controller.signal,
+        mode === "assign" ? "assignment" : "watchers",
+      )
+      .then(
+        (data) => {
+          if (!controller.signal.aborted) setState({ data });
+        },
+        (error) => {
+          if (controller.signal.aborted) return;
+          if ([401, 403, 404].includes(error.status)) onAccessFailure(error);
+          else setState({ error });
+        },
+      );
     return () => controller.abort();
-  }, [repository, id, type, submitted, attempt, onAccessFailure]);
+  }, [repository, id, type, submitted, attempt, onAccessFailure, mode]);
   return (
     <form
       className="ownership-picker"
@@ -164,7 +172,7 @@ export default function RequestOwnership({
   repository,
   id,
   row,
-  canUpdate,
+  capabilities,
   busy,
   onMutate,
   onAccessFailure,
@@ -206,7 +214,7 @@ export default function RequestOwnership({
         <p>
           <TargetLabel target={row.assignment} />
         </p>
-        {canUpdate && (
+        {capabilities.canAssign && (
           <div className="request-action-buttons">
             <button
               className="btn btn-secondary"
@@ -256,7 +264,7 @@ export default function RequestOwnership({
                     <span>
                       <TargetLabel target={target} />
                     </span>
-                    {canUpdate && (
+                    {capabilities.canManageWatchers && (
                       <button
                         className="btn btn-secondary"
                         disabled={busy || !!mode}
@@ -278,7 +286,7 @@ export default function RequestOwnership({
             <div className="request-action-buttons">
               <button
                 className="btn btn-secondary"
-                disabled={busy || !!mode}
+                disabled={busy || !!mode || !capabilities.canWatchSelf}
                 onClick={() =>
                   onMutate(
                     watchers.data.watchingSelf ? "unwatchSelf" : "watchSelf",
@@ -290,7 +298,7 @@ export default function RequestOwnership({
                   ? "Stop watching"
                   : "Watch this request"}
               </button>
-              {canUpdate && (
+              {capabilities.canManageWatchers && (
                 <button
                   className="btn btn-secondary"
                   disabled={busy || !!mode}

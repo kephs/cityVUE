@@ -1,5 +1,6 @@
 import {
   StatusBadge as Status,
+  AudienceBadge,
   IssueIcon,
   LocationDisplay,
   ReferenceDisplay,
@@ -96,6 +97,7 @@ function RequestList({ repository, onSignIn }) {
   const [params, setParams] = useSearchParams();
   const page = Math.max(1, Math.min(1000000, Number(params.get("page")) || 1));
   const filters = {
+    audience: params.get("audience") || "all",
     view: params.get("view") || "all",
     search: params.get("search") || "",
     status: params.get("status") || "",
@@ -131,6 +133,7 @@ function RequestList({ repository, onSignIn }) {
   const apply = (next) => {
     const query = new URLSearchParams();
     for (const field of [
+      "audience",
       "view",
       "search",
       "status",
@@ -142,6 +145,7 @@ function RequestList({ repository, onSignIn }) {
     setParams(query);
   };
   const filtered = Boolean(
+    filters.audience !== "all" ||
     filters.view !== "all" ||
     filters.search ||
     filters.status ||
@@ -158,6 +162,23 @@ function RequestList({ repository, onSignIn }) {
           apply({ ...draft, page: 1 });
         }}
       >
+        <div>
+          <label htmlFor="request-audience">Audience</label>
+          <select
+            id="request-audience"
+            className="form-select"
+            value={draft.audience || "all"}
+            onChange={(e) => {
+              const next = { ...draft, audience: e.target.value, page: 1 };
+              setDraft(next);
+              apply(next);
+            }}
+          >
+            <option value="all">All</option>
+            <option value="public">Public</option>
+            <option value="internal">Internal</option>
+          </select>
+        </div>
         <div>
           <label htmlFor="request-view">Request view</label>
           <select
@@ -258,9 +279,13 @@ function RequestList({ repository, onSignIn }) {
           {!current.data.items.length ? (
             <div className="workspace-feedback">
               <h3>
-                {filtered
-                  ? "No requests match your current filters."
-                  : "No requests to display."}
+                {filters.audience === "public"
+                  ? "No Public requests match your filters."
+                  : filters.audience === "internal"
+                    ? "No Internal requests match your filters."
+                    : filtered
+                      ? "No requests match your current filters."
+                      : "No requests to display."}
               </h3>
               <p>
                 {filtered
@@ -271,7 +296,7 @@ function RequestList({ repository, onSignIn }) {
           ) : (
             <table className="staff-request-table">
               <caption className="visually-hidden">
-                Internal Service Requests available to you, newest first
+                Service Requests available to you, newest first
               </caption>
               <thead>
                 <tr>
@@ -294,6 +319,7 @@ function RequestList({ repository, onSignIn }) {
                         <span>{row.issueName}</span>
                       </Link>
                       <LocationDisplay value={row.serviceLocation} />
+                      <AudienceBadge value={row.audience} />
                       <ReferenceDisplay value={row.referenceNumber} />
                     </th>
                     <td data-label="Status">
@@ -401,14 +427,18 @@ function RequestDetail({ repository, id, onSignIn }) {
     contactController.current = request;
     setContactState({ loading: true });
     try {
-      const data = await repository.contact(id, request.signal);
+      const data = await repository.contact(
+        id,
+        request.signal,
+        state.data.audience,
+      );
       if (!request.signal.aborted) setContactState({ data });
     } catch (error) {
       if (request.signal.aborted) return;
       if ([401, 404].includes(error.status)) accessFailure(error);
       else if (error.status === 403) {
         setContactState({ protected: true });
-        // Recheck the parent too: loss of internal.read must clear the whole request.
+        // Recheck the parent too: loss of audience read access clears the whole request.
         try {
           await read(controller.current.signal);
         } catch (parentError) {
@@ -440,8 +470,19 @@ function RequestDetail({ repository, id, onSignIn }) {
     if (
       inFlight.current ||
       !state?.data ||
-      (!state.options.canUpdate &&
-        !["watchSelf", "unwatchSelf"].includes(operation))
+      !(operation === "workflow"
+        ? state.data.capabilities?.workflowActions?.includes(input.action)
+        : state.data.capabilities?.[
+            {
+              route: "canRoute",
+              assign: "canAssign",
+              unassign: "canAssign",
+              addWatcher: "canManageWatchers",
+              removeWatcher: "canManageWatchers",
+              watchSelf: "canWatchSelf",
+              unwatchSelf: "canWatchSelf",
+            }[operation]
+          ] === true)
     )
       return;
     inFlight.current = true;
@@ -514,6 +555,8 @@ function RequestDetail({ repository, id, onSignIn }) {
     }
   };
   const row = state?.data;
+  const capabilities = row?.capabilities || {};
+  const workflowActions = capabilities.workflowActions || [];
   const routineAction =
     row?.status === "open"
       ? ["start_work", "Start Work"]
@@ -555,6 +598,7 @@ function RequestDetail({ repository, id, onSignIn }) {
                     {row.issueName}
                   </h2>
                   <LocationDisplay value={row.serviceLocation} />
+                  <AudienceBadge value={row.audience} />
                   <ReferenceDisplay value={row.referenceNumber} />
                 </div>
                 <div className="request-current-status">
@@ -564,6 +608,22 @@ function RequestDetail({ repository, id, onSignIn }) {
                 </div>
               </header>
               <dl className="request-metadata">
+                {row.intakeChannel && (
+                  <div>
+                    <dt>Intake channel</dt>
+                    <dd>
+                      {
+                        {
+                          web: "Web",
+                          phone: "Phone",
+                          walk_in: "Walk-in",
+                          staff: "Staff",
+                          api: "API",
+                        }[row.intakeChannel]
+                      }
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt>
                     <i className="bi bi-buildings" aria-hidden="true" />{" "}
@@ -613,10 +673,15 @@ function RequestDetail({ repository, id, onSignIn }) {
               <aside className="request-internal-notice">
                 <i className="bi bi-info-circle-fill" aria-hidden="true" />
                 <div>
-                  <strong>Internal Request</strong>
+                  <strong>
+                    {row.audience === "public"
+                      ? "Public Request"
+                      : "Internal Request"}
+                  </strong>
                   <p>
-                    This is an internal request. Requester contact requires
-                    separate permission.
+                    {row.audience === "public"
+                      ? "Staff operational information is protected. Requester contact requires separate permission."
+                      : "This is an internal request. Requester contact requires separate permission."}
                   </p>
                 </div>
               </aside>
@@ -624,7 +689,7 @@ function RequestDetail({ repository, id, onSignIn }) {
                 repository={repository}
                 id={id}
                 row={row}
-                canUpdate={state.options.canUpdate}
+                capabilities={capabilities}
                 busy={busy || Boolean(narrativeAction) || routing}
                 onMutate={mutate}
                 onAccessFailure={accessFailure}
@@ -656,23 +721,24 @@ function RequestDetail({ repository, id, onSignIn }) {
               <SectionHeading icon="lightning-charge-fill">
                 Actions
               </SectionHeading>
-              {!state.options.canUpdate ? (
+              {!workflowActions.length && !capabilities.canRoute ? (
                 <p>You have read-only access to this request.</p>
               ) : (
                 <>
                   <div className="request-action-buttons">
-                    {routineAction && (
-                      <button
-                        className="btn btn-primary"
-                        disabled={busy || Boolean(narrativeAction)}
-                        onClick={() =>
-                          mutate("workflow", { action: routineAction[0] })
-                        }
-                      >
-                        <i className="bi bi-play-fill" aria-hidden="true" />{" "}
-                        {routineAction[1]}
-                      </button>
-                    )}
+                    {routineAction &&
+                      workflowActions.includes(routineAction[0]) && (
+                        <button
+                          className="btn btn-primary"
+                          disabled={busy || Boolean(narrativeAction)}
+                          onClick={() =>
+                            mutate("workflow", { action: routineAction[0] })
+                          }
+                        >
+                          <i className="bi bi-play-fill" aria-hidden="true" />{" "}
+                          {routineAction[1]}
+                        </button>
+                      )}
                     {(["open", "in_progress", "on_hold"].includes(row.status)
                       ? [
                           ...(row.status === "in_progress" ? ["hold"] : []),
@@ -681,32 +747,34 @@ function RequestDetail({ repository, id, onSignIn }) {
                       : row.status === "closed"
                         ? ["reopen"]
                         : []
-                    ).map((action) => (
-                      <button
-                        key={action}
-                        className="btn btn-secondary"
-                        disabled={busy || Boolean(narrativeAction)}
-                        onClick={(e) => {
-                          narrativeTrigger.current = e.currentTarget;
-                          setRouting(false);
-                          setNarrativeError("");
-                          setNarrativeAction(action);
-                        }}
-                      >
-                        <i
-                          className={`bi bi-${{ hold: "pause-fill", close: "check-lg", reopen: "arrow-counterclockwise" }[action]}`}
-                          aria-hidden="true"
-                        />{" "}
-                        {
+                    )
+                      .filter((action) => workflowActions.includes(action))
+                      .map((action) => (
+                        <button
+                          key={action}
+                          className="btn btn-secondary"
+                          disabled={busy || Boolean(narrativeAction)}
+                          onClick={(e) => {
+                            narrativeTrigger.current = e.currentTarget;
+                            setRouting(false);
+                            setNarrativeError("");
+                            setNarrativeAction(action);
+                          }}
+                        >
+                          <i
+                            className={`bi bi-${{ hold: "pause-fill", close: "check-lg", reopen: "arrow-counterclockwise" }[action]}`}
+                            aria-hidden="true"
+                          />{" "}
                           {
-                            hold: "Place On Hold",
-                            close: "Close Request",
-                            reopen: "Reopen Request",
-                          }[action]
-                        }
-                      </button>
-                    ))}
-                    {row.status !== "cancelled" && (
+                            {
+                              hold: "Place On Hold",
+                              close: "Close Request",
+                              reopen: "Reopen Request",
+                            }[action]
+                          }
+                        </button>
+                      ))}
+                    {row.status !== "cancelled" && capabilities.canRoute && (
                       <button
                         ref={routeButton}
                         className="btn btn-secondary"
@@ -834,7 +902,7 @@ export default function InternalRequestWorkspace({ repository, onSignIn }) {
           <h1 id="staff-requests-heading">
             {requestId ? "Service Request" : "Service Requests"}
           </h1>
-          <p>Manage internal requests within your authorized scope.</p>
+          <p>Manage service requests within your authorized scope.</p>
         </div>
       </header>
       {requestId ? (

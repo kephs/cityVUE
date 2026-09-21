@@ -13,6 +13,8 @@ export const permissions = [
   'service_request.contact.read',
   'service_request.internal.update',
   'service_request.assign',
+  'service_request.route',
+  'service_request.watchers.manage',
   'service_request.start_work',
   'service_request.hold',
   'service_request.resume',

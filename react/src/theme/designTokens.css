@@ -32,6 +32,10 @@
   --activity-created-bg: #eaf0f7;
   --activity-watcher: #546077;
   --activity-watcher-bg: #edf0f5;
+  --audience-public: #684b21;
+  --audience-public-bg: #f3eee4;
+  --audience-internal: #554c72;
+  --audience-internal-bg: #eeebf4;
 }
 [data-bs-theme="dark"] {
   --brand-primary: #1d5dcb;
@@ -65,6 +69,10 @@
   --activity-created-bg: #2b3a4f;
   --activity-watcher: #c4cee0;
   --activity-watcher-bg: #303c4f;
+  --audience-public: #dfcfb1;
+  --audience-public-bg: #39352d;
+  --audience-internal: #d2c9e6;
+  --audience-internal-bg: #353044;
 }
 :root {
   --font-body: 1rem;

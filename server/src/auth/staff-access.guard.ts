@@ -10,7 +10,11 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import type { AppConfiguration } from '../config/configuration.js';
 import { DatabaseService } from '../database/database.service.js';
-import { ENTRA_ONLY_KEY, PERMISSION_KEY } from './auth.decorators.js';
+import {
+  ANY_PERMISSION_KEY,
+  ENTRA_ONLY_KEY,
+  PERMISSION_KEY,
+} from './auth.decorators.js';
 import { EntraTokenService } from './entra-token.service.js';
 import { StaffAuthorizationService } from './staff-authorization.service.js';
 import type { Permission, StaffAccess } from './auth.types.js';
@@ -29,8 +33,15 @@ export class StaffAccessGuard implements CanActivate {
       headers: Record<string, string | undefined>;
       staffAccess?: StaffAccess;
     }>();
-    const permission = this.reflector.getAllAndOverride<Permission>(
+    const permission = this.reflector.getAllAndOverride<Permission | undefined>(
       PERMISSION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    const anyPermissions = this.reflector.getAllAndOverride<
+      Permission[] | undefined
+    >(ANY_PERMISSION_KEY, [context.getHandler(), context.getClass()]);
+    const entraOnly = this.reflector.getAllAndOverride<boolean>(
+      ENTRA_ONLY_KEY,
       [context.getHandler(), context.getClass()],
     );
     const authorization = request.headers.authorization;
@@ -39,19 +50,28 @@ export class StaffAccessGuard implements CanActivate {
       if (!this.tokens.hasRequiredScope(principal))
         throw new ForbiddenException('Required API scope is missing');
       const access = await this.authorization.resolve(principal);
-      this.authorization.assertPermission(access, permission);
+      if (anyPermissions !== undefined) {
+        // Explicit union admission never replaces a resource's audience/scope policy.
+        // Reject ambiguous/malformed annotations and disallow legacy development fallback.
+        if (
+          permission ||
+          !entraOnly ||
+          !Array.isArray(anyPermissions) ||
+          !anyPermissions.length ||
+          !anyPermissions.some((key) => access.permissions.includes(key))
+        )
+          throw new ForbiddenException('Access denied');
+      } else {
+        if (!permission) throw new ForbiddenException('Access denied');
+        this.authorization.assertPermission(access, permission);
+      }
       request.staffAccess = access;
       return true;
     }
-    if (
-      this.tokens.enabled ||
-      this.reflector.getAllAndOverride<boolean>(ENTRA_ONLY_KEY, [
-        context.getHandler(),
-        context.getClass(),
-      ])
-    ) {
+    if (this.tokens.enabled || entraOnly || anyPermissions !== undefined) {
       throw new UnauthorizedException();
     }
+    if (!permission) throw new ForbiddenException('Access denied');
     const read = permission === 'service_request.view';
     const enabled = this.config.get(
       read

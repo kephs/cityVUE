@@ -3,14 +3,23 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { sql } from 'kysely';
 import type { StaffAccess } from '../auth/auth.types.js';
 import { DatabaseService } from '../database/database.service.js';
+import {
+  persistedRequestAudience,
+  requestCapabilities,
+} from './staff-request-policy.js';
 
 import {
   assertInternalAccess,
-  internalRequestScope,
   internalRequestUuid as uuid,
   internalDepartment,
   internalDivision,
 } from './internal-request-scope.js';
+import {
+  assertStaffRequestRead,
+  staffRequestReadScope,
+  readableRequestAudiences,
+  type StaffRequestAudienceFilter,
+} from './staff-request-scope.js';
 
 export function assertInternalReadAccess(
   access: StaffAccess | undefined,
@@ -19,6 +28,7 @@ export function assertInternalReadAccess(
 }
 
 export interface InternalRequestFilters {
+  audience?: StaffRequestAudienceFilter;
   view?: string;
   search?: string;
   status?: string;
@@ -29,23 +39,31 @@ export interface InternalRequestFilters {
 export class InternalRequestRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  private scoped(access: StaffAccess | undefined) {
-    assertInternalReadAccess(access);
-    return internalRequestScope(this.database.client, access).innerJoin(
-      'service_definition_version as version',
-      (join) =>
-        join
-          .onRef('version.id', '=', 'request.service_definition_version_id')
-          .onRef('version.organization_id', '=', 'request.organization_id'),
+  private scoped(
+    access: StaffAccess | undefined,
+    audience: StaffRequestAudienceFilter,
+  ) {
+    assertStaffRequestRead(access, audience);
+    return staffRequestReadScope(
+      this.database.client,
+      access,
+      audience,
+    ).innerJoin('service_definition_version as version', (join) =>
+      join
+        .onRef('version.id', '=', 'request.service_definition_version_id')
+        .onRef('version.organization_id', '=', 'request.organization_id'),
     );
   }
 
   private filtered(
     access: StaffAccess | undefined,
     filters: InternalRequestFilters = {},
+    audience: StaffRequestAudienceFilter = 'internal',
   ) {
-    let query = this.scoped(access);
-    assertInternalReadAccess(access);
+    let query = this.scoped(access, audience);
+    assertStaffRequestRead(access, audience);
+    if (filters.audience && filters.audience !== 'all')
+      query = query.where('request.audience', '=', filters.audience);
     if (filters.view)
       query = query.where(
         operationalView(
@@ -73,9 +91,10 @@ export class InternalRequestRepository {
   private projection(
     access: StaffAccess | undefined,
     filters: InternalRequestFilters = {},
+    audience: StaffRequestAudienceFilter = 'internal',
   ) {
-    assertInternalReadAccess(access);
-    return this.filtered(access, filters)
+    assertStaffRequestRead(access, audience);
+    return this.filtered(access, filters, audience)
       .innerJoin('department as effective_department', (join) =>
         join
           .onRef(
@@ -124,11 +143,12 @@ export class InternalRequestRepository {
     page: number,
     pageSize: number,
     filters: InternalRequestFilters = {},
+    audience: StaffRequestAudienceFilter = 'internal',
   ) {
-    const count = await this.filtered(access, filters)
+    const count = await this.filtered(access, filters, audience)
       .select(sql<number>`count(*)::integer`.as('total'))
       .executeTakeFirstOrThrow();
-    const items = await this.projection(access, filters)
+    const items = await this.projection(access, filters, audience)
       .orderBy('request.created_at', 'desc')
       .orderBy('request.id', 'desc')
       .limit(pageSize)
@@ -144,8 +164,11 @@ export class InternalRequestRepository {
     };
   }
 
-  async workspaceOptions(access: StaffAccess | undefined) {
-    assertInternalReadAccess(access);
+  async workspaceOptions(
+    access: StaffAccess | undefined,
+    audience: StaffRequestAudienceFilter = 'internal',
+  ) {
+    assertStaffRequestRead(access, audience);
     const active = await this.database.client
       .selectFrom('organization')
       .select('id')
@@ -155,8 +178,17 @@ export class InternalRequestRepository {
     const canUpdate =
       Boolean(active) &&
       access.permissions.includes('service_request.internal.update');
+    const audiences =
+      audience === 'all'
+        ? { audiences: active ? readableRequestAudiences(access) : [] }
+        : {};
     if (!active || !access.departmentIds.length)
-      return { canUpdate: false, departments: [], divisions: [] };
+      return {
+        ...(audience === 'internal' ? { canUpdate: false } : {}),
+        departments: [],
+        divisions: [],
+        ...audiences,
+      };
     const departments = await this.database.client
       .selectFrom('department')
       .select(['id', 'name'])
@@ -183,7 +215,12 @@ export class InternalRequestRepository {
             .orderBy('id')
             .execute()
         : [];
-    return { canUpdate, departments, divisions };
+    return {
+      ...(audience === 'internal' ? { canUpdate } : {}),
+      departments,
+      divisions,
+      ...audiences,
+    };
   }
 
   async activity(
@@ -191,15 +228,16 @@ export class InternalRequestRepository {
     id: string,
     page: number,
     pageSize: number,
+    audience: StaffRequestAudienceFilter = 'internal',
   ) {
-    assertInternalReadAccess(access);
+    assertStaffRequestRead(access, audience);
     if (!uuid.test(id)) throw new NotFoundException();
     // One repeatable-read snapshot keeps request admission and history scope consistent.
     return this.database.client
       .transaction()
       .setIsolationLevel('repeatable read')
       .execute(async (trx) => {
-        const parent = await internalRequestScope(trx, access)
+        const parent = await staffRequestReadScope(trx, access, audience)
           .select('request.id')
           .where('request.id', '=', id)
           .executeTakeFirst();
@@ -249,21 +287,38 @@ export class InternalRequestRepository {
       });
   }
 
-  async details(access: StaffAccess | undefined, id: string) {
+  async details(
+    access: StaffAccess | undefined,
+    id: string,
+    audience: StaffRequestAudienceFilter = 'internal',
+  ) {
     // Authorize even malformed lookups. No contacts, identities or activity joins.
-    const query = this.projection(access);
+    const query = this.projection(access, {}, audience);
     if (!uuid.test(id)) return undefined;
     const row = await query
-      .select(['request.description', 'request.revision'])
+      .select([
+        'request.description',
+        'request.revision',
+        'request.intake_channel as intakeChannel',
+      ])
       .where('request.id', '=', id)
       .executeTakeFirst();
-    return row
-      ? {
-          ...row,
-          canReadContact:
-            access?.permissions.includes('service_request.contact.read') ===
-            true,
-        }
-      : undefined;
+    if (!row) return undefined;
+    const { intakeChannel, ...safeRow } = row;
+    return {
+      ...safeRow,
+      ...(audience === 'all' && access
+        ? {
+            intakeChannel,
+            capabilities: requestCapabilities(
+              access,
+              persistedRequestAudience(row.audience),
+              row.status,
+            ),
+          }
+        : {}),
+      canReadContact:
+        access?.permissions.includes('service_request.contact.read') === true,
+    };
   }
 }

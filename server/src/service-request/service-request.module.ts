@@ -7,6 +7,7 @@ import { InternalRequestMutationsService } from './internal-request-mutations.se
 import { StaffIntakeController } from './staff-intake.controller.js';
 import { InternalRequestController } from './internal-request.controller.js';
 import { InternalRequestRepository } from './internal-request.repository.js';
+import { StaffRequestController } from './staff-request.controller.js';
 import {
   Module,
   type MiddlewareConsumer,
@@ -33,6 +34,7 @@ import { StaffActionsService } from './staff-actions.service.js';
     ReferenceConfigurationController,
     ServiceRequestController,
     StaffIntakeController,
+    StaffRequestController,
     InternalRequestController,
     InternalRequestMutationsController,
   ],

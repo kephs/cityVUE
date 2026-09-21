@@ -26,6 +26,15 @@ import {
   internalRequestScope,
   internalRequestUuid,
 } from './internal-request-scope.js';
+import {
+  assertStaffRequestRead,
+  staffRequestReadScope,
+  type StaffRequestAudienceFilter,
+} from './staff-request-scope.js';
+import {
+  assertRequestOperation,
+  persistedRequestAudience,
+} from './staff-request-policy.js';
 
 export interface InternalRoutingInput {
   expectedRevision: number;
@@ -41,16 +50,18 @@ export class InternalRequestMutationsService {
     id: string,
     input: WorkflowActionDto,
     access: StaffAccess | undefined,
+    audience: StaffRequestAudienceFilter = 'internal',
   ) {
-    return this.mutate(id, input, access, 'workflow');
+    return this.mutate(id, input, access, 'workflow', audience);
   }
 
   route(
     id: string,
     input: InternalRoutingInput,
     access: StaffAccess | undefined,
+    audience: StaffRequestAudienceFilter = 'internal',
   ) {
-    return this.mutate(id, input, access, 'routing');
+    return this.mutate(id, input, access, 'routing', audience);
   }
 
   private async mutate(
@@ -58,8 +69,11 @@ export class InternalRequestMutationsService {
     input: WorkflowActionDto | InternalRoutingInput,
     access: StaffAccess | undefined,
     operation: 'workflow' | 'routing',
+    audience: StaffRequestAudienceFilter,
   ) {
-    assertInternalAccess(access, 'service_request.internal.update');
+    if (audience === 'internal')
+      assertInternalAccess(access, 'service_request.internal.update');
+    else assertStaffRequestRead(access, audience);
     if (!internalRequestUuid.test(id)) throw new NotFoundException();
     if (
       !Number.isInteger(input.expectedRevision) ||
@@ -68,9 +82,14 @@ export class InternalRequestMutationsService {
     )
       throw new BadRequestException('Invalid revision');
     return this.database.client.transaction().execute(async (trx) => {
-      const current = await internalRequestScope(trx, access)
+      const scope = () =>
+        audience === 'internal'
+          ? internalRequestScope(trx, access)
+          : staffRequestReadScope(trx, access, audience);
+      const current = await scope()
         .select([
           'request.id',
+          'request.audience',
           'request.status',
           'request.revision',
           internalDepartment.as('departmentId'),
@@ -81,6 +100,15 @@ export class InternalRequestMutationsService {
         .forShare(['category', 'organization'])
         .executeTakeFirst();
       if (!current) throw new NotFoundException();
+      const persistedAudience = persistedRequestAudience(current.audience);
+      if (audience !== 'internal')
+        assertRequestOperation(
+          access,
+          persistedAudience,
+          operation === 'routing'
+            ? 'route'
+            : (input as WorkflowActionDto).action,
+        );
       if (current.revision !== input.expectedRevision)
         throw new ConflictException('Request changed; refresh before retrying');
       let status = current.status;
@@ -214,14 +242,18 @@ export class InternalRequestMutationsService {
         .where(
           'id',
           'in',
-          internalRequestScope(trx, access)
-            .select('request.id')
-            .where('request.id', '=', id),
+          scope().select('request.id').where('request.id', '=', id),
         )
         .where('organization_id', '=', access.organizationId)
-        .where('audience', '=', 'internal')
+        .where('audience', '=', persistedAudience)
         .where('revision', '=', input.expectedRevision)
-        .returning(['id', 'status', 'revision', 'updated_at'])
+        .returning([
+          'id',
+          'reference_number',
+          'status',
+          'revision',
+          'updated_at',
+        ])
         .executeTakeFirst();
       if (!row)
         throw new ConflictException('Request changed; refresh before retrying');
@@ -235,7 +267,11 @@ export class InternalRequestMutationsService {
           actor_type: 'staff',
           staff_identity_id: access.staffIdentityId,
           actor_reference: null,
-          metadata: { ...metadata, policy: 'F031', revision: row.revision },
+          metadata: {
+            ...metadata,
+            policy: persistedAudience === 'public' ? 'F040' : 'F031',
+            revision: row.revision,
+          },
         })
         .execute();
       await trx
@@ -261,9 +297,13 @@ export class InternalRequestMutationsService {
           departmentId,
           divisionId,
           row.revision,
+          persistedAudience,
         );
       return {
         serviceRequestId: row.id,
+        ...(audience === 'public'
+          ? { referenceNumber: row.reference_number }
+          : {}),
         status: row.status,
         revision: row.revision,
         updatedAt: row.updated_at,

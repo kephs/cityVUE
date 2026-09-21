@@ -24,6 +24,16 @@ import {
   type OwnershipTarget,
   type TargetType,
 } from './ownership-targets.js';
+import {
+  assertStaffRequestRead,
+  staffRequestReadScope,
+  type StaffRequestAudience,
+  type StaffRequestAudienceFilter,
+} from './staff-request-scope.js';
+import {
+  assertRequestOperation,
+  persistedRequestAudience,
+} from './staff-request-policy.js';
 
 export interface OwnershipInput {
   expectedRevision: number;
@@ -54,6 +64,7 @@ export async function clearIneligibleAssignment(
   departmentId: string,
   divisionId: string | null,
   revision: number,
+  audience: StaffRequestAudience = 'internal',
 ) {
   const previous = await currentAssignment(db, access.organizationId, id);
   if (
@@ -67,6 +78,7 @@ export async function clearIneligibleAssignment(
         previous.type,
         '',
         previous.id,
+        audience,
       )
     ).length
   )
@@ -103,11 +115,17 @@ export class RequestOwnershipService {
     access: StaffAccess,
     id: string,
     lock = false,
+    audience: StaffRequestAudienceFilter = 'internal',
   ) {
     if (!internalRequestUuid.test(id)) throw new NotFoundException();
-    let query = internalRequestScope(db, access)
+    let query = (
+      audience === 'internal'
+        ? internalRequestScope(db, access)
+        : staffRequestReadScope(db, access, audience)
+    )
       .select([
         'request.id',
+        'request.audience',
         'request.revision',
         internalDepartment.as('departmentId'),
         internalDivision.as('divisionId'),
@@ -125,13 +143,24 @@ export class RequestOwnershipService {
     access: StaffAccess | undefined,
     type: TargetType,
     search: string,
+    audience: StaffRequestAudienceFilter = 'internal',
+    purpose: 'assignment' | 'watchers' = 'assignment',
   ) {
-    assertInternalAccess(access, 'service_request.internal.update');
+    if (audience === 'internal')
+      assertInternalAccess(access, 'service_request.internal.update');
+    else assertStaffRequestRead(access, audience);
     return this.database.client
       .transaction()
       .setIsolationLevel('repeatable read')
       .execute(async (db) => {
-        const parent = await this.parent(db, access, id);
+        const parent = await this.parent(db, access, id, false, audience);
+        const persistedAudience = persistedRequestAudience(parent.audience);
+        if (audience !== 'internal')
+          assertRequestOperation(
+            access,
+            persistedAudience,
+            purpose === 'assignment' ? 'assign' : 'watchers',
+          );
         const rows = await eligibleTargets(
           db,
           access.organizationId,
@@ -139,6 +168,8 @@ export class RequestOwnershipService {
           parent.divisionId,
           type,
           search,
+          undefined,
+          persistedAudience,
         );
         return {
           items: rows.map(({ type, id, displayName }) => ({
@@ -151,13 +182,17 @@ export class RequestOwnershipService {
       });
   }
 
-  async watchers(id: string, access: StaffAccess | undefined) {
-    assertInternalAccess(access, 'service_request.internal.read');
+  async watchers(
+    id: string,
+    access: StaffAccess | undefined,
+    audience: StaffRequestAudienceFilter = 'internal',
+  ) {
+    assertStaffRequestRead(access, audience);
     return this.database.client
       .transaction()
       .setIsolationLevel('repeatable read')
       .execute(async (db) => {
-        await this.parent(db, access, id);
+        await this.parent(db, access, id, false, audience);
         const rows =
           await sql<OwnershipTarget>`select t.type,t.id,t.name as "displayName",t.active
         from service_request_watcher w join ${targetCatalog(access.organizationId)} t
@@ -180,14 +215,17 @@ export class RequestOwnershipService {
     input: OwnershipInput,
     access: StaffAccess | undefined,
     operation: Operation,
+    audience: StaffRequestAudienceFilter = 'internal',
   ) {
     const self = operation === 'watch' || operation === 'unwatch';
-    assertInternalAccess(
-      access,
-      self
-        ? 'service_request.internal.read'
-        : 'service_request.internal.update',
-    );
+    if (audience === 'internal')
+      assertInternalAccess(
+        access,
+        self
+          ? 'service_request.internal.read'
+          : 'service_request.internal.update',
+      );
+    else assertStaffRequestRead(access, audience);
     if (
       !Number.isInteger(input.expectedRevision) ||
       input.expectedRevision < 1 ||
@@ -201,7 +239,14 @@ export class RequestOwnershipService {
     if (operation !== 'unassign')
       validateTarget(self ? type : input.targetType, targetId);
     return this.database.client.transaction().execute(async (db) => {
-      const parent = await this.parent(db, access, id, true);
+      const parent = await this.parent(db, access, id, true, audience);
+      const persistedAudience = persistedRequestAudience(parent.audience);
+      if (audience !== 'internal')
+        assertRequestOperation(
+          access,
+          persistedAudience,
+          self ? 'self_watch' : assignment ? 'assign' : 'watchers',
+        );
       if (parent.revision !== input.expectedRevision)
         throw new ConflictException('Request changed; refresh before retrying');
       const previous = await currentAssignment(db, access.organizationId, id);
@@ -238,6 +283,7 @@ export class RequestOwnershipService {
               type,
               '',
               targetId,
+              persistedAudience,
             )
           ).at(0);
         if (!target) throw new NotFoundException();
@@ -388,7 +434,7 @@ export class RequestOwnershipService {
           staff_identity_id: access.staffIdentityId,
           actor_reference: null,
           metadata: {
-            policy: 'F037',
+            policy: persistedAudience === 'public' ? 'F040' : 'F037',
             action: operation,
             changedField: assignment ? 'assignment' : 'watchers',
             revision: row.revision,

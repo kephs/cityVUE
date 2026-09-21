@@ -10,11 +10,19 @@ const fullUatOperatorPermissions = [
   'service_request.internal.update',
   'catalog.issue_action.manage',
   'service_request.reference.manage',
+  'service_request.view',
+  'service_request.start_work',
+  'service_request.hold',
+  'service_request.resume',
+  'service_request.close',
+  'service_request.reopen',
+  'service_request.assign',
+  'service_request.route',
+  'service_request.watchers.manage',
 ] as const satisfies readonly Permission[];
 
 export const developmentStaffPermissions = [
   ...fullUatOperatorPermissions,
-  'service_request.view',
   'geospatial.read',
 ] as const satisfies readonly Permission[];
 

@@ -49,13 +49,13 @@ test("authenticated requests allowlist filters and discard unexpected sensitive 
     page: 1,
   });
   expect(client.get).toHaveBeenCalledWith(
-    "/staff/internal-service-requests?search=REQ&page=1",
+    "/staff/service-requests?search=REQ&page=1",
     expect.objectContaining({ authenticated: true }),
   );
   expect(data.items[0]).not.toHaveProperty("contact");
   expect(data.items[0]).not.toHaveProperty("description");
 });
-test.each(["public", "unknown"])(
+test.each(["unknown", "PUBLIC"])(
   "unexpected audience %s fails closed",
   async (audience) => {
     const client = { get: vi.fn().mockResolvedValue({ ...row, audience }) };
@@ -76,6 +76,71 @@ test("UUID route is validated and capability must be literal true", async () => 
   expect((await repo.options()).canUpdate).toBe(false);
 });
 
+test("F040 mixed results retain audience, allowlist audience filters and derive controls only from server capabilities", async () => {
+  const client = {
+    get: vi.fn().mockResolvedValue({
+      items: [row, { ...row, audience: "public" }],
+      total: 2,
+      page: 1,
+      pageSize: 25,
+    }),
+  };
+  const repo = createStaffRequestRepository({ client });
+  const results = await repo.list({ audience: "all", view: "watching" });
+  expect(results.items.map((value) => value.audience)).toEqual([
+    "internal",
+    "public",
+  ]);
+  expect(client.get).toHaveBeenCalledWith(
+    "/staff/service-requests?audience=all&view=watching",
+    expect.objectContaining({ authenticated: true }),
+  );
+  client.get.mockResolvedValue({
+    ...row,
+    audience: "public",
+    intakeChannel: "phone",
+    capabilities: {
+      workflowActions: ["hold", "arbitrary"],
+      canAssign: "true",
+      canManageWatchers: true,
+      canRoute: true,
+    },
+    permissions: ["private"],
+  });
+  const detail = await repo.detail(id);
+  expect(detail.audience).toBe("public");
+  expect(detail.intakeChannel).toBe("phone");
+  expect(detail.capabilities).toEqual({
+    workflowActions: ["hold"],
+    canAssign: false,
+    canManageWatchers: true,
+    canRoute: true,
+    canReadContact: false,
+    canWatchSelf: false,
+  });
+  expect(detail).not.toHaveProperty("permissions");
+  expect(detail).not.toHaveProperty("contact");
+});
+
+test("F040 PUBLIC protected contact keeps its separate authenticated endpoint and never accepts an arbitrary audience path", async () => {
+  const client = {
+    get: vi
+      .fn()
+      .mockResolvedValue({ name: null, email: "fictional@example.com" }),
+  };
+  const repo = createStaffRequestRepository({ client });
+  await repo.contact(id, undefined, "public");
+  expect(client.get).toHaveBeenCalledWith(
+    `/staff/public-service-requests/${id}/contact`,
+    expect.objectContaining({ authenticated: true }),
+  );
+  client.get.mockClear();
+  await expect(repo.contact(id, undefined, "../other")).rejects.toThrow(
+    /unavailable/,
+  );
+  expect(client.get).not.toHaveBeenCalled();
+});
+
 test("activity uses protected bounded endpoint and drops identity/audit extras", async () => {
   const event = {
     id,
@@ -94,7 +159,7 @@ test("activity uses protected bounded endpoint and drops identity/audit extras",
   const repo = createStaffRequestRepository({ client });
   const data = await repo.activity(id, 1);
   expect(client.get).toHaveBeenCalledWith(
-    `/staff/internal-service-requests/${id}/activity?page=1&pageSize=25`,
+    `/staff/service-requests/${id}/activity?page=1&pageSize=25`,
     expect.objectContaining({ authenticated: true }),
   );
   expect(data.items[0]).not.toHaveProperty("staffIdentityId");

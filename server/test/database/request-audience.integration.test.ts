@@ -1,6 +1,7 @@
 import { checkRequestOwnership } from './request-ownership-checks.js';
 import { checkRequestContact } from './request-contact-checks.js';
 import { checkPublicRequestContact } from './public-request-contact-checks.js';
+import { checkStaffWorkspace } from './staff-workspace-checks.js';
 import {
   PinoLoggerService,
   createOperationalLogger,
@@ -331,6 +332,10 @@ test(
             'service_request.view',
             'service_request.assign',
             'service_request.start_work',
+            'service_request.hold',
+            'service_request.resume',
+            'service_request.close',
+            'service_request.reopen',
           ].map((permission_key) => ({ permission_key })),
         )
         .execute();
@@ -2235,6 +2240,20 @@ test(
           department,
           targetDepartment,
           targetDivision,
+          logs: contactLogs,
+        });
+        await checkStaffWorkspace(t, {
+          app,
+          db,
+          org,
+          creator,
+          otherOrg,
+          otherInternal,
+          department,
+          targetDepartment,
+          targetDivision,
+          publicPayload: assisted,
+          internalPayload: internal,
           logs: contactLogs,
         });
       } finally {

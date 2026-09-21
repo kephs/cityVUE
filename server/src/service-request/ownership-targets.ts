@@ -2,6 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
 import { internalRequestUuid } from './internal-request-scope.js';
+import {
+  requestReadPermission,
+  type StaffRequestAudience,
+} from './staff-request-scope.js';
 
 export const targetTypes = ['staff', 'role', 'group'] as const;
 export type TargetType = (typeof targetTypes)[number];
@@ -52,6 +56,7 @@ export async function eligibleTargets(
   type: TargetType,
   search = '',
   targetId?: string,
+  audience: StaffRequestAudience = 'internal',
 ): Promise<OwnershipTarget[]> {
   if (!targetTypes.includes(type))
     throw new BadRequestException('Invalid target type');
@@ -66,7 +71,7 @@ export async function eligibleTargets(
         (t.type='staff' and exists(select 1 from staff_department_membership m where m.organization_id=${organizationId} and m.staff_identity_id=t.id and m.department_id=${departmentId} and m.active)
           and (${divisionId}::uuid is null or exists(select 1 from staff_division_membership m where m.organization_id=${organizationId} and m.staff_identity_id=t.id and m.department_id=${departmentId} and m.division_id=${divisionId} and m.active))
           and exists(select 1 from staff_role_assignment a join role r on r.organization_id=a.organization_id and r.id=a.role_id and r.active
-            join role_permission p on p.organization_id=r.organization_id and p.role_id=r.id and p.permission_key='service_request.internal.read'
+            join role_permission p on p.organization_id=r.organization_id and p.role_id=r.id and p.permission_key=${requestReadPermission[audience]}
             where a.organization_id=${organizationId} and a.staff_identity_id=t.id and a.active))
         or (t.type='role' and exists(select 1 from operational_role r where r.organization_id=${organizationId} and r.id=t.id and r.department_id=${departmentId} and (r.division_id is null or r.division_id=${divisionId})))
         or (t.type='group' and exists(select 1 from work_group g where g.organization_id=${organizationId} and g.id=t.id and g.department_id=${departmentId} and (g.division_id is null or g.division_id=${divisionId})))

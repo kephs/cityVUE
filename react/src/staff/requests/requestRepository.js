@@ -1,6 +1,6 @@
 import { createApiClient, CityVueApiError } from "../../api/apiClient.js";
 import { readResidentIntakeConfig } from "../../config/runtimeConfig.js";
-const root = "/staff/internal-service-requests";
+const root = "/staff/service-requests";
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const statusLabels = {
@@ -35,7 +35,7 @@ function project(row, detail = false) {
   if (
     !row ||
     !uuid.test(row.serviceRequestId) ||
-    row.audience !== "internal" ||
+    !["public", "internal"].includes(row.audience) ||
     !Object.hasOwn(statusLabels, row.status) ||
     typeof row.referenceNumber !== "string" ||
     typeof row.issueName !== "string" ||
@@ -52,6 +52,7 @@ function project(row, detail = false) {
   return {
     assignment: row.assignment ? targetProjection(row.assignment) : null,
     serviceRequestId: row.serviceRequestId,
+    audience: row.audience,
     referenceNumber: row.referenceNumber,
     status: row.status,
     issueName: row.issueName,
@@ -70,7 +71,30 @@ function project(row, detail = false) {
       ? {
           description: row.description,
           revision: row.revision,
+          intakeChannel: ["web", "phone", "walk_in", "staff", "api"].includes(
+            row.intakeChannel,
+          )
+            ? row.intakeChannel
+            : null,
           canReadContact: row.canReadContact === true,
+          capabilities: {
+            workflowActions: Array.isArray(row.capabilities?.workflowActions)
+              ? row.capabilities.workflowActions.filter((action) =>
+                  ["start_work", "hold", "resume", "close", "reopen"].includes(
+                    action,
+                  ),
+                )
+              : [],
+            ...Object.fromEntries(
+              [
+                "canRoute",
+                "canAssign",
+                "canManageWatchers",
+                "canWatchSelf",
+                "canReadContact",
+              ].map((key) => [key, row.capabilities?.[key] === true]),
+            ),
+          },
         }
       : {}),
   };
@@ -91,8 +115,13 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
     return `${root}/${id}`;
   };
   return {
-    async contact(id, signal) {
-      const data = await api.get(`${path(id)}/contact`, options(signal));
+    async contact(id, signal, audience = "internal") {
+      path(id);
+      if (!["public", "internal"].includes(audience)) throw invalid();
+      const data = await api.get(
+        `/staff/${audience}-service-requests/${id}/contact`,
+        options(signal),
+      );
       if (
         !data ||
         !["name", "email"].every(
@@ -107,6 +136,7 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
     async list(filters, signal) {
       const query = new URLSearchParams();
       for (const key of [
+        "audience",
         "view",
         "search",
         "status",
@@ -196,8 +226,8 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         }),
       };
     },
-    async targets(id, type, search, signal) {
-      const query = new URLSearchParams({ type, search });
+    async targets(id, type, search, signal, purpose = "assignment") {
+      const query = new URLSearchParams({ type, search, purpose });
       const data = await api.get(
         `${path(id)}/assignment-targets?${query}`,
         options(signal),
@@ -254,6 +284,11 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         throw invalid();
       return {
         canUpdate: data.canUpdate === true,
+        audiences: Array.isArray(data.audiences)
+          ? data.audiences.filter((value) =>
+              ["public", "internal"].includes(value),
+            )
+          : [],
         departments: data.departments.map(({ id, name }) => ({ id, name })),
         divisions: data.divisions.map(({ id, name, departmentId }) => ({
           id,
