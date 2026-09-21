@@ -1,6 +1,6 @@
-# CityVUE API — Phase A Platform Foundation
+# CityVUE API — Backend Workspace
 
-This isolated workspace contains the CityVUE backend platform foundation. It intentionally has no business-domain endpoints, authentication, catalog, ServiceRequest schema, GIS, attachments, notifications, or integrations.
+This workspace began with the Phase A platform foundation and now contains Reqro's implemented backend through F041: canonical catalog/requests, Entra/database authorization, operations, protected contact and Internal Notes. CityVUE remains the existing technical identifier. Read the [current architecture](../docs/ARCHITECTURE.md) and [development protocol](../docs/development/REQRO_CODEX_PROTOCOL.md) before changes; historical phase-specific sections below describe their original scope.
 
 ## Prerequisites
 
@@ -22,7 +22,7 @@ npm run dev
 
 The development values in `.env.example` and `compose.yml` are local-only placeholders. Never reuse them in shared or production environments. Actual `.env` files are ignored by Git.
 
-From the repository root, `npm run server:dev` starts the backend and `npm run react:start` starts the frontend. Phase A does not connect them.
+From the repository root, `npm run server:dev` starts the backend and `npm run react:start` starts the frontend. The frontend connects only when API mode and the applicable identity configuration are explicitly supplied; the original Phase A alone did not connect them.
 
 Backend development uses the existing TypeScript compiler in watch mode with `tsconfig.build.json`, then starts/restarts Node on `dist/main.js` only after a successful complete emit. This preserves Nest constructor decorator metadata, which `tsx` does not emit. Failed builds leave the last successfully started server running until the source is corrected. Ctrl+C closes the compiler watcher and server. Production `npm start` remains unchanged; `tsx` remains available for the existing database CLIs, which do not use Nest dependency injection.
 
@@ -36,7 +36,7 @@ Backend development uses the existing TypeScript compiler in watch mode with `ts
 - OpenAPI UI: `http://localhost:3000/api/docs`
 - OpenAPI JSON: `http://localhost:3000/api/docs-json`
 
-OpenAPI describes only implemented platform endpoints. Restricting or disabling documentation in production remains a deployment/security decision.
+OpenAPI describes implemented endpoints, including the later domain APIs. Restricting or disabling documentation in production remains a deployment/security decision.
 
 ## Commands
 

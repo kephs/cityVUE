@@ -1,387 +1,64 @@
-# CityVUE — Roadmap
+# Reqro — Roadmap
 
-F039 — Protected Resident Contact Access adds independent `service_request.contact.read`, audience-specific audited contact endpoints, and an explicit-view INTERNAL staff card. Ordinary list/detail payloads omit contact. The approved narrow PUBLIC contact endpoint requires existing `service_request.view` plus contact permission and normal scope; no PUBLIC workspace is added. No default grants or INTERNAL intake changes occur. Populated manual live API UAT, contact revocation/restoration and audit/log correlation passed. Temporary PUBLIC view was removed; normal PUBLIC denial and preserved INTERNAL access were verified. Contact permission and the original six development grants remain explicitly retained. See [F039](features/F039-protected-resident-contact-access.md) and [the approved PUBLIC design](features/F039-public-contact-read-design-review.md).
+This roadmap describes accepted progress and possible direction, not implementation or deployment authorization. Follow the [development protocol](development/REQRO_CODEX_PROTOCOL.md) for execution, [Architecture](ARCHITECTURE.md) for current behavior and [ADRs](architecture/decisions/README.md) for durable decisions. Historical CityVUE identifiers remain unchanged.
 
-Implemented and validated: [F040 — PUBLIC Request Staff Workspace](features/F040-public-service-request-staff-workspace.md). The unified workspace preserves separate audience/operation/contact permissions and resident privacy. Automated validation, personal migration, manual authenticated PUBLIC operations, mixed filters, audience/contact revocation and responsive light/dark/keyboard checks passed. Its [implementation report](features/F040-implementation-report.md) records the accepted sixteen-key development checkpoint. [F041 — Internal Notes & Staff Collaboration](features/F041-internal-notes-staff-collaboration.md) is implemented and validated: the safe personal migration, explicit provisioning, authenticated creation/revocation/privacy checks, responsive/keyboard UAT, cleanup and final automated checks passed. Authenticated Notes/composers were confirmed restored after the normal API restart. The [F041 report](features/F041-implementation-report.md) records validation evidence and the eighteen-key retained set. F042 is unselected and unstarted; any next capability requires explicit product review.
+## Accepted progress
 
-F038 — Reqro Unified UI Design System & Experience Refresh is implemented using the approved Service Request detail design direction. The staff list/detail and global navigation are the reference implementation: Issue-first hierarchy, configured icons, authorized location, shared tokens, semantic status/activity, responsive light/dark presentation. Home, Dashboard, Issue List, Report an Issue, Map, AI Workspace and Admin preview are partially normalized through shared primitives/token aliases. Explicit remaining normalization: older home/intake/filter layouts, dashboard chart/summary styling, map symbology, AI/admin preview composition/branding, canonical Issue List icon projection, and remaining local decorative typography/colors. These deferrals use F038 section 112; they do not select or start F039. See [F038](features/F038-unified-ui-design-system-experience-refresh.md).
+The accepted application checkpoint is **F041 complete**: separate append-only Internal Notes for authorized PUBLIC and INTERNAL requests, validated locally with explicit development provisioning and authenticated UAT. See the [F041 report](features/F041-implementation-report.md). **F042 is not selected and has not started.**
 
-F037 adds server-authorized STAFF/operational ROLE/Team ownership, explicit watchers and reader self-watch, scoped operational views, and atomic assignment/watch history. Operational membership and ownership grant no permissions. Existing work groups and F036 local safety boundaries are reused; notifications and production administration remain deferred. See [F037](features/F037-assignment-ownership-watchers-foundation.md).
+The [feature index](features/README.md) links specifications and evidence for the completed operational sequence:
 
-F036 adds explicit local development staff provisioning, read-only inspection/dry-run and targeted deprovisioning using existing Entra mappings and PostgreSQL RBAC. Personal database/profile checks fail closed; runtime authorization, default grants and production HTTP surfaces are unchanged. See [F036](features/F036-safe-development-staff-authorization-provisioning.md).
+| Feature | Completed capability                                          |
+| ------- | ------------------------------------------------------------- |
+| F029    | Service Request audience and assisted-intake foundation       |
+| F030    | INTERNAL Service Request access policy                        |
+| F031    | INTERNAL lifecycle and routing                                |
+| F032    | Issue action / external redirect configuration                |
+| F033    | Configurable Organization-scoped references                   |
+| F034    | Staff INTERNAL request workspace                              |
+| F035    | Append-only operational Activity                              |
+| F036    | Safe explicit development staff provisioning                  |
+| F037    | Assignment, ownership and watchers                            |
+| F038    | Shared UI design system and experience refresh                |
+| F039    | Independent protected structured requester contact            |
+| F040    | Unified PUBLIC/INTERNAL staff workspace and PUBLIC operations |
+| F041    | Staff-only append-only Internal Notes                         |
 
-F035 adds separate append-only operational request history, atomic creation/workflow/routing events, protected paginated INTERNAL timelines, and durable Hold/Close/Reopen narratives. Existing metadata-only audit and F029–F034 authorization remain intact; no grants are added. See [F035](features/F035-service-request-activity-operational-history.md).
+Earlier foundations include React migration, canonical PostgreSQL catalog/intake, API eligibility, optional Entra/database RBAC, resident alerts, AI/provider governance and synthetic/protected geospatial boundaries. Individual reports distinguish local implementation, previews and deferred production work. The earlier global reference plan was superseded by F033; authentication, lifecycle, ownership and Notes are no longer pending foundations.
 
-F034 adds an authenticated INTERNAL staff request workspace with scoped reference/status/hierarchy filters, server-provided update/routing options, Start/Resume actions, and revision-aware refresh. Hold/Close/Reopen UI is explicitly deferred pending durable narrative storage. No migration or grants are introduced; authenticated live staff UAT remains pending. See [F034](features/F034-staff-internal-request-workspace.md).
+## Current governance milestone
 
-F033 evolves request references into Organization-scoped configurable policies and atomic bigint counters, retaining persisted immutable references, safe historical collision checks and explicit `service_request.reference.manage` authorization without default grants. UUID identity and F029–F032 boundaries remain unchanged. See [F033](features/F033-configurable-service-request-reference-numbers.md).
+Consolidate the permanent protocol, accepted ADRs, architecture/context and navigation. Perform a static pre-push history/configuration review and commit documentation locally. This changes no application behavior, migrations or grants.
 
-F032 adds explicit Issue handling (`internal_intake` / `external_redirect`) on existing ServiceDefinitions, a separate protected catalog action API, HTTPS validation and a neutral resident handoff. Both resident/staff creation enforce persisted action; questions are preserved across mode changes. No default grants or vendor integration. See [F032](features/F032-issue-action-external-redirect-foundation.md).
+The next **separately approved task** may be pre-push final verification and GitHub synchronization if the governance review finds the repository suitable. Neither synchronization nor deployment is authorized here. The [governance review](development/GOVERNANCE_REVIEW.md) records local evidence and conditions.
 
-F031 adds explicit INTERNAL workflow/routing commands requiring `service_request.internal.update`, with no default grants. Shared effective routing scope constrains F030 reads and mutations; revisions and atomic metadata-only Activity preserve concurrency/audit boundaries. PUBLIC paths remain unchanged. See [F031](features/F031-internal-service-request-lifecycle.md).
+## Product review before F042
 
-F030 adds Entra-only INTERNAL request list/detail reads under `staff/internal-service-requests`, requiring explicit `service_request.internal.read` and trusted Organization/Department/Division scope. Creation grants no read access. Existing PUBLIC reads and internal mutation denial remain unchanged; contact fields are omitted and no default grants are added. See [F030](features/F030-internal-service-request-access-policy.md).
+No candidate below has priority or a feature number assigned. Review value, privacy, operational impact and dependencies before selecting one:
 
-F029 adds explicit public/internal request audience, independent intake channel, and stable staff submitter/requester attribution. Resident intake is server-controlled PUBLIC/WEB; a separate Entra-only staff route requires explicit creation permissions with no default grants. Existing reads and mutations withhold INTERNAL until an internal-access policy is approved. See [F029](features/F029-service-request-audience-assisted-intake-foundation.md).
+- Resident communication and separately authorized resident-safe request history.
+- Notifications with approved recipients, preferences/consent, queues and failure handling.
+- Note correction/redaction/versioning that preserves accountability and retention requirements.
+- Attachments with secure upload, storage, scanning, access and lifecycle design.
+- Administrative configuration and production Role/Team administration.
+- Priority/SLA/escalation foundations based on approved policies.
 
-Next planned intake feature: administrator-selectable Issue action to continue normal intake with follow-up questions or redirect to an approved external URL. External redirects are not implemented by F029.
+Notes editing, deletion, search, mentions, exports, analytics and AI use are also deferred; they must not appear as incidental F041 extensions. Contact editing/search and resident profiles need independent privacy review.
 
-F028 connects `/map-preview` in API mode to the existing authenticated API client and protected geospatial endpoint. The server owns Organization scope; the browser validates the neutral response and fails closed on authentication, authorization, service, or geometry errors. Development legacy/demo mode retains isolated browser fixtures. No backend authorization or GIS provider changes were made. See [F028](features/F028-protected-geospatial-client-integration.md).
+## Longer-term platform direction
 
-F027 provides controlled personal-tenant development provisioning and database-backed Organization/permission validation while retaining synthetic GIS. Run live delegated-token UAT only with personally controlled Entra and development PostgreSQL; a future feature may review an approved GIS adapter and client cutover after identity and grant validation. See [F027](features/F027-controlled-development-identity-geospatial-grant-validation.md).
+**Catalog and intake:** extend narrow implemented configuration toward reviewed authoring/publication/preview administration, richer conditional intake, accessible discovery and routing policy. Preserve version/Answer history and distinguish platform intake from external redirect. Historical [domain requirements](features/F002-core-product-capabilities-domain-requirements.md) and [catalog direction](features/F003-dynamic-service-catalog-intelligent-intake.md) are broad requirements, not evidence every capability exists.
 
-F026 proves a protected, explicit-permission geospatial read path using server-only synthetic data; its catalog migration grants no roles, and production/client data reads remain unavailable. A later feature must review authorized provider data and grants before any production GIS integration or map cutover. See [F026](features/F026-protected-geospatial-read-api.md).
+**Location and GIS:** select approved authoritative providers/layers, address resolution and service-area/asset eligibility, including boundary, outage, indeterminate-result and geographic privacy cases. Preserve API authority and vendor neutrality. Staff override, geographic routing, PostGIS and live integrations need explicit scope; synthetic map presentation does not implement them.
 
-F025 establishes the server-side Organization authorization seam for future geospatial reads without exposing an endpoint or provider. Next, separately review the private API route, trusted identity/Organization policy, permission catalog/grants, and approved data source before activation. See [F025](features/F025-trusted-organization-context-geospatial-authorization.md).
+**Staff operations and reporting:** build new dashboard metrics from server-authorized scope with clear direct/team/unassigned definitions. Do not reinterpret browser-local statistics as operational reporting. Extend workflow configuration only through approved transition, revision and history rules.
 
-F024 separates the map preview from its synthetic data through an Organization-scoped neutral frontend repository with validated Polygon/Point GeoJSON. Backend authorization and approved production GIS data remain future work; no API, persistence, PostGIS, or ArcGIS integration was added. See [F024](features/F024-organization-scoped-neutral-geospatial-data-foundation.md).
+**Enterprise integrations:** discover actual vendor APIs and capabilities before a controlled pilot. Keep an API-owned router, canonical domain, Organization-scoped mappings/external references and vendor adapters. Validate retries, deduplication, status/source-of-truth rules and recovery. Demonstrate portability with a second approved/mock adapter without requiring a vendor purchase. No vendor connector is currently claimed complete.
 
-F023 completes a local MapLibre presentation foundation with synthetic GeoJSON, a stakeholder preview route, and a no-tile style. Production service areas, basemaps, geocoding, Organization-scoped GIS data, and authorized client adapters remain future work. See [F023](features/F023-client-neutral-gis-presentation-foundation.md).
+**Production readiness:** client identity activation, deployment architecture, security/privacy/records/accessibility review, performance/load evidence, backup/restore, monitoring, operational ownership and support remain separate gates. [F008](features/F008-production-backend-persistence-security-architecture.md) and [F016](features/F016-production-hosting-deployment-readiness-plan.md) preserve hosting direction. Prefer isolated client environments initially; shared SaaS needs a separate tenancy/operating-model decision.
 
-F022 establishes client-neutral deployment profiles and independent-development isolation through existing backend configuration. It preserves Entra, location eligibility and AI boundaries, and leaves live GIS, enterprise and notification adapters for separately authorized features. Original F020/F021 feature records proposed F022 as a provider pilot; this F022 is architecture isolation, with a provider connection deferred. See [F022](features/F022-client-neutral-architecture-development-isolation.md) and [ADR-003](decisions/ADR-003-client-neutral-platform-isolated-development.md).
+**Naming and rollout:** a technical CityVUE-to-Reqro rename requires its own plan. The historical [F007 static Hosting cutover](features/F007-react-stage-10-production-cutover.md) does not establish deployment of later backend/staff features. Git push and cloud deployment require separate authorization.
 
-F021 adds an internal provider-neutral execution lifecycle, strict request/response contracts, metadata-only usage/audit persistence, atomic request-quota admission, and model governance. The application registries remain empty; deterministic providers and an HTTP harness exist only in tests. AI/chat remain disabled by default, production test execution is forbidden, and no generation endpoint or live provider is shipped. See [F021](features/F021-implementation-report.md) and [ADR-002](decisions/ADR-002-ai-governance-metadata.md). Any live provider evaluation requires separate review and approval.
+## Decision and feature records
 
-F020 adds a bounded staff AI workspace at `/staff/ai` with Entra-only admission, explicit AI permissions, protected metadata APIs, provider-neutral contracts and policy-enforced routing. It is disabled by default with no inference, provider connection, conversation storage or deployment. See [F020](features/F020-enterprise-ai-workspace-foundation.md) and [ADR-001](decisions/ADR-001-provider-neutral-staff-ai-gateway.md); governance and live identity UAT precede any separately approved future provider pilot.
-
-- [x] Phase B local Entra authentication and Organization-scoped RBAC foundation (live token UAT pending admin consent; see F018)
-
-- [x] Phase F0 local staff assignment and controlled workflow domain foundation: Organization-scoped development StaffIdentity/explicit memberships, WorkGroups, assignment history, controlled status actions, optimistic concurrency, append-only Activity, and production-forbidden development mutation endpoints. Entra/RBAC, production staff UI/API exposure, notifications, and integrations remain deferred.
-
-- [x] Phase E0 local canonical Location/geographic eligibility foundation: exact-version policy, vendor-neutral provider contract, deterministic production-forbidden test provider, fail-closed decisions, immutable eligible snapshot, safe errors/logging, and no-partial-write coverage. Authoritative City GIS, PostGIS choice, overrides, and deployment remain deferred.
-
-- [x] Phase D3 local canonical staff Issue List foundation: minimal Organization-scoped DTO, dev-gated search and hierarchy filters, controlled sorting, bounded pagination/counts, and API-mode rendering on the existing `/issues` route. Production access remains deferred pending Entra/RBAC and deployment approval.
-
-- [x] Phase D1 local resident intake transition foundation: explicit legacy/API repositories, canonical catalog identifiers, and canonical POST submission. Production cutover remains deferred.
-- [x] Phase D2 local canonical ServiceRequest details foundation: Organization-scoped read model, fail-closed development endpoint, and gated read-only React details route. Production staff access remains deferred pending Entra/RBAC.
-
-**Status:** Working development roadmap  
-**Canonical development name:** CityVUE  
-**Current stage:** Internal development/prototype
-
-CityVUE should evolve from the existing MVP into a **vendor-neutral citizen-engagement platform** capable of communicating with VUEWorks, Cityworks, Cartegraph, MGO, VistaShare, and other future City systems.
-
-Roadmap inclusion does not constitute City approval.
-
-## Production Hosting and Deployment Readiness — Planning Only
-
-F016 records Azure managed services as the preferred first-municipality target while preserving a portable React, NestJS, TypeScript, PostgreSQL, Docker, and REST/OpenAPI core. A VPS/container-host deployment remains technically possible for a future customer-managed environment, but it is not the recommended initial City production architecture. No infrastructure is approved or provisioned by this roadmap entry.
-
-- [ ] Obtain City architecture, cybersecurity, privacy, and production approval.
-- [ ] Approve Azure subscriptions/resource groups, operational ownership, networking/private connectivity, and administrative access.
-- [ ] Establish separate Development, Test/QA, and Production databases, configuration, secrets, storage, telemetry, and integration credentials; prohibit routine production data use in development/testing.
-- [ ] Approve Entra registrations, Conditional Access, Key Vault/managed identities, PostgreSQL environments, Container Registry, Container Apps, Static Web Apps, monitoring, and custom DNS/TLS.
-- [ ] Approve authoritative GIS sources and EAM/integration connectivity, mappings, credentials, failure behavior, and support ownership.
-- [ ] Complete data-governance/retention decisions, backup and restore testing, recovery objectives, disaster recovery, CI/CD controls, security testing, performance/accessibility validation, production UAT, rollback, and launch runbooks.
-
-The planned order is: architecture/security approval; subscription/resource-group approval; networking; Entra; Key Vault; PostgreSQL Test; Container Registry; Container Apps Test; Static Web App Test; CI/CD; API Test deployment; React API-mode Test deployment; GIS/integration Test connectivity; security/UAT; Production PostgreSQL; Production API infrastructure; Production frontend infrastructure; Production DNS; Production migrations; and controlled Production launch. Every item remains incomplete until separately authorized and evidenced. See F016 for the detailed gates.
-
-## Phase 0 — Development Baseline
-
-**Goal:** Make the project safe, understandable, reproducible, and ready for AI-assisted development.
-
-- [ ] Confirm Git/private remote strategy.
-- [ ] Inventory technology stack and dependency versions.
-- [ ] Document local setup and Firebase deployment.
-- [ ] Add `docs/CITYVUE_CONTEXT.md`, root `AGENTS.md`, `docs/ARCHITECTURE.md`, and `docs/ROADMAP.md`.
-- [ ] Create `docs/features/` and `docs/decisions/`.
-- [ ] Review `.gitignore` and confirm `.env` is excluded.
-- [ ] Check history for accidentally committed secrets.
-- [ ] Add/update `.env.example`.
-- [ ] Identify tests, lint, build, and type-check commands.
-- [ ] Record bugs/technical debt.
-
-**Exit:** Another developer or Codex can understand, run, build, and safely modify CityVUE.
-
-## Phase 1 — Stabilize the MVP
-
-- [ ] Inventory existing features against code.
-- [ ] Review Report an Issue.
-- [ ] Review responsive behavior/accessibility.
-- [ ] Improve validation/error handling.
-- [ ] Review search/filter/sort.
-- [ ] Review edit/delete behavior and permissions.
-- [ ] Standardize loading/success/error/empty states.
-- [ ] Add critical tests where practical.
-- [ ] Remove obsolete prototype code only after review.
-- [ ] Keep development branding as CityVUE.
-
-**Exit:** MVP workflows are stable, responsive, understandable, and testable.
-
-## Phase 2 — Vendor-Neutral Domain Model
-
-- [ ] Define canonical `Organization` ownership, lifecycle, business timezone, configuration references, and tenant-isolation invariants before or alongside Organization-owned tables.
-- [ ] Define `ServiceRequest`, `Service`, `Category`, `Location`, and `RequestStatus`.
-- [ ] Define `Department`, optional `Division`, `Assignment`, `Activity`, `Watcher`, `Notification`, `NotificationRule`, and `WorkItem` boundaries.
-- [ ] Define staff identity, group/team, role, and permission references without coupling the domain to an identity vendor.
-- [ ] Define external-system references.
-- [ ] Separate business `RequestStatus` from transmission/synchronization `IntegrationStatus`.
-- [ ] Define attachment and destination/integration metadata.
-- [ ] Document CityVUE-owned versus external-system-owned fields.
-- [ ] Define request/activity visibility boundaries for requester-visible and internal staff information.
-- [ ] Create ADR for the vendor-neutral model.
-- [ ] Define Organization-scoped uniqueness, repository/query context, exports, retention, archival, deletion, migration, backup/restore, and tenant-isolation test strategy; evaluate PostgreSQL RLS only as optional defense in depth.
-
-**Rule:** Never use a VUEWorks, Cityworks, or Cartegraph schema as CityVUE's central model.
-
-**F008 architecture direction:** Implement this future domain behind a TypeScript/NestJS REST API and PostgreSQL only through separately approved work. The existing `Issue` model remains the production MVP compatibility model until a deliberate API migration.
-
-## Phase 3 — Service Catalog and Dynamic Intake
-
-- [ ] Define both Department → Category → Service and Department → optional Division → Category → Service ownership paths; validate that a Category's Division belongs to its Department.
-- [ ] Design authorized Division Admin management for create, rename, activate/deactivate, display order, Category association/movement, audit, archival, and historical understanding.
-- [ ] Design authorized Admin management for create/edit, reorder, activate, archive, clone, preview, and publish operations.
-- [ ] Add an authorized Admin icon picker for Category and Service presentation metadata using stable approved icon keys, preview, fallback, and audit support; do not add icons to legacy `Issue` records.
-- [ ] Add Category selection and live Service search using names, descriptions, keywords, aliases, and synonyms.
-- [ ] Define and render standard/service-specific dynamic questions.
-- [ ] Define a structured, typed Answer model with stable question identifiers and submission-time question/option display snapshots.
-- [ ] Associate every canonical ServiceRequest with the exact published ServiceDefinition/form version used at submission.
-- [ ] Validate structured answers server-side against the associated published definition, including required visible questions, types, options, constraints, and conditional applicability.
-- [ ] Retain historical form definitions or equivalent immutable/versioned representations for safe request display and edit reconstruction.
-- [ ] Render canonical Request Details/Edit views with separate resident-description and structured-answer fields rather than a combined description textarea.
-- [x] Add a local-development read-only `/issues/:issueId` canonical ServiceRequest Details route; production authorization and Issue List navigation remain deferred.
-- [ ] Make Issue names the primary Issue List links, relabel the visible Title column as Issue, and simplify row actions by placing authorized Edit/Delete on Details with an optional compact More menu only if needed.
-- [ ] Add append-oriented answer edit history aligned with the Activity/audit model.
-- [ ] Define a separately reviewed legacy compatibility and migration strategy that does not depend on reverse-parsing `Issue.description`.
-- [ ] Add conditional follow-up questions and validate rule dependencies.
-- [ ] Define required/optional fields.
-- [ ] Define per-Service location modes and contextual location requirements.
-- [ ] Define a separately configurable per-ServiceDefinition `LocationEligibilityPolicy`, including Admin association/versioning and an explicit `UnableToDetermine` policy; do not treat location-required and geographically eligible as the same rule.
-- [ ] Define per-Service attachment policies and secure attachment-processing requirements.
-- [ ] Define anonymous/contact and notification-preference policies.
-- [ ] Add resident review-before-submit and configurable safety guidance.
-- [ ] Define configuration lifecycle, versioning, draft/preview, publication, rollback, and historical-reference behavior.
-- [ ] Audit Admin catalog changes.
-- [ ] Define intelligent routing metadata and conditional routing without exposing internal ownership to residents.
-- [ ] Define destination-system and mapping metadata behind vendor-neutral integration boundaries.
-- [ ] Evaluate privacy-safe duplicate-request reduction.
-- [ ] Determine catalog storage approach.
-- [ ] Configure initial pilot services.
-
-**Exit:** New services require minimal citizen-facing code duplication.
-
-## Phase 4 — Location and GIS
-
-- [ ] Define address-validation requirements.
-- [ ] Evaluate approved autocomplete/address source.
-- [ ] Add autocomplete/validation.
-- [ ] Support intersections, parks, facilities, and non-address locations.
-- [ ] Evaluate map selection.
-- [ ] Identify City-approved authoritative boundary, service-area, property/facility, roadway, and asset layers, including ownership, refresh cadence, and availability expectations.
-- [ ] Define a canonical/configurable `ServiceArea` concept and vendor-neutral GIS/location service abstraction without embedding provider schemas or layer URLs in React.
-- [ ] Implement later location resolution from resident input to canonical coordinates and appropriate GIS/facility/parcel/asset references.
-- [ ] Define API-authoritative point/polygon, service-area, ownership/maintenance, and GIS-asset eligibility validation with `Eligible`, `Ineligible`, and `UnableToDetermine` results.
-- [ ] Define per-ServiceDefinition behavior for ineligible and indeterminate results, including correction, manual triage/staff review, and plain-language resident guidance without invented external-agency information.
-- [ ] Design permission-controlled staff resolution/override with actor, timestamp, reason, and Activity/audit history.
-- [ ] Define GIS timeout, retry, degraded-operation/manual-review, observability, and data-refresh behavior.
-- [ ] Complete geographic privacy/security review covering precision, authorization, public/staff visibility, retention, exports, logs, and attachment metadata.
-- [ ] Define GIS asset integration needs while keeping EAM/GIS vendor fields in adapters and mapping profiles.
-- [ ] Scope municipal boundaries, ServiceAreas, authoritative layers, providers/endpoints, and GIS configuration to Organization with no cross-Organization leakage.
-- [ ] Maintain accessible alternatives.
-
-Future geographic tests must cover clearly inside/outside and exact/near-boundary locations, differing service areas, eligible and non-City assets, missing and ambiguous locations, GIS unavailability, override authorization/audit, and bypassed or malicious client validation.
-
-## Phase 5 — Staff Identity and Authorization
-
-- [ ] Define staff roles and protected functions.
-- [ ] Design Microsoft Entra ID architecture.
-- [ ] Complete required security review.
-- [ ] Configure approved app registrations.
-- [ ] Implement staff authentication.
-- [ ] Implement UI protection and server/API authorization.
-- [ ] Add logout/session handling.
-- [ ] Define audit requirements.
-- [ ] Associate each Organization with its approved identity-provider/Entra tenant configuration while keeping secrets in approved secret management rather than Organization rows.
-- [ ] Enforce Organization-scoped StaffIdentity membership, roles, permissions, and API access; do not design cross-tenant administration in Phase B.
-
-**F008 architecture direction:** Use separate single-tenant Entra SPA and API registrations, authorization code + PKCE, no SPA secret, API token validation, and hybrid authorization: Entra for workforce identity/coarse admission plus CityVUE database roles and granular permissions. Registration and implementation still require Cybersecurity/Microsoft Admin approval.
-
-## Phase 5A — Assignment, Workflow, and Staff Work Management
-
-- [ ] Define individual, group/team/queue, and role-based assignment semantics.
-- [ ] Define manual assignment, reassignment, department/group transfer, and unassigned-queue behavior.
-- [ ] Design configurable automatic routing using approved request attributes and explicit fallback behavior.
-- [ ] Define My Assignments, My Group's Requests, Group Assignments, and Unassigned Requests views.
-- [ ] Preserve assignment history, timestamps, and actor/system attribution.
-- [ ] Define statuses, permitted transitions, work items/work orders, due dates, resolution codes, and closure reasons.
-- [ ] Define future SLA/escalation requirements without inventing City targets.
-- [ ] Add an authenticated staff Dashboard scope selector whose default is **My Assigned Issues**, unless an authorized role/configuration defines another default.
-- [ ] Provide authorized **My Department**, **Selected Category**, and permission-controlled **All Issues** scopes; selecting a scope or Category must never override RBAC.
-- [ ] Define server-authorized scoped request queries and ensure Total, status, priority, Category, and recent-request metrics all reflect the active authorized scope.
-- [ ] Derive Department scope from authoritative staff membership and permissions, never resident-facing Category values; decide combined versus selectable views for staff authorized across multiple Departments.
-- [ ] Support explicit multi-Department/multi-Division staff scope and authorized selected-Division Dashboard views where useful; never infer Division permission from Category selection.
-- [ ] Decide whether My Assigned Issues includes only direct individual assignments or also active group/queue assignments, and distinguish **My Work** from **My Group / Queue Work** where necessary.
-- [ ] Decide whether and how a preferred scope is remembered, with safe fallback when a saved scope is no longer authorized.
-- [ ] Define a controlled canonical `ServiceRequest` lifecycle, conceptually including Open, In Progress, On Hold, Closed, and Reopened without treating these illustrative names or transitions as final City policy.
-- [ ] Model status changes as explicit actions such as Start Work, Place On Hold, Resume Work, Close Request, and Reopen Request rather than arbitrary status-field replacement.
-- [ ] Define each transition's allowed source/result, permissions, roles/groups, required reason/comment/fields, timestamp, actor, notification behavior, and integration behavior.
-- [ ] Define configurable Hold reasons; Close reasons, notes, completion time, actor, and Service-specific closure requirements; and permission-controlled Reopen reasons that preserve prior closure history.
-- [ ] Define configurable assignment/status interactions, including whether In Progress requires an assignee, Close requires responsible staff, Reopen changes assignment, or Hold retains assignment.
-- [ ] Evaluate constrained Admin configuration for approved transitions, Hold/closure reasons, Service-specific requirements, and routing/workflow behavior without committing to a fully generic workflow engine.
-
-**Exit:** Assignment and workflow behavior is approved, vendor-neutral, auditable, and ready for server-enforced implementation.
-
-## Phase 5B — Activity Timeline, Watchers, and Audit History
-
-- [ ] Define the significant event/activity taxonomy.
-- [ ] Define append-oriented activity data, actor attribution, old/new values, and metadata.
-- [ ] Separate requester-visible activity/comments from internal staff activity/notes.
-- [ ] Define audit retention, correction, access, export, and privacy rules.
-- [ ] Define watcher eligibility, add/remove permissions, and future preferences.
-- [ ] Ensure requester, assignee, and watcher remain distinct concepts.
-- [ ] Require every canonical status transition to append Activity/audit history containing previous/new status, actor, timestamp, reason/comment, and relevant metadata; reopening must not erase the prior Closed event.
-
-**Exit:** Request history and watcher behavior are approved, auditable, and protected by explicit visibility rules.
-
-## Phase 6 — CityVUE API and Integration Foundation
-
-- [x] Select API technology/hosting direction through F008: TypeScript/NestJS REST/OpenAPI, PostgreSQL, and Azure Container Apps; implementation and City platform approval remain pending.
-- [x] Complete Phase A local backend platform foundation through F009: isolated strict-TypeScript NestJS workspace, Kysely/PostgreSQL connectivity and migrations, configuration validation, health/readiness, OpenAPI, structured logging/correlation, security defaults, tests, and container definitions; no cloud deployment or business schema.
-- [x] Complete Phase C0 through F010: canonical Organization/service-catalog persistence, composite Organization constraints, transactional development seed, scoped resident reads/search, OpenAPI, and tests; React cutover, ServiceRequest, Entra/RBAC, GIS, and deployment remain deferred.
-- [x] Complete Phase D0 through F011: canonical transactional ServiceRequest creation, global monthly references using Organization business time, typed Answer snapshots, requester/contact, Location foundation, initial append-only Activity, read-safe API DTOs, and concurrency/rollback tests; frontend cutover and later workflows remain deferred.
-- [ ] Implement canonical request contracts.
-- [ ] Implement Organization before or alongside Organization-owned canonical models; require exactly one Organization per ServiceRequest and prevent ownership changes through Department/Division transfer.
-- [ ] Generate immutable, searchable `SR-YYYYMM-NNNNNN` ServiceRequest reference numbers server-side and atomically with creation, using a global six-digit monthly sequence with a namespace of 999,999 references per calendar month while complete references remain globally unique.
-- [ ] Derive the `YYYYMM` period from an explicitly configured, authoritative CityVUE business timezone rather than a client clock; allocate safely across month boundaries and add boundary tests for the last request of one month and the first request of the next.
-- [ ] Use a PostgreSQL allocation strategy that is atomic and concurrency-safe so simultaneous requests cannot receive the same reference; do not use `MAX(referenceNumber) + 1` or equivalent race-prone logic, and enforce uniqueness on the complete canonical reference.
-- [ ] Preserve separate immutable internal IDs and external-system references; add reference-number search/display to approved API, UI, notification, export, and audit contexts.
-- [ ] Define adapter interface and capability model.
-- [ ] Scope adapter configuration, mapping profiles, credentials, external references, notifications, background jobs, and telemetry context to Organization.
-- [ ] Implement integration router.
-- [ ] Add validation, structured errors, and correlation IDs.
-- [ ] Establish logging/monitoring and secret management.
-- [ ] Determine persistence and queue/retry requirements.
-- [ ] Provide server-side assignment, workflow, activity, watcher, and authorization boundaries.
-- [ ] Enforce Dashboard scope and status-transition authorization in the API; React may request a scope or action but cannot determine record access or transition validity.
-- [ ] Define background processing, idempotency/deduplication, and failure recovery for integrations and notifications.
-- [ ] Define environment configuration.
-- [ ] Record major decisions as ADRs.
-
-**Exit:** An enterprise integration can be added without embedding vendor logic in the citizen UI.
-
-Implement Phase 6 incrementally: Phase A completed the platform foundation and Phase C0 completed the Organization/service-catalog persistence foundation without GIS. Phase B remains separately authorized staff identity/authorization work. A separately approved Phase D0 may add canonical Location and ServiceRequest persistence plus monthly reference allocation; add GIS validation and frontend API transition only in their later phases. Then proceed with staff workflow/Activity, notifications, attachments, integration router/adapters, and mobile foundations. See F008, F009, and `docs/features/F010-phase-c0-organization-service-catalog-persistence.md`.
-
-**Organization deployment baseline:** Prefer one isolated application environment, database, storage boundary, identity configuration, secrets set, integrations, telemetry scope, backup/restore plan, and maintenance window per municipality. Preserve container/domain portability for other approved clouds or customer-managed hosting. Evaluate a shared multi-Organization SaaS model only after explicit tenant-isolation, security, operations, procurement, billing, and data-governance approval.
-
-## Phase 7 — First EAM Pilot: VUEWorks
-
-- [ ] Confirm approved VUEWorks integration capabilities.
-- [ ] Define narrow pilot services.
-- [ ] Map CityVUE requests to VUEWorks.
-- [ ] Define statuses, attachments, and failure behavior.
-- [ ] Implement `VueWorksAdapter`.
-- [ ] Implement submission and supported status synchronization.
-- [ ] Define vendor-neutral status mapping, synchronization direction, source-of-truth/conflict handling, and authorization/audit behavior so adapter updates cannot bypass controlled CityVUE transitions.
-- [ ] Add logging/support documentation.
-- [ ] Conduct end-to-end UAT.
-
-Existing Roads/Street Trees concepts may inform pilot selection, but scope must be explicitly approved.
-
-## Phase 8 — Prove EAM Portability
-
-This does not require purchasing another EAM.
-
-- [ ] Review adapter interface for accidental VUEWorks assumptions.
-- [ ] Refactor vendor-specific assumptions.
-- [ ] Create a mock/reference second EAM adapter.
-- [ ] Model capability differences.
-- [ ] Test routing, external IDs, and normalized statuses.
-- [ ] Document EAM migration procedure.
-- [ ] Optionally validate against Cityworks, Cartegraph, or another approved test API if available.
-
-**Exit:** A second EAM can be supported without rewriting CityVUE's citizen experience or canonical model.
-
-## Phase 9 — Additional Enterprise Integrations
-
-Candidate systems: MGO, VistaShare, Cityworks if adopted, Cartegraph if adopted, and other City systems.
-
-For each:
-
-- [ ] Confirm business value/owner.
-- [ ] Confirm API and security requirements.
-- [ ] Define capability profile and mappings.
-- [ ] Implement adapter.
-- [ ] Test errors/retries.
-- [ ] Conduct UAT.
-- [ ] Document support.
-
-## Phase 10 — Citizen Tracking and Communications
-
-- [ ] Define public tracking and identity requirements.
-- [ ] Normalize citizen-friendly statuses.
-- [ ] Present an authorized requester-visible activity timeline without exposing internal activity.
-- [ ] Define email/SMS/push requirements, consent, accessibility, privacy, and operational ownership.
-- [ ] Define centrally managed notification rules, recipients, templates, and event coverage.
-- [ ] Configure approved transition notifications for requesters, assignees, groups, and watchers through server-side Notification orchestration rather than React.
-- [ ] Add confirmation, assignment/reassignment, status-change, comment/update, resolution, reopening, cancellation, escalation, and integration-failure notifications as approved.
-- [ ] Implement queued/sent/retrying/failed delivery state, timestamps, bounded retry, deduplication, correlation, and failure monitoring.
-- [ ] Protect sensitive request information.
-
-**Exit:** Residents can understand progress without knowing the back-end vendor.
-
-## Phase 11 — Search, Self-Service, and Conversational Assistance
-
-- [ ] Improve/live service search.
-- [ ] Add synonyms/common-language matching.
-- [ ] Integrate approved City knowledge.
-- [ ] Evaluate chatbot/conversational interface.
-- [ ] Route users to correct service intake.
-- [ ] Prevent invented City policies/services.
-- [ ] Measure self-service effectiveness.
-
-## Phase 12 — Production Hardening and City Adoption
-
-- [ ] Security, privacy, records-retention, and accessibility reviews.
-- [ ] Performance/load testing.
-- [ ] Backup/recovery and disaster-recovery planning.
-- [ ] Monitoring/alerting.
-- [ ] Support/escalation ownership.
-- [ ] Deployment/change-management process.
-- [ ] Production/integration runbooks.
-- [ ] Support documentation/training.
-- [ ] Analytics/reporting validation.
-- [ ] Validate assignment/group workload, unassigned work, aging, and resolution-time reporting.
-- [ ] Validate integration-failure and notification-failure reporting/alerting.
-- [ ] Present platform for City evaluation/adoption.
-- [ ] Validate tenant-isolation matrices covering IDs/query tampering, catalog, RBAC, ServiceRequests, attachments, integrations, background jobs, exports, retention/deletion, backup/restore, and telemetry redaction.
-- [ ] Decide whether future shared SaaS is justified or isolated per-municipality deployments remain the supported product model.
-
-### Branding Decision
-
-Only after City evaluation/adoption should the project decide whether the production name remains **CityVUE**, changes to **Ask Rockville**, or uses another City-approved name.
-
-## Suggested Near-Term Priorities
-
-1. Repository/documentation baseline
-2. MVP assessment/stabilization
-3. Vendor-neutral domain model
-4. Service catalog/dynamic intake
-5. Location/GIS design
-6. Staff Entra architecture
-7. CityVUE API/integration architecture
-8. Controlled VUEWorks pilot
-9. EAM portability validation
-
-## Feature Specifications
-
-Use `docs/features/F00X-feature-name.md` and include problem, goal, users, requirements, non-goals, user flow, data/security/integration/vendor-neutrality considerations, acceptance criteria, tests, and open questions.
-
-## Architecture Decisions
-
-Use `docs/decisions/ADR-00X-decision-name.md` and include status, context, decision, alternatives, consequences, vendor-lock-in implications, and security/operations implications.
-
-## Governance
-
-```text
-Candidate -> Designed -> Approved -> Implemented -> Validated
-```
-
-Do not interpret roadmap inclusion as approval to modify City production systems.
-
-## React MVP Cutover Gate
-
-React migration Stage 9 is limited to route-level performance preparation, isolated Firebase Hosting preview configuration, emulator validation, preview-channel UAT, and a documented rollback/cutover checklist. It does not authorize a live Firebase deployment or removal of the Parcel rollback path. See `docs/features/F006-react-stage-9-cutover-preparation.md`.
-
-React migration Stage 10 completed the approved production Hosting cutover to the React/Vite MVP on August 29, 2026. Parcel remains a tested emergency rollback target. This frontend cutover does not complete or authorize the still-pending vendor-neutral domain, backend/API, persistence, identity, security, or enterprise-integration roadmap phases. See `docs/features/F007-react-stage-10-production-cutover.md`.
-
-F008 approves the target backend, persistence, identity, security, hosting, and migration direction without implementing it. Subsequent phases must follow its sequencing and retain the public-resident versus protected-workforce boundary. See `docs/features/F008-production-backend-persistence-security-architecture.md`.
+Move a candidate through design, explicit approval, implementation and validation before marking it complete. Use [feature records](features/README.md) for requirements/evidence and the [ADR convention](architecture/decisions/README.md) for durable choices. Do not silently rewrite accepted decisions or turn roadmap entries into permission to use client resources.

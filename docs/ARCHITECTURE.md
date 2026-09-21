@@ -1,502 +1,95 @@
-# CityVUE — Architecture
+# Reqro — Current Architecture
 
-F041 implements a separate immutable Notes child stream for both staff request audiences through the existing persisted-audience/Organization/scope policy. Reading requires `service_request.note.read`; creating additionally requires `service_request.note.create`. Notes creation and metadata-only audit commit atomically, without changing parent revision/updatedAt or operational Activity. Contact remains independently protected. The tested personal migration is applied (20 total, zero pending), with no default grants or fabricated Notes. Incremental explicit provisioning and manual authorization/revocation UAT passed; eighteen permissions are retained and one fictional Note exists on each of the PUBLIC/INTERNAL UAT fixtures. Authorized, read-only and Protected responsive/theme checks passed. See [F041](features/F041-internal-notes-staff-collaboration.md) and the [implementation report](features/F041-implementation-report.md) for final validation status. The F040 record below describes the accepted starting checkpoint.
+Reqro is a client-neutral resident-engagement and staff-work platform. This is the current system map through accepted F041; historical CityVUE identifiers remain in code and deployment configuration. The [development protocol](development/REQRO_CODEX_PROTOCOL.md) governs execution, [ADRs](architecture/decisions/README.md) explain durable decisions, [feature records](features/README.md) retain implementation evidence, and the [roadmap](ROADMAP.md) separates future work. Code/tests/database remain authoritative; investigate conflicts before changing behavior.
 
-F040 extends the shared staff workspace to PUBLIC and INTERNAL using persisted-audience policy. `staffRequestReadScope` admits the secure SQL union under trusted Organization/effective routing scope before filtering, count and pagination. Per-request capabilities use independent PUBLIC action keys or INTERNAL update permission; contact retains a separate two-key audited endpoint. Existing shared operation engines preserve revision/transaction/history rules. A minimal migration permits PUBLIC routing and registers only route/watcher-management keys, with zero default grants. Legacy named audience routes retain their boundaries. See [F040](features/F040-public-service-request-staff-workspace.md) for the permission matrix, compatibility and performance review, and the [implementation report](features/F040-implementation-report.md) for current validation status. Personal reqro_dev has 19 applied migrations and zero pending; authenticated PUBLIC operations, mixed filters and independent audience/contact revocation passed through manual Chrome UAT. Sixteen explicitly approved keys form the retained development selection. The following F039 paragraph records the accepted starting checkpoint.
-
-F039 — Protected Resident Contact Access adds independent `service_request.contact.read`, audience-specific audited contact endpoints, and an explicit-view INTERNAL staff card. Ordinary list/detail payloads omit contact. The approved narrow PUBLIC contact endpoint requires existing `service_request.view` plus contact permission and normal scope; no PUBLIC workspace is added. No default grants or INTERNAL intake changes occur. Populated manual live API UAT, contact revocation/restoration and audit/log correlation passed. Temporary PUBLIC view was removed; normal PUBLIC denial and preserved INTERNAL access were verified. Contact permission and the original six development grants remain explicitly retained. See [F039](features/F039-protected-resident-contact-access.md) and [the approved PUBLIC design](features/F039-public-contact-read-design-review.md).
-
-F038 establishes shared light/dark design tokens and presentation primitives, with the INTERNAL staff list/detail as the reference implementation. Brand variables are separate from semantic status/activity palettes. Configured Issue icons use a finite safe vocabulary; optional service location comes only from the authorized request-owned location projection. Issue-first identity, opaque secondary references, responsive cards, keyboard focus and explicit activity labels do not establish authorization. Existing Bootstrap/theme architecture remains; older surfaces reuse tokens without a framework rewrite. See [F038](features/F038-unified-ui-design-system-experience-refresh.md) for source boundaries, mappings, component reuse and limitations.
-
-F037 adds server-authorized STAFF/operational ROLE/Team ownership, explicit watchers and reader self-watch, scoped operational views, and atomic assignment/watch history. Operational membership and ownership grant no permissions. Existing work groups and F036 local safety boundaries are reused; notifications and production administration remain deferred. See [F037](features/F037-assignment-ownership-watchers-foundation.md).
-
-F036 adds explicit local development staff provisioning, read-only inspection/dry-run and targeted deprovisioning using existing Entra mappings and PostgreSQL RBAC. Personal database/profile checks fail closed; runtime authorization, default grants and production HTTP surfaces are unchanged. See [F036](features/F036-safe-development-staff-authorization-provisioning.md).
-
-F035 adds separate append-only operational request history, atomic creation/workflow/routing events, protected paginated INTERNAL timelines, and durable Hold/Close/Reopen narratives. Existing metadata-only audit and F029–F034 authorization remain intact; no grants are added. See [F035](features/F035-service-request-activity-operational-history.md).
-
-F034 adds an authenticated INTERNAL staff request workspace with scoped reference/status/hierarchy filters, server-provided update/routing options, Start/Resume actions, and revision-aware refresh. Hold/Close/Reopen UI is explicitly deferred pending durable narrative storage. No migration or grants are introduced; authenticated live staff UAT remains pending. See [F034](features/F034-staff-internal-request-workspace.md).
-
-F033 evolves request references into Organization-scoped configurable policies and atomic bigint counters, retaining persisted immutable references, safe historical collision checks and explicit `service_request.reference.manage` authorization without default grants. UUID identity and F029–F032 boundaries remain unchanged. See [F033](features/F033-configurable-service-request-reference-numbers.md).
-
-F032 adds explicit Issue handling (`internal_intake` / `external_redirect`) on existing ServiceDefinitions, a separate protected catalog action API, HTTPS validation and a neutral resident handoff. Both resident/staff creation enforce persisted action; questions are preserved across mode changes. No default grants or vendor integration. See [F032](features/F032-issue-action-external-redirect-foundation.md).
-
-F031 adds explicit INTERNAL workflow/routing commands requiring `service_request.internal.update`, with no default grants. Shared effective routing scope constrains F030 reads and mutations; revisions and atomic metadata-only Activity preserve concurrency/audit boundaries. PUBLIC paths remain unchanged. See [F031](features/F031-internal-service-request-lifecycle.md).
-
-F030 adds Entra-only INTERNAL request list/detail reads under `staff/internal-service-requests`, requiring explicit `service_request.internal.read` and trusted Organization/Department/Division scope. Creation grants no read access. Existing PUBLIC reads and internal mutation denial remain unchanged; contact fields are omitted and no default grants are added. See [F030](features/F030-internal-service-request-access-policy.md).
-
-F029 adds explicit public/internal request audience, independent intake channel, and stable staff submitter/requester attribution. Resident intake is server-controlled PUBLIC/WEB; a separate Entra-only staff route requires explicit creation permissions with no default grants. Existing reads and mutations withhold INTERNAL until an internal-access policy is approved. See [F029](features/F029-service-request-audience-assisted-intake-foundation.md).
-
-F028 connects `/map-preview` in API mode to the existing authenticated API client and protected geospatial endpoint. The server owns Organization scope; the browser validates the neutral response and fails closed on authentication, authorization, service, or geometry errors. Development legacy/demo mode retains isolated browser fixtures. No backend authorization or GIS provider changes were made. See [F028](features/F028-protected-geospatial-client-integration.md).
-
-F027 reuses F018 verified `tid`/`oid` to resolve a pre-provisioned Organization-owned staff identity and PostgreSQL role/permission grants. An explicit development-only provisioning command can associate a personal-tenant identity with fictional Organizations and optionally grant `geospatial.read`; no migration or login grants it by default. The database-backed HTTP harness validates the F025/F026 ordering with only token verification mocked. Development uses personal Entra, development PostgreSQL and synthetic GIS; future client profiles use approved identity, database and GIS adapters behind the same neutral RBAC boundary. Live Entra UAT remains outstanding. See [F027](features/F027-controlled-development-identity-geospatial-grant-validation.md).
-
-F026 exposes `GET /api/v1/geospatial` through the existing Entra-only staff guard, explicit `geospatial.read` permission, and F025 authorization-before-repository service. A catalog migration grants no roles automatically. A narrow neutral Polygon/Point response comes only from a synthetic repository in development/test profile; production/client profiles fail closed. `/map-preview` is unchanged. See [F026](features/F026-protected-geospatial-read-api.md).
-
-F025 establishes an internal server geospatial authorization boundary: only guard-resolved StaffAccess from validated workforce identity can yield trusted Organization context, and a dedicated `geospatial.read` policy runs before provider access. No endpoint, provider, permission grant, or GIS persistence is registered. Browser-side organization scope is not authorization; private reads require server authorization before repository access. See [F025](features/F025-trusted-organization-context-geospatial-authorization.md).
-
-F024's local map preview loads neutral `{ organizationId, boundary, requests }` data through a development-only synthetic frontend repository. Scope checks in the browser protect fixture selection only; production geographic reads require a trusted Organization context and server authorization before an API/provider is added. The map renderer accepts validated Polygon/Point GeoJSON; this does not affect canonical Location or eligibility. See [F024](features/F024-organization-scoped-neutral-geospatial-data-foundation.md).
-
-F023 adds a presentation-only MapLibre map at `/map-preview` using bundled synthetic GeoJSON and a local style without tile or geocoding requests. MapLibre is isolated inside a React component; the existing canonical Location and backend eligibility provider remain unchanged and authoritative for intake. See [F023](features/F023-client-neutral-gis-presentation-foundation.md).
-
-The CityVUE client-neutral core has no required dependency on City of Rockville infrastructure or vendor-specific services. Independent development uses local, synthetic, public test, or personally controlled resources. A future authorized Rockville deployment may intentionally use approved City services through deployment-specific adapters and configuration. Existing Entra validation, location eligibility and AI provider contracts are the current narrow boundaries; no live EAM, CRM, notification or GIS adapter is implied. MapLibre GL JS with synthetic GeoJSON/PostGIS is the preferred future client-neutral map direction; ArcGIS is a possible authorized deployment adapter. See [F022](features/F022-client-neutral-architecture-development-isolation.md) and [ADR-003](decisions/ADR-003-client-neutral-platform-isolated-development.md).
-
-F021.6 adds a presentation-only `/ai-preview` sibling route outside AuthRoot. The existing application route tree retains AuthRoot and `/staff/ai` retains its Entra-only guard and server authorization. The evaluation navigation links to preview; no identity, repository or execution capability is supplied to it. See [stakeholder preview](features/F021-6-ai-stakeholder-preview.md) for isolation and transition criteria.
-
-F021 adds an internal provider-neutral execution lifecycle, strict request/response contracts, metadata-only usage/audit persistence, atomic request-quota admission, and model governance. The application registries remain empty; deterministic providers and an HTTP harness exist only in tests. AI/chat remain disabled by default, production test execution is forbidden, and no generation endpoint or live provider is shipped. See [F021](features/F021-implementation-report.md) and [ADR-002](decisions/ADR-002-ai-governance-metadata.md). Any live provider evaluation requires separate review and approval.
-
-F020 adds a bounded staff AI workspace at `/staff/ai` with Entra-only admission, explicit AI permissions, protected metadata APIs, provider-neutral contracts and policy-enforced routing. It is disabled by default with no inference, provider connection, conversation storage or deployment. See [F020](features/F020-enterprise-ai-workspace-foundation.md) and [ADR-001](decisions/ADR-001-provider-neutral-staff-ai-gateway.md); governance and live identity UAT precede any separately approved future provider pilot.
-
-Phase B adds the local single-tenant identity boundary: MSAL SPA → delegated CityVUE API token → exact issuer/audience/tenant/scope validation → pre-provisioned StaffIdentity → server-owned Organization → Role permission plus Department/Division scope. Public resident endpoints remain anonymous, development gates remain separate and production-forbidden, and production activation awaits administrator consent. See F018.
-
-F016 records the preferred first-municipality production hosting target: Azure Static Web Apps for React, Azure Container Apps for the NestJS API/workers, Azure Container Registry, Azure Database for PostgreSQL Flexible Server, Key Vault, Entra ID, future private Blob Storage, and Application Insights/Azure Monitor, with City-approved DNS/TLS. Development, Test/QA, and Production remain isolated across data, configuration, secrets, storage, telemetry, and integration credentials. This is planning—not City approval or provisioning—and the production MVP remains Firebase Hosting plus legacy browser-local persistence. The portable React/NestJS/TypeScript/PostgreSQL/Docker/REST core may also run on a deployment-specific VPS or other approved host; Azure integrations remain infrastructure concerns. See F016.
-
-Phase E0 adds API-authoritative geographic eligibility to canonical request creation. The exact immutable `ServiceDefinitionVersion` supplies a vendor-neutral policy and conservative failure behavior; restrictive policies call an injected provider before the database write transaction, while unrestricted services perform no provider call. Eligible requests persist an immutable Location eligibility snapshot. Ineligible, indeterminate, timeout, and provider-failure outcomes block without partial writes and return allow-listed resident-safe errors. Only a deterministic, production-forbidden development provider exists; authoritative GIS layers, PostGIS, staff overrides, and deployment remain deferred. See F015.
-
-Phase D3 adds a minimal Organization-scoped canonical `ServiceRequest` list at `GET /api/v1/service-requests`. It reuses the fail-closed D2 development-read gate and accepts no client Organization context. PostgreSQL provides safe search, canonical hierarchy filters, allow-listed sorting, bounded pagination, and counts without returning requester, description, answers, location, or activity. React `/issues` consumes it only in API/dev-read mode; production legacy mode remains localStorage-backed. See F014.
-
-React `/report` selects paired catalog and request repositories from centralized Vite configuration. Legacy mode remains fixture/localStorage-backed; local API mode normalizes canonical catalog DTOs and submits canonical request DTOs through a shared fetch client. Organization context remains backend-owned.
-
-**Status:** Working architecture / target direction  
-**Canonical development name:** CityVUE  
-**Important:** Proposed/TBD items are not final City decisions.
-
-## Architectural Objective
-
-CityVUE should provide a stable, City-controlled citizen experience while allowing internal enterprise systems to change over time.
-
-It should be possible to integrate with VUEWorks today and later add, migrate to, or coexist with Cityworks, Cartegraph, MGO, or other systems without rebuilding the citizen-facing application.
+## Runtime and repository boundaries
 
 ```text
-Residents / City Staff
-          |
-          v
-        CityVUE
-          |
-          v
-     CityVUE API
-       Proposed
-          |
-          v
- Integration / Routing Layer
-          |
-   +------+------+------+------+
-   |      |      |      |      |
-   v      v      v      v      v
-VUEWorks Cityworks Cartegraph MGO  Future
- Adapter   Adapter   Adapter Adapter Adapter
+React/Vite
+  resident intake/catalog       authenticated staff workspace
+              \                 /       MSAL workforce identity
+               versioned NestJS API     -> verified token + DB authorization
+                       |
+          domain services / scoped Kysely repositories
+                       |
+                   PostgreSQL
+
+Separate compatibility boundary: legacy IssueService -> browser localStorage
+Separate future boundary: integration router -> approved vendor adapters
 ```
 
-## Fundamental Rule
+- [React source](../react/src/) uses React Router, injected repositories, component state and existing theme/auth contexts. API mode is explicitly configured; legacy/demo data remains a separate prototype path. Shared staff list/detail routes are `/staff/requests` and `/staff/requests/:requestId`. Earlier `/issues` and resident intake routes retain their contracts.
+- [NestJS server](../server/src/) uses strict TypeScript, versioned REST/OpenAPI controllers, validation, authentication/authorization guards, focused services and Kysely/PostgreSQL repositories. Health/readiness, sanitized errors, request correlation, structured logging and security defaults form the platform foundation.
+- [Migrations](../server/migrations/) own canonical schema evolution. The personal development checkpoint has 20 applied migrations; that is evidence in the [F041 report](features/F041-implementation-report.md), not a fixed future invariant. Database tests use disposable infrastructure separate from personal development state.
+- [Legacy entry point](../index.html) and Parcel build remain compatibility/rollback assets. Browser Issue records are not canonical ServiceRequests and are not automatically migrated. Legacy dashboard/home metrics are not proof of Organization-wide operational analytics.
+- Firebase configuration hosts static frontend output; it is not canonical persistence or workforce authentication. Backend Azure hosting is a planned target, not a deployment established by local feature work.
 
-> **No enterprise vendor's data model should become the CityVUE domain model.**
+## Canonical domain and catalog
 
-Core code should use neutral concepts such as `ServiceRequest`, `Service`, `Category`, `Location`, `Department`, `WorkItem`, `Attachment`, and `RequestStatus`.
+Organization is the tenant/ownership boundary. It owns Departments, optional Divisions, catalog configuration, staff identities and requests. A Category belongs to a Department, optionally through a Division in that Department. Composite Organization-aware relationships and scoped queries prevent cross-Organization ownership. There is no claim of database row-level security or an implemented shared-SaaS administration plane. See [Organization isolation](architecture/decisions/ADR-001-organization-isolation.md).
 
-## Current Application
+Stable ServiceDefinitions and immutable published versions supply service-specific questions, typed Answer snapshots, location policy and intake configuration. Historical answers stay tied to the submitted version; do not reconstruct them from a flattened description. F032 adds an Issue action choice: platform intake or validated external redirect. Its `internal_intake` action means intake inside the platform, not INTERNAL audience. Action administration requires `catalog.issue_action.manage`; a full production catalog administration workspace remains future work.
 
-Known direction:
+ServiceRequest has a UUID identity plus a persisted immutable human reference. F033 replaces the earlier global fixed-width allocation with Organization-scoped configuration and atomic bigint counters. The default format remains familiar, but formatting is configurable and minimum width is not a fixed maximum. Allocation and creation are transactional; uniqueness and collision checks are Organization-scoped. Readers use stored references as opaque identifiers. See [F033](features/F033-configurable-service-request-reference-numbers.md).
 
-- Web application
-- Modern JavaScript front end
-- Firebase Hosting used for the MVP
-- Citizen service-request experience
-- Dashboard/search/filter/edit/delete capabilities
+## Identity, authorization and audience
 
-Inspect the repository to establish exact versions, packages, persistence, routing, and state management.
+Optional Microsoft Entra workforce identity uses MSAL and delegated API tokens. Server validation establishes the trusted identity pair; active pre-provisioned StaffIdentity and database roles, permission grants and Department/Division scope establish authorization. Sign-in is not provisioning. Development/client profiles require deliberate opt-in for personally controlled external identity and do not authorize City/client resources. Resident identity remains a separate, unresolved production concern.
 
-## Logical Architecture
+PUBLIC/INTERNAL is persisted request classification. WEB, PHONE, WALK_IN, STAFF and API are separate intake-channel values; later authorization does not infer audience from channel. Resident creation uses PUBLIC/WEB. Staff-assisted creation requires explicit intake permissions, with an additional INTERNAL-create permission where applicable. INTERNAL self-service intake does not collect structured resident contact. See [audience decision](architecture/decisions/ADR-002-service-request-audience.md).
 
-### Presentation Layer
+The unified staff workspace uses a single database relation constrained by trusted Organization, effective current routing scope and each independently authorized audience. All combines authorized PUBLIC and authorized INTERNAL before filtering, counting and pagination. Audience, status, exact reference, Department/Division and operational-view filters only narrow that relation. Ordering is createdAt descending with UUID tie-breaker; pages default to 25, maximum 100. React does not join separately paginated audience lists.
 
-Responsibilities include the home page, service discovery, Report an Issue, dynamic forms, address/location input, confirmation, request tracking, citizen-friendly statuses, staff/admin UI, authentication UI, search/filter, and loading/error states.
+PUBLIC read requires `service_request.view`; INTERNAL read requires `service_request.internal.read`. Unified operations additionally require PUBLIC action-specific keys or `service_request.internal.update`. There is no generic PUBLIC update permission. Server capabilities guide controls without replacing endpoint checks. Named legacy APIs preserve audience-specific contracts, including earlier INTERNAL workflow/routing update admission. See the exact [authorization matrix and compatibility decision](architecture/decisions/ADR-006-public-internal-staff-authorization.md).
 
-The UI must not contain privileged enterprise credentials or vendor-specific integration logic.
+F036 is development-only explicit provisioning, with target/profile/identity/scope guards, dry run, additive idempotent apply and targeted deprovisioning. `FULL_UAT_OPERATOR` is shorthand for an explicit permission list; runtime never authorizes by bundle name. Bundle changes and migrations grant nothing automatically. The [runbook](features/F036-safe-development-staff-authorization-provisioning.md) and later feature addenda document accepted expansions.
 
-Catalog presentation metadata may include application-approved logical icon keys for Categories and Services. The presentation layer maps those keys to the installed approved icon library and applies a safe Service → Category → generic fallback; arbitrary markup, script, CSS class input, and remote image URLs are not catalog data.
+## Operations, relationships and concurrency
 
-### CityVUE Application/API Layer — Phase A, C0, and D0 Foundations Implemented
+Shared lifecycle services implement Start Work, Hold, Resume, Close and Reopen with explicit transitions and required narratives. Canonical requests have no arbitrary status editor. Routing changes Department/Division independently from ownership and checks current/target scope. Revision checks, locking, transactions and required history/audit writes protect mutations; stale commands require authoritative reload.
 
-Potential responsibilities:
+F037 assignment has one current owner: STAFF, operational ROLE or GROUP (presented as Team), with constrained eligible targets. Routing retains eligible assignment or appends unassignment in the same revision when necessary. Watchers are independent STAFF/ROLE/GROUP relationships. Self-watch requires normal request read; management of others requires the audience's operational permission. My Requests, My Team and Watching add relationship filters only after request authorization. Membership is not RBAC. See [ownership decision](architecture/decisions/ADR-004-assignment-watchers.md).
 
-- Authentication and authorization enforcement
-- Request validation
-- Service catalog
-- Dynamic form definitions
-- Canonical request handling
-- Integration routing
-- Status normalization
-- Logging/audit hooks
-- Notification orchestration
-- API versioning
-- Assignment/routing and workflow enforcement
-- Append-oriented activity/audit recording
-- Watcher management and visibility enforcement
-- Notification-rule evaluation and delivery orchestration
-- Request-number generation and idempotency controls
+## Separate information streams
 
-F008 selects a TypeScript/NestJS modular REST API with an OpenAPI contract and PostgreSQL persistence. Phase A implements the isolated platform foundation. Phase C0 adds Organization-owned Department, optional Division, Category, stable ServiceDefinition, immutable published ServiceDefinitionVersion, Question, and QuestionOption persistence plus Organization-scoped resident catalog reads. Composite foreign keys prohibit cross-Organization relationships. A configured development Organization is temporary and is not a production tenant-security boundary; Phase B remains deferred. React continues to use its fixture. See F009 and `docs/features/F010-phase-c0-organization-service-catalog-persistence.md`.
+| Domain                             | Purpose and access boundary                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| Description and structured Answers | Original problem/intake information within authorized request projection                    |
+| Service location                   | Operational location governed by request/location policy; distinct from requester contact   |
+| Requester Contact                  | Structured name/email through dedicated parent-read + contact-read authorization            |
+| Operational Activity               | Staff-safe append-only creation, lifecycle, routing and ownership history                   |
+| Security audit                     | Minimal trusted actor/action/resource/time/correlation metadata; not staff timeline content |
+| Internal Notes                     | Dedicated staff-only, permission-protected free-text collaboration on either audience       |
+| Resident communication             | Future domain; not supplied by Activity or Notes                                            |
 
-Phase D0 adds transactional canonical ServiceRequest creation, globally unique timezone-aware monthly references, typed and snapshotted Answers, optional requester/contact and Location foundations, initial append-only Activity, and an Organization-scoped exact-reference repository lookup. The public React application remains unconnected, and authentication, staff reads/workflow, GIS, notifications, attachments, and integrations remain deferred. See `docs/features/F011-phase-d0-canonical-service-request-persistence.md`.
+F035 Activity stores historical snapshots and approved plain-text narratives in `request_operational_activity`. UPDATE, DELETE and TRUNCATE protections enforce append-only history. Revision/event ordering accommodates multiple events in one atomic operation, such as route plus unassign. Activity remains separately paginated and never contains contact-view audit or Notes. See [Activity decision](architecture/decisions/ADR-003-operational-activity-history.md).
 
-Phase D2 adds a separate canonical details read-model service. It uses one database transaction and trusted configured Organization context to assemble the exact persisted ServiceDefinitionVersion classification, Answer snapshots, requester/contact, Location foundation, and ordered Activity. Its HTTP route and React details consumer are disabled by default, explicitly local/test-only, and cannot be enabled when the API runs with `NODE_ENV=production`. Protected production staff access remains blocked on Entra/RBAC. See `docs/features/F013-phase-d2-service-request-read-model-details.md`.
+F039 requires independently authorized parent access and `service_request.contact.read`. A scoped transactional fetch persists metadata-only contact-view security audit before disclosure; audit failure fails closed. Ordinary list/detail omit structured contact. The domain supports name/email, not phone. Contact renders as plain text, uses no-store responses and component memory, and clears on navigation/auth changes or subsequent denied fetch. See [contact decision](architecture/decisions/ADR-005-requester-contact-privacy.md).
 
-### Integration Router — Proposed
+F041 Notes use shared GET/POST `/api/v1/staff/service-requests/:requestId/notes`. Parent access plus `service_request.note.read` permits retrieval; creation additionally requires `service_request.note.create`. An immutable author display snapshot avoids identity-provider lookup. Plain-text admission is bounded to 4,000 UTF-16 units. Database append-only protections, scoped idempotency keys, atomic metadata-only creation audit and keyset pagination protect the independent stream. Notes do not alter parent revision, updatedAt, Activity, assignment, watchers or contact. See [Notes decision](architecture/decisions/ADR-007-internal-notes.md).
 
-```text
-Service Request
-      |
-      v
-Service Definition
-      |
-      +-- destinationSystem
-      +-- mappingProfile
-      +-- requiredCapabilities
-      |
-      v
-Integration Router
-      |
-      v
-Appropriate Adapter
-```
+Protected Contact/Notes are neither resident data nor AI inputs by implication. Their bodies stay out of ordinary logs, URLs, titles and persistent browser storage. Structured-contact protection is not a guarantee that free text contains no PII. No automatic redaction exists.
 
-Routing should be configuration-driven where practical.
+## Resident and location boundaries
 
-### Vendor Adapters — Proposed
+The resident-facing creation response retains its minimal receipt, not staff detail. No general resident history GET was added by F040/F041. Earlier canonical GET APIs are authenticated/gated staff contracts, not evidence of anonymous resident visibility. Staff assignment, watchers, operational narratives, Activity and Notes do not flow into the resident receipt. Production resident identity, access, tracking and communication require separate design.
 
-Conceptually:
+F015 evaluates configured geographic eligibility through a provider-neutral server boundary before creation writes; unrestricted policies avoid a provider call. Accepted requests persist an eligibility snapshot. Restrictive policies fail safely on ineligible, indeterminate, timeout or unavailable-provider results. Only the controlled development provider is implemented; authoritative client GIS layers, overrides and production routing are not implied.
 
-```text
-integrations/
-+-- vueworks/VueWorksAdapter
-+-- cityworks/CityworksAdapter
-+-- cartegraph/CartegraphAdapter
-+-- mgo/MgoAdapter
-+-- future-system/FutureSystemAdapter
-```
+F023–F028 add a separate MapLibre presentation and protected geospatial read path. Synthetic neutral GeoJSON and local map styling support development without live tile/geocoding resources. Trusted Organization and `geospatial.read` gate protected API access. Preview geometry is not canonical creation eligibility. Live providers, geographic routing and production spatial persistence remain separately reviewed work.
 
-Potential common operations include `createRequest()`, `getRequest()`, `getRequestStatus()`, `updateRequest()`, and `addAttachment()`.
+## UI, AI and administration boundaries
 
-Adapters do not need to implement unsupported vendor capabilities. Differences should be represented explicitly.
+F038 shared tokens/primitives establish Issue-first hierarchy, secondary reference, meaningful location, distinct audience/status text, light/dark surfaces and responsive wrapping. Brand colors remain separate from semantic status/Activity colors. Unified detail composes Contact, Assignment, Watchers, Notes, Issue Details, Actions and Activity without merging privacy domains. Request/auth changes clear protected state and discard stale responses. Accessibility-oriented tests and manual UAT are evidence, not WCAG certification.
 
-## Vendor Portability
+F020/F021 supply provider-neutral staff AI authorization and metadata-governance foundations. Provider registries do not establish an enabled live generation provider. Stakeholder/admin previews are not production configuration or permissions administration. Notes are not automatically supplied to model context. Existing [AI gateway](decisions/ADR-001-provider-neutral-staff-ai-gateway.md) and [AI governance](decisions/ADR-002-ai-governance-metadata.md) decisions remain in force.
 
-Current example:
+## Future integration and deployment architecture
 
-```text
-CityVUE -> VueWorksAdapter -> VUEWorks
-```
+The approved direction is an API-owned integration router with vendor adapters for supported capabilities such as create, status retrieval, update and attachments. No VUEWorks, Cityworks, Cartegraph, MGO or VistaShare adapter is implemented. Vendor schemas, credentials and status mappings belong inside adapters. External references must remain separate from request UUID/reference and be scoped by Organization/adapter context.
 
-Future migration:
+An adapter must explicitly state supported capabilities; vendors need not support identical operations. Future asynchronous delivery needs approved idempotency/deduplication, bounded retry, recovery, audit and source-of-truth/conflict rules. External delivery status must not silently overwrite canonical business lifecycle. Switching vendors should change mappings/adapters, not the resident domain.
 
-```text
-CityVUE -> CityworksAdapter -> Cityworks
-```
+F008/F016 describe Azure Container Apps/API-workers, managed PostgreSQL, private Blob Storage, Key Vault/managed identity and monitoring as a target requiring separate authorization. Initial client deployment direction remains an isolated environment/database/storage/identity/integration boundary per municipality, with portability to other approved hosting. Shared multi-Organization SaaS needs its own isolation and operating-model decision. Containers and local profiles are not evidence of deployed cloud infrastructure.
 
-Coexistence:
-
-```text
-CityVUE
-   |
-Integration Router
-   +-- Service A -> VUEWorks
-   +-- Service B -> Cityworks
-   +-- Service C -> Cartegraph
-   +-- Permitting -> MGO
-```
-
-This architecture can support phased migrations where departments move at different times.
-
-## Organization / Tenant Architecture — Approved Direction
-
-`Organization` is the canonical business/domain term for a municipal or government customer. “Tenant” describes the corresponding technical isolation boundary where useful. CityVUE is intended to be a reusable Organization-aware municipal platform; canonical names and behavior must not hard-code one municipality or require source-code forks such as municipality-specific service classes or `if city === ...` logic.
-
-The preferred initial enterprise deployment model is one isolated tenant/environment per municipality. Each Organization may receive separate application runtime, database, object storage, Microsoft Entra configuration, secrets, integrations, telemetry, backup/restore, disaster recovery, and maintenance windows. This reduces cross-Organization exposure risk and simplifies security, procurement, authorization, operations, and troubleshooting. A future shared CityVUE SaaS platform is optional and must not be implemented until tenant isolation, operations, billing, procurement, security, and customer-data requirements justify it.
-
-Even in isolated deployments, the canonical domain remains Organization-aware. Conceptually, an Organization has a stable ID, name, short name, slug, active/inactive state, default business timezone, branding/configuration references, and timestamps; possible later metadata includes primary domain, support information, locale, default map extent, and service-area references. Exact schema remains TBD. Organization owns Departments, optional Divisions, Categories, ServiceDefinitions, ServiceRequests, StaffIdentity records, Groups, Roles/Permissions, ServiceAreas, integration configuration, notifications/workflow configuration, and other tenant data. No owned relationship may cross Organization boundaries.
-
-```text
-Organization
-   +-- Department
-         +-- Category
-         +-- Division [optional, 0..many]
-               +-- Category
-                     +-- ServiceDefinition / Issue
-   +-- ServiceRequest[]
-   +-- Staff / Groups / Roles / Permissions
-   +-- ServiceAreas / GIS configuration
-   +-- Integration / Notification configuration
-```
-
-Every canonical ServiceRequest belongs to exactly one Organization independently of Department, Division, Category, or Assignment. Department transfer never changes Organization ownership. Staff identity, memberships, RBAC scopes, API access, catalog configuration, GIS/service areas, integrations/mapping profiles, external references, notification rules/templates, attachments/storage, exports, retention, archival, deletion, and migrations all retain Organization context. `ExternalSystemReference` is meaningful with its Organization and integration context; vendor credentials or mappings must never leak between Organizations.
-
-The API enforces Organization scope server-side as an authorization invariant. Authentication alone never permits cross-Organization access, and changing IDs, route/query parameters, bodies, UUIDs, or client state must not bypass scope. Future repositories must make accidental unscoped queries difficult through explicit `organizationId`, scoped repository/application context, or an equivalent reviewed pattern. PostgreSQL Row-Level Security may provide defense in depth only if later justified; it is not selected automatically here. Some names/keys may be unique only within an Organization, while exact indexes remain TBD.
-
-Each Organization may reference its own approved `IdentityProviderConfiguration`, including Entra tenant and separate SPA/API application identifiers and identity settings. Credentials remain in approved secret management such as Key Vault, not ordinary Organization rows. Cross-tenant administration is not designed. Phase B must establish trusted Organization identity context, Entra-tenant association, staff membership, and server-side Organization authorization.
-
-Organization configuration supplies the authoritative business timezone used for `SR-YYYYMM-NNNNNN`, never a browser timezone. The reference remains immutable, server-generated, globally unique, and free of Organization/Department prefixes. If a future shared database serves several Organizations, concurrency-safe allocation and uniqueness enforcement still operate across all Organizations.
-
-Organization-owned presentation configuration may later supply name, logo, colors, portal title, support text, and footer content while **CityVUE** remains the canonical product name. GIS providers/layers, service areas, storage partitions, EAM adapters, notification senders/templates, and telemetry context are Organization-scoped behind existing abstractions. Operational telemetry may include a safe non-sensitive Organization identifier where appropriate; business Activity/audit remains separate.
-
-The core domain remains infrastructure-portable. F008's preferred initial enterprise implementation uses Azure managed services, but Organization-aware application/domain code should remain deployable through containers on a customer-managed VPS, another approved cloud, or other suitable host. Azure-specific identity, secret, storage, and telemetry integrations stay at infrastructure boundaries. Commercial licensing, intellectual-property ownership, contracting, procurement, and customer/data ownership are legal and organizational matters outside this software architecture and require separate review.
-
-## Canonical Service Request Model — Proposed
-
-Potential fields:
-
-```text
-ServiceRequest
-- id (immutable internal UUID or equivalent)
-- organizationId
-- referenceNumber (immutable SR-YYYYMM-NNNNNN)
-- externalReferences[]
-- serviceId
-- categoryId
-- description
-- location
-- requester/contact information, when appropriate
-- answers[]
-- attachments[]
-- submittedAt
-- status
-- responsibleDepartment
-- destinationSystem
-- integrationStatus
-```
-
-The final schema is TBD.
-
-The internal ID is the technical relationship/primary identifier and is never replaced by or derived from the human reference number. The CityVUE API generates `referenceNumber` in `SR-YYYYMM-NNNNNN` format, where `YYYYMM` is the server-authoritative calendar month in the owning Organization's configured business timezone and `NNNNNN` is a zero-padded six-digit sequence. The sequence restarts at `000001` at each month boundary in that timezone, is global across CityVUE rather than per Organization, Department, or Division, and provides a namespace of 999,999 references per calendar month; this namespace does not limit total database storage. The complete reference remains globally unique even when sequence components repeat in different months.
-
-Reference allocation is atomic and concurrency-safe within the ServiceRequest creation transaction so simultaneous requests never receive the same reference. Request creation, monthly-sequence allocation, reference construction, Answers, and initial Activity participate in the appropriate transactional boundary. The browser must never generate the authoritative reference or determine its period from the resident's clock, and a future PostgreSQL implementation must not use `MAX(referenceNumber) + 1` or equivalent race-prone logic. The exact allocation mechanism and approved business timezone will be established during canonical ServiceRequest persistence, not Phase A.
-
-Department and Division are structured ownership relationships, not encoded reference prefixes, because ownership can change throughout a request's lifecycle. Once assigned, a reference remains unchanged through Department or Division transfer, reassignment, Category changes, status transitions, reopening, EAM integration, and archival. Full-reference search and display are future requirements for details, appropriate lists, resident confirmations, notifications, exports, integrations, and Activity/audit context. External EAM work-order numbers remain separate `ExternalSystemReference` values.
-
-Canonical requests must separate the resident's general description from structured dynamic answers:
-
-```text
-ServiceRequest
-  +-- description
-  +-- serviceDefinitionId
-  +-- serviceDefinitionVersion
-  +-- Answer[]
-        +-- questionId
-        +-- question/version display snapshots
-        +-- typed value
-```
-
-Future edit reconstruction must use the exact versioned ServiceDefinition and authoritative structured Answer records associated with the request. Human-readable description summaries may be generated for presentation or integration, but parsing description text is not a canonical reconstruction strategy. Historical definitions and submitted display snapshots must keep older requests understandable after questions or options change. See `docs/features/F003-dynamic-service-catalog-intelligent-intake.md` for the detailed requirement.
-
-The detailed capability and domain requirements are recorded in `docs/features/F002-core-product-capabilities-domain-requirements.md`. The production model must also account for neutral `Assignment`, `Activity`, `Watcher`, `Notification`, `NotificationRule`, `WorkItem`, `ExternalSystemReference`, and `IntegrationStatus` concepts. These are proposed domain boundaries, not implemented schemas.
-
-```text
-ServiceRequest
-  +-- Assignment(s)
-  +-- Activity[]
-  +-- Watcher[]
-  +-- Attachment[]
-  +-- WorkItem[]
-  +-- ExternalSystemReference[]
-  +--> Notification orchestration
-```
-
-Assignments may target staff identities, groups/teams/queues, or roles and must preserve reassignment history, timestamps, and the responsible actor/system. Configurable automatic routing may consider service, category, department, location/GIS asset, priority, and other approved request attributes. Requester, assignee, watcher, and external-system owner remain distinct.
-
-Significant request changes should append timestamped `Activity` records with actor, visibility, old/new values where appropriate, and metadata. Public/requester-visible activity and internal staff activity require explicit separation and server-side authorization; audit history must not be silently overwritten.
-
-Watchers follow activity but do not become assignees. `NotificationRule` represents centrally managed event/recipient/template conditions, while `Notification` represents a delivery instance and its queued, sent, retrying, or failed lifecycle. Notification and assignment rules must not be embedded in React components.
-
-## Service Catalog — Proposed
-
-A service definition may include:
-
-```text
-Service
-- serviceId
-- displayName
-- citizenDescription
-- category
-- responsibleDepartment
-- requiredFields
-- dynamicQuestions
-- locationRequirements
-- locationEligibilityPolicy
-- destinationSystem
-- mappingProfile
-- notificationRules
-- trackingCapabilities
-```
-
-Within one Organization, the catalog hierarchy supports both `Department → Category → Service` and `Department → Division → Category → Service`. A Department may have zero, one, or multiple Divisions; Division is optional, and each Division belongs to exactly one Department in the same Organization. Every Category belongs to one Organization and Department ownership hierarchy and may either be owned directly by that Department or by one of that Department's Divisions. Cross-Organization ownership and cross-Department Division references are invalid, and the Department relationship must not be duplicated inconsistently.
-
-Department is primarily an internal ownership and routing concept; resident intake normally begins with resident-friendly Categories and Services. A Service may supply versioned dynamic questions, conditional visibility, location requirements, attachment policy, anonymous/contact policy, safety guidance, notification references, and routing metadata. Departments, Divisions, and Category ownership must support audited organizational change, including rename, activation/deactivation, and Category movement, while historical requests remain understandable through archival/version/snapshot strategy rather than unsafe hard deletion.
-
-Location requirement and geographic eligibility are separate per-ServiceDefinition policies. A Service may require, optionally accept, or omit a Location while independently selecting an approved `LocationEligibilityPolicy`, such as City boundary, ServiceArea, City-maintained roadway, City-owned property/facility/park, GIS asset, utility service area, no geographic restriction, or another configured rule; the exact schema remains TBD. CityVUE must not reduce all services to one inside-city/accepted versus outside-city/rejected rule because operational boundaries, ownership, and maintenance responsibility may differ by Service.
-
-React may resolve input and provide immediate feedback, but the CityVUE API revalidates eligibility before authoritative ServiceRequest creation through a vendor-neutral GIS/location service boundary backed by City-approved boundary, service-area, property/facility, and asset sources. Production City-boundary checks use an authoritative polygon rather than hand-entered ranges, approximate bounding boxes, or browser-only definitions. Evaluation distinguishes `Eligible`, `Ineligible`, and `UnableToDetermine`; each ServiceDefinition governs whether an indeterminate result requires correction, permits staff review, or routes to manual triage. Where eligibility is required, an API-confirmed ineligible request is normally blocked with plain-language guidance rather than accepted and silently discarded, subject to future approved exception policy.
-
-Canonical Location may retain the entered/display and normalized address, coordinates, location type, appropriate facility/park/parcel/GIS-asset references, eligibility policy/reference, result, and validation timestamp without adopting a GIS vendor schema. Authorized staff resolution or override requires permission, actor, timestamp, reason, and Activity/audit history. Eligibility context must be sufficient to explain acceptance, rejection, review, or override without requiring a full polygon snapshot. Location precision, visibility, retention, export, logging, and attachment-metadata implications require City privacy/security review.
-
-The GIS/location boundary must handle timeouts, transient failures, retries, degraded/manual-review paths, and observability without assuming a GIS provider is always available. Geographic eligibility is distinct from organizational routing: an eligible Location may inform an approved routing rule, but Department/Division/Group must not be inferred solely from a boundary. EAM adapters receive only supported canonical location or asset references through vendor-specific mappings. Mobile GPS, map pins, photo geolocation, or nearby-asset UX remain inputs—not authoritative proof of eligibility.
-
-The future CityVUE API/application layer owns authoritative catalog persistence, Admin authorization, validation, versioning, publication, routing, audit, and request creation. React renders published configuration and collects resident answers; it must not become authoritative for Admin rules or routing. Published definitions referenced by historical requests should remain resolvable and should normally be archived rather than hard-deleted.
-
-During a separately approved React migration Stage 5.1, a repository-local preloaded fixture may sit behind a catalog abstraction. That fixture is temporary and replaceable by the future API; browser storage is not the future catalog authority. See `docs/features/F003-dynamic-service-catalog-intelligent-intake.md`.
-
-Routing examples are illustrative, not approved City routing decisions.
-
-## Capability Model — Proposed
-
-External systems may differ. CityVUE should be able to represent capabilities such as:
-
-```text
-CREATE_REQUEST
-READ_STATUS
-UPDATE_REQUEST
-ATTACHMENTS
-WEBHOOK_STATUS
-GIS_ASSET_LINKING
-WORK_ORDER_CREATION
-```
-
-## Authentication
-
-### Staff
-
-F008 selects single-tenant Microsoft Entra ID for future workforce authentication using separate Web SPA and CityVUE API registrations. The SPA uses MSAL authorization code + PKCE with no client secret; the API validates access tokens and enforces authorization. Entra may provide coarse admission/app-role or group signals, while CityVUE persists granular permissions and organizational scopes. Exact tenant/client identifiers, scopes, redirects, role grants, and Conditional Access policy remain subject to City Cybersecurity/Microsoft Admin approval.
-
-### Citizens
-
-TBD. Options may include anonymous submission, email-based tracking, optional accounts, or another identity provider. Do not assume workforce Entra identity is appropriate.
-
-## Authorization
-
-```text
-UI protection
-      +
-API authentication
-      +
-API authorization
-      =
-Protected operation
-```
-
-Client-side guards are not the security boundary.
-
-Authenticated staff Dashboard scopes are API-authorized views over canonical `ServiceRequest` records. The default future staff view is My Assigned Issues, with Department, optional selected Division, Category, group/queue, and All Issues views available only where the signed-in user's roles, memberships, and permissions allow them. Staff may be associated with multiple Departments and/or Divisions; Division access is explicit and is not inferred solely from Category selection. Scope selection in React never expands RBAC, and every Dashboard metric must be calculated from the same authorized active scope. Exact API routes and multi-Department/Division/group-work UX remain TBD.
-
-## ServiceRequest Details — Approved Future Direction
-
-The future Issue List should label the current visible `Title` concept as **Issue** without renaming legacy `Issue.title`. Each Issue name becomes the primary link to a read-only `/issues/:issueId` details route; selecting it must not enter edit mode automatically. The details experience presents only applicable lifecycle data, potentially including reference number, Issue, Department/Division, Category, status, priority, date reported, reporter/contact, location, resident description, structured Answers, attachments, assignment, Activity, watchers, external references, and integration status.
-
-Authorized Edit and Delete actions should move to the details experience. The list may retain a compact More menu where implementation review demonstrates a need, but should avoid large Edit/Delete controls in every row. View, edit, and delete permissions are independent and enforced by the CityVUE API; rendering or hiding React controls is not authorization.
-
-Canonical status changes are server-authoritative domain/application actions rather than arbitrary field overwrites. Permitted transitions, reasons, required information, and permissions remain configurable future workflow decisions; each completed transition appends Activity/audit history and may invoke centralized Notification orchestration. External EAM statuses remain vendor-neutral mappings handled through adapters and mapping profiles, with source-of-truth and conflict policies still to be designed.
-
-## Data Ownership — TBD
-
-Before production integration determine CityVUE persistence, authoritative systems, external ID mappings, status synchronization, attachment handling, audit history, reporting, retention, privacy, and backup/recovery.
-
-Avoid unnecessary duplication of enterprise data.
-
-## Integration Reliability — Proposed
-
-```text
-Citizen submits
-      |
-      v
-CityVUE validates
-      |
-      v
-Persist / queue request
-      |
-      v
-Integration Adapter
-      |
-      v
-Enterprise System
-      |
- success / retry / failure
-```
-
-Specific persistence/queue/retry technology is TBD.
-
-Notification delivery and reliable integration work should run through server-side/background processing capable of queuing, bounded retry, deduplication/idempotency, timestamps, correlation, observable terminal failure, and recovery. React may initiate operations and display state, but it is not the execution or authorization boundary.
-
-`IntegrationStatus` describes transmission/synchronization state and is separate from a request's business `RequestStatus`. `ExternalSystemReference` links a CityVUE entity to a vendor record without making the vendor identifier or schema canonical.
-
-## Status Normalization — Proposed
-
-External statuses may be mapped to citizen-friendly CityVUE statuses. Actual mappings require business-owner approval.
-
-## Enterprise Migration Strategy
-
-```text
-Initial:   CityVUE -> VUEWorks
-Migration: CityVUE -> VUEWorks + New EAM
-Future:    CityVUE -> New EAM
-```
-
-The goal is to change integration configuration/adapters rather than rebuild the citizen portal.
-
-## Hosting
-
-Firebase Hosting remains the current React static-frontend host and Parcel rollback target. F008 recommends Azure Container Apps for the future API and worker, Azure Database for PostgreSQL Flexible Server, private Azure Blob Storage, Key Vault through managed identity, and Application Insights/Azure Monitor. Firebase Hosting does not become the API or persistence platform by implication.
-
-Evaluate future hosting against City standards, security, identity, networking, supportability, cost/licensing, monitoring, backup/recovery, procurement, and disaster recovery.
-
-## Environment Strategy — Proposed
-
-```text
-Development
-Test / Training
-Production
-```
-
-Do not hard-code environment-specific configuration.
-
-## Security Principles
-
-The [CityVUE Security Framework](security/SECURITY_FRAMEWORK.md) is the repository security standard for NIST CSF 2.0 alignment, Zero Trust, and OWASP application/API guidance. It defines server-side trust boundaries and distinguishes verified local controls from architectural requirements and future production work.
-
-- Least privilege
-- Defense in depth
-- Server-side authorization
-- No secrets in source control
-- TLS
-- Input validation
-- Safe error handling
-- Dependency hygiene
-- Auditability
-- Minimize sensitive data
-- Secure integration credentials
-- Explicit production change control
-
-Formal City security review should precede production enterprise integrations.
-
-## Architecture Decisions Still Required
-
-1. Detailed production API deployment topology and City operational approval for the F008-selected stack
-2. System-of-record and field-ownership boundaries within the selected PostgreSQL persistence direction
-3. Citizen identity/tracking model
-4. Staff Entra authentication/authorization
-5. Canonical request schema
-6. Service catalog storage
-7. Integration adapter contract/capabilities
-8. VUEWorks integration method
-9. Cityworks integration method if needed
-10. Cartegraph integration method if needed
-11. MGO integration method
-12. VistaShare integration need/method
-13. Attachment storage
-14. Queue/retry architecture
-15. Notifications
-16. Logging/monitoring
-17. Data retention
-18. Deployment/change management
-19. Assignment targets, routing precedence, fallbacks, transfers, and escalation rules
-20. Activity taxonomy, visibility, retention, correction, and audit access
-21. Watcher eligibility, management permissions, privacy, and preferences
-22. Notification channels, consent, templates, deduplication, retry, and operational ownership
-23. Workflow transitions, work-item ownership, due dates, resolution codes, and closure reasons
-
-Document durable decisions as ADRs under `docs/decisions/`.
+Production identity activation, resident-safe history/communication, notifications, attachments, administration, retention/redaction, integration reliability and production-volume performance remain reviewed future work. See [Roadmap](ROADMAP.md); F042 has not been selected or started.

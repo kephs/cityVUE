@@ -19,3 +19,9 @@ server/node_modules/
 .vscode/
 
 .DS_Store
+
+# Generated logs and explicitly local scratch data; never ignore source SQL/HTML.
+*.log
+/.local-uat/
+/server/.local-data/
+/server/pgdata/

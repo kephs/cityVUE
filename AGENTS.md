@@ -1,8 +1,8 @@
-# AGENTS.md — CityVUE Development Instructions
+# AGENTS.md — Reqro Development Instructions (CityVUE Repository)
 
 ## Project Identity
 
-The canonical development name is **CityVUE**. CityVUE is currently an internal development/prototype project.
+The current client-neutral product name is **Reqro**. **CityVUE** remains the historical repository name and existing technical/runtime identifier; a repository-wide rename has not occurred.
 
 **Ask Rockville** is only a previously considered candidate public-facing name. Do not introduce Ask Rockville branding or perform a mass rename of the `cityVUE` directory, repository, package identifiers, Firebase configuration, deployment resources, source files, or documentation unless explicitly instructed.
 
@@ -10,11 +10,12 @@ The canonical development name is **CityVUE**. CityVUE is currently an internal 
 
 Before non-trivial changes, read:
 
+- [Reqro Codex Protocol](docs/development/REQRO_CODEX_PROTOCOL.md) — permanent execution rules and fresh-session recovery
 - `docs/CITYVUE_CONTEXT.md`
 - `docs/ARCHITECTURE.md`
 - `docs/ROADMAP.md`
 - Relevant `docs/features/`
-- Relevant `docs/decisions/`
+- Relevant [architecture decisions](docs/architecture/decisions/README.md), including retained historical `docs/decisions/` records
 
 ## Understand Before Editing
 
@@ -30,15 +31,15 @@ The repository is authoritative for exact implementation details.
 
 ## Project Intent
 
-CityVUE is intended to become a **vendor-neutral citizen-engagement platform**, not a front end exclusively for VUEWorks.
+Reqro is a **vendor-neutral citizen-engagement platform**, not a front end exclusively for VUEWorks.
 
-CityVUE is developed as a client-neutral software platform. Client-specific capabilities are supplied through configurable provider/adapter boundaries and deployment configuration. Independent development does not require client production infrastructure, credentials, internal networks, or non-public data. Treat Rockville as a prospective deployment, and use only local, synthetic, public test, or personally controlled resources until separately authorized.
+Reqro is developed as a client-neutral software platform. Client-specific capabilities are supplied through configurable provider/adapter boundaries and deployment configuration. Independent development does not require client production infrastructure, credentials, internal networks, or non-public data. Treat Rockville as a prospective deployment, and use only local, synthetic, public test, or personally controlled resources until separately authorized.
 
 Potential enterprise destinations include VUEWorks, Trimble Cityworks, OpenGov Cartegraph, MGO, VistaShare, and future City systems.
 
 ## Core Vendor-Neutrality Rule
 
-> **No enterprise vendor's data model should become CityVUE's core domain model.**
+> **No enterprise vendor's data model should become Reqro's core domain model.**
 
 Use neutral concepts such as:
 
@@ -69,9 +70,9 @@ Keep vendor-specific names, schemas, endpoints, and transformations inside integ
 Preferred conceptual architecture:
 
 ```text
-CityVUE
+Reqro
    |
-CityVUE API
+Reqro API
    |
 Integration Router
    |
@@ -87,7 +88,7 @@ When implementing integrations:
 - Never put privileged credentials in browser code.
 - Avoid exposing internal/vendor APIs directly for convenience.
 - Isolate vendor-specific transformations.
-- Keep CityVUE's canonical model independent from vendor schemas.
+- Keep Reqro's canonical model independent from vendor schemas.
 - Normalize external statuses only according to approved mappings.
 - Provide predictable error handling and observability.
 - Do not invent undocumented vendor API behavior.
@@ -124,7 +125,7 @@ Before adding a dependency, check existing capabilities, prefer maintained packa
 
 ## UI
 
-- Use **CityVUE** as the current application name.
+- Preserve existing **CityVUE** runtime branding until a separately approved naming migration; use **Reqro** for current product/governance discussion.
 - Do not introduce Ask Rockville branding unless requested.
 - Use citizen-friendly language.
 - Hide internal vendor complexity.
@@ -146,7 +147,7 @@ Explain broader changes first unless explicitly authorized.
 
 Update documentation when changes affect architecture, setup, environment variables, integrations, authentication, deployment, user-visible behavior, or durable technical decisions.
 
-Use `docs/features/F00X-feature-name.md` for significant feature specifications and `docs/decisions/ADR-00X-decision-name.md` for durable architecture decisions.
+Use `docs/features/F00X-feature-name.md` for significant feature specifications and the [ADR convention](docs/architecture/decisions/README.md) for durable decisions. Retain historical ADR paths; do not silently rewrite accepted decisions.
 
 ## Git Workflow
 
