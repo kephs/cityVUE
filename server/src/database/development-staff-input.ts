@@ -3,6 +3,7 @@ import { validateEnvironment } from '../config/environment.js';
 
 /** Local tooling manifest only. Never imported by runtime authorization. */
 const fullUatOperatorPermissions = [
+  'service_request.tracking.manage',
   'service_request.create',
   'service_request.create_internal',
   'service_request.internal.read',

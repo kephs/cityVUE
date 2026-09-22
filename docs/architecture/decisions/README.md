@@ -1,5 +1,7 @@
 # Reqro architecture decisions
 
+[ADR-009 — Secure requester tracking](ADR-009-secure-requester-tracking.md) records F044's bearer credential, management authorization, minimized projection and secret-handling decisions. The [F044 completion report](../../features/F044-implementation-report.md) records local validation and qualified manual UAT separately from this accepted design. It does not authorize deployment.
+
 Read only decisions relevant to the task after the [protocol](../../development/REQRO_CODEX_PROTOCOL.md), [Architecture](../../ARCHITECTURE.md) and [Roadmap](../../ROADMAP.md). ADRs 001–007 consolidate accepted behavior through F041; ADR 008 records the F042 correspondence decision. These records do not grant permissions or approve deployment.
 
 | ADR                                                                                   | Read when working on                                                            |

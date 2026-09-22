@@ -1,4 +1,11 @@
 import { RequestCommunicationController } from './request-communication.controller.js';
+import { RequestTrackingService } from './request-tracking.service.js';
+import { RequestTrackingRepository } from './request-tracking.repository.js';
+import {
+  StaffRequestTrackingController,
+  RequesterTrackingController,
+  RequestTrackingPrivacyMiddleware,
+} from './request-tracking.controller.js';
 import { RequestCommunicationService } from './request-communication.service.js';
 import { RequestCommunicationRepository } from './request-communication.repository.js';
 import { RequestCommunicationPrivacyMiddleware } from './request-communication-privacy.middleware.js';
@@ -36,6 +43,8 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    StaffRequestTrackingController,
+    RequesterTrackingController,
     RequestCommunicationController,
     RequestNoteController,
     RequestContactController,
@@ -49,6 +58,8 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
     InternalRequestMutationsController,
   ],
   providers: [
+    RequestTrackingService,
+    RequestTrackingRepository,
     RequestCommunicationService,
     RequestCommunicationRepository,
     RequestNoteService,
@@ -68,6 +79,9 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
 })
 export class ServiceRequestModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(RequestTrackingPrivacyMiddleware)
+      .forRoutes(StaffRequestTrackingController, RequesterTrackingController);
     consumer
       .apply(RequestCommunicationPrivacyMiddleware)
       .forRoutes(RequestCommunicationController);

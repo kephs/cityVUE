@@ -394,6 +394,10 @@
   font-size: var(--font-title);
   min-width: 0;
 }
+.request-dialog-header > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .request-dialog :is(input, select, textarea) {
   max-width: 100%;
 }

@@ -80,6 +80,7 @@ test('F036/F041 bundles expand to approved explicit permissions without geospati
   assert.deepEqual(
     selectedDevelopmentPermissions(undefined, 'FULL_UAT_OPERATOR'),
     [
+      'service_request.tracking.manage',
       'service_request.create',
       'service_request.create_internal',
       'service_request.internal.read',

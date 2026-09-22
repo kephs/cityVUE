@@ -1,3 +1,4 @@
+import "./tracking/trackingSession.js";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap-icons/font/bootstrap-icons.css";
 
@@ -12,9 +13,9 @@ import "./theme/designTokens.css";
 import "./components/ui/primitives.css";
 
 createRoot(document.querySelector("#root")).render(
-    <StrictMode>
-        <ThemeProvider>
-            <RouterProvider router={router} />
-        </ThemeProvider>
-    </StrictMode>
+  <StrictMode>
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
+  </StrictMode>,
 );

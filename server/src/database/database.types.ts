@@ -425,6 +425,16 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  request_tracking_credential: {
+    id: Generated<string>;
+    organization_id: string;
+    service_request_id: string;
+    credential_digest: string;
+    status: 'active' | 'revoked';
+    created_by_staff_identity_id: string;
+    created_at: Generated<Timestamp>;
+    revoked_at: Timestamp | null;
+  };
   request_communication: RequestCommunicationTable;
   request_internal_note: RequestInternalNoteTable;
   operational_role: OperationalRoleTable;

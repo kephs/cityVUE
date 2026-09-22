@@ -90,6 +90,8 @@ Before a new grant, prove the ungranted baseline when required. Dry-run and revi
 
 Restart troubleshooting lesson: if Vite/API restarts occur, public endpoints work, and authenticated staff requests do not reach the API, re-establish the normal Entra session by signing out and signing back in before assuming backend/database failure. Check safe request status and session behavior; never request tokens or disable validation. This is a conditional recovery step, not a claim that every restart failure has that cause or that DB grant changes require re-login.
 
+Signing-key retrieval lesson (F044 UAT, 2026-09-22): when authenticated requests reach the local API with a Bearer header but return 401, check whether the API was launched inside a restricted sandbox that blocks Microsoft signing-key retrieval. The Entra validator sanitizes signing-key retrieval failures as authentication failures; this is not evidence of an RBAC/grant problem. Use token-free issuer/JWKS connectivity probes and safe tenant/audience/scope configuration comparisons without printing, decoding or copying bearer tokens. In this incident, sandbox probes failed with EACCES while the same public endpoints returned 200 outside the sandbox; the developer restarted the API outside that restricted sandbox and confirmed authenticated Service Requests loaded normally. Use that developer-launched API for authenticated UAT. Preserve token validation, TLS, grants and existing configuration; do not provision permissions to repair a 401 or assume every 401 has this cause.
+
 ## Feature execution and completion
 
 1. Verify the accepted checkpoint and authorized scope.

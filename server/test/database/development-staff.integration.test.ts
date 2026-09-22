@@ -777,7 +777,7 @@ test(
         },
       );
       await t.test(
-        'F042 twenty-permission bundle preserves F041 grants and remains explicit, read-only in dry run, idempotent and targeted on removal',
+        'F044 twenty-one-permission bundle preserves F041/F042 grants and remains explicit, read-only in dry run, idempotent and targeted on removal',
         async () => {
           const before = await state();
           const selected: DevelopmentStaffSelection = {
@@ -787,7 +787,7 @@ test(
               'FULL_UAT_OPERATOR',
             ),
           };
-          assert.equal(selected.permissions.length, 20);
+          assert.equal(selected.permissions.length, 21);
           assert.deepEqual((await auth.resolve(principal)).permissions, [
             'geospatial.read',
           ]);

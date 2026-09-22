@@ -1,4 +1,5 @@
 import { checkRequestCommunications } from './request-communication-checks.js';
+import { checkRequestTracking } from './request-tracking-checks.js';
 import { checkRequestOwnership } from './request-ownership-checks.js';
 import { checkRequestContact } from './request-contact-checks.js';
 import { checkPublicRequestContact } from './public-request-contact-checks.js';
@@ -2280,6 +2281,17 @@ test(
           department,
           targetDepartment,
           targetDivision,
+          publicPayload: assisted,
+          internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkRequestTracking(t, {
+          app,
+          db,
+          org,
+          creator,
+          otherInternal,
+          department,
           publicPayload: assisted,
           internalPayload: internal,
           logs: contactLogs,

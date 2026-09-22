@@ -1,11 +1,7 @@
 {
   "hosting": {
     "public": "dist-react",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "cleanUrls": true,
     "trailingSlash": false,
     "redirects": [
@@ -27,6 +23,13 @@
       }
     ],
     "headers": [
+      {
+        "source": "/track",
+        "headers": [
+          { "key": "Referrer-Policy", "value": "no-referrer" },
+          { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+        ]
+      },
       {
         "source": "**",
         "headers": [

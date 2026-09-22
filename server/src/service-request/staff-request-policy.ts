@@ -71,6 +71,9 @@ export function requestCapabilities(
     }
   });
   return {
+    canManageRequesterTracking:
+      audience === 'public' &&
+      access.permissions.includes('service_request.tracking.manage'),
     workflowActions,
     canRoute: permitted('route'),
     canAssign: permitted('assign'),

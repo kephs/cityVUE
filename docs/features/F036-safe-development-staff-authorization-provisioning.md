@@ -1,5 +1,9 @@
 # F036 — Safe Development Staff Authorization Provisioning
 
+## F044 tracking-management addition (locally validated)
+
+`service_request.tracking.manage` is registered in the known-permission manifest and added explicitly to `FULL_UAT_OPERATOR`: the F042/F043 20-key expansion plus this one key becomes 21. The bundle remains CLI shorthand, never runtime authority. No existing grant changes automatically. For a new environment, prove the authenticated ungranted baseline after migration validation/application, then dry-run and explicitly provision only this key in the approved fictional scope. F044 completed that sequence in personal development and retained exactly the 21 approved keys, with Public Works / Streets and Community Services / Parks scope unchanged. Parent PUBLIC read remains independently required. No production/client provisioning is enabled. See the [F044 UAT record](F044-secure-requester-tracking-foundation.md) and [completion report](F044-implementation-report.md).
+
 ## Purpose and security boundary
 
 F032–F035 authenticated UAT was repeatedly blocked by absent explicit personal-development staff grants. F036 adds local operator tooling using the existing F018 PostgreSQL roles, permissions and memberships. It introduces no production administration interface, migration, authentication change or React authorization logic.

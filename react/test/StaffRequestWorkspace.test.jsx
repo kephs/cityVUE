@@ -1090,9 +1090,11 @@ test("activity loading, plain-text narrative, safe actor, routing and older page
   });
   fireEvent.click(screen.getByRole("button", { name: "Older activity" }));
   await screen.findByText("Fictional New / District A");
-  expect(
-    screen.getByRole("heading", { name: "Request Activity" }),
-  ).toHaveFocus();
+  await waitFor(() =>
+    expect(
+      screen.getByRole("heading", { name: "Request Activity" }),
+    ).toHaveFocus(),
+  );
   expect(repository.activity).toHaveBeenLastCalledWith(
     id,
     2,

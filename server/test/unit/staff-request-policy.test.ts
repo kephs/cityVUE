@@ -89,6 +89,7 @@ test('F040 PUBLIC action capabilities require their exact key and a valid lifecy
     'open',
   );
   assert.deepEqual(readOnly, {
+    canManageRequesterTracking: false,
     workflowActions: [],
     canRoute: false,
     canAssign: false,

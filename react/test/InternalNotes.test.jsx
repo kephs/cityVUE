@@ -118,7 +118,7 @@ test("F041 load older appends server order, de-duplicates boundary and focuses t
     `note-${id}`,
     `note-${other}`,
   ]);
-  expect(screen.getAllByRole("listitem")[1]).toHaveFocus();
+  await waitFor(() => expect(screen.getAllByRole("listitem")[1]).toHaveFocus());
 });
 test("F041 Add Note is single-flight, returns authoritative state, clears draft and restores textarea focus", async () => {
   const repo = repository();

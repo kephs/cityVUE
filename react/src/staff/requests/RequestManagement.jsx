@@ -6,6 +6,7 @@ import {
 import RequestDialog from "./RequestDialog.jsx";
 import RequestOwnership, { TargetLabel } from "./RequestOwnership.jsx";
 import RequesterContact from "./RequesterContact.jsx";
+import RequesterTracking from "./RequesterTracking.jsx";
 
 export default function RequestManagement({
   repository,
@@ -47,6 +48,15 @@ export default function RequestManagement({
   return (
     <ContentCard className="request-management">
       <SectionHeading icon="sliders">Request Management</SectionHeading>
+      {row.audience === "public" && (
+        <RequesterTracking
+          key={`${id}:${row.capabilities?.canManageRequesterTracking === true}`}
+          repository={repository}
+          id={id}
+          allowed={row.capabilities?.canManageRequesterTracking === true}
+          onAccessFailure={onAccessFailure}
+        />
+      )}
       <div className="request-management-row">
         <div>
           <h4>Assignment</h4>

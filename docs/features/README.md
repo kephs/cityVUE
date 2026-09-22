@@ -1,5 +1,7 @@
 # Reqro Feature Records
 
+[F044 — Secure Requester Tracking Foundation](F044-secure-requester-tracking-foundation.md) is implemented and validated locally from accepted, synchronized F043 `19af51623d1770601272b5d97a3fd0c49e0868d4`. The [completion report](F044-implementation-report.md) records the complete diff inventory, security review, 877 passing tests and qualified manual UAT evidence. No push or deployment is authorized; F045 is not started.
+
 Start with the [development protocol](../development/REQRO_CODEX_PROTOCOL.md), [current architecture](../ARCHITECTURE.md), [roadmap](../ROADMAP.md) and relevant [ADRs](../architecture/decisions/README.md). Feature specifications and reports retain feature-specific requirements and historical implementation/validation evidence. They are not replacements for the permanent protocol.
 
 ## Accepted operational features
@@ -22,7 +24,7 @@ Start with the [development protocol](../development/REQRO_CODEX_PROTOCOL.md), [
 | F040    | PUBLIC Service Request Staff Workspace            | Complete | [Specification](F040-public-service-request-staff-workspace.md), [permission design](F040-public-staff-workspace-design-review.md), [validation checkpoint](F040-validation-checkpoint.md), [implementation report](F040-implementation-report.md) |
 | F041    | Internal Notes & Staff Collaboration              | Complete | [Specification](F041-internal-notes-staff-collaboration.md), [implementation report](F041-implementation-report.md)                                                                                                                                |
 
-F042 — [Requester Communication & Correspondence Foundation](F042-requester-communication-foundation.md) is accepted and synchronized at `8018acf8f2caf9699faa682241a026f09b101e90`. Its [implementation report](F042-implementation-report.md) prominently records the approved two-message UAT automation exception, final validation and live limitations. [F043 — Service Request Workspace UX Consolidation](F043-service-request-workspace-ux-consolidation.md) is implemented and validated locally, awaiting review; its record includes tests, authenticated UAT, data preservation and the intentional assignment test. F044 remains unstarted. Governance and GitHub synchronization at `371ec3bd753b6054cdc5403ad0e88898ef0ea161` precede this feature.
+F042 — [Requester Communication & Correspondence Foundation](F042-requester-communication-foundation.md) is accepted and synchronized at `8018acf8f2caf9699faa682241a026f09b101e90`. Its [implementation report](F042-implementation-report.md) prominently records the approved two-message UAT automation exception, final validation and live limitations. [F043 — Service Request Workspace UX Consolidation](F043-service-request-workspace-ux-consolidation.md) was accepted and synchronized at the F044 starting checkpoint above; its record retains tests, authenticated UAT, data preservation and the intentional assignment test. F044's current local completion is recorded above. Governance and GitHub synchronization at `371ec3bd753b6054cdc5403ad0e88898ef0ea161` precede these features.
 
 ## Earlier foundations and direction
 

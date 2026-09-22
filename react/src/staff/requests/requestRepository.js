@@ -15,6 +15,27 @@ const invalid = () =>
     "invalid-response",
     "Request information is unavailable.",
   );
+function trackingProjection(row, operation) {
+  if (
+    !row ||
+    !["not_issued", "active", "revoked"].includes(row.status) ||
+    (row.status === "not_issued"
+      ? row.version !== null
+      : !uuid.test(row.version))
+  )
+    throw invalid();
+  const result = { status: row.status, version: row.version };
+  if (operation && operation !== "revoke") {
+    if (
+      row.status !== "active" ||
+      typeof row.credential !== "string" ||
+      !/^[A-Za-z0-9_-]{43}$/.test(row.credential)
+    )
+      throw invalid();
+    result.credential = row.credential;
+  }
+  return result;
+}
 function noteProjection(row) {
   if (
     !row ||
@@ -139,6 +160,7 @@ function project(row, detail = false) {
                 "canReadNotes",
                 "canCreateNotes",
                 "canReadCommunications",
+                "canManageRequesterTracking",
                 "canCreateCommunication",
               ].map((key) => [key, row.capabilities?.[key] === true]),
             ),
@@ -384,6 +406,22 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
     ),
     async detail(id, signal) {
       return project(await api.get(path(id), options(signal)), true);
+    },
+    async trackingState(id, signal) {
+      return trackingProjection(
+        await api.get(`${path(id)}/requester-tracking`, options(signal)),
+      );
+    },
+    async changeTracking(id, operation, expectedVersion, signal) {
+      if (!["issue", "rotate", "revoke"].includes(operation)) throw invalid();
+      return trackingProjection(
+        await api.post(
+          `${path(id)}/requester-tracking/${operation}`,
+          { expectedVersion },
+          options(signal),
+        ),
+        operation,
+      );
     },
     async options(signal) {
       const data = await api.get(`${root}/workspace-options`, options(signal));
