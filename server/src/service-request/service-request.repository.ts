@@ -264,6 +264,7 @@ export class ServiceRequestRepository {
         .where('activity_type', 'not in', [
           'service_request_contact_viewed',
           'service_request_internal_note_created',
+          'service_request_communication_created',
         ])
         .orderBy('occurred_at')
         .orderBy('id')

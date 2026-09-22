@@ -4,7 +4,7 @@ This roadmap describes accepted progress and possible direction, not implementat
 
 ## Accepted progress
 
-The accepted application checkpoint is **F041 complete**: separate append-only Internal Notes for authorized PUBLIC and INTERNAL requests, validated locally with explicit development provisioning and authenticated UAT. See the [F041 report](features/F041-implementation-report.md). **F042 is not selected and has not started.**
+The preceding accepted application checkpoint is **F041 complete**: separate append-only Internal Notes for authorized PUBLIC and INTERNAL requests. See the [F041 report](features/F041-implementation-report.md). **F042 — Requester Communication & Correspondence Foundation is implemented and validated locally, awaiting feature review.** See its [feature record](features/F042-requester-communication-foundation.md) and [implementation report](features/F042-implementation-report.md), including the approved two-record UAT automation exception and disclosed live coverage limits.
 
 The [feature index](features/README.md) links specifications and evidence for the completed operational sequence:
 
@@ -26,17 +26,17 @@ The [feature index](features/README.md) links specifications and evidence for th
 
 Earlier foundations include React migration, canonical PostgreSQL catalog/intake, API eligibility, optional Entra/database RBAC, resident alerts, AI/provider governance and synthetic/protected geospatial boundaries. Individual reports distinguish local implementation, previews and deferred production work. The earlier global reference plan was superseded by F033; authentication, lifecycle, ownership and Notes are no longer pending foundations.
 
-## Current governance milestone
+## Governance and synchronization checkpoint
 
-Consolidate the permanent protocol, accepted ADRs, architecture/context and navigation. Perform a static pre-push history/configuration review and commit documentation locally. This changes no application behavior, migrations or grants.
+Governance consolidation and the separately authorized GitHub synchronization are complete at `371ec3bd753b6054cdc5403ad0e88898ef0ea161`. F042 begins from that synchronized checkpoint.
 
-The next **separately approved task** may be pre-push final verification and GitHub synchronization if the governance review finds the repository suitable. Neither synchronization nor deployment is authorized here. The [governance review](development/GOVERNANCE_REVIEW.md) records local evidence and conditions.
+F042 stops after validation, documented UAT and local commit for review. Its push and deployment are not authorized. The [governance review](development/GOVERNANCE_REVIEW.md) records the earlier synchronization evidence and conditions.
 
-## Product review before F042
+## Product review after F042
 
-No candidate below has priority or a feature number assigned. Review value, privacy, operational impact and dependencies before selecting one:
+F043 has not been selected or started. No candidate below has priority or a feature number assigned. Review value, privacy, operational impact and dependencies before selecting one:
 
-- Resident communication and separately authorized resident-safe request history.
+- Secure resident tracking/history and externally delivered correspondence beyond the F042 recorded PORTAL foundation.
 - Notifications with approved recipients, preferences/consent, queues and failure handling.
 - Note correction/redaction/versioning that preserves accountability and retention requirements.
 - Attachments with secure upload, storage, scanning, access and lifecycle design.

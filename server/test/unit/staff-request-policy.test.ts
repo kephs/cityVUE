@@ -97,6 +97,8 @@ test('F040 PUBLIC action capabilities require their exact key and a valid lifecy
     canReadContact: false,
     canReadNotes: false,
     canCreateNotes: false,
+    canReadCommunications: false,
+    canCreateCommunication: false,
   });
 });
 

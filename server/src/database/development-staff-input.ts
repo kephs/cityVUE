@@ -9,6 +9,8 @@ const fullUatOperatorPermissions = [
   'service_request.contact.read',
   'service_request.note.read',
   'service_request.note.create',
+  'service_request.communication.read',
+  'service_request.communication.create',
   'service_request.internal.update',
   'catalog.issue_action.manage',
   'service_request.reference.manage',

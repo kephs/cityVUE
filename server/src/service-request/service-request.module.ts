@@ -1,3 +1,7 @@
+import { RequestCommunicationController } from './request-communication.controller.js';
+import { RequestCommunicationService } from './request-communication.service.js';
+import { RequestCommunicationRepository } from './request-communication.repository.js';
+import { RequestCommunicationPrivacyMiddleware } from './request-communication-privacy.middleware.js';
 import { RequestOwnershipController } from './request-ownership.controller.js';
 import { RequestOwnershipService } from './request-ownership.service.js';
 import { ReferenceConfigurationController } from './reference-configuration.controller.js';
@@ -32,6 +36,7 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    RequestCommunicationController,
     RequestNoteController,
     RequestContactController,
     PublicRequestContactController,
@@ -44,6 +49,8 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
     InternalRequestMutationsController,
   ],
   providers: [
+    RequestCommunicationService,
+    RequestCommunicationRepository,
     RequestNoteService,
     RequestNoteRepository,
     RequestContactService,
@@ -61,6 +68,9 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
 })
 export class ServiceRequestModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(RequestCommunicationPrivacyMiddleware)
+      .forRoutes(RequestCommunicationController);
     consumer
       .apply(RequestNotePrivacyMiddleware)
       .forRoutes(RequestNoteController);

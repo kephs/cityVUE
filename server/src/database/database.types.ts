@@ -410,7 +410,22 @@ export interface RequestInternalNoteTable {
   created_at: Timestamp;
 }
 
+export interface RequestCommunicationTable {
+  id: Generated<string>;
+  organization_id: string;
+  service_request_id: string;
+  author_staff_identity_id: string;
+  author_display_name: string;
+  submission_key: string;
+  body: string;
+  created_at: Timestamp;
+  direction: Generated<'outbound'>;
+  channel: Generated<'portal'>;
+  delivery_state: Generated<'recorded'>;
+}
+
 export interface DatabaseSchema {
+  request_communication: RequestCommunicationTable;
   request_internal_note: RequestInternalNoteTable;
   operational_role: OperationalRoleTable;
   operational_role_membership: OperationalRoleMembershipTable;

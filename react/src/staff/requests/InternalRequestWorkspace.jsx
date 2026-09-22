@@ -11,6 +11,7 @@ import RequestOwnership, { TargetLabel } from "./RequestOwnership.jsx";
 import RequestActivity from "./RequestActivity.jsx";
 import RequesterContact from "./RequesterContact.jsx";
 import InternalNotes from "./InternalNotes.jsx";
+import RequestCommunication from "./RequestCommunication.jsx";
 import WorkflowNarrativeForm from "./WorkflowNarrativeForm.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -407,13 +408,13 @@ function RequestDetail({ repository, id, onSignIn }) {
     routeButton = useRef(null),
     inFlight = useRef(false),
     controller = useRef(null);
-  const notesAccessFailure = useCallback(
+  const protectedContentAccessFailure = useCallback(
     async (error) => {
       if (error.status !== 403) {
         accessFailure(error);
         return;
       }
-      // A Notes permission denial must not suppress an independently readable parent/contact.
+      // A protected-content permission denial must not suppress an independently readable parent/contact.
       try {
         const signal = controller.current?.signal;
         const data = await repository.detail(id, signal);
@@ -725,8 +726,17 @@ function RequestDetail({ repository, id, onSignIn }) {
               id={id}
               canRead={capabilities.canReadNotes}
               canCreate={capabilities.canCreateNotes}
-              onAccessFailure={notesAccessFailure}
+              onAccessFailure={protectedContentAccessFailure}
             />
+            {row.audience === "public" && (
+              <RequestCommunication
+                repository={repository}
+                id={id}
+                canRead={capabilities.canReadCommunications}
+                canCreate={capabilities.canCreateCommunication}
+                onAccessFailure={protectedContentAccessFailure}
+              />
+            )}
             <ContentCard className="request-issue-details">
               <SectionHeading icon="tag">Issue Details</SectionHeading>
               <dl className="request-metadata">

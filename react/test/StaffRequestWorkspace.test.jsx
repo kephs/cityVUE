@@ -27,6 +27,144 @@ const id = "10000000-0000-4000-8000-000000000001",
   dept = "20000000-0000-4000-8000-000000000001",
   target = "20000000-0000-4000-8000-000000000002",
   division = "30000000-0000-4000-8000-000000000001";
+
+test.each([
+  [true, false],
+  [false, true],
+  [true, true],
+  [false, false],
+])(
+  "F042 PUBLIC correspondence read=%s and Notes read=%s remain independent in detail",
+  async (communicationRead, noteRead) => {
+    repository.detail.mockResolvedValue({
+      ...row,
+      audience: "public",
+      capabilities: {
+        ...row.capabilities,
+        canReadCommunications: communicationRead,
+        canCreateCommunication: communicationRead,
+        canReadNotes: noteRead,
+        canCreateNotes: false,
+      },
+    });
+    show(`/staff/requests/${id}`);
+    await screen.findByRole("heading", { name: "Requester Communication" });
+    if (communicationRead)
+      await screen.findByText("F042 fictional correspondence");
+    else expect(repository.communications).not.toHaveBeenCalled();
+    if (noteRead) await screen.findByText("F041 fictional collaboration");
+    else expect(repository.notes).not.toHaveBeenCalled();
+    expect(Boolean(screen.queryByText("F042 fictional correspondence"))).toBe(
+      communicationRead,
+    );
+    expect(Boolean(screen.queryByText("F041 fictional collaboration"))).toBe(
+      noteRead,
+    );
+    expect(
+      screen.getByText(
+        "You don't have permission to view requester contact information.",
+      ),
+    ).toBeInTheDocument();
+    expect(repository.contact).not.toHaveBeenCalled();
+  },
+);
+
+test("F042 INTERNAL detail never fetches history or offers a composer even with inconsistent client hints", async () => {
+  repository.detail.mockResolvedValue({
+    ...row,
+    capabilities: {
+      ...row.capabilities,
+      canReadCommunications: true,
+      canCreateCommunication: true,
+    },
+  });
+  show(`/staff/requests/${id}`);
+  await screen.findByText("Internal request");
+  expect(
+    screen.queryByRole("heading", { name: "Requester Communication" }),
+  ).not.toBeInTheDocument();
+  expect(repository.communications).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("button", { name: "Add Message" }),
+  ).not.toBeInTheDocument();
+});
+
+test("F042 PUBLIC to INTERNAL navigation immediately clears correspondence and aborts its stream", async () => {
+  repository.detail
+    .mockResolvedValueOnce({
+      ...row,
+      audience: "public",
+      capabilities: {
+        ...row.capabilities,
+        canReadCommunications: true,
+        canCreateCommunication: true,
+      },
+    })
+    .mockResolvedValue({ ...row, serviceRequestId: other });
+  render(
+    <MemoryRouter initialEntries={[`/staff/requests/${id}`]}>
+      <Jump />
+      <Routes>
+        <Route
+          path="/staff/requests/:requestId"
+          element={<InternalRequestWorkspace repository={repository} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+  await screen.findByText("F042 fictional correspondence");
+  const signal = repository.communications.mock.calls[0][2];
+  fireEvent.change(screen.getByLabelText("Message"), {
+    target: { value: "Fictional unsent draft" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Other request" }));
+  expect(
+    screen.queryByText("F042 fictional correspondence"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByDisplayValue("Fictional unsent draft"),
+  ).not.toBeInTheDocument();
+  await screen.findByText("Internal request");
+  expect(signal.aborted).toBe(true);
+  expect(repository.communications).toHaveBeenCalledTimes(1);
+});
+
+test("F042 communication read revocation refreshes capabilities without hiding independently authorized Notes or parent", async () => {
+  repository.detail
+    .mockResolvedValueOnce({
+      ...row,
+      audience: "public",
+      capabilities: {
+        ...row.capabilities,
+        canReadNotes: true,
+        canReadCommunications: true,
+        canCreateCommunication: true,
+      },
+    })
+    .mockResolvedValue({
+      ...row,
+      audience: "public",
+      capabilities: {
+        ...row.capabilities,
+        canReadNotes: true,
+        canReadCommunications: false,
+        canCreateCommunication: false,
+      },
+    });
+  show(`/staff/requests/${id}`);
+  await screen.findByText("F042 fictional correspondence");
+  await screen.findByText("F041 fictional collaboration");
+  repository.communications.mockRejectedValue({ status: 403 });
+  fireEvent.click(screen.getByRole("button", { name: "Refresh messages" }));
+  await screen.findByText("You don't have permission to view messages.");
+  expect(
+    screen.queryByText("F042 fictional correspondence"),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("F041 fictional collaboration")).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: row.issueName }),
+  ).toBeInTheDocument();
+});
 const row = {
   audience: "internal",
   intakeChannel: "staff",
@@ -55,6 +193,21 @@ let repository;
 beforeEach(() => {
   vi.clearAllMocks();
   repository = {
+    communications: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: other,
+          body: "F042 fictional correspondence",
+          author: { displayName: "Fictional sender" },
+          createdAt: "2026-09-21T12:00:00Z",
+          direction: "outbound",
+          channel: "portal",
+          deliveryState: "recorded",
+        },
+      ],
+      nextCursor: null,
+    }),
+    createCommunication: vi.fn(),
     notes: vi.fn().mockResolvedValue({
       items: [
         {

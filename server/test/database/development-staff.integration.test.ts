@@ -675,6 +675,68 @@ test(
         },
       );
       await t.test(
+        'F042 Communication read and create are explicitly provisioned, idempotent and separately revocable without changing requests',
+        async () => {
+          const baseline = await state();
+          const prior = (await auth.resolve(principal)).permissions;
+          for (const permission of [
+            'service_request.communication.read',
+            'service_request.communication.create',
+          ] as const) {
+            assert.ok(
+              !(await auth.resolve(principal)).permissions.includes(permission),
+            );
+            const selection = { ...input, permissions: [permission] };
+            const before = await state();
+            await changeDevelopmentStaffGrants(
+              db,
+              selection,
+              'provision',
+              true,
+            );
+            assert.deepEqual(await state(), before);
+            await changeDevelopmentStaffGrants(
+              db,
+              selection,
+              'provision',
+              false,
+            );
+            await changeDevelopmentStaffGrants(
+              db,
+              selection,
+              'provision',
+              false,
+            );
+            assert.ok(
+              (await auth.resolve(principal)).permissions.includes(permission),
+            );
+          }
+          await changeDevelopmentStaffGrants(
+            db,
+            { ...input, permissions: ['service_request.communication.create'] },
+            'deprovision',
+            false,
+          );
+          assert.deepEqual(
+            (await auth.resolve(principal)).permissions.sort(),
+            [...prior, 'service_request.communication.read'].sort(),
+          );
+          await changeDevelopmentStaffGrants(
+            db,
+            { ...input, permissions: ['service_request.communication.read'] },
+            'deprovision',
+            false,
+          );
+          assert.deepEqual((await auth.resolve(principal)).permissions, prior);
+          const after = await state();
+          assert.deepEqual(after.service_request, baseline.service_request);
+          assert.deepEqual(
+            after.request_operational_activity,
+            baseline.request_operational_activity,
+          );
+        },
+      );
+      await t.test(
         'F039 temporary PUBLIC view is explicit and targeted removal preserves contact permission and data',
         async () => {
           const contact = {
@@ -715,7 +777,7 @@ test(
         },
       );
       await t.test(
-        'F041 eighteen-permission bundle preserves F040 grants and remains explicit, read-only in dry run, idempotent and targeted on removal',
+        'F042 twenty-permission bundle preserves F041 grants and remains explicit, read-only in dry run, idempotent and targeted on removal',
         async () => {
           const before = await state();
           const selected: DevelopmentStaffSelection = {
@@ -725,7 +787,7 @@ test(
               'FULL_UAT_OPERATOR',
             ),
           };
-          assert.equal(selected.permissions.length, 18);
+          assert.equal(selected.permissions.length, 20);
           assert.deepEqual((await auth.resolve(principal)).permissions, [
             'geospatial.read',
           ]);

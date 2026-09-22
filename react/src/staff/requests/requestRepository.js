@@ -34,6 +34,31 @@ function noteProjection(row) {
     createdAt: row.createdAt,
   };
 }
+function communicationProjection(row) {
+  if (
+    !row ||
+    row.direction !== "outbound" ||
+    row.channel !== "portal" ||
+    row.deliveryState !== "recorded" ||
+    !uuid.test(row.id) ||
+    typeof row.body !== "string" ||
+    row.body.length > 4000 ||
+    typeof row.author?.displayName !== "string" ||
+    row.author.displayName.length > 200 ||
+    typeof row.createdAt !== "string" ||
+    !Number.isFinite(Date.parse(row.createdAt))
+  )
+    throw invalid();
+  return {
+    id: row.id,
+    body: row.body,
+    direction: row.direction,
+    channel: row.channel,
+    deliveryState: row.deliveryState,
+    author: { displayName: row.author.displayName },
+    createdAt: row.createdAt,
+  };
+}
 function targetProjection(value) {
   if (
     !value ||
@@ -113,6 +138,8 @@ function project(row, detail = false) {
                 "canReadContact",
                 "canReadNotes",
                 "canCreateNotes",
+                "canReadCommunications",
+                "canCreateCommunication",
               ].map((key) => [key, row.capabilities?.[key] === true]),
             ),
           },
@@ -164,6 +191,42 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
       return noteProjection(
         await api.post(
           `${path(id)}/notes`,
+          { body },
+          { ...options(signal), idempotencyKey: submissionKey },
+        ),
+      );
+    },
+    async communications(id, cursor, signal) {
+      const query = new URLSearchParams({ pageSize: "25" });
+      if (cursor) query.set("cursor", cursor);
+      const data = await api.get(
+        `${path(id)}/communications?${query}`,
+        options(signal),
+      );
+      if (
+        !Array.isArray(data?.items) ||
+        data.items.length > 25 ||
+        data.pageSize !== 25 ||
+        typeof data.hasMore !== "boolean" ||
+        !(
+          data.nextCursor === null ||
+          (typeof data.nextCursor === "string" &&
+            /^[A-Za-z0-9_-]{1,256}$/.test(data.nextCursor))
+        ) ||
+        data.hasMore !== Boolean(data.nextCursor)
+      )
+        throw invalid();
+      return {
+        items: data.items.map(communicationProjection),
+        hasMore: data.hasMore,
+        nextCursor: data.nextCursor,
+      };
+    },
+    async createCommunication(id, body, submissionKey, signal) {
+      if (!uuid.test(submissionKey)) throw invalid();
+      return communicationProjection(
+        await api.post(
+          `${path(id)}/communications`,
           { body },
           { ...options(signal), idempotencyKey: submissionKey },
         ),

@@ -30,17 +30,17 @@ Historical feature specifications retain original scope, validation and deferred
 
 F041 completed local implementation, automated validation and incremental authenticated manual UAT for PUBLIC/INTERNAL Notes. Its [implementation report](features/F041-implementation-report.md) records safe fixture state, test counts, permissions and limitations. The accepted commit is `6d394713a81b304800badf5a5413189b31d2395a`; personal development had 20 migrations with zero pending, 18 deliberately retained permission keys and two fictional Notes. These are checkpoint facts, not hard-coded production requirements.
 
-The following governance task consolidates permanent rules and decisions without changing application behavior, database state or grants. F042 is unselected and unstarted. No later feature or deployment is authorized by this document.
+Governance and separately authorized GitHub synchronization completed at `371ec3bd753b6054cdc5403ad0e88898ef0ea161`. [F042](features/F042-requester-communication-foundation.md) implements independently authorized PUBLIC correspondence, recorded without external delivery, from that synchronized checkpoint. Its [report](features/F042-implementation-report.md) records passing final automated validation, live UAT limitations and the approved retention of two fictional communications after a keyboard automation incident. All 20 intended permissions were restored and parent state remained unchanged. F042 stops at local commit for review; F043 remains unstarted. No push or deployment is authorized by this feature.
 
 ## Current product boundaries
 
-Residents can use implemented catalog/intake paths and receive the existing safe creation receipt. Production resident identity, rich tracking and communication remain separate design work. Legacy local Issue editing/deletion and dashboard metrics remain prototype compatibility behavior; they do not define canonical request or staff access policy.
+Residents can use implemented catalog/intake paths and receive the existing safe creation receipt. Production resident identity, rich tracking and external communication delivery remain separate design work. F042 prepares a minimized correspondence projection but introduces no resident retrieval endpoint. Legacy local Issue editing/deletion and dashboard metrics remain prototype compatibility behavior; they do not define canonical request or staff access policy.
 
 Authenticated staff have a unified workspace with independent PUBLIC/INTERNAL read policies, controlled lifecycle/routing, assignment, watchers, Activity and protected Contact/Notes. My Requests, My Team and Watching filter independently authorized requests. Operational membership is not RBAC. Contact and Notes permissions are separate from parent read/update and from each other.
 
 The catalog includes versioned questions, structured Answers, location policy and narrow action/reference configuration. Broad production administration, production Role/Team administration and geographic routing are not implied by stakeholder previews or development tooling.
 
-Descriptions, operational narratives and Notes may contain incidental PII. Structured-contact protection does not provide automated redaction or a legal confidentiality classification. Notes are staff-only collaboration, not resident communication, Activity or an automatic AI input.
+Descriptions, operational narratives and Notes may contain incidental PII. Structured-contact protection does not provide automated redaction or a legal confidentiality classification. Notes are staff-only collaboration, not requester communication, Activity or an automatic AI input.
 
 ## Continuing without chat history
 

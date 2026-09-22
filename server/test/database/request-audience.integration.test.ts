@@ -1,3 +1,4 @@
+import { checkRequestCommunications } from './request-communication-checks.js';
 import { checkRequestOwnership } from './request-ownership-checks.js';
 import { checkRequestContact } from './request-contact-checks.js';
 import { checkPublicRequestContact } from './public-request-contact-checks.js';
@@ -2258,6 +2259,19 @@ test(
           logs: contactLogs,
         });
         await checkRequestNotes(t, {
+          app,
+          db,
+          org,
+          creator,
+          otherInternal,
+          department,
+          targetDepartment,
+          targetDivision,
+          publicPayload: assisted,
+          internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkRequestCommunications(t, {
           app,
           db,
           org,

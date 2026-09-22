@@ -463,38 +463,47 @@
 .request-contact dt {
   margin-top: var(--space-3);
 }
-.request-notes {
+.request-notes,
+.request-communications {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.request-notes-list {
+.request-notes-list,
+.request-communications-list {
   list-style: none;
   padding: 0;
 }
-.request-notes-list li {
+.request-notes-list li,
+.request-communications-list li {
   border-bottom: 1px solid var(--border-default);
   padding-block: var(--space-4);
 }
 .request-note-attribution,
-.request-notes-controls {
+.request-message-attribution,
+.request-notes-controls,
+.request-communications-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-3);
 }
-.request-note-attribution time {
+.request-note-attribution time,
+.request-message-attribution time {
   color: var(--text-secondary);
   font-size: var(--font-small);
 }
-.request-note-body {
+.request-note-body,
+.request-message-body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   margin-top: var(--space-3);
 }
-.request-note-composer {
+.request-note-composer,
+.request-message-composer {
   margin-top: var(--space-5);
 }
-.request-note-composer textarea {
+.request-note-composer textarea,
+.request-message-composer textarea {
   width: 100%;
   min-width: 0;
   resize: vertical;

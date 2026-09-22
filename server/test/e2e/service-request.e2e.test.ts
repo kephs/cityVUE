@@ -26,6 +26,19 @@ test('F041 development/legacy staff bypass cannot read or create Notes; all deni
     .expect(403)
     .expect('Cache-Control', 'no-store');
 });
+test('F042 development/legacy staff bypass cannot read or create Communications; all denied responses are no-store', async () => {
+  const path =
+    '/api/v1/staff/service-requests/80000000-0000-4000-8000-000000000001/communications';
+  await request(app.getHttpServer())
+    .get(path)
+    .expect(403)
+    .expect('Cache-Control', 'no-store');
+  await request(app.getHttpServer())
+    .post(path)
+    .send({ body: 'F042 fictional E2E communication' })
+    .expect(403)
+    .expect('Cache-Control', 'no-store');
+});
 const versionId = '50000000-0000-4000-8000-000000000001';
 const base = {
   serviceDefinitionId: serviceId,

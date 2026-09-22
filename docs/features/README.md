@@ -22,7 +22,7 @@ Start with the [development protocol](../development/REQRO_CODEX_PROTOCOL.md), [
 | F040    | PUBLIC Service Request Staff Workspace            | Complete | [Specification](F040-public-service-request-staff-workspace.md), [permission design](F040-public-staff-workspace-design-review.md), [validation checkpoint](F040-validation-checkpoint.md), [implementation report](F040-implementation-report.md) |
 | F041    | Internal Notes & Staff Collaboration              | Complete | [Specification](F041-internal-notes-staff-collaboration.md), [implementation report](F041-implementation-report.md)                                                                                                                                |
 
-F042 has not been selected or started. The governance consolidation is documentation work, not another numbered product feature.
+F042 — [Requester Communication & Correspondence Foundation](F042-requester-communication-foundation.md) is implemented and validated locally, awaiting review. Its [implementation report](F042-implementation-report.md) prominently records the approved two-message UAT automation exception, final validation and live limitations. F043 remains unstarted. Governance and GitHub synchronization at `371ec3bd753b6054cdc5403ad0e88898ef0ea161` precede this feature.
 
 ## Earlier foundations and direction
 
