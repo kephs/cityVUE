@@ -3,11 +3,19 @@ import {
   SectionHeading,
 } from "../../components/ui/RequestPresentation.jsx";
 
-export default function RequesterContact({ canRead, state, onLoad }) {
+export default function RequesterContact({
+  canRead,
+  state,
+  onLoad,
+  embedded = false,
+}) {
+  const Surface = embedded ? "div" : ContentCard;
   const protectedState = !canRead || state?.protected;
   return (
-    <ContentCard className="request-contact">
-      <SectionHeading icon="person-lock">Requester Contact</SectionHeading>
+    <Surface className="request-contact">
+      {!embedded && (
+        <SectionHeading icon="person-lock">Requester Contact</SectionHeading>
+      )}
       {protectedState ? (
         <>
           <p>
@@ -69,6 +77,6 @@ export default function RequesterContact({ canRead, state, onLoad }) {
           </button>
         </>
       )}
-    </ContentCard>
+    </Surface>
   );
 }

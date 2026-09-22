@@ -4,7 +4,7 @@ Start with the [development protocol](../development/REQRO_CODEX_PROTOCOL.md), [
 
 ## Accepted operational features
 
-“Complete” below means the accepted local implementation is in the F041 checkpoint. Each linked record preserves its own test/UAT scope, limitations and deferred work; an earlier checkpoint is not silently rewritten by a later feature. None of these statuses independently authorizes deployment.
+“Complete” below identifies accepted implementation checkpoints. Each linked record preserves its own test/UAT scope, limitations and deferred work; an earlier checkpoint is not silently rewritten by a later feature. None of these statuses independently authorizes deployment.
 
 | Feature | Name                                              | Status   | Specification / evidence                                                                                                                                                                                                                           |
 | ------- | ------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -22,7 +22,7 @@ Start with the [development protocol](../development/REQRO_CODEX_PROTOCOL.md), [
 | F040    | PUBLIC Service Request Staff Workspace            | Complete | [Specification](F040-public-service-request-staff-workspace.md), [permission design](F040-public-staff-workspace-design-review.md), [validation checkpoint](F040-validation-checkpoint.md), [implementation report](F040-implementation-report.md) |
 | F041    | Internal Notes & Staff Collaboration              | Complete | [Specification](F041-internal-notes-staff-collaboration.md), [implementation report](F041-implementation-report.md)                                                                                                                                |
 
-F042 — [Requester Communication & Correspondence Foundation](F042-requester-communication-foundation.md) is implemented and validated locally, awaiting review. Its [implementation report](F042-implementation-report.md) prominently records the approved two-message UAT automation exception, final validation and live limitations. F043 remains unstarted. Governance and GitHub synchronization at `371ec3bd753b6054cdc5403ad0e88898ef0ea161` precede this feature.
+F042 — [Requester Communication & Correspondence Foundation](F042-requester-communication-foundation.md) is accepted and synchronized at `8018acf8f2caf9699faa682241a026f09b101e90`. Its [implementation report](F042-implementation-report.md) prominently records the approved two-message UAT automation exception, final validation and live limitations. [F043 — Service Request Workspace UX Consolidation](F043-service-request-workspace-ux-consolidation.md) is implemented and validated locally, awaiting review; its record includes tests, authenticated UAT, data preservation and the intentional assignment test. F044 remains unstarted. Governance and GitHub synchronization at `371ec3bd753b6054cdc5403ad0e88898ef0ea161` precede this feature.
 
 ## Earlier foundations and direction
 

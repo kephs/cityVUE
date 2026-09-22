@@ -4,7 +4,7 @@ This roadmap describes accepted progress and possible direction, not implementat
 
 ## Accepted progress
 
-The preceding accepted application checkpoint is **F041 complete**: separate append-only Internal Notes for authorized PUBLIC and INTERNAL requests. See the [F041 report](features/F041-implementation-report.md). **F042 — Requester Communication & Correspondence Foundation is implemented and validated locally, awaiting feature review.** See its [feature record](features/F042-requester-communication-foundation.md) and [implementation report](features/F042-implementation-report.md), including the approved two-record UAT automation exception and disclosed live coverage limits.
+The preceding accepted application checkpoint is **F041 complete**: separate append-only Internal Notes for authorized PUBLIC and INTERNAL requests. See the [F041 report](features/F041-implementation-report.md). **F042 — Requester Communication & Correspondence Foundation is accepted and synchronized at `8018acf8f2caf9699faa682241a026f09b101e90`.** See its [feature record](features/F042-requester-communication-foundation.md) and [implementation report](features/F042-implementation-report.md), including the approved two-record UAT automation exception and disclosed live coverage limits.
 
 The [feature index](features/README.md) links specifications and evidence for the completed operational sequence:
 
@@ -30,11 +30,11 @@ Earlier foundations include React migration, canonical PostgreSQL catalog/intake
 
 Governance consolidation and the separately authorized GitHub synchronization are complete at `371ec3bd753b6054cdc5403ad0e88898ef0ea161`. F042 begins from that synchronized checkpoint.
 
-F042 stops after validation, documented UAT and local commit for review. Its push and deployment are not authorized. The [governance review](development/GOVERNANCE_REVIEW.md) records the earlier synchronization evidence and conditions.
+F042 was separately reviewed and its GitHub synchronization completed. [F043 — Service Request Workspace UX Consolidation](features/F043-service-request-workspace-ux-consolidation.md) is implemented and validated locally from that accepted checkpoint, awaiting review. F043 must stop after validated local commit and review report; its push and deployment are not authorized. The [governance review](development/GOVERNANCE_REVIEW.md) records the earlier synchronization evidence and conditions.
 
-## Product review after F042
+## Product review after F043
 
-F043 has not been selected or started. No candidate below has priority or a feature number assigned. Review value, privacy, operational impact and dependencies before selecting one:
+F044 has not been selected or started. No candidate below has priority or a feature number assigned. Review value, privacy, operational impact and dependencies before selecting one:
 
 - Secure resident tracking/history and externally delivered correspondence beyond the F042 recorded PORTAL foundation.
 - Notifications with approved recipients, preferences/consent, queues and failure handling.

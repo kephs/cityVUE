@@ -7,11 +7,10 @@ import {
   ContentCard,
   SectionHeading,
 } from "../../components/ui/RequestPresentation.jsx";
-import RequestOwnership, { TargetLabel } from "./RequestOwnership.jsx";
-import RequestActivity from "./RequestActivity.jsx";
-import RequesterContact from "./RequesterContact.jsx";
-import InternalNotes from "./InternalNotes.jsx";
-import RequestCommunication from "./RequestCommunication.jsx";
+import { TargetLabel } from "./RequestOwnership.jsx";
+import ActivityPanel from "./ActivityPanel.jsx";
+import RequestManagement from "./RequestManagement.jsx";
+import CollaborationPanel from "./CollaborationPanel.jsx";
 import WorkflowNarrativeForm from "./WorkflowNarrativeForm.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -404,6 +403,7 @@ function RequestDetail({ repository, id, onSignIn }) {
     },
     [clearContact],
   );
+  const initialFocus = useRef(false);
   const heading = useRef(null),
     routeButton = useRef(null),
     inFlight = useRef(false),
@@ -485,7 +485,10 @@ function RequestDetail({ repository, id, onSignIn }) {
     if (state?.error) clearContact();
   }, [state?.error, clearContact]);
   useEffect(() => {
-    if (state?.data) heading.current?.focus();
+    if (state?.data && !initialFocus.current) {
+      heading.current?.focus();
+      initialFocus.current = true;
+    }
   }, [state?.data]);
   const mutate = async (operation, input) => {
     if (
@@ -511,6 +514,14 @@ function RequestDetail({ repository, id, onSignIn }) {
     setNotice("");
     setNarrativeError("");
     const signal = controller.current.signal;
+    const management = [
+      "assign",
+      "unassign",
+      "addWatcher",
+      "removeWatcher",
+      "watchSelf",
+      "unwatchSelf",
+    ].includes(operation);
     let commandCompleted = false;
     try {
       await repository[operation](
@@ -522,7 +533,6 @@ function RequestDetail({ repository, id, onSignIn }) {
       commandCompleted = true;
       setRouting(false);
       setNarrativeAction(null);
-      setState(null);
       const fresh = await read(signal);
       if (fresh)
         setNotice(
@@ -549,6 +559,14 @@ function RequestDetail({ repository, id, onSignIn }) {
     } catch (error) {
       if (signal.aborted) return;
       if (
+        management &&
+        !commandCompleted &&
+        ![401, 404, 409].includes(error.status)
+      ) {
+        if (error.status === 403) await protectedContentAccessFailure(error);
+        return { error: workspaceError(error) };
+      }
+      if (
         !commandCompleted &&
         narrativeAction &&
         ![401, 403, 404, 409].includes(error.status)
@@ -558,7 +576,6 @@ function RequestDetail({ repository, id, onSignIn }) {
       }
       setNarrativeAction(null);
       setRouting(false);
-      setState(null);
       if (error.status === 409) {
         try {
           await read(signal);
@@ -570,6 +587,13 @@ function RequestDetail({ repository, id, onSignIn }) {
           if (!signal.aborted) setState({ error: refreshError });
         }
       } else setState({ error });
+      if (management)
+        return {
+          error:
+            error.status === 409
+              ? "This request changed. Review the latest information before trying again."
+              : workspaceError(error),
+        };
     } finally {
       inFlight.current = false;
       if (!signal.aborted) setBusy(false);
@@ -603,157 +627,106 @@ function RequestDetail({ repository, id, onSignIn }) {
       )}
       {row && (
         <article className="request-detail-grid">
-          <div className="request-primary-column">
-            <ContentCard className="request-detail">
-              <header className="request-identity">
-                <IssueIcon icon={row.issueIcon} size="large" />
-                <div className="request-identity-copy">
-                  {row.categoryName && (
-                    <p className="request-eyebrow">{row.categoryName}</p>
-                  )}
-                  <h2
-                    className="request-issue-title"
-                    ref={heading}
-                    tabIndex="-1"
-                  >
-                    {row.issueName}
-                  </h2>
-                  <LocationDisplay value={row.serviceLocation} />
-                  <AudienceBadge value={row.audience} />
-                  <ReferenceDisplay value={row.referenceNumber} />
-                </div>
-                <div className="request-current-status">
-                  <Status value={row.status} />
-                  <span>Last updated</span>
-                  <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
-                </div>
-              </header>
-              <dl className="request-metadata">
-                {row.intakeChannel && (
-                  <div>
-                    <dt>Intake channel</dt>
-                    <dd>
-                      {
-                        {
-                          web: "Web",
-                          phone: "Phone",
-                          walk_in: "Walk-in",
-                          staff: "Staff",
-                          api: "API",
-                        }[row.intakeChannel]
-                      }
-                    </dd>
-                  </div>
-                )}
-                <div>
-                  <dt>
-                    <i className="bi bi-buildings" aria-hidden="true" />{" "}
-                    Department
-                  </dt>
-                  <dd>{row.departmentName}</dd>
-                </div>
-                <div>
-                  <dt>
-                    <i className="bi bi-people" aria-hidden="true" /> Division
-                  </dt>
-                  <dd>{row.divisionName || "Department-level"}</dd>
-                </div>
-                <div>
-                  <dt>
-                    <i className="bi bi-calendar3" aria-hidden="true" /> Created
-                  </dt>
-                  <dd>
-                    <time dateTime={row.createdAt}>{date(row.createdAt)}</time>
-                  </dd>
-                </div>
-                <div>
-                  <dt>
-                    <i className="bi bi-clock" aria-hidden="true" /> Updated
-                  </dt>
-                  <dd>
-                    <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
-                  </dd>
-                </div>
-              </dl>
-              <section className="request-description">
-                <SectionHeading icon="file-earmark-text">
-                  Description
-                </SectionHeading>
-                {row.description.length > 1200 ? (
-                  <>
-                    <p>{row.description.slice(0, 1200)}…</p>
-                    <details>
-                      <summary>Read full description</summary>
-                      <p>{row.description}</p>
-                    </details>
-                  </>
-                ) : (
-                  <p>{row.description}</p>
-                )}
-              </section>
-              <aside className="request-internal-notice">
-                <i className="bi bi-info-circle-fill" aria-hidden="true" />
-                <div>
-                  <strong>
-                    {row.audience === "public"
-                      ? "Public Request"
-                      : "Internal Request"}
-                  </strong>
-                  <p>
-                    {row.audience === "public"
-                      ? "Staff operational information is protected. Requester contact requires separate permission."
-                      : "This is an internal request. Requester contact requires separate permission."}
-                  </p>
-                </div>
-              </aside>
-              <RequestOwnership
-                repository={repository}
-                id={id}
-                row={row}
-                capabilities={capabilities}
-                busy={busy || Boolean(narrativeAction) || routing}
-                onMutate={mutate}
-                onAccessFailure={accessFailure}
-              />
-            </ContentCard>
-            <RequesterContact
-              canRead={row.canReadContact}
-              state={contactState}
-              onLoad={loadContact}
-            />
-            <InternalNotes
-              repository={repository}
-              id={id}
-              canRead={capabilities.canReadNotes}
-              canCreate={capabilities.canCreateNotes}
-              onAccessFailure={protectedContentAccessFailure}
-            />
-            {row.audience === "public" && (
-              <RequestCommunication
-                repository={repository}
-                id={id}
-                canRead={capabilities.canReadCommunications}
-                canCreate={capabilities.canCreateCommunication}
-                onAccessFailure={protectedContentAccessFailure}
-              />
-            )}
-            <ContentCard className="request-issue-details">
-              <SectionHeading icon="tag">Issue Details</SectionHeading>
-              <dl className="request-metadata">
-                <div>
-                  <dt>Issue</dt>
-                  <dd>{row.issueName}</dd>
-                </div>
+          <ContentCard className="request-detail">
+            <header className="request-identity">
+              <IssueIcon icon={row.issueIcon} size="large" />
+              <div className="request-identity-copy">
                 {row.categoryName && (
-                  <div>
-                    <dt>Service category</dt>
-                    <dd>{row.categoryName}</dd>
-                  </div>
+                  <p className="request-eyebrow">{row.categoryName}</p>
                 )}
-              </dl>
-            </ContentCard>
-          </div>
-          <div className="request-supporting-column">
+                <h2 className="request-issue-title" ref={heading} tabIndex="-1">
+                  {row.issueName}
+                </h2>
+                <LocationDisplay value={row.serviceLocation} />
+                <AudienceBadge value={row.audience} />
+                <ReferenceDisplay value={row.referenceNumber} />
+              </div>
+              <div className="request-current-status">
+                <Status value={row.status} />
+                <span>Last updated</span>
+                <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
+              </div>
+            </header>
+            <dl className="request-metadata">
+              {row.intakeChannel && (
+                <div>
+                  <dt>Intake channel</dt>
+                  <dd>
+                    {
+                      {
+                        web: "Web",
+                        phone: "Phone",
+                        walk_in: "Walk-in",
+                        staff: "Staff",
+                        api: "API",
+                      }[row.intakeChannel]
+                    }
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>
+                  <i className="bi bi-buildings" aria-hidden="true" />{" "}
+                  Department
+                </dt>
+                <dd>{row.departmentName}</dd>
+              </div>
+              <div>
+                <dt>
+                  <i className="bi bi-people" aria-hidden="true" /> Division
+                </dt>
+                <dd>{row.divisionName || "Department-level"}</dd>
+              </div>
+              <div>
+                <dt>
+                  <i className="bi bi-calendar3" aria-hidden="true" /> Created
+                </dt>
+                <dd>
+                  <time dateTime={row.createdAt}>{date(row.createdAt)}</time>
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  <i className="bi bi-clock" aria-hidden="true" /> Updated
+                </dt>
+                <dd>
+                  <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
+                </dd>
+              </div>
+            </dl>
+            <section className="request-description">
+              <SectionHeading icon="file-earmark-text">
+                Description
+              </SectionHeading>
+              {row.description.length > 1200 ? (
+                <>
+                  <p>{row.description.slice(0, 1200)}…</p>
+                  <details>
+                    <summary>Read full description</summary>
+                    <p>{row.description}</p>
+                  </details>
+                </>
+              ) : (
+                <p>{row.description}</p>
+              )}
+            </section>
+            <aside className="request-internal-notice">
+              <i className="bi bi-info-circle-fill" aria-hidden="true" />
+              <div>
+                <strong>
+                  {row.audience === "public"
+                    ? "Public Request"
+                    : "Internal Request"}
+                </strong>
+                <p>
+                  {row.audience === "public"
+                    ? "Staff operational information is protected. Requester contact requires separate permission."
+                    : "This is an internal request. Requester contact requires separate permission."}
+                </p>
+              </div>
+            </aside>
+          </ContentCard>
+          <div className="request-supporting-controls">
             <ContentCard className="request-actions">
               <SectionHeading icon="lightning-charge-fill">
                 Actions
@@ -901,13 +874,47 @@ function RequestDetail({ repository, id, onSignIn }) {
                 </>
               )}
             </ContentCard>
-            <RequestActivity
-              key={`${id}:${row.revision}`}
+            <RequestManagement
               repository={repository}
               id={id}
-              onAccessFailure={accessFailure}
+              row={row}
+              busy={busy || Boolean(narrativeAction) || routing}
+              onMutate={mutate}
+              onAccessFailure={protectedContentAccessFailure}
+              contactState={contactState}
+              loadContact={loadContact}
+              clearContact={clearContact}
             />
           </div>
+          <CollaborationPanel
+            key={id + ":" + row.audience}
+            repository={repository}
+            id={id}
+            audience={row.audience}
+            capabilities={capabilities}
+            onAccessFailure={protectedContentAccessFailure}
+          />
+          <ContentCard className="request-issue-details">
+            <SectionHeading icon="tag">Issue Details</SectionHeading>
+            <dl className="request-metadata">
+              <div>
+                <dt>Issue</dt>
+                <dd>{row.issueName}</dd>
+              </div>
+              {row.categoryName && (
+                <div>
+                  <dt>Service category</dt>
+                  <dd>{row.categoryName}</dd>
+                </div>
+              )}
+            </dl>
+          </ContentCard>
+          <ActivityPanel
+            repository={repository}
+            id={id}
+            revision={row.revision}
+            onAccessFailure={accessFailure}
+          />
         </article>
       )}
     </>

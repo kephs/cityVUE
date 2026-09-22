@@ -1,6 +1,6 @@
 import { activityPresentation } from "../../components/ui/presentation.js";
 import { StatusBadge } from "../../components/ui/RequestPresentation.jsx";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { statusLabels } from "./requestRepository.js";
 export const activityLabels = Object.fromEntries(
   Object.entries(activityPresentation).map(([type, meta]) => [
@@ -8,7 +8,15 @@ export const activityLabels = Object.fromEntries(
     meta.label,
   ]),
 );
-export default function RequestActivity({ repository, id, onAccessFailure }) {
+export default function RequestActivity({
+  repository,
+  id,
+  onAccessFailure,
+  preview = false,
+  embedded = false,
+}) {
+  const headingId = useId();
+  const pageSize = preview ? 5 : 25;
   const [page, setPage] = useState(1),
     [retry, setRetry] = useState(0),
     [state, setState] = useState(null);
@@ -23,7 +31,7 @@ export default function RequestActivity({ repository, id, onAccessFailure }) {
   useEffect(() => {
     const controller = new AbortController();
     setState(null);
-    repository.activity(id, page, controller.signal).then(
+    repository.activity(id, page, controller.signal, pageSize).then(
       (data) => {
         if (!controller.signal.aborted) setState({ data, page });
       },
@@ -34,16 +42,16 @@ export default function RequestActivity({ repository, id, onAccessFailure }) {
       },
     );
     return () => controller.abort();
-  }, [repository, id, page, retry, onAccessFailure]);
+  }, [repository, id, page, retry, onAccessFailure, pageSize]);
   const current = state?.page === page ? state : null;
   return (
     <section
-      className="request-activity ui-card"
-      aria-labelledby="request-activity-heading"
+      className={`request-activity${embedded ? "" : " ui-card"}${preview ? " request-activity-preview" : ""}`}
+      aria-labelledby={headingId}
     >
-      <h3 id="request-activity-heading" ref={heading} tabIndex="-1">
-        <i className="bi bi-clock-history" aria-hidden="true" /> Request
-        Activity
+      <h3 id={headingId} ref={heading} tabIndex="-1">
+        <i className="bi bi-clock-history" aria-hidden="true" />{" "}
+        {preview ? "Recent Activity" : "Request Activity"}
       </h3>
       <p className="text-body-secondary">Newest activity first</p>
       {!current && <p role="status">Loading activity…</p>}
@@ -88,7 +96,23 @@ export default function RequestActivity({ repository, id, onAccessFailure }) {
                       <StatusBadge value={event.toStatus} />
                     </p>
                   )}
-                  {event.type === "request_routed" && (
+                  {preview && event.type === "request_routed" && (
+                    <p>
+                      To {event.toDepartment}
+                      {event.toDivision ? ` / ${event.toDivision}` : ""}
+                    </p>
+                  )}
+                  {preview && (event.toTargetName || event.fromTargetName) && (
+                    <p>
+                      {event.toTargetName || event.fromTargetName} ·{" "}
+                      {
+                        { staff: "Staff", role: "Role", group: "Team" }[
+                          event.toTargetType || event.fromTargetType
+                        ]
+                      }
+                    </p>
+                  )}
+                  {!preview && event.type === "request_routed" && (
                     <dl>
                       <dt>From</dt>
                       <dd>
@@ -102,7 +126,7 @@ export default function RequestActivity({ repository, id, onAccessFailure }) {
                       </dd>
                     </dl>
                   )}
-                  {(event.fromTargetName || event.toTargetName) && (
+                  {!preview && (event.fromTargetName || event.toTargetName) && (
                     <dl className="activity-targets">
                       {event.fromTargetName && (
                         <div>
@@ -162,7 +186,7 @@ export default function RequestActivity({ repository, id, onAccessFailure }) {
                       }[event.intakeChannel] || "Recorded intake"}
                     </p>
                   )}
-                  {event.narrative && (
+                  {!preview && event.narrative && (
                     <div className="activity-narrative-card">
                       <strong>
                         {event.type === "request_closed"
@@ -185,29 +209,31 @@ export default function RequestActivity({ repository, id, onAccessFailure }) {
               </li>
             ))}
           </ol>
-          <nav aria-label="Activity pages" className="request-pagination">
-            <button
-              className="btn btn-secondary"
-              disabled={!current.data.hasPreviousPage}
-              onClick={() => {
-                focusAfterPage.current = true;
-                setPage((n) => n - 1);
-              }}
-            >
-              Newer activity
-            </button>
-            <span>Page {page}</span>
-            <button
-              className="btn btn-secondary"
-              disabled={!current.data.hasNextPage}
-              onClick={() => {
-                focusAfterPage.current = true;
-                setPage((n) => n + 1);
-              }}
-            >
-              Older activity
-            </button>
-          </nav>
+          {!preview && (
+            <nav aria-label="Activity pages" className="request-pagination">
+              <button
+                className="btn btn-secondary"
+                disabled={!current.data.hasPreviousPage}
+                onClick={() => {
+                  focusAfterPage.current = true;
+                  setPage((n) => n - 1);
+                }}
+              >
+                Newer activity
+              </button>
+              <span>Page {page}</span>
+              <button
+                className="btn btn-secondary"
+                disabled={!current.data.hasNextPage}
+                onClick={() => {
+                  focusAfterPage.current = true;
+                  setPage((n) => n + 1);
+                }}
+              >
+                Older activity
+              </button>
+            </nav>
+          )}
         </>
       )}
     </section>

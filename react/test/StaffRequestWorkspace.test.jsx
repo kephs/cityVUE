@@ -22,6 +22,31 @@ vi.mock(
     createStaffRequestRepository: vi.fn(),
   }),
 );
+async function manage(name) {
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Manage " + name.toLowerCase() }),
+  );
+  return screen.findByRole("dialog", { name });
+}
+function closeDialog() {
+  fireEvent.click(
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Close",
+      exact: true,
+    }),
+  );
+}
+async function selectCommunication() {
+  fireEvent.click(
+    await screen.findByRole("tab", { name: "Requester Communication" }),
+  );
+}
+async function fullActivity() {
+  fireEvent.click(
+    await screen.findByRole("button", { name: "View full activity" }),
+  );
+  return screen.findByRole("dialog", { name: "Full Request Activity" });
+}
 const id = "10000000-0000-4000-8000-000000000001",
   other = "10000000-0000-4000-8000-000000000002",
   dept = "20000000-0000-4000-8000-000000000001",
@@ -48,7 +73,7 @@ test.each([
       },
     });
     show(`/staff/requests/${id}`);
-    await screen.findByRole("heading", { name: "Requester Communication" });
+    await selectCommunication();
     if (communicationRead)
       await screen.findByText("F042 fictional correspondence");
     else expect(repository.communications).not.toHaveBeenCalled();
@@ -59,6 +84,9 @@ test.each([
     );
     expect(Boolean(screen.queryByText("F041 fictional collaboration"))).toBe(
       noteRead,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "View requester contact" }),
     );
     expect(
       screen.getByText(
@@ -112,6 +140,7 @@ test("F042 PUBLIC to INTERNAL navigation immediately clears correspondence and a
       </Routes>
     </MemoryRouter>,
   );
+  await selectCommunication();
   await screen.findByText("F042 fictional correspondence");
   const signal = repository.communications.mock.calls[0][2];
   fireEvent.change(screen.getByLabelText("Message"), {
@@ -152,6 +181,7 @@ test("F042 communication read revocation refreshes capabilities without hiding i
       },
     });
   show(`/staff/requests/${id}`);
+  await selectCommunication();
   await screen.findByText("F042 fictional correspondence");
   await screen.findByText("F041 fictional collaboration");
   repository.communications.mockRejectedValue({ status: 403 });
@@ -289,13 +319,16 @@ test.each(["public", "internal"])(
     const { container } = show(`/staff/requests/${id}`);
     await screen.findByText("F041 fictional collaboration");
     expect(
-      screen.getByRole("heading", { name: "Internal Notes" }),
+      screen.getByRole("tab", { name: "Internal Notes" }),
     ).toBeInTheDocument();
     expect(container.querySelector(".request-activity")).not.toHaveTextContent(
       "F041 fictional collaboration",
     );
-    expect(container.querySelector(".request-contact")).not.toHaveTextContent(
-      "F041 fictional collaboration",
+    expect(
+      container.querySelector(".request-management"),
+    ).not.toHaveTextContent("F041 fictional collaboration");
+    fireEvent.click(
+      screen.getByRole("button", { name: "View requester contact" }),
     );
     expect(
       screen.getByText(
@@ -322,6 +355,7 @@ test("F041 Notes permission denial refreshes capabilities while preserving paren
     screen.getByRole("button", { name: "View requester contact" }),
   );
   await screen.findByText("alex@example.com");
+  closeDialog();
   repository.notes.mockRejectedValue({ status: 403 });
   repository.detail.mockResolvedValue({
     ...row,
@@ -337,6 +371,10 @@ test("F041 Notes permission denial refreshes capabilities while preserving paren
   expect(
     screen.getByRole("heading", { name: row.issueName }),
   ).toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "View requester contact" }),
+  );
+  await screen.findByText("alex@example.com");
   expect(screen.getByText("alex@example.com")).toBeInTheDocument();
   expect(
     screen.queryByText("F041 fictional collaboration"),
@@ -357,6 +395,7 @@ test.each([401, 404])(
       screen.getByRole("button", { name: "View requester contact" }),
     );
     await screen.findByText("alex@example.com");
+    closeDialog();
     repository.notes.mockRejectedValue({ status });
     fireEvent.click(screen.getByRole("button", { name: "Refresh notes" }));
     await waitFor(() =>
@@ -403,13 +442,18 @@ test("F041 sign-out removes Notes and in-memory draft from the real workspace", 
 
 test("F039 protected detail never fetches or hides contact values in DOM", async () => {
   show(`/staff/requests/${id}`);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "View requester contact" }),
+  );
   await screen.findByText(
     "You don't have permission to view requester contact information.",
   );
   expect(repository.contact).not.toHaveBeenCalled();
   expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "View requester contact" }),
+    within(screen.getByRole("dialog")).queryByRole("button", {
+      name: "View requester contact",
+    }),
   ).not.toBeInTheDocument();
 });
 
@@ -445,10 +489,12 @@ test("F039 explicit view is single-flight in Strict Mode and workflow refresh do
     resolve({ name: "Alex Example", email: "alex@example.com" }),
   );
   expect(screen.getByText("alex@example.com")).toBeInTheDocument();
+  closeDialog();
+  expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Start Work" }));
   await screen.findByText("Request moved to Open.");
   expect(repository.contact).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("alex@example.com")).toBeInTheDocument();
+  expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
 });
 
 test.each([403, 401, 404, 500])(
@@ -587,7 +633,7 @@ test("F038 detail is Issue-first with configured icon and authorized location", 
     "Watchers",
     "Issue Details",
     "Actions",
-    "Request Activity",
+    "Recent Activity",
   ])
     expect(
       await screen.findByRole("heading", { name: title }),
@@ -1024,6 +1070,13 @@ test("activity loading, plain-text narrative, safe actor, routing and older page
   ).toBeInTheDocument();
   expect(document.querySelector("script")).toBeNull();
   repository.activity.mockResolvedValue({
+    items: [event("placed_on_hold", "<script>alert(1)</script>")],
+    page: 1,
+    hasNextPage: true,
+  });
+  await fullActivity();
+  await screen.findByText("<script>alert(1)</script>");
+  repository.activity.mockResolvedValue({
     items: [
       {
         ...event("request_routed"),
@@ -1044,6 +1097,7 @@ test("activity loading, plain-text narrative, safe actor, routing and older page
     id,
     2,
     expect.any(AbortSignal),
+    25,
   );
 });
 test("activity-specific failure preserves detail and retry, authorization loss clears it", async () => {
@@ -1077,6 +1131,8 @@ test("empty history and long narrative disclosure are safe", async () => {
   show(`/staff/requests/${id}`);
   await screen.findByText("No activity has been recorded for this request.");
   fireEvent.click(screen.getByRole("button", { name: "Start Work" }));
+  await screen.findByText("Request moved to In Progress.");
+  await fullActivity();
   await screen.findByText("Read narrative");
   expect(document.querySelector(".activity-narrative")).toHaveTextContent(
     "Fictional resolution",
@@ -1138,6 +1194,10 @@ test.each([
     );
     fireEvent.change(input, { target: { value: "Fictional new narrative" } });
     fireEvent.submit(form);
+    await screen.findByText(
+      `Request moved to ${next === "on_hold" ? "On Hold" : next === "closed" ? "Closed" : "Open"}.`,
+    );
+    await fullActivity();
     await screen.findByText("Fictional new narrative", {
       selector: ".activity-narrative",
     });
@@ -1152,7 +1212,7 @@ test.each([
       },
       expect.any(AbortSignal),
     );
-    expect(repository.activity).toHaveBeenCalledTimes(2);
+    expect(repository.activity).toHaveBeenCalledTimes(3);
   },
 );
 test("narrative cancel and Escape restore focus without mutation", async () => {
@@ -1268,6 +1328,7 @@ test.each(["staff", "role", "group"])(
     expect(
       await screen.findByRole("heading", { name: "Assignment" }),
     ).toBeInTheDocument();
+    await manage("Watchers");
     expect(
       await screen.findByRole("button", {
         name: "Remove watcher: Fictional <script>target</script>",
@@ -1290,6 +1351,7 @@ test.each(["staff", "role", "group"])(
     };
     repository.targets.mockResolvedValue({ items: [targetValue] });
     show(`/staff/requests/${id}`);
+    await manage("Assignment");
     await user.click(
       await screen.findByRole("button", { name: "Assign Request" }),
     );
@@ -1322,6 +1384,7 @@ test.each(["staff", "role", "group"])(
 test("F037 picker search, no-results, errors, keyboard cancel and focus return", async () => {
   const user = userEvent.setup();
   show(`/staff/requests/${id}`);
+  await manage("Assignment");
   const trigger = await screen.findByRole("button", { name: "Assign Request" });
   await user.click(trigger);
   expect(screen.getByLabelText("Target type")).toHaveFocus();
@@ -1369,6 +1432,7 @@ test("F037 read-only users can self-watch but cannot manage other targets", asyn
   });
   const user = userEvent.setup();
   show(`/staff/requests/${id}`);
+  await manage("Watchers");
   const watch = await screen.findByRole("button", {
     name: "Watch this request",
   });
@@ -1412,6 +1476,7 @@ test("F037 add/remove watchers refreshes from API and preserves separate assignm
     };
   repository.targets.mockResolvedValue({ items: [targetValue] });
   show(`/staff/requests/${id}`);
+  await manage("Watchers");
   await user.click(await screen.findByRole("button", { name: "Add Watcher" }));
   await user.selectOptions(screen.getByLabelText("Target type"), "role");
   await user.selectOptions(
@@ -1453,6 +1518,7 @@ test("F037 unassign and duplicate watcher conflict reload authoritative state", 
     assignment: { type: "group", id: other, displayName: "Fictional team" },
   });
   show(`/staff/requests/${id}`);
+  await manage("Assignment");
   await user.click(
     await screen.findByRole("button", { name: "Unassign Request" }),
   );
@@ -1463,6 +1529,9 @@ test("F037 unassign and duplicate watcher conflict reload authoritative state", 
       expect.anything(),
     ),
   );
+  await screen.findByText("Request unassigned.");
+  closeDialog();
+  await manage("Watchers");
   repository.watchSelf.mockRejectedValue({ status: 409 });
   await user.click(
     await screen.findByRole("button", { name: "Watch this request" }),
@@ -1482,6 +1551,7 @@ test("F037 pending mutation prevents rapid duplicate commands", async () => {
       }),
   );
   show(`/staff/requests/${id}`);
+  await manage("Watchers");
   const button = await screen.findByRole("button", {
     name: "Watch this request",
   });
@@ -1496,8 +1566,15 @@ test.each([401, 403, 404])(
   "F037 watcher authorization failure %s clears protected detail",
   async (status) => {
     repository.watchers.mockRejectedValue({ status });
+    if (status === 403)
+      repository.detail
+        .mockResolvedValueOnce(row)
+        .mockRejectedValue({ status });
     show(`/staff/requests/${id}`);
-    await screen.findByRole("alert");
+    await manage("Watchers");
+    await waitFor(() =>
+      expect(screen.queryByText(row.description)).not.toBeInTheDocument(),
+    );
     expect(screen.queryByText(row.description)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Assignment" }),
@@ -1633,6 +1710,7 @@ test("F040 PUBLIC detail uses shared hierarchy and on-demand PUBLIC contact; per
   expect(
     screen.getByRole("button", { name: "Close Request" }),
   ).toBeInTheDocument();
+  await manage("Assignment");
   expect(
     screen.getByRole("button", { name: "Assign Request" }),
   ).toBeInTheDocument();
@@ -1694,9 +1772,499 @@ test("F040 PUBLIC-to-INTERNAL navigation clears contact, ownership and history b
   ).not.toBeInTheDocument();
   await act(async () => resolveNext({ ...row, serviceRequestId: other }));
   await screen.findByText("Internal request");
+  fireEvent.click(
+    screen.getByRole("button", { name: "View requester contact" }),
+  );
   expect(
     screen.getByText(
       "You don't have permission to view requester contact information.",
     ),
   ).toBeInTheDocument();
+});
+
+const f043Row = () => ({
+  ...row,
+  audience: "public",
+  canReadContact: true,
+  capabilities: {
+    ...row.capabilities,
+    canReadNotes: true,
+    canCreateNotes: true,
+    canReadCommunications: true,
+    canCreateCommunication: true,
+  },
+});
+async function f043Show() {
+  repository.detail.mockResolvedValue(f043Row());
+  const view = show(`/staff/requests/${id}`);
+  await screen.findByText("F041 fictional collaboration");
+  return view;
+}
+
+test("F043 initial detail requests only Notes and five recent events; management and other history are lazy", async () => {
+  await f043Show();
+  expect(repository.notes).toHaveBeenCalledTimes(1);
+  expect(repository.activity).toHaveBeenCalledWith(
+    id,
+    1,
+    expect.any(AbortSignal),
+    5,
+  );
+  for (const key of ["contact", "communications", "watchers", "targets"])
+    expect(repository[key]).not.toHaveBeenCalled();
+  await manage("Assignment");
+  expect(repository.targets).not.toHaveBeenCalled();
+  expect(repository.watchers).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Assign Request" }));
+  await screen.findByText("No eligible targets found.");
+  expect(repository.targets).toHaveBeenLastCalledWith(
+    id,
+    "staff",
+    "",
+    expect.any(AbortSignal),
+    "assignment",
+  );
+  closeDialog();
+  await manage("Watchers");
+  await screen.findByText("No watchers");
+  expect(repository.watchers).toHaveBeenCalledTimes(1);
+  expect(repository.targets).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "Add Watcher" }));
+  await screen.findByText("No eligible targets found.");
+  expect(repository.targets).toHaveBeenLastCalledWith(
+    id,
+    "staff",
+    "",
+    expect.any(AbortSignal),
+    "watchers",
+  );
+  closeDialog();
+  await selectCommunication();
+  await screen.findByText("F042 fictional correspondence");
+  expect(repository.communications).toHaveBeenCalledTimes(1);
+  await fullActivity();
+  await waitFor(() =>
+    expect(repository.activity).toHaveBeenLastCalledWith(
+      id,
+      1,
+      expect.any(AbortSignal),
+      25,
+    ),
+  );
+  expect(repository.activity).toHaveBeenCalledTimes(2);
+});
+
+test("F043 Contact close aborts a late response; reopening refetches once and restores focus", async () => {
+  const user = userEvent.setup();
+  await f043Show();
+  let finish;
+  repository.contact.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const trigger = screen.getByRole("button", {
+    name: "View requester contact",
+  });
+  await user.click(trigger);
+  const dialog = screen.getByRole("dialog", { name: "Requester Contact" });
+  expect(within(dialog).getByRole("button", { name: "Close" })).toHaveFocus();
+  const signal = repository.contact.mock.calls[0][1];
+  await user.click(within(dialog).getByRole("button", { name: "Close" }));
+  expect(signal.aborted).toBe(true);
+  expect(trigger).toHaveFocus();
+  await act(async () =>
+    finish({ name: "Late fictional contact", email: "late@example.com" }),
+  );
+  expect(screen.queryByText("late@example.com")).not.toBeInTheDocument();
+  await user.click(trigger);
+  await screen.findByText("alex@example.com");
+  expect(repository.contact).toHaveBeenCalledTimes(2);
+  closeDialog();
+  expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
+  await selectCommunication();
+  expect(repository.contact).toHaveBeenCalledTimes(2);
+});
+
+test("F043 Contact authorized empty state reveals presence only inside the explicit dialog", async () => {
+  repository.contact.mockResolvedValue({ name: null, email: null });
+  await f043Show();
+  expect(
+    screen.queryByText("No contact information was provided."),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "View requester contact" }),
+  );
+  await screen.findByText("No contact information was provided.");
+  closeDialog();
+  expect(
+    screen.queryByText("No contact information was provided."),
+  ).not.toBeInTheDocument();
+});
+
+test.each([
+  "Assignment",
+  "Watchers",
+  "Requester Contact",
+  "Full Request Activity",
+])(
+  "F043 %s dialog is named, closes on cancel and returns focus",
+  async (name) => {
+    const user = userEvent.setup();
+    await f043Show();
+    const trigger = screen.getByRole("button", {
+      name: {
+        Assignment: "Manage assignment",
+        Watchers: "Manage watchers",
+        "Requester Contact": "View requester contact",
+        "Full Request Activity": "View full activity",
+      }[name],
+    });
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog", { name });
+    expect(dialog).toHaveAttribute("open");
+    expect(
+      within(dialog).getByRole("button", { name: "Close", exact: true }),
+    ).toHaveFocus();
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  },
+);
+
+test("F043 tabs use keyboard selection and retain separate drafts without refetch or storage", async () => {
+  const storage = vi.spyOn(Storage.prototype, "setItem");
+  await f043Show();
+  const notes = screen.getByRole("tab", { name: "Internal Notes" });
+  const messages = screen.getByRole("tab", { name: "Requester Communication" });
+  expect(notes).toHaveAttribute("aria-selected", "true");
+  fireEvent.change(screen.getByLabelText("Internal Note"), {
+    target: { value: "Fictional unsent note\nline two" },
+  });
+  fireEvent.keyDown(notes, { key: "ArrowRight" });
+  expect(messages).toHaveFocus();
+  expect(messages).toHaveAttribute("aria-selected", "true");
+  expect(
+    screen.queryByRole("button", { name: "Add Note" }),
+  ).not.toBeInTheDocument();
+  await screen.findByText("F042 fictional correspondence");
+  fireEvent.change(screen.getByLabelText("Message"), {
+    target: { value: "Fictional unsent message\nline two" },
+  });
+  fireEvent.keyDown(messages, { key: "Home" });
+  expect(notes).toHaveFocus();
+  expect(screen.getByLabelText("Internal Note")).toHaveValue(
+    "Fictional unsent note\nline two",
+  );
+  expect(
+    screen.queryByRole("button", { name: "Add Message" }),
+  ).not.toBeInTheDocument();
+  fireEvent.keyDown(notes, { key: "End" });
+  expect(screen.getByLabelText("Message")).toHaveValue(
+    "Fictional unsent message\nline two",
+  );
+  fireEvent.keyDown(messages, { key: "ArrowLeft" });
+  expect(notes).toHaveFocus();
+  expect(repository.notes).toHaveBeenCalledTimes(1);
+  expect(repository.communications).toHaveBeenCalledTimes(1);
+  expect(storage).not.toHaveBeenCalled();
+  expect(document.title).not.toMatch(/unsent/);
+  expect(window.location.href).not.toMatch(/unsent/);
+  storage.mockRestore();
+});
+
+test.each(["note", "message"])(
+  "F043 successful %s creation clears only its own draft; failure retains it",
+  async (kind) => {
+    await f043Show();
+    fireEvent.change(screen.getByLabelText("Internal Note"), {
+      target: { value: "Fictional note draft" },
+    });
+    await selectCommunication();
+    await screen.findByText("F042 fictional correspondence");
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "Fictional message draft" },
+    });
+    const isNote = kind === "note",
+      method = isNote ? "createNote" : "createCommunication";
+    if (isNote)
+      fireEvent.click(screen.getByRole("tab", { name: "Internal Notes" }));
+    repository[method]
+      .mockRejectedValueOnce({ status: 500 })
+      .mockResolvedValue({
+        id: dept,
+        body: "Authoritative fictional child",
+        author: { displayName: "Authoritative staff" },
+        createdAt: "2026-09-22T01:00:00Z",
+        direction: "outbound",
+        channel: "portal",
+        deliveryState: "recorded",
+      });
+    const label = isNote ? "Internal Note" : "Message",
+      button = isNote ? "Add Note" : "Add Message";
+    fireEvent.click(screen.getByRole("button", { name: button }));
+    await screen.findByText(/Your draft is retained/);
+    expect(screen.getByLabelText(label)).toHaveValue(`Fictional ${kind} draft`);
+    fireEvent.click(screen.getByRole("button", { name: button }));
+    await screen.findByText("Authoritative fictional child");
+    expect(screen.getByLabelText(label)).toHaveValue("");
+    fireEvent.click(
+      screen.getByRole("tab", {
+        name: isNote ? "Requester Communication" : "Internal Notes",
+      }),
+    );
+    expect(
+      screen.getByLabelText(isNote ? "Message" : "Internal Note"),
+    ).toHaveValue(`Fictional ${isNote ? "message" : "note"} draft`);
+    expect(repository.activity).toHaveBeenCalledTimes(1);
+    expect(repository.detail).toHaveBeenCalledTimes(1);
+  },
+);
+
+test("F043 request navigation immediately clears both visited streams and drafts and aborts both", async () => {
+  await f043Show();
+  fireEvent.change(screen.getByLabelText("Internal Note"), {
+    target: { value: "Unsent note A" },
+  });
+  await selectCommunication();
+  await screen.findByText("F042 fictional correspondence");
+  fireEvent.change(screen.getByLabelText("Message"), {
+    target: { value: "Unsent message A" },
+  });
+  const noteSignal = repository.notes.mock.calls[0][2],
+    messageSignal = repository.communications.mock.calls[0][2];
+  repository.detail.mockReturnValue(new Promise(() => {}));
+  fireEvent.click(screen.getByRole("button", { name: "Other request" }));
+  for (const text of ["Unsent note A", "Unsent message A"])
+    expect(screen.queryByDisplayValue(text)).not.toBeInTheDocument();
+  for (const text of [
+    "F041 fictional collaboration",
+    "F042 fictional correspondence",
+  ])
+    expect(screen.queryByText(text)).not.toBeInTheDocument();
+  expect(noteSignal.aborted && messageSignal.aborted).toBe(true);
+});
+
+test("F043 sign-out removes selected and hidden collaboration streams and drafts", async () => {
+  repository.detail.mockResolvedValue(f043Row());
+  const view = show(`/staff/requests/${id}`, true);
+  await screen.findByText("F041 fictional collaboration");
+  fireEvent.change(screen.getByLabelText("Internal Note"), {
+    target: { value: "Unsent hidden note" },
+  });
+  await selectCommunication();
+  await screen.findByText("F042 fictional correspondence");
+  fireEvent.change(screen.getByLabelText("Message"), {
+    target: { value: "Unsent visible message" },
+  });
+  useAuth.mockReturnValue({
+    enabled: true,
+    isAuthenticated: false,
+    signIn: vi.fn(),
+  });
+  view.rerender(
+    <MemoryRouter>
+      <StaffRequestsPage />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.queryByText("F041 fictional collaboration"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("F042 fictional correspondence"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("textbox", { hidden: true }),
+  ).not.toBeInTheDocument();
+});
+
+test("F043 authoritative revocation clears hidden Notes without refetching an inactive stream", async () => {
+  await f043Show();
+  fireEvent.change(screen.getByLabelText("Internal Note"), {
+    target: { value: "Unsent protected draft" },
+  });
+  await selectCommunication();
+  await screen.findByText("F042 fictional correspondence");
+  repository.detail.mockResolvedValue({
+    ...f043Row(),
+    capabilities: {
+      ...f043Row().capabilities,
+      canReadNotes: false,
+      canCreateNotes: false,
+      canReadCommunications: false,
+      canCreateCommunication: false,
+    },
+  });
+  repository.communications.mockRejectedValue({ status: 403 });
+  fireEvent.click(screen.getByRole("button", { name: "Refresh messages" }));
+  await screen.findByText("You don't have permission to view messages.");
+  await waitFor(() =>
+    expect(
+      screen.queryByText("F041 fictional collaboration"),
+    ).not.toBeInTheDocument(),
+  );
+  expect(
+    screen.queryByDisplayValue("Unsent protected draft"),
+  ).not.toBeInTheDocument();
+  expect(repository.notes).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("tab", { name: "Internal Notes" }));
+  expect(
+    screen.getByText("You don't have permission to view internal notes."),
+  ).toBeVisible();
+  expect(repository.notes).toHaveBeenCalledTimes(1);
+});
+
+test("F043 hidden stream capability change clears its draft and defers authorized reload until selected", async () => {
+  await f043Show();
+  fireEvent.change(screen.getByLabelText("Internal Note"), {
+    target: { value: "Unsent draft before create revocation" },
+  });
+  await selectCommunication();
+  await screen.findByText("F042 fictional correspondence");
+  repository.detail.mockResolvedValue({
+    ...f043Row(),
+    capabilities: {
+      ...f043Row().capabilities,
+      canCreateNotes: false,
+      canCreateCommunication: false,
+    },
+  });
+  repository.createCommunication.mockRejectedValue({ status: 403 });
+  fireEvent.change(screen.getByLabelText("Message"), {
+    target: { value: "Fictional denied message" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add Message" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "Add Message" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(repository.notes).toHaveBeenCalledTimes(1);
+  expect(
+    screen.queryByDisplayValue("Unsent draft before create revocation"),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "Internal Notes" }));
+  await screen.findByText("F041 fictional collaboration");
+  expect(repository.notes).toHaveBeenCalledTimes(2);
+  expect(
+    screen.queryByRole("button", { name: "Add Note" }),
+  ).not.toBeInTheDocument();
+});
+
+test.each(["assignment", "watchers"])(
+  "F043 %s discovery failure stays local and retries without losing parent or drafts",
+  async (kind) => {
+    await f043Show();
+    fireEvent.change(screen.getByLabelText("Internal Note"), {
+      target: { value: "Fictional retained draft" },
+    });
+    const method = kind === "assignment" ? "targets" : "watchers";
+    repository[method].mockRejectedValueOnce({ status: 500 });
+    await manage(kind === "assignment" ? "Assignment" : "Watchers");
+    if (kind === "assignment")
+      fireEvent.click(screen.getByRole("button", { name: "Assign Request" }));
+    await screen.findByRole("alert");
+    expect(
+      screen.getByRole("heading", { name: row.issueName }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: kind === "assignment" ? "Search targets" : "Retry watchers",
+      }),
+    );
+    await screen.findByText(
+      kind === "assignment" ? "No eligible targets found." : "No watchers",
+    );
+    closeDialog();
+    expect(screen.getByLabelText("Internal Note")).toHaveValue(
+      "Fictional retained draft",
+    );
+    expect(repository.notes).toHaveBeenCalledTimes(1);
+  },
+);
+
+test("F043 assignment permission loss clears picker while preserving independently readable parent", async () => {
+  await f043Show();
+  repository.targets.mockResolvedValue({
+    items: [{ id: other, type: "staff", displayName: "Fictional assignee" }],
+  });
+  await manage("Assignment");
+  fireEvent.click(screen.getByRole("button", { name: "Assign Request" }));
+  await screen.findByLabelText("Eligible target");
+  fireEvent.change(screen.getByLabelText("Eligible target"), {
+    target: { value: other },
+  });
+  repository.assign.mockRejectedValue({ status: 403 });
+  repository.detail.mockResolvedValue({
+    ...f043Row(),
+    capabilities: { ...f043Row().capabilities, canAssign: false },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Confirm assignment" }));
+  await screen.findByRole("alert");
+  await waitFor(() =>
+    expect(screen.queryByLabelText("Eligible target")).not.toBeInTheDocument(),
+  );
+  expect(
+    screen.getByRole("heading", { name: row.issueName }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("dialog", { name: "Assignment" }),
+  ).toBeInTheDocument();
+});
+
+test.each([false, true])(
+  "F043 ownership refresh (conflict=%s) preserves both collaboration drafts and does not refetch streams",
+  async (conflict) => {
+    await f043Show();
+    fireEvent.change(screen.getByLabelText("Internal Note"), {
+      target: { value: "Note draft remains" },
+    });
+    await selectCommunication();
+    await screen.findByText("F042 fictional correspondence");
+    fireEvent.change(screen.getByLabelText("Message"), {
+      target: { value: "Message draft remains" },
+    });
+    await manage("Watchers");
+    await screen.findByText("No watchers");
+    repository.detail.mockResolvedValue({ ...f043Row(), revision: 2 });
+    if (conflict) repository.watchSelf.mockRejectedValue({ status: 409 });
+    fireEvent.click(screen.getByRole("button", { name: "Watch this request" }));
+    await screen.findByText(
+      conflict
+        ? /latest information has been loaded/
+        : "You are now watching this request.",
+    );
+    closeDialog();
+    expect(screen.getByLabelText("Message")).toHaveValue(
+      "Message draft remains",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Internal Notes" }));
+    expect(screen.getByLabelText("Internal Note")).toHaveValue(
+      "Note draft remains",
+    );
+    expect(repository.notes).toHaveBeenCalledTimes(1);
+    expect(repository.communications).toHaveBeenCalledTimes(1);
+    expect(repository.activity).toHaveBeenCalledTimes(2);
+    expect(repository.watchSelf).toHaveBeenCalledTimes(1);
+  },
+);
+
+test("F043 full Activity failure leaves preview and parent intact and can retry", async () => {
+  await f043Show();
+  repository.activity.mockRejectedValueOnce({ status: 500 });
+  await fullActivity();
+  await screen.findByText("Activity could not be loaded.");
+  expect(
+    screen.getByRole("heading", { name: row.issueName }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Recent Activity" }),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry activity" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByText("Activity could not be loaded."),
+    ).not.toBeInTheDocument(),
+  );
+  expect(repository.activity).toHaveBeenCalledTimes(3);
 });

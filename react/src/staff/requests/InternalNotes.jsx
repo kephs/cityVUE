@@ -28,7 +28,15 @@ export default function InternalNotes(props) {
   );
 }
 
-function NotesStream({ repository, id, canRead, canCreate, onAccessFailure }) {
+function NotesStream({
+  repository,
+  id,
+  canRead,
+  canCreate,
+  onAccessFailure,
+  embedded = false,
+  active = true,
+}) {
   const [items, setItems] = useState([]),
     [cursor, setCursor] = useState(null),
     [loading, setLoading] = useState(Boolean(canRead)),
@@ -45,6 +53,10 @@ function NotesStream({ repository, id, canRead, canCreate, onAccessFailure }) {
     submission = useRef(null),
     textarea = useRef(null),
     firstNewNote = useRef(null);
+  const started = useRef(false);
+  const visible = useRef(active);
+  visible.current = active;
+  const Surface = embedded ? "div" : ContentCard;
   const accessFailure = useRef(onAccessFailure);
   accessFailure.current = onAccessFailure;
   async function failure(problem, signal, creating = false) {
@@ -102,18 +114,24 @@ function NotesStream({ repository, id, canRead, canCreate, onAccessFailure }) {
     const controller = new AbortController();
     lifecycle.current = controller;
     reading.current = false;
-    if (canRead) void readPage(null, controller.signal);
+    started.current = false;
     return () => controller.abort();
   }, [repository, id, canRead]);
   useEffect(() => {
-    if (firstNewNote.current) {
+    if (active && canRead && !started.current) {
+      started.current = true;
+      void readPage(null, lifecycle.current.signal);
+    }
+  }, [active, repository, id, canRead]);
+  useEffect(() => {
+    if (visible.current && firstNewNote.current) {
       document.getElementById(`note-${firstNewNote.current}`)?.focus();
       firstNewNote.current = null;
     }
   }, [items]);
   useEffect(() => {
     if (!pending && notice === "Internal note added.")
-      textarea.current?.focus();
+      if (visible.current) textarea.current?.focus();
   }, [pending, notice]);
   async function add(event) {
     event.preventDefault();
@@ -129,7 +147,7 @@ function NotesStream({ repository, id, canRead, canCreate, onAccessFailure }) {
     const validation = bodyError(draft);
     if (validation) {
       setError(validation);
-      textarea.current?.focus();
+      if (visible.current) textarea.current?.focus();
       return;
     }
     submitting.current = true;
@@ -156,7 +174,7 @@ function NotesStream({ repository, id, canRead, canCreate, onAccessFailure }) {
       setDraft("");
       submission.current = null;
       setNotice("Internal note added.");
-      textarea.current?.focus();
+      if (visible.current) textarea.current?.focus();
     } catch (problem) {
       await failure(problem, signal, true);
     } finally {
@@ -167,8 +185,10 @@ function NotesStream({ repository, id, canRead, canCreate, onAccessFailure }) {
     }
   }
   return (
-    <ContentCard className="request-notes">
-      <SectionHeading icon="chat-left-text">Internal Notes</SectionHeading>
+    <Surface className="request-notes">
+      {!embedded && (
+        <SectionHeading icon="chat-left-text">Internal Notes</SectionHeading>
+      )}
       {!canRead || denied ? (
         <>
           <p>
@@ -267,6 +287,6 @@ function NotesStream({ repository, id, canRead, canCreate, onAccessFailure }) {
           )}
         </>
       )}
-    </ContentCard>
+    </Surface>
   );
 }

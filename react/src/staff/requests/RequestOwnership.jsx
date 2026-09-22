@@ -54,8 +54,8 @@ function TargetPicker({
         },
         (error) => {
           if (controller.signal.aborted) return;
+          setState({ error });
           if ([401, 403, 404].includes(error.status)) onAccessFailure(error);
-          else setState({ error });
         },
       );
     return () => controller.abort();
@@ -176,6 +176,7 @@ export default function RequestOwnership({
   busy,
   onMutate,
   onAccessFailure,
+  section = "all",
 }) {
   const [watchers, setWatchers] = useState(null),
     [retry, setRetry] = useState(0),
@@ -185,6 +186,14 @@ export default function RequestOwnership({
     setMode(null);
   }, [row.revision]);
   useEffect(() => {
+    if (
+      (mode === "assign" && !capabilities.canAssign) ||
+      (mode === "watcher" && !capabilities.canManageWatchers)
+    )
+      setMode(null);
+  }, [mode, capabilities.canAssign, capabilities.canManageWatchers]);
+  useEffect(() => {
+    if (section === "assignment") return;
     const controller = new AbortController();
     setWatchers(null);
     repository.watchers(id, controller.signal).then(
@@ -193,12 +202,12 @@ export default function RequestOwnership({
       },
       (error) => {
         if (controller.signal.aborted) return;
+        setWatchers({ error });
         if ([401, 403, 404].includes(error.status)) onAccessFailure(error);
-        else setWatchers({ error });
       },
     );
     return () => controller.abort();
-  }, [repository, id, row.revision, retry, onAccessFailure]);
+  }, [repository, id, row.revision, retry, onAccessFailure, section]);
   const cancel = () => {
     setMode(null);
     requestAnimationFrame(() => trigger.current?.focus());
@@ -209,108 +218,112 @@ export default function RequestOwnership({
   };
   return (
     <div className="request-ownership">
-      <section aria-labelledby="assignment-heading">
-        <h3 id="assignment-heading">Assignment</h3>
-        <p>
-          <TargetLabel target={row.assignment} />
-        </p>
-        {capabilities.canAssign && (
-          <div className="request-action-buttons">
-            <button
-              className="btn btn-secondary"
-              disabled={busy || !!mode}
-              onClick={(e) => open(e, "assign")}
-            >
-              {row.assignment ? "Change Assignment" : "Assign Request"}
-            </button>
-            {row.assignment && (
-              <button
-                className="btn btn-secondary"
-                disabled={busy || !!mode}
-                onClick={() => onMutate("unassign", {})}
-              >
-                Unassign Request
-              </button>
-            )}
-          </div>
-        )}
-      </section>
-      <section aria-labelledby="watchers-heading">
-        <h3 id="watchers-heading">Watchers</h3>
-        <p>
-          Following is separate from assignment and access. Notifications are
-          not sent.
-        </p>
-        {!watchers && <p role="status">Loading watchers…</p>}
-        {watchers?.error && (
-          <>
-            <p role="alert">{workspaceError(watchers.error)}</p>
-            <button
-              className="btn btn-secondary"
-              onClick={() => setRetry((n) => n + 1)}
-            >
-              Retry watchers
-            </button>
-          </>
-        )}
-        {watchers?.data && (
-          <>
-            {!watchers.data.items.length ? (
-              <p>No watchers</p>
-            ) : (
-              <ul className="watcher-list">
-                {watchers.data.items.map((target) => (
-                  <li key={`${target.type}:${target.id}`}>
-                    <span>
-                      <TargetLabel target={target} />
-                    </span>
-                    {capabilities.canManageWatchers && (
-                      <button
-                        className="btn btn-secondary"
-                        disabled={busy || !!mode}
-                        aria-label={`Remove watcher: ${target.displayName}`}
-                        onClick={() =>
-                          onMutate("removeWatcher", {
-                            targetType: target.type,
-                            targetId: target.id,
-                          })
-                        }
-                      >
-                        Remove watcher
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+      {section !== "watchers" && (
+        <section aria-labelledby="assignment-heading">
+          <h3 id="assignment-heading">Assignment</h3>
+          <p>
+            <TargetLabel target={row.assignment} />
+          </p>
+          {capabilities.canAssign && (
             <div className="request-action-buttons">
               <button
                 className="btn btn-secondary"
-                disabled={busy || !!mode || !capabilities.canWatchSelf}
-                onClick={() =>
-                  onMutate(
-                    watchers.data.watchingSelf ? "unwatchSelf" : "watchSelf",
-                    {},
-                  )
-                }
+                disabled={busy || !!mode}
+                onClick={(e) => open(e, "assign")}
               >
-                {watchers.data.watchingSelf
-                  ? "Stop watching"
-                  : "Watch this request"}
+                {row.assignment ? "Change Assignment" : "Assign Request"}
               </button>
-              {capabilities.canManageWatchers && (
+              {row.assignment && (
                 <button
                   className="btn btn-secondary"
                   disabled={busy || !!mode}
-                  onClick={(e) => open(e, "watcher")}
+                  onClick={() => onMutate("unassign", {})}
                 >
-                  Add Watcher
+                  Unassign Request
                 </button>
               )}
             </div>
-          </>
-        )}
-      </section>
+          )}
+        </section>
+      )}
+      {section !== "assignment" && (
+        <section aria-labelledby="watchers-heading">
+          <h3 id="watchers-heading">Watchers</h3>
+          <p>
+            Following is separate from assignment and access. Notifications are
+            not sent.
+          </p>
+          {!watchers && <p role="status">Loading watchers…</p>}
+          {watchers?.error && (
+            <>
+              <p role="alert">{workspaceError(watchers.error)}</p>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setRetry((n) => n + 1)}
+              >
+                Retry watchers
+              </button>
+            </>
+          )}
+          {watchers?.data && (
+            <>
+              {!watchers.data.items.length ? (
+                <p>No watchers</p>
+              ) : (
+                <ul className="watcher-list">
+                  {watchers.data.items.map((target) => (
+                    <li key={`${target.type}:${target.id}`}>
+                      <span>
+                        <TargetLabel target={target} />
+                      </span>
+                      {capabilities.canManageWatchers && (
+                        <button
+                          className="btn btn-secondary"
+                          disabled={busy || !!mode}
+                          aria-label={`Remove watcher: ${target.displayName}`}
+                          onClick={() =>
+                            onMutate("removeWatcher", {
+                              targetType: target.type,
+                              targetId: target.id,
+                            })
+                          }
+                        >
+                          Remove watcher
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="request-action-buttons">
+                <button
+                  className="btn btn-secondary"
+                  disabled={busy || !!mode || !capabilities.canWatchSelf}
+                  onClick={() =>
+                    onMutate(
+                      watchers.data.watchingSelf ? "unwatchSelf" : "watchSelf",
+                      {},
+                    )
+                  }
+                >
+                  {watchers.data.watchingSelf
+                    ? "Stop watching"
+                    : "Watch this request"}
+                </button>
+                {capabilities.canManageWatchers && (
+                  <button
+                    className="btn btn-secondary"
+                    disabled={busy || !!mode}
+                    onClick={(e) => open(e, "watcher")}
+                  >
+                    Add Watcher
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </section>
+      )}
       {mode && (
         <TargetPicker
           repository={repository}

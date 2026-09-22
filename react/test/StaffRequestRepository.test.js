@@ -174,3 +174,32 @@ test("activity uses protected bounded endpoint and drops identity/audit extras",
   });
   await expect(repo.activity(id, 1)).rejects.toThrow(/unavailable/);
 });
+
+test("F043 preview uses five server-bounded rows and rejects unbounded page sizes before HTTP", async () => {
+  const client = {
+    get: vi.fn().mockResolvedValue({
+      items: [],
+      page: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    }),
+  };
+  const repo = createStaffRequestRepository({ client });
+  await repo.activity(id, 1, undefined, 5);
+  expect(client.get).toHaveBeenCalledWith(
+    `/staff/service-requests/${id}/activity?page=1&pageSize=5`,
+    expect.objectContaining({ authenticated: true }),
+  );
+  for (const size of [0, -1, 101, 1.5])
+    await expect(repo.activity(id, 1, undefined, size)).rejects.toThrow(
+      "Invalid activity page size",
+    );
+  expect(client.get).toHaveBeenCalledTimes(1);
+  client.get.mockResolvedValue({
+    items: Array.from({ length: 6 }, () => ({})),
+    page: 1,
+  });
+  await expect(repo.activity(id, 1, undefined, 5)).rejects.toThrow(
+    /unavailable/,
+  );
+});

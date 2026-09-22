@@ -280,9 +280,11 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         hasPreviousPage: data.hasPreviousPage === true,
       };
     },
-    async activity(id, page, signal) {
+    async activity(id, page, signal, pageSize = 25) {
+      if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100)
+        throw new Error("Invalid activity page size");
       const data = await api.get(
-        `${path(id)}/activity?page=${page}&pageSize=25`,
+        `${path(id)}/activity?page=${page}&pageSize=${pageSize}`,
         options(signal),
       );
       const types = [
@@ -302,7 +304,7 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
       if (
         !Array.isArray(data?.items) ||
         !Number.isInteger(data.page) ||
-        data.items.length > 25
+        data.items.length > pageSize
       )
         throw invalid();
       return {
