@@ -196,7 +196,29 @@ F043 tabs preserves separate files; success clears only that composer. Note
 files never become Communication selections. Communication helper text explains
 requester intent and that delivery remains disabled. Attachments render directly
 under their authorized parent. Staff **Request Evidence** is a separate compact
-section and never combines collaboration files.
+section immediately after Description and before Collaboration, using the shared
+card/heading primitives. It is outside Description and never combines
+collaboration files. The existing authorized projection supplies **No attachments**,
+**1 attachment** or **N attachments**; loading and failure remain distinct from
+an authorized empty result. Ordered rows use presentation-only ordinals with
+intrinsic width, without changing the five-file limit.
+
+Finalized JPEG/PNG/WebP Preview opens the existing **Image Preview** dialog only
+after the normal authorized content retrieval succeeds. Closing retains the
+left-adjacent processed thumbnail; activating it reauthorizes through the same
+API and reopens the dialog. The dialog preserves aspect ratio, bounds the image
+to the viewport, shows the safe filename and offers existing authorized Download.
+Native modality, labeled buttons, visible focus, Tab containment, Escape/Close
+and restoration to the originating control follow the existing dialog convention;
+clicking the backdrop does not close it. Preview origins stay focusable while a
+read is pending, with aria-disabled and a duplicate-operation guard, so closing
+during Download can restore focus.
+
+Note/Communication lists reuse counts, numbering and the finalized image dialog
+inside their own authorized parents. Prepared intake/composer drafts retain
+their existing inline Preview and Remove behavior. No unsupported type receives
+an image preview, and the unchanged repository/server still reject unsupported
+or non-CLEAN content. No new endpoint, count query or persistent storage exists.
 
 File states distinguish selected, uploading, processing/scanning, ready, rejected
 and failed; no invented progress percentage. Rejected files require removal;
@@ -205,7 +227,11 @@ Request/navigation/auth changes abort stale work and discard drafts. Best-effort
 abandonment is supplemented by authoritative expiry cleanup. Full refresh loses
 local File selections; no localStorage/sessionStorage/IndexedDB persistence is
 introduced. Local preview URLs contain already processed authorized bytes and
-are revoked on replacement, removal, success and unmount. Failed previews retain
+are revoked on replacement, removal, success and unmount. Closing a finalized
+image dialog retains its URL only for the visible inline thumbnail; attachment/
+parent changes discard it. Downloads use separate short-lived object URLs so
+they do not invalidate an open preview; unmount also revokes outstanding download
+URLs. Failed previews retain
 safe metadata and the download control; permission-denied fetches clear preview
 bytes and notify parent access handling. Prior authorized disclosure cannot be
 retroactively erased from another browser or saved file.

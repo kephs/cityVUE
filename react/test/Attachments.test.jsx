@@ -11,6 +11,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import {
   AttachmentSelector,
   AttachmentList,
+  RequestEvidence,
   useAttachmentDraft,
   displayFilename,
 } from "../src/attachments/Attachments.jsx";
@@ -72,6 +73,294 @@ const select = (files) =>
 beforeEach(() => {
   URL.createObjectURL = vi.fn().mockReturnValue("blob:synthetic");
   URL.revokeObjectURL = vi.fn();
+});
+
+test.each([0, 1, 3])(
+  "F046 authorized evidence count %s uses only the loaded projection",
+  async (count) => {
+    const repo = repository();
+    let finish;
+    repo.evidence = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<RequestEvidence repository={repo} requestId={id} />);
+    expect(screen.getByText("Loading request evidence…")).toBeInTheDocument();
+    expect(screen.queryByText("No attachments")).not.toBeInTheDocument();
+    await waitFor(() => expect(repo.evidence).toHaveBeenCalledTimes(1));
+    const items = Array.from({ length: count }, (_, index) => ({
+      ...metadata,
+      id: String(index),
+      filename: "synthetic-" + index + ".png",
+    }));
+    await act(() => finish(items));
+    expect(
+      screen.getByText(
+        count === 0
+          ? "No attachments"
+          : count === 1
+            ? "1 attachment"
+            : "3 attachments",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(count);
+    if (count) {
+      expect(screen.getByRole("list").tagName).toBe("OL");
+      expect(
+        screen
+          .getAllByRole("listitem")
+          .map((item) => item.querySelector(".attachment-ordinal").textContent),
+      ).toEqual(items.map((_, index) => index + 1 + "."));
+    }
+    expect(repo.evidence).toHaveBeenCalledWith(id, expect.any(AbortSignal));
+    expect(repo.download).not.toHaveBeenCalled();
+  },
+);
+
+test.each([401, 403, 404, 500])(
+  "F046 evidence failure %s cannot masquerade as zero or expose a count",
+  async (status) => {
+    const repo = repository(),
+      denied = vi.fn();
+    repo.evidence = vi.fn().mockRejectedValue({ status });
+    render(
+      <RequestEvidence
+        repository={repo}
+        requestId={id}
+        onAccessFailure={denied}
+      />,
+    );
+    await screen.findByText("Request evidence unavailable.");
+    expect(screen.queryByText("No attachments")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    expect(repo.download).not.toHaveBeenCalled();
+    if (status !== 500) expect(denied).toHaveBeenCalledWith({ status });
+    else expect(denied).not.toHaveBeenCalled();
+  },
+);
+
+test("F046 disabled evidence does not fetch metadata or disclose a zero count", async () => {
+  const repo = repository();
+  repo.policy.mockResolvedValue({ enabled: false });
+  repo.evidence = vi.fn();
+  render(<RequestEvidence repository={repo} requestId={id} />);
+  await waitFor(() =>
+    expect(
+      screen.queryByText("Loading request evidence…"),
+    ).not.toBeInTheDocument(),
+  );
+  expect(repo.evidence).not.toHaveBeenCalled();
+  expect(screen.queryByText("No attachments")).not.toBeInTheDocument();
+});
+
+test("F046 image modal restores each origin and reauthorizes thumbnail and download", async () => {
+  const repo = repository(),
+    user = userEvent.setup();
+  const anchor = vi
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(() => {});
+  const view = render(
+    <AttachmentList
+      items={[metadata]}
+      repository={repo}
+      requestId={id}
+      parentId={other}
+      context="INTERNAL_NOTE"
+    />,
+  );
+  const preview = screen.getByRole("button", { name: "Preview synthetic.png" });
+  preview.focus();
+  await user.keyboard("{Enter}");
+  let dialog = await screen.findByRole("dialog", { name: "Image Preview" });
+  expect(
+    within(dialog).getByRole("button", { name: "Close", exact: true }),
+  ).toHaveFocus();
+  await user.tab();
+  expect(
+    within(dialog).getByRole("button", { name: "Download synthetic.png" }),
+  ).toHaveFocus();
+  await user.keyboard(" ");
+  await waitFor(() => expect(anchor).toHaveBeenCalledTimes(1));
+  expect(anchor.mock.instances[0].download).toBe("synthetic.png");
+  expect(anchor.mock.instances[0].href).toBe("blob:synthetic");
+  expect(within(dialog).getByRole("img")).toBeInTheDocument();
+  await user.click(
+    within(dialog).getByRole("button", { name: "Close", exact: true }),
+  );
+  expect(preview).toHaveFocus();
+  const thumbnail = screen.getByRole("button", {
+    name: "Enlarge synthetic.png",
+  });
+  thumbnail.focus();
+  await user.keyboard(" ");
+  dialog = await screen.findByRole("dialog", { name: "Image Preview" });
+  fireEvent(dialog, new Event("cancel", { bubbles: false, cancelable: true }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(thumbnail).toHaveFocus();
+  expect(repo.download).toHaveBeenCalledTimes(3);
+  for (const call of repo.download.mock.calls) {
+    expect(call).toEqual([
+      id,
+      "INTERNAL_NOTE",
+      other,
+      id,
+      expect.any(AbortSignal),
+    ]);
+  }
+  // Closing retains the authorized inline thumbnail; replacement/unmount revoke it.
+  expect(screen.getByAltText("Preview of synthetic.png")).toBeInTheDocument();
+  view.unmount();
+  expect(URL.revokeObjectURL).toHaveBeenCalled();
+  expect(repo.download.mock.calls[0][4].aborted).toBe(true);
+  anchor.mockRestore();
+});
+
+test("F046 closing during a download restores focus without reopening after completion", async () => {
+  const repo = repository(),
+    user = userEvent.setup();
+  const anchor = vi
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(() => {});
+  render(
+    <AttachmentList
+      items={[metadata]}
+      repository={repo}
+      requestId={id}
+      parentId={id}
+      context="REQUEST_EVIDENCE"
+    />,
+  );
+  const preview = screen.getByRole("button", { name: "Preview synthetic.png" });
+  await user.click(preview);
+  const dialog = await screen.findByRole("dialog");
+  let finish;
+  repo.download.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await user.click(
+    within(dialog).getByRole("button", { name: "Download synthetic.png" }),
+  );
+  await user.click(
+    within(dialog).getByRole("button", { name: "Close", exact: true }),
+  );
+  expect(preview).toHaveFocus();
+  expect(preview).toHaveAttribute("aria-disabled", "true");
+  await user.keyboard("{Enter}");
+  expect(repo.download).toHaveBeenCalledTimes(2);
+  await act(() => finish(new Blob(["processed"], { type: "image/png" })));
+  expect(preview).toHaveFocus();
+  expect(preview).toHaveAttribute("aria-disabled", "false");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(anchor).toHaveBeenCalledTimes(1);
+  anchor.mockRestore();
+});
+
+test("F046 changing attachment context discards previews and aborts late retrieval", async () => {
+  const repo = repository(),
+    user = userEvent.setup();
+  let finish;
+  repo.download.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = render(
+    <AttachmentList
+      items={[metadata]}
+      repository={repo}
+      requestId={id}
+      parentId={id}
+      context="REQUEST_EVIDENCE"
+    />,
+  );
+  await user.click(
+    screen.getByRole("button", { name: "Preview synthetic.png" }),
+  );
+  const signal = repo.download.mock.calls[0][4];
+  view.rerender(
+    <AttachmentList
+      items={[metadata]}
+      repository={repo}
+      requestId={other}
+      parentId={other}
+      context="REQUEST_EVIDENCE"
+    />,
+  );
+  await act(() => finish(new Blob(["processed"], { type: "image/png" })));
+  expect(signal.aborted).toBe(true);
+  expect(URL.createObjectURL).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Preview synthetic.png" }),
+  );
+  await screen.findByRole("dialog");
+  view.rerender(
+    <AttachmentList
+      items={[{ ...metadata, id: other }]}
+      repository={repo}
+      requestId={other}
+      parentId={other}
+      context="REQUEST_EVIDENCE"
+    />,
+  );
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(URL.revokeObjectURL).toHaveBeenCalled();
+});
+
+test("F046 unsupported types do not fabricate an image preview", () => {
+  const repo = repository();
+  render(
+    <AttachmentList
+      items={[
+        {
+          ...metadata,
+          filename: "synthetic.pdf",
+          mediaType: "application/pdf",
+        },
+      ]}
+      repository={repo}
+      requestId={id}
+      parentId={id}
+      context="REQUEST_EVIDENCE"
+    />,
+  );
+  expect(
+    screen.queryByRole("button", { name: /Preview|Enlarge/ }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(repo.download).not.toHaveBeenCalled();
+  // The existing repository continues to reject unsupported types before rendering.
+  expect(() =>
+    attachmentProjection({ ...metadata, mediaType: "application/pdf" }),
+  ).toThrow();
+});
+
+test("F046 display ordinals accommodate three digits without changing intake limits", () => {
+  const repo = repository();
+  const items = Array.from({ length: 100 }, (_, index) => ({
+    ...metadata,
+    id: String(index),
+  }));
+  render(
+    <AttachmentList
+      items={items}
+      repository={repo}
+      requestId={id}
+      parentId={id}
+      context="REQUEST_EVIDENCE"
+    />,
+  );
+  expect(screen.getByText("100 attachments")).toBeInTheDocument();
+  expect(screen.getByText("10.")).toHaveClass("attachment-ordinal");
+  expect(screen.getByText("100.")).toHaveClass("attachment-ordinal");
+  expect(repo.download).not.toHaveBeenCalled();
 });
 test("F046 expired staging can be discarded without mutating finalized server content", async () => {
   const repo = repository(),
@@ -225,7 +514,9 @@ test("F046 preview denial clears prior bytes, retains filename and notifies pare
   await screen.findByAltText("Preview of synthetic.png");
   repo.download.mockRejectedValue({ status: 403 });
   await user.click(
-    screen.getByRole("button", { name: "Download synthetic.png" }),
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Download synthetic.png",
+    }),
   );
   await waitFor(() => expect(denied).toHaveBeenCalled());
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
@@ -387,10 +678,21 @@ for (const context of [
     );
     for (const name of ["synthetic.png", longName]) {
       await user.click(screen.getByRole("button", { name: "Preview " + name }));
-      const image = await screen.findByAltText("Preview of " + name);
-      const presentation = image.parentElement;
+      const dialog = await screen.findByRole("dialog", {
+        name: "Image Preview",
+      });
+      expect(within(dialog).getByText(name)).toBeInTheDocument();
+      expect(
+        within(dialog).getByAltText("Enlarged preview of " + name),
+      ).toBeInTheDocument();
+      await user.click(
+        within(dialog).getByRole("button", { name: "Close", exact: true }),
+      );
+      const image = screen.getByAltText("Preview of " + name);
+      const presentation = image.parentElement.parentElement;
       expect(presentation).toHaveClass("attachment-preview");
-      expect(presentation.firstElementChild).toBe(image);
+      expect(presentation.firstElementChild).toBe(image.parentElement);
+      expect(image.parentElement).toHaveAccessibleName("Enlarge " + name);
       const body = presentation.querySelector(".attachment-body");
       expect(within(body).getByText(name)).toBeInTheDocument();
       expect(

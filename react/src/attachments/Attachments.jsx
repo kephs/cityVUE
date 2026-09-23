@@ -1,4 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
+import {
+  ContentCard,
+  SectionHeading,
+} from "../components/ui/RequestPresentation.jsx";
+import RequestDialog from "../staff/requests/RequestDialog.jsx";
 import "./attachments.css";
 const types = ["image/jpeg", "image/png", "image/webp"];
 const maxFile = 5242880,
@@ -416,51 +421,69 @@ function AttachmentPreview({
   filename,
   load,
   download = false,
+  image = true,
   onAccessFailure,
   children,
   actions,
 }) {
   const [url, setUrl] = useState(""),
     [error, setError] = useState(""),
-    [pending, setPending] = useState(false);
+    [pending, setPending] = useState(false),
+    [enlarged, setEnlarged] = useState(false);
   const object = useRef(""),
+    downloads = useRef(new Set()),
     lifecycle = useRef(null),
-    lock = useRef(false);
+    lock = useRef(false),
+    trigger = useRef(null);
   useEffect(() => {
     const abort = new AbortController();
     lifecycle.current = abort;
     return () => {
       abort.abort();
       if (object.current) URL.revokeObjectURL(object.current);
+      for (const downloadUrl of downloads.current)
+        URL.revokeObjectURL(downloadUrl);
+      downloads.current.clear();
     };
   }, []);
-  async function open(asDownload) {
+  function clearPreview() {
+    if (object.current) URL.revokeObjectURL(object.current);
+    object.current = "";
+    setUrl("");
+    setEnlarged(false);
+  }
+  function imageFailed() {
+    clearPreview();
+    setError("Preview unavailable. The file may still be downloaded.");
+  }
+  async function open(asDownload, origin) {
     if (lock.current) return;
+    if (!asDownload) trigger.current = origin;
     lock.current = true;
     setPending(true);
     setError("");
     try {
       const blob = await load(lifecycle.current.signal);
       if (lifecycle.current.signal.aborted) return;
-      if (object.current) URL.revokeObjectURL(object.current);
-      object.current = URL.createObjectURL(blob);
+      const loaded = URL.createObjectURL(blob);
       if (asDownload) {
+        downloads.current.add(loaded);
         const link = document.createElement("a");
-        link.href = object.current;
+        link.href = loaded;
         link.download = filename;
         link.click();
-        setUrl("");
-        const downloaded = object.current;
         setTimeout(() => {
-          URL.revokeObjectURL(downloaded);
-          if (object.current === downloaded) object.current = "";
+          if (downloads.current.delete(loaded)) URL.revokeObjectURL(loaded);
         }, 1000);
-      } else setUrl(object.current);
+      } else {
+        if (object.current) URL.revokeObjectURL(object.current);
+        object.current = loaded;
+        setUrl(loaded);
+        setEnlarged(download);
+      }
     } catch (problem) {
       if (!lifecycle.current.signal.aborted) {
-        if (object.current) URL.revokeObjectURL(object.current);
-        object.current = "";
-        setUrl("");
+        clearPreview();
         setError("Preview or download unavailable. Try again.");
         if ([401, 403, 404].includes(problem.status))
           await onAccessFailure?.(problem);
@@ -470,47 +493,74 @@ function AttachmentPreview({
       if (!lifecycle.current.signal.aborted) setPending(false);
     }
   }
+  const downloadButton = download && (
+    <button
+      type="button"
+      className="btn btn-sm btn-secondary"
+      disabled={pending}
+      onClick={() => open(true)}
+      aria-label={`Download ${filename}`}
+    >
+      Download
+    </button>
+  );
+  const thumbnail = url && (
+    <img src={url} alt={`Preview of ${filename}`} onError={imageFailed} />
+  );
   return (
     <div className="attachment-preview">
-      {url && (
-        <img
-          src={url}
-          alt={`Preview of ${filename}`}
-          onError={() => {
-            if (object.current) URL.revokeObjectURL(object.current);
-            object.current = "";
-            setUrl("");
-            setError("Preview unavailable. The file may still be downloaded.");
-          }}
-        />
-      )}
+      {thumbnail &&
+        (download ? (
+          <button
+            type="button"
+            className="attachment-thumbnail btn btn-sm btn-secondary"
+            aria-label={`Enlarge ${filename}`}
+            aria-disabled={pending}
+            onClick={(event) => open(false, event.currentTarget)}
+          >
+            {thumbnail}
+          </button>
+        ) : (
+          thumbnail
+        ))}
       <div className="attachment-body">
         {children}
         <div className="attachment-controls">
-          <button
-            type="button"
-            className="btn btn-sm btn-secondary"
-            disabled={pending}
-            onClick={() => open(false)}
-            aria-label={`Preview ${filename}`}
-          >
-            {pending ? "Loading…" : "Preview"}
-          </button>
-          {download && (
+          {image && (
             <button
               type="button"
               className="btn btn-sm btn-secondary"
-              disabled={pending}
-              onClick={() => open(true)}
-              aria-label={`Download ${filename}`}
+              disabled={pending && !download}
+              aria-disabled={download ? pending : undefined}
+              onClick={(event) => open(false, event.currentTarget)}
+              aria-label={`Preview ${filename}`}
             >
-              Download
+              {pending ? "Loading…" : "Preview"}
             </button>
           )}
+          {downloadButton}
           {actions}
         </div>
         {error && <p role="alert">{error}</p>}
       </div>
+      {enlarged && url && (
+        <RequestDialog
+          title="Image Preview"
+          wide
+          onClose={() => setEnlarged(false)}
+          returnFocusRef={trigger}
+        >
+          <div className="attachment-image-dialog">
+            <p>{filename}</p>
+            <img
+              src={url}
+              alt={`Enlarged preview of ${filename}`}
+              onError={imageFailed}
+            />
+            <div className="attachment-controls">{downloadButton}</div>
+          </div>
+        </RequestDialog>
+      )}
     </div>
   );
 }
@@ -525,12 +575,20 @@ export function AttachmentList({
   if (!items?.length) return null;
   return (
     <div>
-      <h5>Attachments</h5>
-      <ul className="attachment-list">
-        {items.map((item) => (
-          <li key={item.id}>
+      <h5>
+        {items.length === 1 ? "1 attachment" : `${items.length} attachments`}
+      </h5>
+      <ol className="attachment-list attachment-numbered-list">
+        {items.map((item, index) => (
+          <li
+            key={`${requestId}:${context}:${parentId}:${item.id}:${item.filename}`}
+          >
+            <span className="attachment-ordinal" aria-hidden="true">
+              {index + 1}.
+            </span>
             <AttachmentPreview
               filename={item.filename}
+              image={types.includes(item.mediaType)}
               download
               load={(signal) =>
                 repository.download(
@@ -552,7 +610,7 @@ export function AttachmentList({
             </AttachmentPreview>
           </li>
         ))}
-      </ul>
+      </ol>
     </div>
   );
 }
@@ -576,7 +634,7 @@ export function RequestEvidence({ repository, requestId, onAccessFailure }) {
         const files = await repository.evidence(requestId, abort.signal);
         if (!abort.signal.aborted) {
           setItems(files);
-          setState(files.length ? "" : "No request evidence.");
+          setState(files.length ? "" : "No attachments");
         }
       })
       .catch(async (problem) => {
@@ -591,8 +649,8 @@ export function RequestEvidence({ repository, requestId, onAccessFailure }) {
   }, [repository, requestId]);
   if (!state && !items.length) return null;
   return (
-    <section className="content-card request-evidence">
-      <h3>Request Evidence</h3>
+    <ContentCard className="request-evidence">
+      <SectionHeading icon="images">Request Evidence</SectionHeading>
       {state && <p role="status">{state}</p>}
       <AttachmentList
         items={items}
@@ -602,6 +660,6 @@ export function RequestEvidence({ repository, requestId, onAccessFailure }) {
         context="REQUEST_EVIDENCE"
         onAccessFailure={onAccessFailure}
       />
-    </section>
+    </ContentCard>
   );
 }

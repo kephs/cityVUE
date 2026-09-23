@@ -7,12 +7,13 @@ export default function RequestDialog({
   onClose,
   busy = false,
   wide = false,
+  returnFocusRef,
 }) {
   const dialog = useRef(null);
   const titleId = useId();
   useEffect(() => {
     const element = dialog.current;
-    const trigger = document.activeElement;
+    const trigger = returnFocusRef?.current || document.activeElement;
     element.showModal();
     return () => {
       element.close();

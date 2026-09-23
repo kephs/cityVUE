@@ -358,8 +358,14 @@
   gap: var(--space-5);
   min-width: 0;
 }
-.request-detail {
+.request-primary-content {
   grid-area: identity;
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.request-evidence {
+  min-width: 0;
 }
 .request-supporting-controls {
   grid-area: controls;

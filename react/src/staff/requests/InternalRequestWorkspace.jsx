@@ -744,107 +744,119 @@ function RequestDetail({ repository, id, onSignIn }) {
       )}
       {row && (
         <article className="request-detail-grid">
-          <ContentCard className="request-detail">
-            <header className="request-identity">
-              <IssueIcon icon={row.issueIcon} size="large" />
-              <div className="request-identity-copy">
-                {row.categoryName && (
-                  <p className="request-eyebrow">{row.categoryName}</p>
-                )}
-                <h2 className="request-issue-title" ref={heading} tabIndex="-1">
-                  {row.issueName}
-                </h2>
-                <LocationDisplay value={row.serviceLocation} />
-                <div className="request-identity-meta">
-                  <AudienceBadge value={row.audience} />
-                  <ReferenceDisplay value={row.referenceNumber} />
+          <div className="request-primary-content">
+            <ContentCard className="request-detail">
+              <header className="request-identity">
+                <IssueIcon icon={row.issueIcon} size="large" />
+                <div className="request-identity-copy">
+                  {row.categoryName && (
+                    <p className="request-eyebrow">{row.categoryName}</p>
+                  )}
+                  <h2
+                    className="request-issue-title"
+                    ref={heading}
+                    tabIndex="-1"
+                  >
+                    {row.issueName}
+                  </h2>
+                  <LocationDisplay value={row.serviceLocation} />
+                  <div className="request-identity-meta">
+                    <AudienceBadge value={row.audience} />
+                    <ReferenceDisplay value={row.referenceNumber} />
+                  </div>
                 </div>
-              </div>
-              <div className="request-current-status">
-                <Status value={row.status} />
-                <span>Last updated</span>
-                <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
-              </div>
-            </header>
-            <dl className="request-metadata">
-              {row.intakeChannel && (
-                <div>
-                  <dt>Intake channel</dt>
-                  <dd>
-                    {
+                <div className="request-current-status">
+                  <Status value={row.status} />
+                  <span>Last updated</span>
+                  <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
+                </div>
+              </header>
+              <dl className="request-metadata">
+                {row.intakeChannel && (
+                  <div>
+                    <dt>Intake channel</dt>
+                    <dd>
                       {
-                        web: "Web",
-                        phone: "Phone",
-                        walk_in: "Walk-in",
-                        staff: "Staff",
-                        api: "API",
-                      }[row.intakeChannel]
-                    }
+                        {
+                          web: "Web",
+                          phone: "Phone",
+                          walk_in: "Walk-in",
+                          staff: "Staff",
+                          api: "API",
+                        }[row.intakeChannel]
+                      }
+                    </dd>
+                  </div>
+                )}
+                <div>
+                  <dt>
+                    <i className="bi bi-buildings" aria-hidden="true" />{" "}
+                    Department
+                  </dt>
+                  <dd>{row.departmentName}</dd>
+                </div>
+                <div>
+                  <dt>
+                    <i className="bi bi-people" aria-hidden="true" /> Division
+                  </dt>
+                  <dd>{row.divisionName || "Department-level"}</dd>
+                </div>
+                <div>
+                  <dt>
+                    <i className="bi bi-calendar3" aria-hidden="true" /> Created
+                  </dt>
+                  <dd>
+                    <time dateTime={row.createdAt}>{date(row.createdAt)}</time>
                   </dd>
                 </div>
-              )}
-              <div>
-                <dt>
-                  <i className="bi bi-buildings" aria-hidden="true" />{" "}
-                  Department
-                </dt>
-                <dd>{row.departmentName}</dd>
-              </div>
-              <div>
-                <dt>
-                  <i className="bi bi-people" aria-hidden="true" /> Division
-                </dt>
-                <dd>{row.divisionName || "Department-level"}</dd>
-              </div>
-              <div>
-                <dt>
-                  <i className="bi bi-calendar3" aria-hidden="true" /> Created
-                </dt>
-                <dd>
-                  <time dateTime={row.createdAt}>{date(row.createdAt)}</time>
-                </dd>
-              </div>
-              <div>
-                <dt>
-                  <i className="bi bi-clock" aria-hidden="true" /> Updated
-                </dt>
-                <dd>
-                  <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
-                </dd>
-              </div>
-            </dl>
-            <section className="request-description">
-              <SectionHeading icon="file-earmark-text">
-                Description
-              </SectionHeading>
-              {row.description.length > 1200 ? (
-                <>
-                  <p>{row.description.slice(0, 1200)}…</p>
-                  <details>
-                    <summary>Read full description</summary>
-                    <p>{row.description}</p>
-                  </details>
-                </>
-              ) : (
-                <p>{row.description}</p>
-              )}
-            </section>
-            <aside className="request-internal-notice">
-              <i className="bi bi-info-circle-fill" aria-hidden="true" />
-              <div>
-                <strong>
-                  {row.audience === "public"
-                    ? "Public Request"
-                    : "Internal Request"}
-                </strong>
-                <p>
-                  {row.audience === "public"
-                    ? "Staff operational information is protected. Requester contact requires separate permission."
-                    : "This is an internal request. Requester contact requires separate permission."}
-                </p>
-              </div>
-            </aside>
-          </ContentCard>
+                <div>
+                  <dt>
+                    <i className="bi bi-clock" aria-hidden="true" /> Updated
+                  </dt>
+                  <dd>
+                    <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
+                  </dd>
+                </div>
+              </dl>
+              <aside className="request-internal-notice">
+                <i className="bi bi-info-circle-fill" aria-hidden="true" />
+                <div>
+                  <strong>
+                    {row.audience === "public"
+                      ? "Public Request"
+                      : "Internal Request"}
+                  </strong>
+                  <p>
+                    {row.audience === "public"
+                      ? "Staff operational information is protected. Requester contact requires separate permission."
+                      : "This is an internal request. Requester contact requires separate permission."}
+                  </p>
+                </div>
+              </aside>
+              <section className="request-description">
+                <SectionHeading icon="file-earmark-text">
+                  Description
+                </SectionHeading>
+                {row.description.length > 1200 ? (
+                  <>
+                    <p>{row.description.slice(0, 1200)}…</p>
+                    <details>
+                      <summary>Read full description</summary>
+                      <p>{row.description}</p>
+                    </details>
+                  </>
+                ) : (
+                  <p>{row.description}</p>
+                )}
+              </section>
+            </ContentCard>
+            <RequestEvidence
+              key={id}
+              repository={repository.attachments}
+              requestId={id}
+              onAccessFailure={protectedContentAccessFailure}
+            />
+          </div>
           <div className="request-supporting-controls">
             <ContentCard className="request-actions">
               <SectionHeading icon="lightning-charge-fill">
@@ -1005,12 +1017,6 @@ function RequestDetail({ repository, id, onSignIn }) {
               clearContact={clearContact}
             />
           </div>
-          <RequestEvidence
-            key={id}
-            repository={repository.attachments}
-            requestId={id}
-            onAccessFailure={protectedContentAccessFailure}
-          />
           <CollaborationPanel
             key={id + ":" + row.audience}
             repository={repository}

@@ -864,6 +864,135 @@ function show(path = "/staff/requests", secured = false) {
     </MemoryRouter>,
   );
 }
+
+test.each(["public", "internal"])(
+  "F046 %s evidence follows Description and precedes Collaboration",
+  async (audience) => {
+    repository.detail.mockResolvedValue({ ...row, audience });
+    repository.attachments = {
+      policy: vi.fn().mockResolvedValue({ enabled: true }),
+      evidence: vi.fn().mockResolvedValue([]),
+    };
+    show("/staff/requests/" + id);
+    await screen.findByText("No attachments");
+    const description = screen
+      .getByRole("heading", { name: "Description" })
+      .closest("section");
+    const evidence = screen
+      .getByRole("heading", { name: "Request Evidence" })
+      .closest("section");
+    const collaboration = screen.getByRole("heading", {
+      name: "Collaboration",
+    });
+    expect(description.parentElement.nextElementSibling).toBe(evidence);
+    expect(description.contains(evidence)).toBe(false);
+    expect(
+      evidence.compareDocumentPosition(collaboration) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(repository.attachments.evidence).toHaveBeenCalledWith(
+      id,
+      expect.any(AbortSignal),
+    );
+  },
+);
+
+test.each([401, 403, 404])(
+  "F046 parent denial %s never loads evidence or leaks its count",
+  async (status) => {
+    repository.detail.mockRejectedValue({ status });
+    repository.attachments = { policy: vi.fn(), evidence: vi.fn() };
+    show("/staff/requests/" + id);
+    await waitFor(() => expect(repository.detail).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByText("Loading request…")).not.toBeInTheDocument(),
+    );
+    expect(repository.attachments.policy).not.toHaveBeenCalled();
+    expect(repository.attachments.evidence).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("heading", { name: "Request Evidence" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("No attachments")).not.toBeInTheDocument();
+  },
+);
+
+test("F046 counted Note and Communication attachments remain inside their collaboration parents", async () => {
+  const attachment = {
+    id,
+    filename: "synthetic.png",
+    mediaType: "image/png",
+    byteSize: 32,
+    state: "CLEAN",
+  };
+  repository.detail.mockResolvedValue({
+    ...row,
+    audience: "public",
+    capabilities: {
+      ...row.capabilities,
+      canReadNotes: true,
+      canReadCommunications: true,
+    },
+  });
+  repository.attachments = {
+    policy: vi.fn().mockResolvedValue({ enabled: true }),
+    evidence: vi.fn().mockResolvedValue([]),
+  };
+  repository.notes.mockResolvedValue({
+    items: [
+      {
+        id,
+        body: "Fictional note with evidence",
+        author: { displayName: "Staff" },
+        createdAt: row.createdAt,
+        attachments: [attachment],
+      },
+    ],
+    nextCursor: null,
+  });
+  repository.communications.mockResolvedValue({
+    items: [
+      {
+        id: other,
+        body: "Fictional recorded message",
+        author: { displayName: "Staff" },
+        createdAt: row.createdAt,
+        direction: "outbound",
+        channel: "portal",
+        deliveryState: "recorded",
+        attachments: [
+          attachment,
+          { ...attachment, id: other, filename: "second.png" },
+        ],
+      },
+    ],
+    nextCursor: null,
+  });
+  show("/staff/requests/" + id);
+  const note = (
+    await screen.findByText("Fictional note with evidence")
+  ).closest("li");
+  expect(
+    within(note).getByRole("heading", { name: "1 attachment" }),
+  ).toBeInTheDocument();
+  expect(within(note).getByText("1.")).toBeInTheDocument();
+  expect(note.closest(".request-collaboration")).not.toBeNull();
+  await selectCommunication();
+  const message = (
+    await screen.findByText("Fictional recorded message")
+  ).closest("li");
+  expect(
+    within(message).getByRole("heading", { name: "2 attachments" }),
+  ).toBeInTheDocument();
+  expect(within(message).getByText("2.")).toBeInTheDocument();
+  expect(message.closest(".request-collaboration")).not.toBeNull();
+  expect(
+    within(message).getByText("Outbound · Portal · Recorded"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getAllByRole("heading", { name: "Request Evidence" }),
+  ).toHaveLength(1);
+  expect(screen.getByText("No attachments")).toBeInTheDocument();
+});
 test("list has loading, semantic references/status/department/date and no UUID primary display", async () => {
   show();
   expect(screen.getByText("Loading requests…")).toBeInTheDocument();

@@ -414,3 +414,88 @@ support, new broad attachment permission, cloud/client resource change or
 deployment was introduced. Live Search, Issue-Based Default Assignment,
 Anonymous Request Policy, requester identity/history and future analytics remain
 deferred. **F047 remains unstarted.**
+
+## Accepted-checkpoint Request Evidence presentation follow-up
+
+This separately authorized frontend follow-up starts at accepted F046
+`5c2c310885836bebee440ad8a836351019b20c4f`, on main with a clean working tree,
+one ahead/zero behind unchanged local origin/main
+`72081ec6121189c61bdc83acf2ef80d3dcfdf3dd`. It does not amend that feature commit.
+The preceding implementation/security/database results describe the accepted
+feature checkpoint; this follow-up does not rerun or modify those domains.
+
+Request Evidence now follows Description directly in a shared primary-column
+layout group and precedes Collaboration. The classification/privacy notice is
+above Description; Issue-first identity, status and supporting management/Activity
+remain intact. Evidence uses the existing card and section-heading primitives,
+as a separate section outside Description. Authorized zero is compact
+**No attachments**, one is **1 attachment**, and plural is **N attachments**.
+Unavailable evidence remains an error state, never a fabricated zero. Counts
+come solely from the existing authorized projection.
+
+The shared finalized list renders an ordered list with display-only ordinals.
+An intrinsic-width ordinal column accommodates multi-digit labels, while the
+actual five-file limit is unchanged. Image/filename/metadata/actions remain
+adjacent and wrap safely. Note and Communication attachments stay inside their
+own collaboration parents and receive no additional Request Evidence heading.
+
+Explicit Preview retrieves bytes through the existing API, then opens the
+existing native Image Preview dialog. The safe filename, viewport-bounded
+proportional image, Close and Download are provided. On close, the same processed
+image remains as the nearby thumbnail; thumbnail activation makes another
+authorized retrieval before reopening. No automatic content prefetch, direct
+filesystem/storage URL, public URL, new endpoint or authorization logic was added.
+Unsupported types receive no fabricated image modal. Draft Preview/Remove remains
+inline. A separate download URL preserves an open preview. Replaced/unmounted
+previews and short-lived download URLs are revoked; errors discard preview bytes
+and retain the existing parent access-failure handling.
+
+A delayed synthetic download also confirmed Close restores origin focus before
+completion and no late modal reopens. The dialog uses native modality and the
+existing focus trap, Escape/Close and
+backdrop convention (outside clicks do not dismiss it). An optional origin ref
+lets asynchronous preview loading restore focus to the exact Preview/thumbnail
+button. The origin remains focusable but aria-disabled during an in-flight read;
+the existing operation lock prevents duplicate retrieval. This also permits
+focus restoration if Close is used before a download completes.
+
+Validation for this follow-up:
+
+- Thirty isolated synthetic browser cases: 1440, 1280, 1024, 768 and 390 px;
+  light/dark; zero/one/three evidence items. Description/Evidence/Collaboration
+  order, compact zero, long filenames, ordinals, adjacent thumbnails, modal
+  bounds/aspect ratio, download, Enter/Space, forward/reverse Tab containment,
+  Escape/Close, focus restoration, visible focus and no horizontal overflow passed.
+- Twenty additional browser cases exercised Note/Communication parent placement
+  and shared Preview/thumbnail behavior across the same widths/themes. Ten
+  presentation-only cases checked ordinals 10 and 100 without changing limits.
+- The final full React run passed **472 tests in 32 files**, including **161**
+  tests in the two affected attachment/workspace files and the existing dialog
+  regressions. This includes closing during a pending download, stale retrieval
+  abort/URL disposal, unsupported types, count/error separation, parent denial
+  and shared collaboration regressions. Commands: the repository
+  `test:react` script (also run with the two focused paths during development).
+- `build:react` passed. The existing warning about chunks larger than 500 kB
+  remains; no bundle/dependency restructuring was in scope. Prettier checks,
+  `git diff --check`, five local documentation-link targets and lightweight
+  private-data/artifact review passed. Frontend lint has no configured script.
+  Backend/shared suites were not rerun for this frontend-only follow-up.
+- The user confirmed all authenticated read-only checks passed on existing
+  **SR-202609-000008**: page order, singular count/ordinal, enlarged Preview,
+  Close/Escape and return focus, thumbnail reopen, Download and both existing
+  collaboration attachment contexts. No new parent or attachment was needed.
+
+Only five frontend source/style files, the two affected React test files and
+this report/specification change. Attachment repository/API, backend, security,
+storage, claims, scan lifecycle, content validation, EXIF/GPS, database schema
+and grants remain unchanged. No direct database query, mutation or cleanup operation
+was needed for this presentation follow-up. Last verified development baseline
+remains 23 applied/zero pending migrations; three finalized CLEAN attachments;
+zero staged/rejected/orphan files; tracking **1 active / 5 revoked**. These are
+retained checkpoint facts, not a new database observation. Personal Requester Tracking
+was not opened, inspected or exercised. Normal authorized attachment reads retain
+the existing minimal audit behavior.
+
+The separate local commit leaves main two ahead/zero behind the same local
+origin/main. No fetch, push, history rewrite, tag/release, deployment or cloud/
+client-resource change is authorized or performed. **F047 remains unstarted.**
