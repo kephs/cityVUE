@@ -31,7 +31,7 @@ export function normalizeApiDefinition(row, categoryId) {
         ...normalizeIssueAction(row),
         id: row.id, categoryId, serviceDefinitionVersionId: row.serviceDefinitionVersionId,
         name: row.name, citizenDescription: row.description, icon: iconClass(row.iconKey, "bi-megaphone"),
-        defaultPriority: row.defaultPriority, locationRequirement: row.locationPolicy.replaceAll("_", "-"),
+        geographicEligibilityMode: row.geographicEligibilityMode, defaultPriority: row.defaultPriority, locationRequirement: row.locationPolicy.replaceAll("_", "-"),
         anonymousPolicy: row.anonymousReportingPolicy.replaceAll("_", "-"), status: "active",
         questions: (row.actionType === "external_redirect" ? [] : (row.questions || [])).map((question, index) => ({
             id: question.id, key: question.key, label: question.label, helpText: question.helpText,

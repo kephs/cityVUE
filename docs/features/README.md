@@ -1,6 +1,6 @@
 # Reqro Feature Records
 
-[F044 — Secure Requester Tracking Foundation](F044-secure-requester-tracking-foundation.md) is implemented and validated locally from accepted, synchronized F043 `19af51623d1770601272b5d97a3fd0c49e0868d4`. The [completion report](F044-implementation-report.md) records the complete diff inventory, security review, 877 passing tests and qualified manual UAT evidence. No push or deployment is authorized; F045 is not started.
+[F045 — Requester Issue Location Experience](F045-requester-issue-location-experience.md) is implemented and locally validated from synchronized F044 `54bb498ba37edcd28c646c84a4a1274370939697`. Its [completion report](F045-implementation-report.md) records provider-neutral development search, MapLibre selection, explicit device geolocation, manual alternatives and the existing server-owned Service Location/eligibility boundary. No migration or grant change: 22 migrations, zero pending; tracking remains zero active/four revoked. No F045 push or deployment; F046 is not started.
 
 Start with the [development protocol](../development/REQRO_CODEX_PROTOCOL.md), [current architecture](../ARCHITECTURE.md), [roadmap](../ROADMAP.md) and relevant [ADRs](../architecture/decisions/README.md). Feature specifications and reports retain feature-specific requirements and historical implementation/validation evidence. They are not replacements for the permanent protocol.
 

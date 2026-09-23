@@ -390,3 +390,31 @@ test('development staff assignment and workflow endpoints expose safe command re
   assert.equal(transitionedBody.status, 'in_progress');
   assert.equal('organizationId' in transitionedBody, false);
 });
+
+test('F045 HTTP rejects malformed coordinates and device/provider metadata', async () => {
+  for (const location of [
+    { enteredAddress: 'Fictional', latitude: 91, longitude: 0 },
+    { enteredAddress: 'Fictional', latitude: 0, longitude: 181 },
+    { enteredAddress: 'Fictional', latitude: '0', longitude: 0 },
+    { enteredAddress: 'Fictional', latitude: 0, longitude: 0, accuracy: 10 },
+    {
+      enteredAddress: 'Fictional',
+      latitude: 0,
+      longitude: 0,
+      provider: 'untrusted',
+    },
+  ])
+    await request(app.getHttpServer())
+      .post('/api/v1/service-requests')
+      .send({ ...base, location })
+      .expect(400);
+  const unavailable = await request(app.getHttpServer())
+    .get('/api/v1/intake/location?organizationId=untrusted')
+    .expect(200)
+    .expect('Cache-Control', 'no-store');
+  assert.deepEqual(unavailable.body, {
+    mode: 'unavailable',
+    boundary: null,
+    locations: [],
+  });
+});

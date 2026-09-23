@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { IntakeLocationController } from './intake-location.controller.js';
 import { ConfigService } from '@nestjs/config';
 import type { AppConfiguration } from '../config/configuration.js';
 import {
@@ -9,6 +10,7 @@ import { LOCATION_ELIGIBILITY_PROVIDER } from './location-eligibility.types.js';
 import { EvaluateLocationEligibilityService } from './evaluate-location-eligibility.service.js';
 
 @Module({
+  controllers: [IntakeLocationController],
   providers: [
     EvaluateLocationEligibilityService,
     {

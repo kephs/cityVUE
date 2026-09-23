@@ -172,10 +172,10 @@ export class GetServiceRequestDetailsService {
                 ? { normalizedAddress: location.normalized_address }
                 : {}),
               ...(location.latitude !== null
-                ? { latitude: location.latitude }
+                ? { latitude: Number(location.latitude) }
                 : {}),
               ...(location.longitude !== null
-                ? { longitude: location.longitude }
+                ? { longitude: Number(location.longitude) }
                 : {}),
               ...(location.eligibility_result
                 ? { eligibilityResult: location.eligibility_result }

@@ -1,3 +1,5 @@
+import { EvaluateLocationEligibilityService } from '../../src/location-eligibility/evaluate-location-eligibility.service.js';
+import { DevelopmentLocationEligibilityProvider } from '../../src/location-eligibility/development-location-eligibility.provider.js';
 import { up as operationalUp } from '../../migrations/20260919050000-add-request-operational-activity.js';
 import { up as referenceUp } from '../../migrations/20260919040000-configure-request-references.js';
 import { up as actionUp } from '../../migrations/20260919030000-add-issue-action.js';
@@ -611,6 +613,160 @@ test(
           })
           .execute(),
       );
+      // F045 uses the existing Location row and creation transaction for every input method.
+      for (const method of ['search', 'map', 'device', 'manual']) {
+        const location = {
+          enteredAddress: 'Fictional ' + method + ' landmark <b>text</b>',
+          locationType: 'other',
+          latitude: -0.012345,
+          longitude: 0.023456,
+        };
+        const createdLocation = await creator.execute(
+          { ...payload, location },
+          new Date('2026-10-15T12:00:00Z'),
+        );
+        const persisted = await db
+          .selectFrom('location')
+          .selectAll()
+          .where('service_request_id', '=', createdLocation.id)
+          .executeTakeFirstOrThrow();
+        assert.equal(persisted.entered_address, location.enteredAddress);
+        assert.equal(Number(persisted.latitude), location.latitude);
+        assert.equal(Number(persisted.longitude), location.longitude);
+        const locationRead = await reader.execute(createdLocation.id);
+        assert.equal(locationRead.location?.latitude, location.latitude);
+        assert.equal(locationRead.location.longitude, location.longitude);
+        assert.equal(persisted.organization_id, org);
+        assert.equal('accuracy' in persisted, false);
+        assert.equal('provenance' in persisted, false);
+        const parent = await db
+          .selectFrom('service_request')
+          .select(['audience', 'intake_channel'])
+          .where('id', '=', createdLocation.id)
+          .executeTakeFirstOrThrow();
+        assert.deepEqual(parent, { audience: 'public', intake_channel: 'web' });
+        assert.equal(
+          (
+            await db
+              .selectFrom('request_operational_activity')
+              .selectAll()
+              .where('service_request_id', '=', createdLocation.id)
+              .execute()
+          ).length,
+          1,
+        );
+      }
+      const snapshot = async () =>
+        JSON.stringify(
+          await Promise.all([
+            db
+              .selectFrom('service_request')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+            db.selectFrom('location').selectAll().orderBy('id').execute(),
+            db
+              .selectFrom('service_request_reference_sequence')
+              .selectAll()
+              .execute(),
+            db
+              .selectFrom('request_operational_activity')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+          ]),
+        );
+      const beforeInvalidLocation = await snapshot();
+      for (const coordinates of [
+        { latitude: 91, longitude: 0 },
+        { latitude: 0, longitude: 181 },
+        { latitude: NaN, longitude: 0 },
+        { latitude: 0 },
+      ]) {
+        await assert.rejects(
+          creator.execute({
+            ...payload,
+            location: {
+              enteredAddress: 'Fictional invalid point',
+              ...coordinates,
+            },
+          }),
+        );
+      }
+      assert.equal(await snapshot(), beforeInvalidLocation);
+      await db
+        .updateTable('service_definition_version')
+        .set({
+          status: 'published',
+          published_at: new Date(),
+          geographic_eligibility_mode: 'service_area',
+        })
+        .where('id', '=', draftVersion)
+        .execute();
+      const realEligibility = new EvaluateLocationEligibilityService(
+        { get: () => 100 } as never,
+        new DevelopmentLocationEligibilityProvider(),
+        { logger: { info: () => undefined } } as never,
+      );
+      const coordinateCreator = new CreateServiceRequestService(
+        config,
+        { client: db } as DatabaseService,
+        repository,
+        realEligibility,
+      );
+      const coordinatePayload = {
+        ...payload,
+        serviceDefinitionVersionId: draftVersion,
+        answers: [],
+        location: {
+          enteredAddress: 'Fictional boundary point',
+          latitude: 0,
+          longitude: 0,
+        },
+      };
+      await coordinateCreator.execute(coordinatePayload);
+      const beforeBoundaryFailure = await snapshot();
+      await assert.rejects(
+        coordinateCreator.execute({
+          ...coordinatePayload,
+          location: { ...coordinatePayload.location, longitude: 1 },
+        }),
+        (error: unknown) =>
+          error instanceof BadRequestException &&
+          (error.getResponse() as { code: string }).code ===
+            'LOCATION_INELIGIBLE',
+      );
+      assert.equal(await snapshot(), beforeBoundaryFailure);
+      await assert.rejects(
+        coordinateCreator.execute({
+          ...coordinatePayload,
+          location: { enteredAddress: 'Fictional unknown' },
+        }),
+      );
+      assert.equal(await snapshot(), beforeBoundaryFailure);
+      await db
+        .updateTable('service_definition')
+        .set({
+          action_type: 'external_redirect',
+          redirect_url: 'https://example.test/service',
+          redirect_message: 'External service',
+          redirect_label: 'Continue',
+        })
+        .where('id', '=', serviceId)
+        .execute();
+      const beforeExternal = await snapshot();
+      for (const label of [
+        'Fictional search',
+        'Fictional map',
+        'Fictional manual',
+      ])
+        await assert.rejects(
+          coordinateCreator.execute({
+            ...coordinatePayload,
+            location: { ...coordinatePayload.location, enteredAddress: label },
+          }),
+        );
+      assert.equal(await snapshot(), beforeExternal);
       await staffDown(db);
       await eligibilityDown(db);
       await listDown(db);

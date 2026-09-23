@@ -28,6 +28,8 @@ export class EvaluateLocationEligibilityService {
     unableToDetermineBehavior: string;
     enteredAddress: string;
     locationType: string;
+    latitude?: number | undefined;
+    longitude?: number | undefined;
   }): Promise<LocationEligibilityResponse | null> {
     if (input.policyType === 'no_geographic_restriction') return null;
     const started = Date.now();
@@ -45,8 +47,8 @@ export class EvaluateLocationEligibilityService {
           policyReference: input.policyReference,
           enteredAddress: input.enteredAddress,
           normalizedAddress: null,
-          latitude: null,
-          longitude: null,
+          latitude: input.latitude ?? null,
+          longitude: input.longitude ?? null,
           locationType: input.locationType,
           facilityReference: null,
           parkReference: null,

@@ -165,6 +165,10 @@ export async function checkRequestTracking(
     ).id;
   const id = await create(c.publicPayload),
     internal = await create(c.internalPayload);
+  // F045 projection regression: coordinates remain operational data, tracking stays text-only.
+  await sql`insert into location(id,organization_id,service_request_id,entered_address,latitude,longitude,location_type) values (${randomUUID()},${org},${id},'Fictional F045 service landmark',0.012345,-0.023456,'other')`.execute(
+    db,
+  );
   const root = (requestId = id) =>
     `/api/v1/staff/service-requests/${requestId}/requester-tracking`;
   const state = (who: string = full, requestId = id) =>
@@ -303,6 +307,20 @@ export async function checkRequestTracking(
     'F044 bearer access is allowlisted, reference/UUID/malformed/unknown are insufficient and headers protect failures',
     async () => {
       const result = await track(a).expect(200);
+      assert.equal(
+        (result.body as { serviceLocation: string }).serviceLocation,
+        'Fictional F045 service landmark',
+      );
+      for (const field of [
+        'latitude',
+        'longitude',
+        'accuracy',
+        'permission',
+        'provenance',
+        'deviceLocation',
+        'requesterGeography',
+      ])
+        assert.equal(field in result.body, false);
       assert.deepEqual(Object.keys(result.body).sort(), [
         'description',
         'issue',

@@ -1,4 +1,4 @@
-export function mapIntakeToCreateServiceRequest({ service, answers, description, location, reportingMode, reporterName }) {
+export function mapIntakeToCreateServiceRequest({ service, answers, description, location, locationPoint, reportingMode, reporterName }) {
     const visibleIds = new Set((service.questions || []).map((question) => question.id));
     return {
         serviceDefinitionId: service.id,
@@ -13,6 +13,6 @@ export function mapIntakeToCreateServiceRequest({ service, answers, description,
             return { questionId, value: typedValue };
         }),
         ...(reportingMode === "identified" ? { contact: { name: reporterName.trim() } } : {}),
-        ...(location.trim() ? { location: { enteredAddress: location.trim(), locationType: "entered_address" } } : {})
+        ...(location.trim() ? { location: { enteredAddress: location.trim(), locationType: locationPoint ? "other" : "entered_address", ...(locationPoint ? { latitude: locationPoint.latitude, longitude: locationPoint.longitude } : {}) } } : {})
     };
 }

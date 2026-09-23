@@ -17,7 +17,7 @@ async function completeRequest(user) {
     await user.click(await screen.findByRole("radio", { name: /Pothole/ }));
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.type(await screen.findByLabelText("Tell us more about the concern *"), "Resident-only description");
-    await user.type(screen.getByLabelText("Location *"), "100 Main Street");
+    await user.type(screen.getByLabelText("Service Location (required)"), "100 Main Street");
     await user.click(screen.getByRole("button", { name: "Review request" }));
 }
 
@@ -31,6 +31,7 @@ test("API mode loads asynchronously, submits once, and displays the API referenc
     expect(create).toHaveBeenCalledOnce(); expect(screen.getByRole("button", { name: "Submitting..." })).toBeDisabled();
     resolveRequest({ id: "request", referenceNumber: "SR-202609-000123", status: "open", createdAt: "2026-09-02T00:00:00Z" });
     expect(await screen.findByRole("status")).toHaveTextContent("SR-202609-000123");
+    expect(screen.getByText("100 Main Street")).toBeInTheDocument();
 });
 
 test("offers canonical details navigation only when development reads are enabled", async () => {

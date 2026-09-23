@@ -1,3 +1,4 @@
+import { createIntakeLocationRepository } from "./locationSearch.js";
 import { createApiClient } from "../api/apiClient.js";
 import { createApiCatalogRepository, createFixtureCatalogRepository } from "../catalog/catalogRepositories.js";
 import { readResidentIntakeConfig } from "../config/runtimeConfig.js";
@@ -7,5 +8,5 @@ export function createResidentIntakeRepositories({ environment, fetchImplementat
     const config = readResidentIntakeConfig(environment);
     if (config.dataSource === "legacy") return { mode: "legacy", detailsEnabled: false, catalog: createFixtureCatalogRepository(), requests: createLegacyIssueRepository({ saveIssue, createTimestamp }) };
     const client = createApiClient({ baseUrl: config.apiBaseUrl, fetchImplementation });
-    return { mode: "api", detailsEnabled: config.developmentReadsEnabled || config.entra.enabled, catalog: createApiCatalogRepository(client), requests: createApiServiceRequestRepository(client, { authenticated: config.entra.enabled }) };
+    return { mode: "api", location: createIntakeLocationRepository(client), detailsEnabled: config.developmentReadsEnabled || config.entra.enabled, catalog: createApiCatalogRepository(client), requests: createApiServiceRequestRepository(client, { authenticated: config.entra.enabled }) };
 }

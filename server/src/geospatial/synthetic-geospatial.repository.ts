@@ -96,6 +96,14 @@ const fixtures: Record<string, GeospatialMapData> = {
   },
 };
 
+// Shared fictional geometry only; never expose staff request features to intake.
+export function syntheticServiceBoundary(organizationId: string) {
+  const fixture = fixtures[organizationId];
+  return fixture
+    ? projectGeospatialMapData(fixture, organizationId).boundary
+    : null;
+}
+
 @Injectable()
 export class SyntheticGeospatialRepository implements GeospatialReadRepository<GeospatialMapData> {
   constructor(private readonly config: ConfigService<AppConfiguration, true>) {}

@@ -1,4 +1,5 @@
 import type { StaffAccess } from '../auth/auth.types.js';
+import { validServicePoint } from '../location-eligibility/service-location.domain.js';
 import {
   BadRequestException,
   ConflictException,
@@ -147,6 +148,15 @@ export class CreateServiceRequestService {
     );
     if (input.location?.enteredAddress.trim() === '')
       throw new BadRequestException('Location address must not be blank');
+    if (
+      input.location &&
+      (input.location.latitude !== undefined ||
+        input.location.longitude !== undefined) &&
+      !validServicePoint(input.location.latitude, input.location.longitude)
+    )
+      throw new BadRequestException(
+        'Provide valid latitude and longitude together',
+      );
 
     const supplied = new Map<string, unknown>();
     for (const answer of input.answers) {
@@ -244,6 +254,8 @@ export class CreateServiceRequestService {
           unableToDetermineBehavior: definition.unableToDetermineBehavior,
           enteredAddress: input.location.enteredAddress.trim(),
           locationType: input.location.locationType ?? 'entered_address',
+          latitude: input.location.latitude,
+          longitude: input.location.longitude,
         })
       : null;
     return this.database.client.transaction().execute(async (trx) => {
@@ -309,8 +321,8 @@ export class CreateServiceRequestService {
             service_request_id: requestId,
             entered_address: input.location.enteredAddress.trim(),
             normalized_address: null,
-            latitude: null,
-            longitude: null,
+            latitude: input.location.latitude ?? null,
+            longitude: input.location.longitude ?? null,
             location_type: input.location.locationType ?? 'entered_address',
             facility_reference: null,
             park_reference: null,

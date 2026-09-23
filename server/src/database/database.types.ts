@@ -156,8 +156,8 @@ interface LocationTable {
   service_request_id: string;
   entered_address: string;
   normalized_address: string | null;
-  latitude: number | null;
-  longitude: number | null;
+  latitude: ColumnType<number | string | null, number | null, number | null>;
+  longitude: ColumnType<number | string | null, number | null, number | null>;
   location_type: string;
   facility_reference: string | null;
   park_reference: string | null;
