@@ -818,7 +818,9 @@ function RequestDetail({ repository, id, onSignIn }) {
                   </dd>
                 </div>
               </dl>
-              <aside className="request-internal-notice">
+              <aside
+                className={`request-internal-notice${row.audience === "public" ? " request-public-notice" : ""}`}
+              >
                 <i className="bi bi-info-circle-fill" aria-hidden="true" />
                 <div>
                   <strong>
@@ -850,202 +852,207 @@ function RequestDetail({ repository, id, onSignIn }) {
                 )}
               </section>
             </ContentCard>
-            <RequestEvidence
-              key={id}
-              repository={repository.attachments}
-              requestId={id}
-              onAccessFailure={protectedContentAccessFailure}
-            />
-          </div>
-          <div className="request-supporting-controls">
-            <ContentCard className="request-actions">
-              <SectionHeading icon="lightning-charge-fill">
-                Actions
-              </SectionHeading>
-              {!workflowActions.length && !capabilities.canRoute ? (
-                <p>You have read-only access to this request.</p>
-              ) : (
-                <>
-                  <div className="request-action-buttons">
-                    {routineAction &&
-                      workflowActions.includes(routineAction[0]) && (
-                        <button
-                          className="btn btn-primary"
-                          disabled={busy || Boolean(narrativeAction)}
-                          onClick={() =>
-                            mutate("workflow", { action: routineAction[0] })
-                          }
-                        >
-                          <i className="bi bi-play-fill" aria-hidden="true" />{" "}
-                          {routineAction[1]}
-                        </button>
-                      )}
-                    {(["open", "in_progress", "on_hold"].includes(row.status)
-                      ? [
-                          ...(row.status === "in_progress" ? ["hold"] : []),
-                          "close",
-                        ]
-                      : row.status === "closed"
-                        ? ["reopen"]
-                        : []
-                    )
-                      .filter((action) => workflowActions.includes(action))
-                      .map((action) => (
-                        <button
-                          key={action}
-                          className="btn btn-secondary"
-                          disabled={busy || Boolean(narrativeAction)}
-                          onClick={(e) => {
-                            narrativeTrigger.current = e.currentTarget;
-                            setRouting(false);
-                            setNarrativeError("");
-                            setNarrativeAction(action);
-                          }}
-                        >
-                          <i
-                            className={`bi bi-${{ hold: "pause-fill", close: "check-lg", reopen: "arrow-counterclockwise" }[action]}`}
-                            aria-hidden="true"
-                          />{" "}
-                          {
-                            {
-                              hold: "Place On Hold",
-                              close: "Close Request",
-                              reopen: "Reopen Request",
-                            }[action]
-                          }
-                        </button>
-                      ))}
-                    {row.status !== "cancelled" && capabilities.canRoute && (
-                      <button
-                        ref={routeButton}
-                        className="btn btn-secondary"
-                        disabled={busy || Boolean(narrativeAction)}
-                        onClick={() => setRouting(true)}
-                      >
-                        <i
-                          className="bi bi-signpost-split"
-                          aria-hidden="true"
-                        />{" "}
-                        Route Request
-                      </button>
-                    )}
+            <div className="request-supporting-content">
+              <RequestEvidence
+                key={id}
+                repository={repository.attachments}
+                requestId={id}
+                onAccessFailure={protectedContentAccessFailure}
+              />
+              <CollaborationPanel
+                key={id + ":" + row.audience}
+                repository={repository}
+                id={id}
+                audience={row.audience}
+                capabilities={capabilities}
+                onAccessFailure={protectedContentAccessFailure}
+              />
+              <ContentCard className="request-issue-details">
+                <SectionHeading icon="tag">Issue Details</SectionHeading>
+                <dl className="request-metadata">
+                  <div>
+                    <dt>Issue</dt>
+                    <dd>{row.issueName}</dd>
                   </div>
-                  {row.status === "cancelled" && (
-                    <p>Cancelled requests have no workflow actions.</p>
+                  {row.categoryName && (
+                    <div>
+                      <dt>Service category</dt>
+                      <dd>{row.categoryName}</dd>
+                    </div>
                   )}
-                  {narrativeAction && (
-                    <WorkflowNarrativeForm
-                      key={narrativeAction}
-                      action={narrativeAction}
-                      busy={busy}
-                      error={narrativeError}
-                      onCancel={() => {
-                        setNarrativeAction(null);
-                        setNarrativeError("");
-                        requestAnimationFrame(() =>
-                          narrativeTrigger.current?.focus(),
-                        );
-                      }}
-                      onSubmit={(input) => mutate("workflow", input)}
-                    />
-                  )}
-                  {routing && (
-                    <form
-                      className="routing-form"
-                      aria-label="Route Request"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        mutate("route", {
-                          departmentId: department,
-                          divisionId: division || null,
-                        });
-                      }}
-                    >
-                      <h4>Route Request</h4>
-                      <fieldset disabled={busy}>
-                        <legend className="visually-hidden">
-                          Choose an authorized destination
-                        </legend>
-                        <ScopeFields
-                          options={state.options}
-                          departmentId={department}
-                          divisionId={division}
-                          onDepartment={(value) => {
-                            setDepartment(value);
-                            setDivision("");
-                          }}
-                          onDivision={setDivision}
-                          prefix="route"
-                        />
-                        <div className="request-action-buttons">
+                </dl>
+              </ContentCard>
+            </div>
+          </div>
+          <div className="request-sidebar">
+            <div className="request-supporting-controls">
+              <ContentCard className="request-actions">
+                <SectionHeading icon="lightning-charge-fill">
+                  Actions
+                </SectionHeading>
+                {!workflowActions.length && !capabilities.canRoute ? (
+                  <p>You have read-only access to this request.</p>
+                ) : (
+                  <>
+                    <div className="request-action-buttons">
+                      {routineAction &&
+                        workflowActions.includes(routineAction[0]) && (
                           <button
                             className="btn btn-primary"
-                            disabled={
-                              !department ||
-                              (department === row.departmentId &&
-                                (division || null) === (row.divisionId || null))
+                            disabled={busy || Boolean(narrativeAction)}
+                            onClick={() =>
+                              mutate("workflow", { action: routineAction[0] })
                             }
                           >
-                            Confirm routing
+                            <i className="bi bi-play-fill" aria-hidden="true" />{" "}
+                            {routineAction[1]}
                           </button>
+                        )}
+                      {(["open", "in_progress", "on_hold"].includes(row.status)
+                        ? [
+                            ...(row.status === "in_progress" ? ["hold"] : []),
+                            "close",
+                          ]
+                        : row.status === "closed"
+                          ? ["reopen"]
+                          : []
+                      )
+                        .filter((action) => workflowActions.includes(action))
+                        .map((action) => (
                           <button
-                            type="button"
+                            key={action}
                             className="btn btn-secondary"
-                            onClick={() => {
+                            disabled={busy || Boolean(narrativeAction)}
+                            onClick={(e) => {
+                              narrativeTrigger.current = e.currentTarget;
                               setRouting(false);
-                              routeButton.current?.focus();
+                              setNarrativeError("");
+                              setNarrativeAction(action);
                             }}
                           >
-                            Cancel routing
+                            <i
+                              className={`bi bi-${{ hold: "pause-fill", close: "check-lg", reopen: "arrow-counterclockwise" }[action]}`}
+                              aria-hidden="true"
+                            />{" "}
+                            {
+                              {
+                                hold: "Place On Hold",
+                                close: "Close Request",
+                                reopen: "Reopen Request",
+                              }[action]
+                            }
                           </button>
-                        </div>
-                      </fieldset>
-                    </form>
-                  )}
-                </>
-              )}
-            </ContentCard>
-            <RequestManagement
+                        ))}
+                      {row.status !== "cancelled" && capabilities.canRoute && (
+                        <button
+                          ref={routeButton}
+                          className="btn btn-secondary"
+                          disabled={busy || Boolean(narrativeAction)}
+                          onClick={() => setRouting(true)}
+                        >
+                          <i
+                            className="bi bi-signpost-split"
+                            aria-hidden="true"
+                          />{" "}
+                          Route Request
+                        </button>
+                      )}
+                    </div>
+                    {row.status === "cancelled" && (
+                      <p>Cancelled requests have no workflow actions.</p>
+                    )}
+                    {narrativeAction && (
+                      <WorkflowNarrativeForm
+                        key={narrativeAction}
+                        action={narrativeAction}
+                        busy={busy}
+                        error={narrativeError}
+                        onCancel={() => {
+                          setNarrativeAction(null);
+                          setNarrativeError("");
+                          requestAnimationFrame(() =>
+                            narrativeTrigger.current?.focus(),
+                          );
+                        }}
+                        onSubmit={(input) => mutate("workflow", input)}
+                      />
+                    )}
+                    {routing && (
+                      <form
+                        className="routing-form"
+                        aria-label="Route Request"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          mutate("route", {
+                            departmentId: department,
+                            divisionId: division || null,
+                          });
+                        }}
+                      >
+                        <h4>Route Request</h4>
+                        <fieldset disabled={busy}>
+                          <legend className="visually-hidden">
+                            Choose an authorized destination
+                          </legend>
+                          <ScopeFields
+                            options={state.options}
+                            departmentId={department}
+                            divisionId={division}
+                            onDepartment={(value) => {
+                              setDepartment(value);
+                              setDivision("");
+                            }}
+                            onDivision={setDivision}
+                            prefix="route"
+                          />
+                          <div className="request-action-buttons">
+                            <button
+                              className="btn btn-primary"
+                              disabled={
+                                !department ||
+                                (department === row.departmentId &&
+                                  (division || null) ===
+                                    (row.divisionId || null))
+                              }
+                            >
+                              Confirm routing
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              onClick={() => {
+                                setRouting(false);
+                                routeButton.current?.focus();
+                              }}
+                            >
+                              Cancel routing
+                            </button>
+                          </div>
+                        </fieldset>
+                      </form>
+                    )}
+                  </>
+                )}
+              </ContentCard>
+              <RequestManagement
+                repository={repository}
+                id={id}
+                row={row}
+                busy={busy || Boolean(narrativeAction) || routing}
+                onMutate={mutate}
+                onAccessFailure={protectedContentAccessFailure}
+                contactState={contactState}
+                loadContact={loadContact}
+                clearContact={clearContact}
+              />
+            </div>
+            <ActivityPanel
               repository={repository}
               id={id}
-              row={row}
-              busy={busy || Boolean(narrativeAction) || routing}
-              onMutate={mutate}
-              onAccessFailure={protectedContentAccessFailure}
-              contactState={contactState}
-              loadContact={loadContact}
-              clearContact={clearContact}
+              revision={row.revision}
+              onAccessFailure={accessFailure}
             />
           </div>
-          <CollaborationPanel
-            key={id + ":" + row.audience}
-            repository={repository}
-            id={id}
-            audience={row.audience}
-            capabilities={capabilities}
-            onAccessFailure={protectedContentAccessFailure}
-          />
-          <ContentCard className="request-issue-details">
-            <SectionHeading icon="tag">Issue Details</SectionHeading>
-            <dl className="request-metadata">
-              <div>
-                <dt>Issue</dt>
-                <dd>{row.issueName}</dd>
-              </div>
-              {row.categoryName && (
-                <div>
-                  <dt>Service category</dt>
-                  <dd>{row.categoryName}</dd>
-                </div>
-              )}
-            </dl>
-          </ContentCard>
-          <ActivityPanel
-            repository={repository}
-            id={id}
-            revision={row.revision}
-            onAccessFailure={accessFailure}
-          />
         </article>
       )}
     </>

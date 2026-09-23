@@ -14,6 +14,39 @@ import {
 import RequestActivity from "../src/staff/requests/RequestActivity.jsx";
 afterEach(cleanup);
 
+test("final F046 detail aligns content-sized rows and stacks columns in DOM order below desktop", () => {
+  const css = readFileSync(
+    "react/src/staff/requests/staffRequests.css",
+    "utf8",
+  );
+  const grid = css.match(/\.request-detail-grid\s*\{([^}]+)\}/)[1];
+  expect(grid).toMatch(
+    /grid-template-columns:\s*minmax\(0, 1.65fr\) minmax\(0, 1fr\)/,
+  );
+  const columns = css.match(
+    /\.request-primary-content,\s*\.request-sidebar\s*\{([^}]+)\}/,
+  )[1];
+  expect(columns).toMatch(/grid-template-rows:\s*subgrid/);
+  expect(columns).toMatch(/grid-row:\s*1 \/ span 2/);
+  expect(columns).not.toMatch(/position:\s*absolute|transform:|order:|margin/);
+  const mobile = css.slice(css.indexOf("@media (max-width: 991.98px)"));
+  expect(mobile).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+  expect(mobile).toMatch(/grid-template-rows:\s*none/);
+  expect(mobile).toMatch(/grid-row:\s*auto/);
+});
+
+test("final F046 banner-to-Description spacing uses an existing token only for PUBLIC", () => {
+  const css = readFileSync(
+    "react/src/staff/requests/staffRequests.css",
+    "utf8",
+  );
+  const spacing = css.match(
+    /\.request-public-notice \+ \.request-description\s*\{([^}]+)\}/,
+  )[1];
+  expect(spacing).toMatch(/margin-block-start:\s*var\(--space-5\)/);
+  expect(css).not.toMatch(/\.request-internal-notice \+ \.request-description/);
+});
+
 test("list toolbar wraps and readable ordinals retain room for multiple digits", () => {
   const css = readFileSync(
     "react/src/staff/requests/staffRequests.css",

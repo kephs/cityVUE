@@ -499,3 +499,93 @@ the existing minimal audit behavior.
 The separate local commit leaves main two ahead/zero behind the same local
 origin/main. No fetch, push, history rewrite, tag/release, deployment or cloud/
 client-resource change is authorized or performed. **F047 remains unstarted.**
+
+## Final staff-detail layout follow-up — 2026-09-23
+
+Starting checkpoint: `854c6bf49ab95a0466eb7659ff4852954fa2f793`, clean main,
+two ahead/zero behind local origin/main
+`72081ec6121189c61bdc83acf2ef80d3dcfdf3dd`. This separately authorized final
+presentation refinement preserves that commit and the original F046 foundation.
+
+The existing Public Request notice gains a presentation class. Its immediately
+following Description section receives the existing `space-5` block-start
+margin. The notice stays in place; Description stays in the primary information
+card. INTERNAL retains its existing Internal Request notice and spacing, with no
+Public Request banner or PUBLIC-only spacing rule. No whitespace characters,
+line breaks, negative margins or positioning offsets supply the separation.
+
+Two content-sized grid rows now coordinate two semantic column groups. The
+primary column contains the information card, then a stack of Request Evidence,
+Collaboration and Issue Details. The sidebar contains Actions and Request
+Management, followed by the separate Recent Activity card. CSS subgrid shares
+the row boundaries, aligning Evidence and Activity at the second row while
+allowing their contents to have independent heights. The first row accommodates
+whichever information/management group is taller; there are no measurements or
+viewport-specific vertical offsets. Normal token gaps separate subsequent cards.
+
+The existing column proportions remain, with the standard desktop boundary at
+992 px so **1440, 1280 and 1024** retain two columns. Below that boundary, the
+column groups use their intrinsic rows and stack in DOM order: primary
+information → Evidence → Collaboration → Issue Details → Actions/Request
+Management → Recent Activity. **768 and 390** are single-column. No CSS order
+property or separate visual/focus ordering is used. Recent Activity remains
+outside and after Request Management.
+
+Only these files change:
+
+- `react/src/staff/requests/InternalRequestWorkspace.jsx`: layout wrappers,
+  presentation order and PUBLIC notice class; existing components/props retained.
+- `react/src/staff/requests/staffRequests.css`: token spacing, shared grid rows
+  and responsive stacking.
+- `react/test/StaffRequestWorkspace.test.jsx` and
+  `react/test/DesignSystem.test.jsx`: focused semantic/order/spacing/grid and
+  Activity read-count regressions.
+- This implementation report.
+
+Validation:
+
+| Width | Light / dark | Result                                                                   |
+| ----- | ------------ | ------------------------------------------------------------------------ |
+| 1440  | Both         | Two columns; Evidence/Activity aligned; 48 variable-content cases passed |
+| 1280  | Both         | Two columns; Evidence/Activity aligned; 48 variable-content cases passed |
+| 1024  | Both         | Two columns; Evidence/Activity aligned; 48 variable-content cases passed |
+| 768   | Both         | Single column in DOM order; 48 variable-content cases passed             |
+| 390   | Both         | Single column in DOM order; 48 variable-content cases passed             |
+
+The **240 synthetic browser cases** combine PUBLIC/INTERNAL, short/long
+Description, zero/one/three evidence files and short/five-event Activity. They
+check notice spacing, all card relationships, content-driven gaps, clipping and
+horizontal overflow. Expanding a longer Description reflows the shared rows
+without another Activity read. Sequential Tab checks across 13 visible controls
+passed at each width. Ten additional width/theme interaction cases passed
+Evidence Preview/thumbnail dialog entry, containment, Escape/Close, focus return,
+visible focus, Collaboration arrow-key navigation and full Activity access.
+The preview still reads five events; full Activity requests its existing 25-row
+page only when opened. Resizing adds no fetch. These are accessibility-oriented
+checks, not a WCAG certification.
+
+The user confirmed the entire authenticated read-only visual matrix passed on
+existing **SR-202609-000008**, at all five widths in both themes. No new request,
+Note, Communication or attachment was created, and personal Requester Tracking
+was left closed.
+
+The affected React run passed **215 tests in five files**: workspace, design
+system, attachments, management and dialog. It uses `test:react` with those five
+paths. The full React/backend/database suites were not rerun: application changes
+are limited to staff detail markup and CSS, and affected behavior is covered by
+the focused suites. `build:react` passed with the existing large-chunk warning.
+Frontend lint still has no configured script. Changed-file formatting, whitespace,
+documentation links and lightweight private-data/artifact checks passed.
+
+Attachment components/repository, Preview/Download/modal behavior, Activity
+components/repository, APIs, backend, authorization, storage, scan/claim/content/
+EXIF behavior, schema, migrations and grants are unchanged. No database operation
+was performed. Last verified development facts remain **23 applied / 0 pending**
+and personal Requester Tracking **1 active / 5 revoked**; this follow-up makes no
+new database-state claim and does not inspect or exercise a tracking credential.
+The three finalized fictional attachments remain the intentional UAT record.
+
+The separate local commit leaves main **three ahead / zero behind** the unchanged
+local origin/main reference. No amend, history rewrite, fetch, push, tag/release,
+deployment or cloud/client-resource change was performed. **F047 remains
+unstarted.** Stop for review.

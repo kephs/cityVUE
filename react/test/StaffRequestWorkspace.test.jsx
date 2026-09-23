@@ -884,7 +884,9 @@ test.each(["public", "internal"])(
     const collaboration = screen.getByRole("heading", {
       name: "Collaboration",
     });
-    expect(description.parentElement.nextElementSibling).toBe(evidence);
+    expect(description.parentElement.nextElementSibling.firstElementChild).toBe(
+      evidence,
+    );
     expect(description.contains(evidence)).toBe(false);
     expect(
       evidence.compareDocumentPosition(collaboration) &
@@ -896,6 +898,95 @@ test.each(["public", "internal"])(
     );
   },
 );
+
+test.each(["public", "internal"])(
+  "final F046 %s notice stays distinct from Description with PUBLIC-only spacing",
+  async (audience) => {
+    repository.detail.mockResolvedValue({ ...row, audience });
+    show("/staff/requests/" + id);
+    const description = (
+      await screen.findByRole("heading", { name: "Description" })
+    ).closest("section");
+    const notice = description.previousElementSibling;
+    expect(notice.tagName).toBe("ASIDE");
+    expect(notice).toHaveClass("request-internal-notice");
+    expect(notice.classList.contains("request-public-notice")).toBe(
+      audience === "public",
+    );
+    expect(
+      within(notice).getByText(
+        audience === "public" ? "Public Request" : "Internal Request",
+        { exact: true },
+      ),
+    ).toBeInTheDocument();
+    expect(notice.contains(description)).toBe(false);
+    expect(description.parentElement).toHaveClass("request-detail");
+    expect(description.querySelector("p").textContent).toBe(row.description);
+    if (audience === "internal")
+      expect(
+        screen.queryByText("Public Request", { exact: true }),
+      ).not.toBeInTheDocument();
+  },
+);
+
+test("final F046 DOM groups preserve primary flow and management-before-Activity without extra reads", async () => {
+  repository.attachments = {
+    policy: vi.fn().mockResolvedValue({ enabled: true }),
+    evidence: vi.fn().mockResolvedValue([]),
+  };
+  const { container } = show("/staff/requests/" + id);
+  await screen.findByText("No attachments");
+  await screen.findByText("No activity has been recorded for this request.");
+  const grid = container.querySelector(".request-detail-grid");
+  const [primary, sidebar] = grid.children;
+  expect(primary).toHaveClass("request-primary-content");
+  expect(sidebar).toHaveClass("request-sidebar");
+  expect(primary.firstElementChild).toHaveClass("request-detail");
+  expect(
+    [...primary.lastElementChild.children].map((element) => element.className),
+  ).toEqual([
+    expect.stringContaining("request-evidence"),
+    expect.stringContaining("request-collaboration"),
+    expect.stringContaining("request-issue-details"),
+  ]);
+  expect(
+    [...sidebar.firstElementChild.children].map((element) => element.className),
+  ).toEqual([
+    expect.stringContaining("request-actions"),
+    expect.stringContaining("request-management"),
+  ]);
+  expect(sidebar.lastElementChild).toHaveClass("request-history");
+  expect(
+    sidebar
+      .querySelector(".request-management")
+      .contains(sidebar.lastElementChild),
+  ).toBe(false);
+  expect(repository.activity).toHaveBeenCalledTimes(1);
+  expect(repository.activity).toHaveBeenCalledWith(
+    id,
+    1,
+    expect.any(AbortSignal),
+    5,
+  );
+  fireEvent(window, new Event("resize"));
+  expect(repository.activity).toHaveBeenCalledTimes(1);
+  const dialog = await fullActivity();
+  await within(dialog).findByText(
+    "No activity has been recorded for this request.",
+  );
+  expect(repository.activity).toHaveBeenCalledTimes(2);
+  expect(repository.activity).toHaveBeenLastCalledWith(
+    id,
+    1,
+    expect.any(AbortSignal),
+    25,
+  );
+  closeDialog();
+  expect(
+    screen.getByRole("heading", { name: "Recent Activity" }),
+  ).toBeInTheDocument();
+  expect(repository.activity).toHaveBeenCalledTimes(2);
+});
 
 test.each([401, 403, 404])(
   "F046 parent denial %s never loads evidence or leaks its count",
