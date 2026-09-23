@@ -1,3 +1,8 @@
+import {
+  AttachmentSelector,
+  AttachmentList,
+  useAttachmentDraft,
+} from "../../attachments/Attachments.jsx";
 import { useEffect, useRef, useState } from "react";
 import {
   ContentCard,
@@ -37,6 +42,11 @@ function NotesStream({
   embedded = false,
   active = true,
 }) {
+  const attachmentDraft = useAttachmentDraft(
+    canRead && canCreate ? repository.attachments : undefined,
+    { requestId: id, context: "INTERNAL_NOTE" },
+    onAccessFailure,
+  );
   const [items, setItems] = useState([]),
     [cursor, setCursor] = useState(null),
     [loading, setLoading] = useState(Boolean(canRead)),
@@ -63,6 +73,7 @@ function NotesStream({
     if (signal.aborted) return;
     if ([401, 403, 404].includes(problem?.status)) {
       setDraft("");
+      attachmentDraft.clear();
       setNotice("");
       submission.current = null;
       if (creating && problem.status === 403) setCreateDenied(true);
@@ -136,6 +147,7 @@ function NotesStream({
   async function add(event) {
     event.preventDefault();
     if (
+      !attachmentDraft.ready ||
       submitting.current ||
       reading.current ||
       !canRead ||
@@ -156,13 +168,19 @@ function NotesStream({
     setNotice("");
     const signal = lifecycle.current.signal;
     try {
-      if (!submission.current || submission.current.body !== draft)
-        submission.current = { body: draft, key: crypto.randomUUID() };
+      const batchId = attachmentDraft.claim()?.batchId;
+      if (
+        !submission.current ||
+        submission.current.body !== draft ||
+        submission.current.batchId !== batchId
+      )
+        submission.current = { body: draft, batchId, key: crypto.randomUUID() };
       const note = await repository.createNote(
         id,
         draft,
         submission.current.key,
         signal,
+        ...(attachmentDraft.claim() ? [attachmentDraft.claim()] : []),
       );
       if (signal.aborted) return;
       setItems((current) =>
@@ -172,6 +190,7 @@ function NotesStream({
         ),
       );
       setDraft("");
+      attachmentDraft.clear();
       submission.current = null;
       setNotice("Internal note added.");
       if (visible.current) textarea.current?.focus();
@@ -226,6 +245,14 @@ function NotesStream({
                   </time>
                 </div>
                 <p className="request-note-body">{note.body}</p>
+                <AttachmentList
+                  items={note.attachments}
+                  repository={repository.attachments}
+                  requestId={id}
+                  parentId={note.id}
+                  context="INTERNAL_NOTE"
+                  onAccessFailure={onAccessFailure}
+                />
               </li>
             ))}
           </ol>
@@ -276,10 +303,15 @@ function NotesStream({
               <p id="internal-note-count" className="text-body-secondary">
                 {draft.length.toLocaleString()} / 4,000 characters
               </p>
+              <AttachmentSelector
+                draft={attachmentDraft}
+                disabled={pending}
+                requesterDirected={false}
+              />
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={pending || loading}
+                disabled={pending || loading || !attachmentDraft.ready}
               >
                 {pending ? "Adding Note…" : "Add Note"}
               </button>

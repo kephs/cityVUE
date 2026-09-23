@@ -1,3 +1,11 @@
+import { AttachmentService } from '../attachments/attachment.service.js';
+import {
+  IntakeAttachmentController,
+  StaffAttachmentController,
+  AttachmentOriginGuard,
+  AttachmentUploadGuard,
+  AttachmentPrivacyMiddleware,
+} from '../attachments/attachment.controller.js';
 import { RequestCommunicationController } from './request-communication.controller.js';
 import { RequestTrackingService } from './request-tracking.service.js';
 import { RequestTrackingRepository } from './request-tracking.repository.js';
@@ -43,6 +51,8 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    IntakeAttachmentController,
+    StaffAttachmentController,
     StaffRequestTrackingController,
     RequesterTrackingController,
     RequestCommunicationController,
@@ -58,6 +68,9 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
     InternalRequestMutationsController,
   ],
   providers: [
+    AttachmentService,
+    AttachmentOriginGuard,
+    AttachmentUploadGuard,
     RequestTrackingService,
     RequestTrackingRepository,
     RequestCommunicationService,
@@ -79,6 +92,9 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
 })
 export class ServiceRequestModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(AttachmentPrivacyMiddleware)
+      .forRoutes(IntakeAttachmentController, StaffAttachmentController);
     consumer
       .apply(RequestTrackingPrivacyMiddleware)
       .forRoutes(StaffRequestTrackingController, RequesterTrackingController);

@@ -1,3 +1,5 @@
+import { ValidateNested } from 'class-validator';
+import { AttachmentClaimDto } from '../attachments/attachment.controller.js';
 import {
   Body,
   Controller,
@@ -41,6 +43,10 @@ export class CreateRequestCommunicationDto {
   @IsString()
   @MaxLength(COMMUNICATION_BODY_MAXIMUM)
   body!: string;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AttachmentClaimDto)
+  attachments?: AttachmentClaimDto;
 }
 export class RequestCommunicationsQueryDto {
   @ApiPropertyOptional({ default: 25, minimum: 1, maximum: 100 })
@@ -95,6 +101,13 @@ export class RequestCommunicationController {
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: { id?: string },
   ) {
-    return this.communications.create(id, access, input.body, key, request.id);
+    return this.communications.create(
+      id,
+      access,
+      input.body,
+      key,
+      request.id,
+      input.attachments,
+    );
   }
 }

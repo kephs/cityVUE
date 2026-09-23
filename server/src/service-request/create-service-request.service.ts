@@ -1,3 +1,6 @@
+import { Optional } from '@nestjs/common';
+import { AttachmentService } from '../attachments/attachment.service.js';
+import { checksum } from '../attachments/attachment.domain.js';
 import type { StaffAccess } from '../auth/auth.types.js';
 import { validServicePoint } from '../location-eligibility/service-location.domain.js';
 import {
@@ -54,6 +57,7 @@ export class CreateServiceRequestService {
     private readonly database: DatabaseService,
     private readonly repository: ServiceRequestRepository,
     private readonly eligibility: EvaluateLocationEligibilityService,
+    @Optional() private readonly attachments?: AttachmentService,
   ) {
     this.organizationId = config.get('catalog.developmentOrganizationId', {
       infer: true,
@@ -81,6 +85,10 @@ export class CreateServiceRequestService {
     access: StaffAccess | undefined,
     now = new Date(),
   ): Promise<CreateServiceRequestResponseDto> {
+    if (input.attachments)
+      throw new BadRequestException(
+        'Evidence is available only during PUBLIC requester intake',
+      );
     if (
       !access ||
       access.development ||
@@ -125,6 +133,9 @@ export class CreateServiceRequestService {
     },
     now: Date,
   ): Promise<CreateServiceRequestResponseDto> {
+    const attachments = this.attachments;
+    if (input.attachments && !attachments)
+      throw new BadRequestException('Attachments unavailable');
     const definition = await this.repository.loadSubmissionDefinition(
       this.database.client,
       context.organizationId,
@@ -259,6 +270,47 @@ export class CreateServiceRequestService {
         })
       : null;
     return this.database.client.transaction().execute(async (trx) => {
+      const attachmentDigest = checksum(
+        JSON.stringify({
+          serviceDefinitionId: input.serviceDefinitionId,
+          serviceDefinitionVersionId: input.serviceDefinitionVersionId,
+          description: input.description,
+          reportingIdentity: input.reportingIdentity,
+          answers: input.answers,
+          contact: input.contact,
+          location: input.location,
+        }),
+      );
+      const batch =
+        input.attachments && attachments
+          ? await attachments.prepare(
+              trx,
+              input.attachments,
+              {
+                organizationId: context.organizationId,
+                context: 'REQUEST_EVIDENCE',
+                issueId: input.serviceDefinitionId,
+                versionId: input.serviceDefinitionVersionId,
+              },
+              attachmentDigest,
+            )
+          : undefined;
+      if (batch?.state === 'FINALIZED') {
+        if (!batch.service_request_id) throw new NotFoundException();
+        const prior = await trx
+          .selectFrom('service_request')
+          .select(['id', 'reference_number', 'created_at'])
+          .where('organization_id', '=', context.organizationId)
+          .where('id', '=', batch.service_request_id)
+          .executeTakeFirstOrThrow();
+        return {
+          id: prior.id,
+          referenceNumber: prior.reference_number,
+          // A retry returns the original creation receipt, never current workflow state.
+          status: 'open',
+          createdAt: new Date(prior.created_at as unknown as string),
+        };
+      }
       // Serialize action changes against final submission, including stale published versions.
       const action = await trx
         .selectFrom('service_definition')
@@ -299,6 +351,14 @@ export class CreateServiceRequestService {
         })
         .returning(['id', 'reference_number', 'status', 'created_at'])
         .executeTakeFirstOrThrow();
+      if (batch && attachments)
+        await attachments.finalize(
+          trx,
+          batch,
+          requestId,
+          requestId,
+          attachmentDigest,
+        );
       if (input.reportingIdentity === 'identified' && input.contact) {
         const email = input.contact.email?.trim();
         await trx

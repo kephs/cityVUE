@@ -1,3 +1,8 @@
+import {
+  AttachmentSelector,
+  AttachmentList,
+  useAttachmentDraft,
+} from "../../attachments/Attachments.jsx";
 import { useEffect, useRef, useState } from "react";
 import {
   ContentCard,
@@ -37,6 +42,11 @@ function CommunicationStream({
   embedded = false,
   active = true,
 }) {
+  const attachmentDraft = useAttachmentDraft(
+    canRead && canCreate ? repository.attachments : undefined,
+    { requestId: id, context: "REQUESTER_COMMUNICATION" },
+    onAccessFailure,
+  );
   const [items, setItems] = useState([]),
     [cursor, setCursor] = useState(null),
     [loading, setLoading] = useState(Boolean(canRead)),
@@ -63,6 +73,7 @@ function CommunicationStream({
     if (signal.aborted) return;
     if ([401, 403, 404].includes(problem?.status)) {
       setDraft("");
+      attachmentDraft.clear();
       setNotice("");
       submission.current = null;
       if (creating && problem.status === 403) setCreateDenied(true);
@@ -136,6 +147,7 @@ function CommunicationStream({
   async function add(event) {
     event.preventDefault();
     if (
+      !attachmentDraft.ready ||
       submitting.current ||
       reading.current ||
       !canRead ||
@@ -156,13 +168,19 @@ function CommunicationStream({
     setNotice("");
     const signal = lifecycle.current.signal;
     try {
-      if (!submission.current || submission.current.body !== draft)
-        submission.current = { body: draft, key: crypto.randomUUID() };
+      const batchId = attachmentDraft.claim()?.batchId;
+      if (
+        !submission.current ||
+        submission.current.body !== draft ||
+        submission.current.batchId !== batchId
+      )
+        submission.current = { body: draft, batchId, key: crypto.randomUUID() };
       const message = await repository.createCommunication(
         id,
         draft,
         submission.current.key,
         signal,
+        ...(attachmentDraft.claim() ? [attachmentDraft.claim()] : []),
       );
       if (signal.aborted) return;
       setItems((current) =>
@@ -172,6 +190,7 @@ function CommunicationStream({
         ),
       );
       setDraft("");
+      attachmentDraft.clear();
       submission.current = null;
       setNotice("Message added.");
       if (visible.current) textarea.current?.focus();
@@ -230,6 +249,14 @@ function CommunicationStream({
                   Outbound · Portal · Recorded
                 </p>
                 <p className="request-message-body">{message.body}</p>
+                <AttachmentList
+                  items={message.attachments}
+                  repository={repository.attachments}
+                  requestId={id}
+                  parentId={message.id}
+                  context="REQUESTER_COMMUNICATION"
+                  onAccessFailure={onAccessFailure}
+                />
               </li>
             ))}
           </ol>
@@ -280,10 +307,15 @@ function CommunicationStream({
               <p id="requester-message-count" className="text-body-secondary">
                 {draft.length.toLocaleString()} / 4,000 characters
               </p>
+              <AttachmentSelector
+                draft={attachmentDraft}
+                disabled={pending}
+                requesterDirected={true}
+              />
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={pending || loading}
+                disabled={pending || loading || !attachmentDraft.ready}
               >
                 {pending ? "Adding Message…" : "Add Message"}
               </button>

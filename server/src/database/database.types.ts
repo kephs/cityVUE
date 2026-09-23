@@ -425,6 +425,48 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  attachment_batch: {
+    id: Generated<string>;
+    organization_id: string;
+    context: string;
+    token_digest: string;
+    staff_identity_id: string | null;
+    service_definition_id: string | null;
+    service_definition_version_id: string | null;
+    service_request_id: string | null;
+    note_id: string | null;
+    communication_id: string | null;
+    state: Generated<string>;
+    submission_digest: string | null;
+    created_at: Generated<Date>;
+    expires_at: Timestamp;
+    finalized_at: Timestamp | null;
+  };
+  attachment: {
+    id: string;
+    organization_id: string;
+    batch_id: string;
+    context: string;
+    storage_key: string;
+    filename: string;
+    media_type: string;
+    byte_size: number;
+    source_byte_size: number;
+    content_checksum: string;
+    scan_state: string;
+    created_at: Generated<Date>;
+  };
+  attachment_audit: {
+    id: Generated<string>;
+    organization_id: string;
+    context: string;
+    action: string;
+    batch_id: string;
+    attachment_id: string | null;
+    service_request_id: string | null;
+    staff_identity_id: string | null;
+    created_at: Generated<Date>;
+  };
   request_tracking_credential: {
     id: Generated<string>;
     organization_id: string;
@@ -432,7 +474,7 @@ export interface DatabaseSchema {
     credential_digest: string;
     status: 'active' | 'revoked';
     created_by_staff_identity_id: string;
-    created_at: Generated<Timestamp>;
+    created_at: Generated<Date>;
     revoked_at: Timestamp | null;
   };
   request_communication: RequestCommunicationTable;

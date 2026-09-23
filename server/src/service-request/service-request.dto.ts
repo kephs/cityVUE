@@ -1,3 +1,4 @@
+import { AttachmentClaimDto } from '../attachments/attachment.controller.js';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -77,6 +78,11 @@ export class LocationInputDto {
   locationType?: string;
 }
 export class CreateServiceRequestDto {
+  @ApiPropertyOptional({ type: AttachmentClaimDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AttachmentClaimDto)
+  attachments?: AttachmentClaimDto;
   @ApiProperty({ format: 'uuid' }) @IsUUID('4') serviceDefinitionId!: string;
   @ApiProperty({ format: 'uuid' })
   @IsUUID('4')

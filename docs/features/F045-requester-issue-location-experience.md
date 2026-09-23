@@ -17,3 +17,7 @@ Existing Issue location policies are required, optional and not applicable. `no_
 ## Validation and completion
 
 Checkpoint verified: clean main, zero ahead/behind, 22 applied migrations, zero pending. See the [implementation report](F045-implementation-report.md) for executed automated suites, non-mutating browser UAT, privacy review, limitations and local commit evidence. This is not production readiness.
+
+## F046 attachment integration
+
+[F046](F046-secure-attachments-photos-foundation.md) adds development-only private image attachments with independent parent authorization, immutable finalized relationships and separate in-memory drafts. Existing read/create permissions, PUBLIC-only Communication eligibility, recorded/no-delivery semantics, F044 exclusions and F045 Service Location remain unchanged. Photo GPS does not set or modify location. Final validation/UAT are tracked in the F046 record.

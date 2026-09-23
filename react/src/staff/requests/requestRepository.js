@@ -1,3 +1,7 @@
+import {
+  createAttachmentRepository,
+  attachmentProjection,
+} from "../../attachments/attachmentRepository.js";
 import { createApiClient, CityVueApiError } from "../../api/apiClient.js";
 import { readResidentIntakeConfig } from "../../config/runtimeConfig.js";
 const root = "/staff/service-requests";
@@ -53,6 +57,9 @@ function noteProjection(row) {
     body: row.body,
     author: { displayName: row.author.displayName },
     createdAt: row.createdAt,
+    ...(row.attachments
+      ? { attachments: row.attachments.map(attachmentProjection) }
+      : {}),
   };
 }
 function communicationProjection(row) {
@@ -78,6 +85,9 @@ function communicationProjection(row) {
     deliveryState: row.deliveryState,
     author: { displayName: row.author.displayName },
     createdAt: row.createdAt,
+    ...(row.attachments
+      ? { attachments: row.attachments.map(attachmentProjection) }
+      : {}),
   };
 }
 function targetProjection(value) {
@@ -185,6 +195,7 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
     return `${root}/${id}`;
   };
   return {
+    attachments: createAttachmentRepository(api, true),
     async notes(id, cursor, signal) {
       const query = new URLSearchParams({ pageSize: "25" });
       if (cursor) query.set("cursor", cursor);
@@ -208,12 +219,12 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         nextCursor: data.nextCursor,
       };
     },
-    async createNote(id, body, submissionKey, signal) {
+    async createNote(id, body, submissionKey, signal, attachments) {
       if (!uuid.test(submissionKey)) throw invalid();
       return noteProjection(
         await api.post(
           `${path(id)}/notes`,
-          { body },
+          { body, ...(attachments ? { attachments } : {}) },
           { ...options(signal), idempotencyKey: submissionKey },
         ),
       );
@@ -244,12 +255,12 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         nextCursor: data.nextCursor,
       };
     },
-    async createCommunication(id, body, submissionKey, signal) {
+    async createCommunication(id, body, submissionKey, signal, attachments) {
       if (!uuid.test(submissionKey)) throw invalid();
       return communicationProjection(
         await api.post(
           `${path(id)}/communications`,
-          { body },
+          { body, ...(attachments ? { attachments } : {}) },
           { ...options(signal), idempotencyKey: submissionKey },
         ),
       );

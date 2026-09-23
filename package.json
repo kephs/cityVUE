@@ -14,7 +14,7 @@
     "react:start": "vite react",
     "react:build": "npm run build:react",
     "react:preview": "vite preview react --outDir ../dist-react",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/Catalog.test.js test/Issue.test.js test/IssueListUtils.test.js test/IssueService.test.js test/LegacyIssueMatching.test.js test/Statistics.test.js test/ThemePreferences.test.js",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/Catalog.test.js test/Issue.test.js test/IssueListUtils.test.js test/IssueService.test.js test/LegacyIssueMatching.test.js test/Statistics.test.js test/ThemePreferences.test.js test/VitePrivateFiles.test.mjs",
     "test:react": "vitest run --config vitest.config.mjs --maxWorkers=1",
     "clean": "rimraf dist .parcel-cache",
     "deploy": "npm run deploy:react",

@@ -1,3 +1,9 @@
+import { Optional } from '@nestjs/common';
+import {
+  AttachmentService,
+  type AttachmentClaim,
+} from '../attachments/attachment.service.js';
+import { checksum } from '../attachments/attachment.domain.js';
 import {
   BadRequestException,
   ForbiddenException,
@@ -24,6 +30,7 @@ export class RequestCommunicationService {
   constructor(
     private readonly database: DatabaseService,
     private readonly communications: RequestCommunicationRepository,
+    @Optional() private readonly attachments?: AttachmentService,
   ) {}
 
   private async parent(
@@ -51,13 +58,22 @@ export class RequestCommunicationService {
     assertStaffRequestPermission(access, 'service_request.communication.read');
     return this.database.client.transaction().execute(async (trx) => {
       await this.parent(trx, access, id);
-      return this.communications.list(
+      const page = await this.communications.list(
         trx,
         access.organizationId,
         id,
         pageSize,
         cursor,
       );
+      if (this.attachments)
+        page.items = await this.attachments.decorate(
+          trx,
+          access.organizationId,
+          id,
+          'REQUESTER_COMMUNICATION',
+          page.items,
+        );
+      return page;
     });
   }
 
@@ -67,6 +83,7 @@ export class RequestCommunicationService {
     body: unknown,
     submissionKey: string | undefined,
     correlationId?: string,
+    attachmentClaim?: AttachmentClaim,
   ) {
     assertStaffRequestRead(access, 'public');
     assertStaffRequestPermission(access, 'service_request.communication.read');
@@ -78,9 +95,28 @@ export class RequestCommunicationService {
       throw new BadRequestException(
         'A valid communication submission key is required',
       );
+    const attachments = this.attachments;
+    if (attachmentClaim && !attachments)
+      throw new BadRequestException('Attachments unavailable');
     const normalized = normalizeCommunicationBody(body);
     return this.database.client.transaction().execute(async (trx) => {
       await this.parent(trx, access, id);
+      const attachmentDigest = checksum(normalized);
+      const batch =
+        attachmentClaim && attachments
+          ? await attachments.prepare(
+              trx,
+              attachmentClaim,
+              {
+                organizationId: access.organizationId,
+                context: 'REQUESTER_COMMUNICATION',
+                requestId: id,
+                staffId: access.staffIdentityId,
+              },
+              attachmentDigest,
+              access,
+            )
+          : undefined;
       const author = await trx
         .selectFrom('staff_identity as s')
         .select(safeStaffName.as('displayName'))
@@ -98,6 +134,21 @@ export class RequestCommunicationService {
         submissionKey,
         body: normalized,
       });
+      if (!result.created && this.attachments)
+        await this.attachments.assertPriorBatch(
+          trx,
+          'REQUESTER_COMMUNICATION',
+          result.communication.id,
+          batch?.id,
+        );
+      if (batch && attachments)
+        await attachments.finalize(
+          trx,
+          batch,
+          id,
+          result.communication.id,
+          attachmentDigest,
+        );
       if (result.created)
         await trx
           .insertInto('activity')
@@ -120,7 +171,17 @@ export class RequestCommunicationService {
             },
           })
           .execute();
-      return result.communication;
+      return this.attachments
+        ? ((
+            await this.attachments.decorate(
+              trx,
+              access.organizationId,
+              id,
+              'REQUESTER_COMMUNICATION',
+              [result.communication],
+            )
+          )[0] ?? result.communication)
+        : result.communication;
     });
   }
 }

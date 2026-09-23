@@ -7,6 +7,7 @@ export type DatabaseSslMode = 'disable' | 'require' | 'verify-full';
 export interface EnvironmentVariables {
   CITYVUE_DEPLOYMENT_PROFILE: 'development' | 'client';
   CITYVUE_ENABLE_EXTERNAL_IDENTITY: boolean;
+  ENABLE_DEVELOPMENT_ATTACHMENTS: boolean;
   AI_TEST_EXECUTION_ENABLED: boolean;
   AI_ENABLED: boolean;
   AI_CHAT_ENABLED: false;
@@ -44,6 +45,10 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
     .valid('development', 'client')
     .default('development'),
   CITYVUE_ENABLE_EXTERNAL_IDENTITY: Joi.boolean()
+    .truthy('true')
+    .falsy('false')
+    .default(false),
+  ENABLE_DEVELOPMENT_ATTACHMENTS: Joi.boolean()
     .truthy('true')
     .falsy('false')
     .default(false),
@@ -155,6 +160,14 @@ export function validateEnvironment(
   }
 
   const environment = value as EnvironmentVariables;
+  if (
+    environment.ENABLE_DEVELOPMENT_ATTACHMENTS &&
+    (environment.NODE_ENV === 'production' ||
+      environment.CITYVUE_DEPLOYMENT_PROFILE !== 'development')
+  )
+    throw new Error(
+      'Invalid server configuration: development attachments cannot run in production or client profiles',
+    );
   if (
     environment.NODE_ENV === 'development' &&
     environment.CITYVUE_DEPLOYMENT_PROFILE === 'development' &&

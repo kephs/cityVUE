@@ -1,3 +1,5 @@
+import { ValidateNested } from 'class-validator';
+import { AttachmentClaimDto } from '../attachments/attachment.controller.js';
 import {
   Body,
   Controller,
@@ -41,6 +43,10 @@ export class CreateRequestNoteDto {
   @IsString()
   @MaxLength(NOTE_BODY_MAXIMUM)
   body!: string;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AttachmentClaimDto)
+  attachments?: AttachmentClaimDto;
 }
 export class RequestNotesQueryDto {
   @ApiPropertyOptional({ default: 25, minimum: 1, maximum: 100 })
@@ -90,6 +96,13 @@ export class RequestNoteController {
     @Headers('idempotency-key') key: string | undefined,
     @Req() request: { id?: string },
   ) {
-    return this.notes.create(id, access, input.body, key, request.id);
+    return this.notes.create(
+      id,
+      access,
+      input.body,
+      key,
+      request.id,
+      input.attachments,
+    );
   }
 }

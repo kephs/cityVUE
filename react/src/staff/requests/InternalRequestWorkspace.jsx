@@ -1,3 +1,4 @@
+import { RequestEvidence } from "../../attachments/Attachments.jsx";
 import {
   StatusBadge as Status,
   AudienceBadge,
@@ -1004,6 +1005,12 @@ function RequestDetail({ repository, id, onSignIn }) {
               clearContact={clearContact}
             />
           </div>
+          <RequestEvidence
+            key={id}
+            repository={repository.attachments}
+            requestId={id}
+            onAccessFailure={protectedContentAccessFailure}
+          />
           <CollaborationPanel
             key={id + ":" + row.audience}
             repository={repository}

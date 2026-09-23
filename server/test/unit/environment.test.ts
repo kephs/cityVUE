@@ -185,3 +185,30 @@ test('configuration validation rejects wildcard CORS', () => {
     /CORS_ORIGINS/,
   );
 });
+
+test('F046 attachment processing is opt-in and prohibited in production or client profiles', () => {
+  assert.equal(
+    validateEnvironment(validEnvironment).ENABLE_DEVELOPMENT_ATTACHMENTS,
+    false,
+  );
+  assert.equal(
+    validateEnvironment({
+      ...validEnvironment,
+      ENABLE_DEVELOPMENT_ATTACHMENTS: 'true',
+    }).ENABLE_DEVELOPMENT_ATTACHMENTS,
+    true,
+  );
+  for (const extra of [
+    { NODE_ENV: 'production', CITYVUE_DEPLOYMENT_PROFILE: 'client' },
+    { CITYVUE_DEPLOYMENT_PROFILE: 'client' },
+  ])
+    assert.throws(
+      () =>
+        validateEnvironment({
+          ...validEnvironment,
+          ...extra,
+          ENABLE_DEVELOPMENT_ATTACHMENTS: 'true',
+        }),
+      /development attachments/,
+    );
+});

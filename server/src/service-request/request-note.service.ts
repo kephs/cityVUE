@@ -1,3 +1,9 @@
+import { Optional } from '@nestjs/common';
+import {
+  AttachmentService,
+  type AttachmentClaim,
+} from '../attachments/attachment.service.js';
+import { checksum } from '../attachments/attachment.domain.js';
 import {
   BadRequestException,
   ForbiddenException,
@@ -24,6 +30,7 @@ export class RequestNoteService {
   constructor(
     private readonly database: DatabaseService,
     private readonly notes: RequestNoteRepository,
+    @Optional() private readonly attachments?: AttachmentService,
   ) {}
 
   private async parent(
@@ -51,7 +58,22 @@ export class RequestNoteService {
     assertStaffRequestPermission(access, 'service_request.note.read');
     return this.database.client.transaction().execute(async (trx) => {
       await this.parent(trx, access, id);
-      return this.notes.list(trx, access.organizationId, id, pageSize, cursor);
+      const page = await this.notes.list(
+        trx,
+        access.organizationId,
+        id,
+        pageSize,
+        cursor,
+      );
+      if (this.attachments)
+        page.items = await this.attachments.decorate(
+          trx,
+          access.organizationId,
+          id,
+          'INTERNAL_NOTE',
+          page.items,
+        );
+      return page;
     });
   }
 
@@ -61,15 +83,35 @@ export class RequestNoteService {
     body: unknown,
     submissionKey: string | undefined,
     correlationId?: string,
+    attachmentClaim?: AttachmentClaim,
   ) {
     assertStaffRequestRead(access);
     assertStaffRequestPermission(access, 'service_request.note.read');
     assertStaffRequestPermission(access, 'service_request.note.create');
     if (!submissionKey || !requestUuid.test(submissionKey))
       throw new BadRequestException('A valid note submission key is required');
+    const attachments = this.attachments;
+    if (attachmentClaim && !attachments)
+      throw new BadRequestException('Attachments unavailable');
     const normalized = normalizeNoteBody(body);
     return this.database.client.transaction().execute(async (trx) => {
       await this.parent(trx, access, id);
+      const attachmentDigest = checksum(normalized);
+      const batch =
+        attachmentClaim && attachments
+          ? await attachments.prepare(
+              trx,
+              attachmentClaim,
+              {
+                organizationId: access.organizationId,
+                context: 'INTERNAL_NOTE',
+                requestId: id,
+                staffId: access.staffIdentityId,
+              },
+              attachmentDigest,
+              access,
+            )
+          : undefined;
       const author = await trx
         .selectFrom('staff_identity as s')
         .select(safeStaffName.as('displayName'))
@@ -87,6 +129,21 @@ export class RequestNoteService {
         submissionKey,
         body: normalized,
       });
+      if (!result.created && this.attachments)
+        await this.attachments.assertPriorBatch(
+          trx,
+          'INTERNAL_NOTE',
+          result.note.id,
+          batch?.id,
+        );
+      if (batch && attachments)
+        await attachments.finalize(
+          trx,
+          batch,
+          id,
+          result.note.id,
+          attachmentDigest,
+        );
       if (result.created)
         await trx
           .insertInto('activity')
@@ -109,7 +166,17 @@ export class RequestNoteService {
             },
           })
           .execute();
-      return result.note;
+      return this.attachments
+        ? ((
+            await this.attachments.decorate(
+              trx,
+              access.organizationId,
+              id,
+              'INTERNAL_NOTE',
+              [result.note],
+            )
+          )[0] ?? result.note)
+        : result.note;
     });
   }
 }

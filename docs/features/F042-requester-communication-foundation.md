@@ -385,3 +385,7 @@ The tested F042 bundle contains exactly that set plus
 existing grants did not change when the manifest changed. Explicit incremental
 F036 provisioning follows the confirmed negative live baseline and validated
 terminology correction, then read-only proof and creation proof.
+
+## F046 attachment integration
+
+[F046](F046-secure-attachments-photos-foundation.md) adds development-only private image attachments with independent parent authorization, immutable finalized relationships and separate in-memory drafts. Existing read/create permissions, PUBLIC-only Communication eligibility, recorded/no-delivery semantics, F044 exclusions and F045 Service Location remain unchanged. Photo GPS does not set or modify location. Final validation/UAT are tracked in the F046 record.

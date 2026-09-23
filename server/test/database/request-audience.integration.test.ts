@@ -1,3 +1,4 @@
+import { checkAttachments } from './attachment-checks.js';
 import { checkRequestCommunications } from './request-communication-checks.js';
 import { checkRequestTracking } from './request-tracking-checks.js';
 import { checkRequestOwnership } from './request-ownership-checks.js';
@@ -2292,6 +2293,17 @@ test(
           creator,
           otherInternal,
           department,
+          publicPayload: assisted,
+          internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkAttachments(t, {
+          app,
+          db,
+          org,
+          creator,
+          department,
+          otherInternal,
           publicPayload: assisted,
           internalPayload: internal,
           logs: contactLogs,
