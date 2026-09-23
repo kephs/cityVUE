@@ -14,6 +14,25 @@ import {
 import RequestActivity from "../src/staff/requests/RequestActivity.jsx";
 afterEach(cleanup);
 
+test("list toolbar wraps and readable ordinals retain room for multiple digits", () => {
+  const css = readFileSync(
+    "react/src/staff/requests/staffRequests.css",
+    "utf8",
+  );
+  expect(css.match(/\.request-list-toolbar\s*\{([^}]+)\}/)[1]).toMatch(
+    /flex-wrap:\s*wrap/,
+  );
+  expect(css.match(/\.request-row-position\s*\{([^}]+)\}/)[1]).toMatch(
+    /font-size:\s*var\(--font-body\)/,
+  );
+  expect(css.match(/\.request-row-position > span\s*\{([^}]+)\}/)[1]).toMatch(
+    /min-width:\s*4ch/,
+  );
+  expect(css.match(/\.staff-request-table thead\s*\{([^}]+)\}/)[1]).toMatch(
+    /font-size:\s*var\(--font-body\)/,
+  );
+});
+
 test("detail audience/reference metadata uses token spacing and responsive flex wrapping", () => {
   const css = readFileSync(
     "react/src/staff/requests/staffRequests.css",

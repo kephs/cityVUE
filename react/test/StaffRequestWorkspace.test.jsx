@@ -742,6 +742,44 @@ test("list defaults, keyboard sort toggles, assignment composition and Reset", a
   );
 });
 
+test("list toolbar groups heading, sort, direction and Refresh in DOM order", async () => {
+  show("/staff/requests");
+  await screen.findByLabelText("Row position 1");
+  const toolbar = screen.getByRole("group", { name: "Request list controls" });
+  expect(
+    within(toolbar).getByRole("heading", { name: "Requests" }),
+  ).toBeInTheDocument();
+  const sort = within(toolbar).getByLabelText("Sort by");
+  const direction = within(toolbar).getByLabelText("Direction");
+  const refresh = within(toolbar).getByRole("button", { name: "Refresh" });
+  expect([...toolbar.querySelectorAll("select,button")]).toEqual([
+    sort,
+    direction,
+    refresh,
+  ]);
+  expect(screen.getByText("1 requests · Page 1")).toBeInTheDocument();
+  const user = userEvent.setup();
+  sort.focus();
+  await user.tab();
+  expect(direction).toHaveFocus();
+  await user.tab();
+  expect(refresh).toHaveFocus();
+  const calls = repository.list.mock.calls.length;
+  const filters = repository.list.mock.calls.at(-1)[0];
+  await user.keyboard("{Enter}");
+  await waitFor(() => expect(repository.list).toHaveBeenCalledTimes(calls + 1));
+  expect(repository.list).toHaveBeenLastCalledWith(
+    filters,
+    expect.any(AbortSignal),
+  );
+  await screen.findByLabelText("Row position 1");
+  expect(
+    screen
+      .getByRole("button", { name: "Sort by Created; descending" })
+      .closest("th"),
+  ).toHaveAttribute("aria-sort", "descending");
+});
+
 test("F038 detail is Issue-first with configured icon and authorized location", async () => {
   repository.detail.mockResolvedValue({
     ...row,

@@ -276,49 +276,53 @@ function RequestList({ repository, onSignIn }) {
           </button>
         </div>
       </form>
-      <div className="request-list-sort" aria-label="Request sorting">
-        <div>
-          <label htmlFor="request-sort">Sort by</label>
-          <select
-            id="request-sort"
-            className="form-select"
-            value={filters.sort}
-            onChange={(e) =>
-              apply({ ...filters, sort: e.target.value, page: 1 })
-            }
-          >
-            {Object.entries(listSorts).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="request-direction">Direction</label>
-          <select
-            id="request-direction"
-            className="form-select"
-            value={filters.direction}
-            onChange={(e) =>
-              apply({ ...filters, direction: e.target.value, page: 1 })
-            }
-          >
-            <option value="asc">Ascending</option>
-            <option value="desc">Descending</option>
-          </select>
-        </div>
-      </div>
-      <div className="request-results-heading">
+      <div
+        className="request-results-heading request-list-toolbar"
+        role="group"
+        aria-label="Request list controls"
+      >
         <h2 ref={heading} tabIndex="-1">
           Requests
         </h2>
-        <button
-          className="btn btn-secondary"
-          onClick={() => setRetry((n) => n + 1)}
-        >
-          Refresh
-        </button>
+        <div className="request-list-sort">
+          <div>
+            <label htmlFor="request-sort">Sort by</label>
+            <select
+              id="request-sort"
+              className="form-select"
+              value={filters.sort}
+              onChange={(e) =>
+                apply({ ...filters, sort: e.target.value, page: 1 })
+              }
+            >
+              {Object.entries(listSorts).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="request-direction">Direction</label>
+            <select
+              id="request-direction"
+              className="form-select"
+              value={filters.direction}
+              onChange={(e) =>
+                apply({ ...filters, direction: e.target.value, page: 1 })
+              }
+            >
+              <option value="asc">Ascending</option>
+              <option value="desc">Descending</option>
+            </select>
+          </div>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setRetry((n) => n + 1)}
+          >
+            Refresh
+          </button>
+        </div>
       </div>
       {!current && (
         <p role="status" className="workspace-feedback">

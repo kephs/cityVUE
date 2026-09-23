@@ -47,7 +47,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin-block: var(--space-4);
+  margin: 0;
 }
 .request-list-sort > div {
   display: flex;
@@ -76,8 +76,14 @@
   outline-offset: 2px;
 }
 .request-row-position {
-  font-size: var(--font-small);
+  font-size: var(--font-body);
+  font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
+}
+.request-row-position > span {
+  display: inline-block;
+  min-width: 4ch;
+  white-space: nowrap;
 }
 .request-results-heading {
   display: flex;
@@ -85,6 +91,13 @@
   align-items: center;
   gap: 1rem;
   margin: 1.25rem 0 0.5rem;
+}
+.request-list-toolbar {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.request-list-toolbar .request-list-sort {
+  gap: var(--space-3);
 }
 .request-results-heading h2 {
   font-size: 1.1rem;
@@ -110,9 +123,13 @@
 }
 .staff-request-table thead {
   background: var(--surface-subtle);
-  font-size: var(--font-small);
+  font-size: var(--font-body);
+  font-weight: var(--weight-label);
   text-transform: uppercase;
   letter-spacing: 0.035em;
+}
+.staff-request-table thead th {
+  font-weight: var(--weight-label);
 }
 .staff-request-table tbody th {
   font-weight: 600;

@@ -56,6 +56,12 @@ Security review preserves Organization and PUBLIC/INTERNAL authorization, worksp
 
 [Roadmap](../ROADMAP.md#unnumbered-future-staff-capabilities) additions **Service Request Live Search** and **Issue-Based Default Assignment** are unnumbered future capabilities only. Neither is implemented. F046 remains unstarted.
 
+## Staff list layout refinement — 2026-09-22
+
+From accepted `6a52f8c6fbdf6e9538be85a9529b5ff8270e16bc`, a separate presentation-only change consolidates **Requests → Sort by → Direction → Refresh** into one wrapping toolbar in matching DOM/tab order. Result count and page remain directly below. Existing filter/sort handlers, query contracts, row numbering and sortable-header semantics are unchanged. Headers use `font-body` (1rem) and `weight-label` (600); ordinals use 1rem at normal weight with tabular digits and a 4ch minimum inline span, growing naturally for larger values without badge/link styling. Table cell padding and mobile card/header hiding behavior are preserved.
+
+Affected workspace/design React tests: **156 passed**, including sorting/direction regressions, Refresh without filter changes, toolbar/tab order, result summary, ordinals and CSS rules. Frontend production build passed with the existing large-chunk warning; formatting, whitespace and private-data checks passed. No backend suites are required by this presentation-only change. Synthetic Chrome checks at **1280, 1024, 768 and 390**, light/dark, found no page overflow, clipped controls or row numbers (1/25/100/999/1000/25000000). The toolbar fits one row at the first three fixture widths and wraps cleanly at 390. Labels remain paired, Refresh works by keyboard, focus remains visible, and headers retain arrows/names/aria-sort/44px hit areas. These are synthetic browser/accessibility-oriented checks, not live staff UAT or WCAG certification. No API/query, migration, grant/permission, push, deployment or F046 changes.
+
 ## Approved scope
 
 Reduce the always-visible detail controls while preserving the Issue-first F038 hierarchy and all F037–F042 domain contracts. Request Management presents compact assignment, watcher and contact summaries with separate dialogs. Collaboration presents independently authorized Internal Notes and Requester Communication tabs. Recent Activity requests five events; full authorized, paginated history opens separately.
