@@ -1,5 +1,13 @@
 # F044 — Secure Requester Tracking Foundation
 
+## Request Management polish — 2026-09-22
+
+The authorized post-F045 presentation refinement shows **Not issued**, **Active**, or **Revoked**, followed by **“ · Secure requester access”**, using only the existing authorized management projection. Status loads only when the existing tracking-management capability allows it; denied access retains the protected presentation and no status/help request is made. Loading/failure is distinguished from Not issued. Opening Manage revalidates state through its existing read; mutations remain explicit and unchanged. Summary state stores only the status, never a credential, URL, digest, concurrency version or history. Pending initial reads are cancelled before dialog reads, preventing late status overwrite.
+
+An **About Requester Tracking** information button opens the existing accessible help dialog: “Requester Tracking lets you create, rotate, or revoke the secure link a requester can use to track this Service Request.” It supports pointer, keyboard and touch, Close/Escape dismissal and focus restoration. Help and management disappear when the capability is lost. The compact order is Assignment, Watchers, Requester Tracking, Requester Contact.
+
+This explicit UI refinement updates the original dialog-only status-discovery timing described below and in the historical ADR-009 presentation description; its authorization and credential design are unchanged. No new API, grant, credential or lifecycle operation is introduced. [F043 validation](F043-service-request-workspace-ux-consolidation.md#request-management-polish--2026-09-22) records the React, browser, responsive/theme and accessibility-oriented checks.
+
 Status: local implementation, validation and complete diff review finished; see the [completion report](F044-implementation-report.md) for the local commit inventory and final gate evidence. Starting checkpoint: `19af51623d1770601272b5d97a3fd0c49e0868d4`.
 
 ## Design and boundaries

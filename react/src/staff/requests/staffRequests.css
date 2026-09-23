@@ -332,6 +332,23 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.request-management-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.request-management-label h4 {
+  margin: 0;
+}
+.request-tracking-help {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.5rem;
+}
+.request-management-row > button {
+  flex-shrink: 0;
+}
 .request-management-row h4 {
   font-size: var(--font-body);
   font-weight: var(--weight-heading);

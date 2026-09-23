@@ -2,6 +2,16 @@
 
 Implemented from accepted F042 commit `8018acf8f2caf9699faa682241a026f09b101e90` on `main`, initially clean and synchronized with the cached `origin/main`. Implementation, automated validation and authenticated UAT are complete. The local commit stops for review; this record does not authorize a push or deployment.
 
+## Request Management polish — 2026-09-22
+
+From synchronized F045 `979a3609517ac200fd483ab702adbe66f429c862`, the separately authorized UI refinement orders the compact rows **Assignment → Watchers → Requester Tracking → Requester Contact** (tracking remains PUBLIC-only). Existing dialogs, APIs and authorization contracts remain authoritative.
+
+The watcher summary derives only `items.length` from the existing authorized, bounded watcher-list response, retaining only the count in summary state. Zero reads “No watchers are following this request”; one reads “1 watcher following this request”; many reads “{count} watchers following this request”. Loading and unavailable states never masquerade as zero. The initial summary now reads watchers, and revision/request changes refresh it; aborted/stale responses are ignored. Manage independently reloads its authoritative list. Names never appear in the compact watcher summary. This explicitly updates the original lazy watcher-read timing below, without broadening F037 access or changing permissions.
+
+Tracking presentation and help are documented in [F044](F044-secure-requester-tracking-foundation.md#request-management-polish--2026-09-22). Validation: the full React suite passed **424 tests across 31 files**; the final focused run passed **142 tests**, including two additional tracking denial/stale-response regressions. Focused summary tests cover zero/one/many, ordering, safe tracking states, keyboard help, denial, permission loss and stale reads. Frontend production build passed with the existing large-chunk warning. No frontend lint script exists. Changed-file formatting, whitespace, documentation links and private-data review passed. Backend code/contracts are unchanged, so backend/database suites are not rerun for this narrow presentation refinement.
+
+Browser validation used the real components with synthetic repository responses in isolated Chrome, not authenticated staff UAT. At **1280, 768 and 390**, in **light and dark**, watcher text wrapped without horizontal overflow; Manage/View right edges aligned; help stayed in bounds. The 44px help control opened by touch, pointer and keyboard. The existing modal provides a named heading, focus containment, Close/Escape dismissal, focus restoration and a visible four-pixel keyboard focus ring. No physical-device or WCAG certification is claimed. No browser artifact was written, staff API invoked, credential operation performed, or database/cloud resource changed. No migration, permission, push, deployment or F046 work belongs to this refinement.
+
 ## Approved scope
 
 Reduce the always-visible detail controls while preserving the Issue-first F038 hierarchy and all F037–F042 domain contracts. Request Management presents compact assignment, watcher and contact summaries with separate dialogs. Collaboration presents independently authorized Internal Notes and Requester Communication tabs. Recent Activity requests five events; full authorized, paginated history opens separately.

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ContentCard,
   SectionHeading,
@@ -19,6 +19,31 @@ export default function RequestManagement({
   loadContact,
   clearContact,
 }) {
+  const [watcherSummary, setWatcherSummary] = useState(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    setWatcherSummary(null);
+    repository.watchers(id, controller.signal).then(
+      (data) => {
+        if (!controller.signal.aborted)
+          setWatcherSummary({
+            id,
+            revision: row.revision,
+            count: data.items.length,
+          });
+      },
+      (problem) => {
+        if (controller.signal.aborted) return;
+        setWatcherSummary({ id, revision: row.revision, unavailable: true });
+        if ([401, 403, 404].includes(problem.status)) onAccessFailure(problem);
+      },
+    );
+    return () => controller.abort();
+  }, [repository, id, row.revision, onAccessFailure]);
+  const watcherState =
+    watcherSummary?.id === id && watcherSummary.revision === row.revision
+      ? watcherSummary
+      : null;
   const [dialog, setDialog] = useState(null);
   const [error, setError] = useState("");
   const close = () => {
@@ -48,15 +73,6 @@ export default function RequestManagement({
   return (
     <ContentCard className="request-management">
       <SectionHeading icon="sliders">Request Management</SectionHeading>
-      {row.audience === "public" && (
-        <RequesterTracking
-          key={`${id}:${row.capabilities?.canManageRequesterTracking === true}`}
-          repository={repository}
-          id={id}
-          allowed={row.capabilities?.canManageRequesterTracking === true}
-          onAccessFailure={onAccessFailure}
-        />
-      )}
       <div className="request-management-row">
         <div>
           <h4>Assignment</h4>
@@ -77,7 +93,15 @@ export default function RequestManagement({
       <div className="request-management-row">
         <div>
           <h4>Watchers</h4>
-          <p>Following this request</p>
+          <p>
+            {!watcherState
+              ? "Loading watcher count…"
+              : watcherState.unavailable
+                ? "Watcher count unavailable"
+                : watcherState.count === 0
+                  ? "No watchers are following this request"
+                  : `${watcherState.count} ${watcherState.count === 1 ? "watcher" : "watchers"} following this request`}
+          </p>
         </div>
         <button
           type="button"
@@ -89,6 +113,15 @@ export default function RequestManagement({
           Manage
         </button>
       </div>
+      {row.audience === "public" && (
+        <RequesterTracking
+          key={`${id}:${row.capabilities?.canManageRequesterTracking === true}`}
+          repository={repository}
+          id={id}
+          allowed={row.capabilities?.canManageRequesterTracking === true}
+          onAccessFailure={onAccessFailure}
+        />
+      )}
       <div className="request-management-row">
         <div>
           <h4>Requester Contact</h4>

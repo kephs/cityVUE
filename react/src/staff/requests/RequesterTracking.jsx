@@ -15,6 +15,27 @@ export default function RequesterTracking({
 }) {
   const [open, setOpen] = useState(false);
   const [summary, setSummary] = useState(null);
+  const summaryAbort = useRef(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  useEffect(() => {
+    setSummary(null);
+    setOpen(false);
+    setHelpOpen(false);
+    if (!allowed) return;
+    const controller = new AbortController();
+    summaryAbort.current = controller;
+    repository.trackingState(id, controller.signal).then(
+      (value) => {
+        if (!controller.signal.aborted) setSummary(value.status);
+      },
+      (problem) => {
+        if (controller.signal.aborted) return;
+        setSummary("unavailable");
+        onAccessFailure?.(problem);
+      },
+    );
+    return () => controller.abort();
+  }, [repository, id, allowed, onAccessFailure]);
   if (!allowed)
     return (
       <div className="request-management-row">
@@ -27,17 +48,48 @@ export default function RequesterTracking({
   return (
     <div className="request-management-row">
       <div>
-        <h4>Requester Tracking</h4>
-        <p>{labels[summary] || "Manage requester access"}</p>
+        <div className="request-management-label">
+          <h4>Requester Tracking</h4>
+          <button
+            type="button"
+            className="btn btn-secondary request-tracking-help"
+            aria-label="About Requester Tracking"
+            aria-haspopup="dialog"
+            onClick={() => setHelpOpen(true)}
+          >
+            <i className="bi bi-info-circle" aria-hidden="true" />
+          </button>
+        </div>
+        <p>
+          {labels[summary] ||
+            (summary === "unavailable"
+              ? "Status unavailable"
+              : "Loading status…")}{" "}
+          · Secure requester access
+        </p>
       </div>
       <button
         type="button"
         className="btn btn-secondary"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          summaryAbort.current?.abort();
+          setOpen(true);
+        }}
         aria-label="Manage requester tracking"
       >
         Manage
       </button>
+      {helpOpen && (
+        <RequestDialog
+          title="About Requester Tracking"
+          onClose={() => setHelpOpen(false)}
+        >
+          <p>
+            Requester Tracking lets you create, rotate, or revoke the secure
+            link a requester can use to track this Service Request.
+          </p>
+        </RequestDialog>
+      )}
       {open && (
         <TrackingDialog
           key={id}
@@ -75,6 +127,7 @@ function TrackingDialog({ repository, id, onClose, onState, onAccessFailure }) {
       })
       .catch((problem) => {
         if (!controller.signal.aborted) {
+          onState("unavailable");
           setError(
             "Tracking management is unavailable. Close and reopen to try again.",
           );
@@ -117,6 +170,7 @@ function TrackingDialog({ repository, id, onClose, onState, onAccessFailure }) {
           "Tracking management could not be completed. Close and reopen to check the current state before retrying.",
         );
         setState(null);
+        onState("unavailable");
         onAccessFailure?.(problem);
       }
     } finally {

@@ -1573,7 +1573,7 @@ test.each([401, 403, 404])(
         .mockResolvedValueOnce(row)
         .mockRejectedValue({ status });
     show(`/staff/requests/${id}`);
-    await manage("Watchers");
+    await waitFor(() => expect(repository.watchers).toHaveBeenCalled());
     await waitFor(() =>
       expect(screen.queryByText(row.description)).not.toBeInTheDocument(),
     );
@@ -1803,7 +1803,7 @@ async function f043Show() {
   return view;
 }
 
-test("F043 initial detail requests only Notes and five recent events; management and other history are lazy", async () => {
+test("F043 initial detail reads authorized watcher count; management actions and other history stay lazy", async () => {
   await f043Show();
   expect(repository.notes).toHaveBeenCalledTimes(1);
   expect(repository.activity).toHaveBeenCalledWith(
@@ -1812,11 +1812,11 @@ test("F043 initial detail requests only Notes and five recent events; management
     expect.any(AbortSignal),
     5,
   );
-  for (const key of ["contact", "communications", "watchers", "targets"])
+  for (const key of ["contact", "communications", "targets"])
     expect(repository[key]).not.toHaveBeenCalled();
   await manage("Assignment");
   expect(repository.targets).not.toHaveBeenCalled();
-  expect(repository.watchers).not.toHaveBeenCalled();
+  expect(repository.watchers).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "Assign Request" }));
   await screen.findByText("No eligible targets found.");
   expect(repository.targets).toHaveBeenLastCalledWith(
@@ -1829,7 +1829,7 @@ test("F043 initial detail requests only Notes and five recent events; management
   closeDialog();
   await manage("Watchers");
   await screen.findByText("No watchers");
-  expect(repository.watchers).toHaveBeenCalledTimes(1);
+  expect(repository.watchers).toHaveBeenCalledTimes(2);
   expect(repository.targets).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "Add Watcher" }));
   await screen.findByText("No eligible targets found.");
