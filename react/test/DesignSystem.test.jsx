@@ -14,6 +14,17 @@ import {
 import RequestActivity from "../src/staff/requests/RequestActivity.jsx";
 afterEach(cleanup);
 
+test("detail audience/reference metadata uses token spacing and responsive flex wrapping", () => {
+  const css = readFileSync(
+    "react/src/staff/requests/staffRequests.css",
+    "utf8",
+  );
+  const rule = css.match(/\.request-identity-meta\s*\{([^}]+)\}/)[1];
+  expect(rule).toMatch(/display:\s*flex/);
+  expect(rule).toMatch(/flex-wrap:\s*wrap/);
+  expect(rule).toMatch(/gap:\s*var\(--space-2\) var\(--space-4\)/);
+});
+
 test.each([
   "signpost-split",
   "bi-tree",

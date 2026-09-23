@@ -638,8 +638,10 @@ function RequestDetail({ repository, id, onSignIn }) {
                   {row.issueName}
                 </h2>
                 <LocationDisplay value={row.serviceLocation} />
-                <AudienceBadge value={row.audience} />
-                <ReferenceDisplay value={row.referenceNumber} />
+                <div className="request-identity-meta">
+                  <AudienceBadge value={row.audience} />
+                  <ReferenceDisplay value={row.referenceNumber} />
+                </div>
               </div>
               <div className="request-current-status">
                 <Status value={row.status} />

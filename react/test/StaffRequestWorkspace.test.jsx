@@ -606,6 +606,37 @@ test("F039 sign-out removes populated contact from DOM", async () => {
   expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
 });
 
+test.each(["public", "internal"])(
+  "detail metadata groups %s audience and long reference below the Issue",
+  async (audience) => {
+    const reference = `SYNTHETIC-${"REFERENCE".repeat(16)}`;
+    repository.detail.mockResolvedValue({
+      ...row,
+      audience,
+      referenceNumber: reference,
+    });
+    const { container } = show(`/staff/requests/${id}`);
+    const value = await screen.findByText(reference);
+    const metadata = container.querySelector(".request-identity-meta");
+    expect(metadata).toContainElement(value);
+    expect(
+      within(metadata).getByText(
+        audience === "public" ? "Public request" : "Internal request",
+      ),
+    ).toHaveClass("ui-audience");
+    expect(within(metadata).getByText("Request #")).toBeInTheDocument();
+    expect(metadata.parentElement).toHaveClass("request-identity-copy");
+    expect(
+      container.querySelector(".request-current-status"),
+    ).not.toContainElement(value);
+    expect(
+      screen
+        .getByRole("heading", { name: row.issueName, level: 2 })
+        .compareDocumentPosition(metadata) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  },
+);
+
 test("F038 detail is Issue-first with configured icon and authorized location", async () => {
   repository.detail.mockResolvedValue({
     ...row,
