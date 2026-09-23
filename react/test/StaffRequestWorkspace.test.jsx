@@ -742,24 +742,31 @@ test("list defaults, keyboard sort toggles, assignment composition and Reset", a
   );
 });
 
-test("list toolbar groups heading, sort, direction and Refresh in DOM order", async () => {
-  show("/staff/requests");
+test("consolidated controls follow search, clear, sort, direction and Refresh keyboard order", async () => {
+  show("/staff/requests?q=street");
   await screen.findByLabelText("Row position 1");
   const toolbar = screen.getByRole("group", { name: "Request list controls" });
-  expect(
-    within(toolbar).getByRole("heading", { name: "Requests" }),
-  ).toBeInTheDocument();
+  const search = within(toolbar).getByRole("searchbox", {
+    name: "Search requests",
+  });
+  const clear = within(toolbar).getByRole("button", { name: "Clear search" });
   const sort = within(toolbar).getByLabelText("Sort by");
   const direction = within(toolbar).getByLabelText("Direction");
   const refresh = within(toolbar).getByRole("button", { name: "Refresh" });
-  expect([...toolbar.querySelectorAll("select,button")]).toEqual([
+  expect([...toolbar.querySelectorAll("input,select,button")]).toEqual([
+    search,
+    clear,
     sort,
     direction,
     refresh,
   ]);
   expect(screen.getByText("1 requests · Page 1")).toBeInTheDocument();
   const user = userEvent.setup();
-  sort.focus();
+  search.focus();
+  await user.tab();
+  expect(clear).toHaveFocus();
+  await user.tab();
+  expect(sort).toHaveFocus();
   await user.tab();
   expect(direction).toHaveFocus();
   await user.tab();

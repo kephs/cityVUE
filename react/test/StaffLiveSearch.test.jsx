@@ -64,7 +64,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-test("results hierarchy follows filters, toolbar, search, summary and rows in DOM and keyboard order", async () => {
+test("results hierarchy follows filters, consolidated controls, summary and rows in DOM and keyboard order", async () => {
   show("?q=alpha");
   await flush();
   const filters = screen.getByRole("form", { name: "Request filters" });
@@ -72,13 +72,13 @@ test("results hierarchy follows filters, toolbar, search, summary and rows in DO
   const search = input().closest(".request-live-search");
   const summary = screen.getByText("1 requests · Page 1");
   const results = screen.getByRole("table");
-  const ordered = [filters, toolbar, search, summary, results];
+  const ordered = [filters, toolbar, summary, results];
   for (let i = 1; i < ordered.length; i++)
     expect(
       ordered[i - 1].compareDocumentPosition(ordered[i]) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-  expect(toolbar).toHaveClass("request-list-toolbar");
+  expect(toolbar).toHaveClass("request-list-controls");
   expect(
     search.querySelector(".request-live-search-controls"),
   ).toContainElement(input());
@@ -97,11 +97,11 @@ test("results hierarchy follows filters, toolbar, search, summary and rows in DO
   expect(search.closest("form")).toBeNull();
   const keyboard = [
     screen.getByRole("button", { name: "Reset", exact: true }),
+    input(),
+    screen.getByRole("button", { name: "Clear search" }),
     screen.getByLabelText("Sort by"),
     screen.getByLabelText("Direction"),
     screen.getByRole("button", { name: "Refresh", exact: true }),
-    input(),
-    screen.getByRole("button", { name: "Clear search" }),
   ];
   for (let i = 1; i < keyboard.length; i++)
     expect(
@@ -109,9 +109,18 @@ test("results hierarchy follows filters, toolbar, search, summary and rows in DO
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   for (const control of keyboard) expect(control.tabIndex).toBe(0);
-  for (const control of keyboard.slice(1, 4))
+  for (const control of keyboard.slice(1))
     expect(toolbar).toContainElement(control);
   expect(summary).toHaveAttribute("role", "status");
+  expect(toolbar).not.toContainElement(summary);
+  expect(input()).toHaveAttribute(
+    "placeholder",
+    "Search reference, issue, or service location",
+  );
+  expect(toolbar.querySelectorAll("input, select, button")).toHaveLength(5);
+  expect(
+    screen.getAllByRole("group", { name: "Request list controls" }),
+  ).toHaveLength(1);
 });
 
 test.each([

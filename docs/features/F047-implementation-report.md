@@ -130,7 +130,7 @@ Typing updates local input immediately and starts a cancellable timer. URL state
 
 Captured real test-API structured logs omit the synthetic query marker on success, validation failure and denied access. Audit row counts do not change for those searches. Existing safe exception/log sanitation remains unchanged. The user separately confirmed the live developer-terminal marker was absent. Search history/analytics are not persisted by the application; URL/browser history is the documented exception inherent in existing navigation state.
 
-Visible label **Search requests**, described help, explicit **Clear search**, status/live count, zero-result text, separate `role=alert` failures and text-labeled controls preserve accessible meaning without reliance on color. Search is outside the filter form, so Enter cannot unexpectedly apply its draft fields. After the accepted placement follow-up, reading order is filters → list controls → search → count → results → paging.
+Visible label **Search requests**, described help, explicit **Clear search**, status/live count, zero-result text, separate `role=alert` failures and text-labeled controls preserve accessible meaning without reliance on color. Search is outside the filter form, so Enter cannot unexpectedly apply its draft fields. After the final control-row follow-up, reading order is filters → consolidated Search / Clear / Sort / Direction / Refresh → count → results → paging.
 
 ## Data integrity and scope
 
@@ -188,3 +188,38 @@ Validation:
 Files changed: `react/src/staff/requests/InternalRequestWorkspace.jsx`, `react/test/StaffLiveSearch.test.jsx`, this report and `F047-service-request-live-search.md`. No backend/API/search-semantic changes: Reference/Issue/Service Location matching, exclusions, debounce, authorization, Organization/count privacy, parameterization, wildcard escaping, filtering/sorting/pagination, cancellation and logging remain unchanged. No database, migration, grant or Requester Tracking changes or actions.
 
 Separate local commit: `fix(ui): align live search with request results`; final hash and clean-tree/ahead status are reported in the delivery message. No push/deployment; F048 not started. Stop for review.
+
+## Final F047 control-row polish
+
+Starting checkpoint: clean main at 22ef9c9856285d9e7017ad5f08d1074c2164e981, 2 ahead / 0 behind local origin/main. This final presentation-only follow-up supersedes the preceding placement arrangement without amending either accepted commit.
+
+The page-level Service Requests heading and structured filters remain. One labeled result-control group now contains Search, inline X Clear, Sort by, Direction and Refresh in actual DOM/tab order. Existing surface-subtle, border, radius, spacing, text and focus-ring tokens provide a differentiated surface in light and dark themes. No CSS order changes. Search is outside the filter form and receives the flexible width; Sort and Direction occupy compact 10rem columns on desktop, with content-sized Refresh. Labels align above the fields; help remains directly below Search only. The settled count/page sits immediately outside and below the surface, followed by results and pagination. The separate visible Requests heading is removed, retaining its screen-reader heading and existing pagination focus target.
+
+Clear retains the existing handler and disabled-empty behavior. Its decorative X has accessible name Clear search, a 44px-wide target (46px measured height), reserved input padding and a theme-aware focus ring. The browser-native duplicate cancel glyph is suppressed. No dependency or optional search icon was added.
+
+| Viewport | Light and dark UAT result                                                                                         |
+| -------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1440     | One aligned main control row; Search approximately 854px versus 170px selectors.                                  |
+| 1280     | One aligned main control row; Search approximately 698px versus 170px selectors.                                  |
+| 1024     | Search approximately 939px across first row; Sort / Direction / Refresh wrap together below.                      |
+| 768      | Search approximately 687px across first row; remaining controls share second row.                                 |
+| 390      | Search approximately 325px; help, Sort, Direction and full-width Refresh stack cleanly. Clear remains 44 by 46px. |
+
+All ten viewport/theme combinations were checked in the authenticated developer-API workspace using existing requests. Screenshots and DOM measurements confirmed one control surface, help placement, summary placement, useful widths, no horizontal overflow and no control clipping. Light/dark surfaces, borders, labels, input, Clear, help, selectors and Refresh remained distinguishable. The truthful long placeholder naturally exceeds the phone input's visible capacity; the full accessible label and helper remain available.
+
+Actual keyboard order is Search → Clear → Sort → Direction → Refresh, including Reset → Search at the filter boundary. Light and dark focus outlines were checked; Enter on Clear returns focus to Search. Empty Clear is disabled. Settled status announcements, empty-result wording, error distinction and sort-header semantics remain covered by the existing tests. This is accessibility-oriented validation, not assistive-technology/WCAG certification.
+
+Live read-only behavior checks returned 6 default requests, 5 matching street sign, 2 with Unassigned combined, 3 after clearing while retaining Unassigned, and 0 for a fictional no-match query. Separately, settled Issue/ascending sorting survived Refresh and Clear; Refresh retained the active search. Reset restored defaults. No records were created or modified; no tracking credential or protected tracking state was inspected.
+
+Validation:
+
+- Affected React suites: 153 tests passed across StaffLiveSearch, StaffRequestWorkspace and StaffRequestRepository. Layout assertions now cover the single surface, filter/control/summary/result hierarchy, labels/placeholder/help, responsive class structure, unique controls and actual keyboard order. Existing behavioral tests were retained.
+- Frontend production build passed. The pre-existing greater-than-500-kB chunk warning remains.
+- Formatting, git whitespace checks, local Markdown link targets and changed-file private-value scans passed.
+- Backend/PostgreSQL suites were not rerun: changes are limited to list JSX presentation, scoped styles, two React tests and the two F047 documents.
+
+Files changed: react/src/staff/requests/InternalRequestWorkspace.jsx; react/src/staff/requests/staffRequests.css; react/test/StaffLiveSearch.test.jsx; react/test/StaffRequestWorkspace.test.jsx; docs/features/F047-service-request-live-search.md; this report.
+
+No backend/API/query/search-semantic, authentication, authorization, Organization isolation, count/privacy, normalization, debounce, parameterization, wildcard, filter/sort/page, cancellation or logging changes. No database, migration, grant, permission or configuration changes. Requester Tracking was untouched; the previously approved 1 active / 5 revoked baseline was not re-inspected. No new manual setup is required.
+
+Separate local commit: fix(ui): consolidate live search and list controls. The delivery message records the final hash and verified repository state. No push or deployment; F048 not started. Stop for user review of this local commit.

@@ -319,87 +319,86 @@ function RequestList({ repository, onSignIn }) {
           </button>
         </div>
       </form>
+      <h2 ref={heading} tabIndex="-1" className="visually-hidden">
+        Requests
+      </h2>
       <div
-        className="request-results-heading request-list-toolbar"
+        className="request-list-controls"
         role="group"
         aria-label="Request list controls"
       >
-        <h2 ref={heading} tabIndex="-1">
-          Requests
-        </h2>
-        <div className="request-list-sort">
-          <div>
-            <label htmlFor="request-sort">Sort by</label>
-            <select
-              id="request-sort"
-              className="form-select"
-              value={filters.sort}
-              onChange={(e) =>
-                apply({ ...filters, sort: e.target.value, page: 1 })
+        <div className="request-live-search">
+          <label htmlFor="request-live-search">Search requests</label>
+          <div className="request-live-search-controls">
+            <input
+              ref={searchField}
+              id="request-live-search"
+              type="search"
+              className="form-control"
+              value={searchInput}
+              maxLength={160}
+              placeholder="Search reference, issue, or service location"
+              aria-describedby="request-live-search-help"
+              aria-invalid={invalidSearch || undefined}
+              onChange={(event) =>
+                setSearchDraft({ urlKey, value: event.target.value })
               }
+            />
+            <button
+              type="button"
+              className="request-search-clear"
+              aria-label="Clear search"
+              onClick={clearSearch}
+              disabled={!searchInput}
             >
-              {Object.entries(listSorts).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+              <span aria-hidden="true">×</span>
+            </button>
           </div>
-          <div>
-            <label htmlFor="request-direction">Direction</label>
-            <select
-              id="request-direction"
-              className="form-select"
-              value={filters.direction}
-              onChange={(e) =>
-                apply({ ...filters, direction: e.target.value, page: 1 })
-              }
-            >
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </select>
-          </div>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setRetry((n) => n + 1)}
-          >
-            Refresh
-          </button>
+          <p id="request-live-search-help">
+            {searchInput.length > 160
+              ? "Use 160 characters or fewer."
+              : invalidSearch
+                ? "Enter at least 2 characters to search."
+                : "Searches reference, Issue and displayed Service Location. Other filters still apply."}
+          </p>
         </div>
-      </div>
-      <div className="request-live-search">
-        <label htmlFor="request-live-search">Search requests</label>
-        <div className="request-live-search-controls">
-          <input
-            ref={searchField}
-            id="request-live-search"
-            type="search"
-            className="form-control"
-            value={searchInput}
-            maxLength={160}
-            placeholder="Search reference, issue, or service location"
-            aria-describedby="request-live-search-help"
-            aria-invalid={invalidSearch || undefined}
-            onChange={(event) =>
-              setSearchDraft({ urlKey, value: event.target.value })
+        <div>
+          <label htmlFor="request-sort">Sort by</label>
+          <select
+            id="request-sort"
+            className="form-select"
+            value={filters.sort}
+            onChange={(e) =>
+              apply({ ...filters, sort: e.target.value, page: 1 })
             }
-          />
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={clearSearch}
-            disabled={!searchInput}
           >
-            Clear search
-          </button>
+            {Object.entries(listSorts).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
-        <p id="request-live-search-help">
-          {searchInput.length > 160
-            ? "Use 160 characters or fewer."
-            : invalidSearch
-              ? "Enter at least 2 characters to search."
-              : "Searches reference, Issue and displayed Service Location. Other filters still apply."}
-        </p>
+        <div>
+          <label htmlFor="request-direction">Direction</label>
+          <select
+            id="request-direction"
+            className="form-select"
+            value={filters.direction}
+            onChange={(e) =>
+              apply({ ...filters, direction: e.target.value, page: 1 })
+            }
+          >
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
+        </div>
+        <button
+          className="btn btn-secondary"
+          onClick={() => setRetry((n) => n + 1)}
+        >
+          Refresh
+        </button>
       </div>
       {!current && !invalidSearch && (
         <p role="status" className="workspace-feedback">
