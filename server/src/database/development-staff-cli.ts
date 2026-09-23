@@ -1,3 +1,5 @@
+import { developmentIssueDefault } from './development-issue-default.js';
+import type { TargetType } from '../service-request/ownership-targets.js';
 import { setupDevelopmentOperationalTargets } from './development-operational-targets.js';
 import 'reflect-metadata';
 import { Kysely, PostgresDialect, sql } from 'kysely';
@@ -18,8 +20,9 @@ async function run() {
   const [command, ...flags] = process.argv.slice(2);
   if (command === '--help' || flags.includes('--help')) {
     process.stdout.write(`F036 personal development staff tooling
-Commands: inspect | provision | deprovision | setup-operations
+Commands: inspect | provision | deprovision | setup-operations | issue-default
 setup-operations explicitly creates/reuses fictional operational roles/teams and memberships for the selected existing scopes. It changes no permissions.
+issue-default uses F048_ACTION=inspect|set|clear, F048_ISSUE_ID, and for mutations F048_EXPECTED_REVISION. Set additionally requires F048_TARGET_TYPE=staff|role|group and F048_TARGET_ID. Use inspect --dry-run before set/clear --dry-run, then --confirm. No HTTP configuration endpoint or grants are added.
 Flags: --dry-run (read-only), --confirm (explicit write)
 Set NODE_ENV=development, CITYVUE_DEPLOYMENT_PROFILE=development,
 CITYVUE_ENABLE_EXTERNAL_IDENTITY=true and existing Entra settings.
@@ -36,9 +39,13 @@ Identity, requests, activity, catalog and unrelated roles are preserved.
     return;
   }
   if (
-    !['inspect', 'provision', 'deprovision', 'setup-operations'].includes(
-      command ?? '',
-    ) ||
+    ![
+      'inspect',
+      'provision',
+      'deprovision',
+      'setup-operations',
+      'issue-default',
+    ].includes(command ?? '') ||
     flags.some((flag) => !['--dry-run', '--confirm'].includes(flag)) ||
     new Set(flags).size !== flags.length ||
     (flags.includes('--dry-run') && flags.includes('--confirm'))
@@ -130,6 +137,50 @@ Identity, requests, activity, catalog and unrelated roles are preserved.
     const staffId = process.env.F036_STAFF_ID ?? '';
     if (!developmentUuid.test(staffId))
       throw new Error('Explicit staff ID required');
+    if (command === 'issue-default') {
+      const action = process.env.F048_ACTION;
+      if (!['inspect', 'set', 'clear'].includes(action ?? ''))
+        throw new Error('Explicit F048_ACTION inspect, set or clear required');
+      const revision = process.env.F048_EXPECTED_REVISION;
+      if (action !== 'inspect' && !/^(0|[1-9][0-9]*)$/.test(revision ?? ''))
+        throw new Error('Explicit configuration revision required');
+      const result = await developmentIssueDefault(
+        db,
+        {
+          tenantId,
+          staffId,
+          organizationId: process.env.F036_ORGANIZATION_ID ?? '',
+          issueId: process.env.F048_ISSUE_ID ?? '',
+          ...(action === 'inspect'
+            ? {}
+            : {
+                input: {
+                  expectedRevision: Number(revision),
+                  target:
+                    action === 'clear'
+                      ? null
+                      : {
+                          type: process.env.F048_TARGET_TYPE as TargetType,
+                          id: process.env.F048_TARGET_ID ?? '',
+                        },
+                },
+              }),
+        },
+        dryRun,
+      );
+      process.stdout.write(
+        JSON.stringify(
+          {
+            profile: 'development',
+            database: 'localhost:5432 / reqro_dev / reqro_dev_user',
+            ...result,
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+      return;
+    }
     if (command === 'setup-operations') {
       const result = await setupDevelopmentOperationalTargets(
         db,

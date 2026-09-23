@@ -174,6 +174,9 @@ export default function RequestActivity({
                       )}
                     </dl>
                   )}
+                  {event.type === "request_auto_assigned" && (
+                    <p>Source: Issue default assignment</p>
+                  )}
                   {event.intakeChannel && (
                     <p>
                       Intake:{" "}

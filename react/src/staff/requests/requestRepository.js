@@ -325,6 +325,7 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         options(signal),
       );
       const types = [
+        "request_auto_assigned",
         "request_assigned",
         "request_reassigned",
         "request_unassigned",

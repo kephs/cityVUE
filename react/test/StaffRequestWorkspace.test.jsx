@@ -1439,6 +1439,35 @@ const event = (type = "request_created", narrative = null) => ({
   toStatus: null,
   intakeChannel: "staff",
 });
+test("F048 automatic assignment uses the normal owner summary and truthful System Activity", async () => {
+  repository.activity.mockResolvedValue({
+    items: [
+      {
+        ...event("request_auto_assigned"),
+        actorDisplay: "System",
+        intakeChannel: null,
+        toTargetType: "group",
+        toTargetName: "F048 Fictional Queue",
+      },
+    ],
+    page: 1,
+    hasNextPage: false,
+  });
+  show(`/staff/requests/${id}`);
+  await screen.findByText("Request automatically assigned");
+  expect(
+    screen.getByText("Source: Issue default assignment"),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/F048 Fictional Queue/)).toBeInTheDocument();
+  expect(screen.getByText(/System/)).toBeInTheDocument();
+  await fullActivity();
+  expect(
+    within(
+      screen.getByRole("dialog", { name: "Full Request Activity" }),
+    ).getByText("Request automatically assigned"),
+  ).toBeInTheDocument();
+});
+
 test("activity loading, plain-text narrative, safe actor, routing and older pages", async () => {
   let resolve;
   repository.activity.mockImplementationOnce(

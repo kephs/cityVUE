@@ -1,3 +1,4 @@
+import { configureIssueDefault } from '../../src/service-request/issue-default-assignment.js';
 import type { Server } from 'node:http';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -426,6 +427,27 @@ export async function checkAttachments(
               .expect(201)
           ).body as AttachmentClaim,
         );
+        const issueId = payload.serviceDefinitionId as string;
+        const teams = [randomUUID(), randomUUID()] as const;
+        for (const [index, teamId] of teams.entries())
+          await db
+            .insertInto('work_group')
+            .values({
+              id: teamId,
+              organization_id: org,
+              department_id: c.department,
+              division_id: null,
+              name: `F048 Retry Team ${String(index)}`,
+              description: 'Disposable',
+              active: true,
+            })
+            .execute();
+        await db.transaction().execute((trx) =>
+          configureIssueDefault(trx, org, issueId, c.creator, {
+            expectedRevision: 0,
+            target: { type: 'group', id: teams[0] },
+          }),
+        );
         const id = randomUUID();
         await upload(claim, id, png, filename, false).expect(201);
         const result = await request(api)
@@ -434,6 +456,25 @@ export async function checkAttachments(
           .expect(201);
         const requestId = (result.body as { id: string }).id;
         trackingParents.push(requestId);
+        const assignmentsBefore = await db
+          .selectFrom('service_request_assignment')
+          .selectAll()
+          .where('service_request_id', '=', requestId)
+          .execute();
+        const eventsBefore = await db
+          .selectFrom('request_operational_activity')
+          .selectAll()
+          .where('service_request_id', '=', requestId)
+          .orderBy('id')
+          .execute();
+        assert.equal(assignmentsBefore.length, 1);
+        assert.equal(assignmentsBefore[0]?.work_group_id, teams[0]);
+        await db.transaction().execute((trx) =>
+          configureIssueDefault(trx, org, issueId, c.creator, {
+            expectedRevision: 1,
+            target: { type: 'group', id: teams[1] },
+          }),
+        );
         // Disposable fixture only: retry must not become an alternative status lookup.
         await db
           .updateTable('service_request')
@@ -446,6 +487,104 @@ export async function checkAttachments(
           .expect(201);
         assert.equal((retry.body as { id: string }).id, requestId);
         assert.deepEqual(retry.body, result.body);
+        for (const concurrent of await Promise.all(
+          [1, 2].map(() =>
+            request(api)
+              .post('/api/v1/service-requests')
+              .send({ ...payload, attachments: claim })
+              .expect(201),
+          ),
+        ))
+          assert.deepEqual(concurrent.body, result.body);
+        assert.deepEqual(
+          await db
+            .selectFrom('service_request_assignment')
+            .selectAll()
+            .where('service_request_id', '=', requestId)
+            .execute(),
+          assignmentsBefore,
+        );
+        assert.deepEqual(
+          await db
+            .selectFrom('request_operational_activity')
+            .selectAll()
+            .where('service_request_id', '=', requestId)
+            .orderBy('id')
+            .execute(),
+          eventsBefore,
+        );
+        const manager = await actor([
+          'service_request.view',
+          'service_request.assign',
+        ]);
+        await request(api)
+          .post(`${root}/${requestId}/assignment`)
+          .set('Authorization', `Bearer ${manager.id}`)
+          .send({
+            expectedRevision: 2,
+            targetType: 'group',
+            targetId: teams[1],
+          })
+          .expect(200);
+        const manuallyChanged = await db
+          .selectFrom('service_request_assignment')
+          .selectAll()
+          .where('service_request_id', '=', requestId)
+          .orderBy('id')
+          .execute();
+        const manualHistory = await db
+          .selectFrom('request_operational_activity')
+          .selectAll()
+          .where('service_request_id', '=', requestId)
+          .orderBy('id')
+          .execute();
+        const manualRetry = await request(api)
+          .post('/api/v1/service-requests')
+          .send({ ...payload, attachments: claim })
+          .expect(201);
+        assert.deepEqual(manualRetry.body, result.body);
+        assert.deepEqual(
+          await db
+            .selectFrom('service_request_assignment')
+            .selectAll()
+            .where('service_request_id', '=', requestId)
+            .orderBy('id')
+            .execute(),
+          manuallyChanged,
+        );
+        assert.deepEqual(
+          await db
+            .selectFrom('request_operational_activity')
+            .selectAll()
+            .where('service_request_id', '=', requestId)
+            .orderBy('id')
+            .execute(),
+          manualHistory,
+        );
+        const next = await request(api)
+          .post('/api/v1/service-requests')
+          .send(payload)
+          .expect(201);
+        assert.equal(
+          (
+            await db
+              .selectFrom('service_request_assignment')
+              .select('work_group_id')
+              .where(
+                'service_request_id',
+                '=',
+                (next.body as { id: string }).id,
+              )
+              .executeTakeFirstOrThrow()
+          ).work_group_id,
+          teams[1],
+        );
+        await db.transaction().execute((trx) =>
+          configureIssueDefault(trx, org, issueId, c.creator, {
+            expectedRevision: 2,
+            target: null,
+          }),
+        );
         assert.equal(
           (
             await db

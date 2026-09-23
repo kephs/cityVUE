@@ -1,6 +1,8 @@
 # Reqro Feature Records
 
-[F047 — Service Request Live Search](F047-service-request-live-search.md): implemented and locally validated. The [report](F047-implementation-report.md) records passed automated checks, authenticated UI UAT, integrity verification and user-confirmed live logging privacy. F048 is unassigned and not started.
+[F048 — Issue-Based Default Assignment](F048-issue-based-default-assignment.md): implemented from synchronized F047. The [report](F048-implementation-report.md) records automated and authenticated UAT evidence, migration/integrity results, retained fictional state and passed completion gates. Production configuration administration is deferred. F049 is not selected or started.
+
+[F047 — Service Request Live Search](F047-service-request-live-search.md): implemented, validated and synchronized. The [report](F047-implementation-report.md) records its historical delivery evidence.
 
 [F046 — Secure Attachments & Photos Foundation](F046-secure-attachments-photos-foundation.md): implemented and locally validated as a development foundation. The [validation record](F046-implementation-report.md) covers authenticated UAT, shared preview layout, approved security corrections, cleanup and retained fixture state.
 

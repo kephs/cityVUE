@@ -302,7 +302,7 @@ interface ServiceRequestAssignmentTable {
   assigned_at: Generated<Timestamp>;
   ended_at: Timestamp | null;
   assigned_by_actor_type: string;
-  assigned_by_staff_identity_id: string;
+  assigned_by_staff_identity_id: string | null;
   reason: string | null;
   created_at: Generated<Timestamp>;
 }
@@ -425,6 +425,27 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  issue_default_assignment: {
+    organization_id: string;
+    service_definition_id: string;
+    target_type: 'staff' | 'role' | 'group' | null;
+    staff_identity_id: string | null;
+    operational_role_id: string | null;
+    work_group_id: string | null;
+    revision: number;
+    updated_at: Timestamp;
+  };
+  issue_default_assignment_audit: {
+    id: Generated<string>;
+    organization_id: string;
+    service_definition_id: string;
+    staff_identity_id: string;
+    revision: number;
+    action: 'set' | 'clear';
+    target_type: 'staff' | 'role' | 'group' | null;
+    target_id: string | null;
+    occurred_at: Generated<Timestamp>;
+  };
   attachment_batch: {
     id: Generated<string>;
     organization_id: string;

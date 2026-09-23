@@ -30,7 +30,8 @@
     "dev:staff:inspect": "tsx src/database/development-staff-cli.ts inspect",
     "dev:staff:provision": "tsx src/database/development-staff-cli.ts provision",
     "dev:staff:deprovision": "tsx src/database/development-staff-cli.ts deprovision",
-    "attachments:cleanup": "tsx src/attachments/attachment-cleanup.ts"
+    "attachments:cleanup": "tsx src/attachments/attachment-cleanup.ts",
+    "dev:issue:default-assignment": "tsx src/database/development-staff-cli.ts issue-default"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

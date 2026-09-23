@@ -47,13 +47,14 @@ test("final F046 banner-to-Description spacing uses an existing token only for P
   expect(css).not.toMatch(/\.request-internal-notice \+ \.request-description/);
 });
 
-test("list toolbar wraps and readable ordinals retain room for multiple digits", () => {
+test("list controls stack responsively and readable ordinals retain room for multiple digits", () => {
   const css = readFileSync(
     "react/src/staff/requests/staffRequests.css",
     "utf8",
   );
-  expect(css.match(/\.request-list-toolbar\s*\{([^}]+)\}/)[1]).toMatch(
-    /flex-wrap:\s*wrap/,
+  const mobile = css.slice(css.indexOf("@media (max-width: 575px)"));
+  expect(mobile.match(/\.request-list-controls\s*\{([^}]+)\}/)[1]).toMatch(
+    /grid-template-columns:\s*minmax\(0, 1fr\)/,
   );
   expect(css.match(/\.request-row-position\s*\{([^}]+)\}/)[1]).toMatch(
     /font-size:\s*var\(--font-body\)/,

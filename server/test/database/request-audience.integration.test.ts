@@ -1,3 +1,8 @@
+import { checkIssueDefaults } from './issue-default-assignment-checks.js';
+import {
+  up as defaultAssignmentUp,
+  down as defaultAssignmentDown,
+} from '../../migrations/20260924000000-add-issue-default-assignment.js';
 import { checkAttachments } from './attachment-checks.js';
 import { checkRequestCommunications } from './request-communication-checks.js';
 import { checkRequestTracking } from './request-tracking-checks.js';
@@ -421,6 +426,8 @@ test(
           .execute(),
       );
       process.env.NODE_ENV = 'test';
+      // Feature helpers enable attachments only after their disposable migration.
+      process.env.ENABLE_DEVELOPMENT_ATTACHMENTS = 'false';
       process.env.CITYVUE_DEPLOYMENT_PROFILE = 'development';
       process.env.DATABASE_URL =
         'postgresql://example:placeholder@localhost/test';
@@ -443,6 +450,27 @@ test(
             { service: 'cityvue-api', version: 'test', environment: 'test' },
             { write: (line) => contactLogs.push(line) },
           ),
+        },
+      );
+      await t.test(
+        'F048 unused migration applies, rolls back and reapplies without historical changes',
+        async () => {
+          const before = await db
+            .selectFrom('service_request')
+            .selectAll()
+            .orderBy('id')
+            .execute();
+          await db.transaction().execute(defaultAssignmentUp);
+          await db.transaction().execute(defaultAssignmentDown);
+          await db.transaction().execute(defaultAssignmentUp);
+          assert.deepEqual(
+            await db
+              .selectFrom('service_request')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+            before,
+          );
         },
       );
       const module = await Test.createTestingModule({ imports: [AppModule] })
@@ -2304,6 +2332,16 @@ test(
           creator,
           department,
           otherInternal,
+          publicPayload: assisted,
+          internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkIssueDefaults(t, {
+          app,
+          db,
+          org,
+          creator,
+          department,
           publicPayload: assisted,
           internalPayload: internal,
           logs: contactLogs,

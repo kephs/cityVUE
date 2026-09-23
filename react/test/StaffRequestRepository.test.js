@@ -171,6 +171,25 @@ test("activity uses protected bounded endpoint and drops identity/audit extras",
   expect(data.items[0]).not.toHaveProperty("staffIdentityId");
   expect(data.items[0]).not.toHaveProperty("metadata");
   client.get.mockResolvedValue({
+    items: [
+      {
+        ...event,
+        type: "request_auto_assigned",
+        actorDisplay: "System",
+        toTargetType: "group",
+        toTargetName: "F048 Fictional Queue",
+      },
+    ],
+    page: 1,
+  });
+  const automatic = await repo.activity(id, 1);
+  expect(automatic.items[0]).toMatchObject({
+    type: "request_auto_assigned",
+    actorDisplay: "System",
+    toTargetName: "F048 Fictional Queue",
+  });
+  expect(automatic.items[0]).not.toHaveProperty("metadata");
+  client.get.mockResolvedValue({
     items: [{ ...event, type: "arbitrary_comment" }],
     page: 1,
   });

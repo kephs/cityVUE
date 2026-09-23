@@ -1,3 +1,5 @@
+import { up as ownershipUp } from '../../migrations/20260920000000-add-assignment-watchers.js';
+import { up as defaultAssignmentUp } from '../../migrations/20260924000000-add-issue-default-assignment.js';
 import { up as operationalUp } from '../../migrations/20260919050000-add-request-operational-activity.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -238,6 +240,8 @@ test(
         development: false,
       });
       await operationalUp(db);
+      await ownershipUp(db);
+      await defaultAssignmentUp(db);
       const create = (seed: typeof a, date = '2026-09-15T12:00:00Z') =>
         new CreateServiceRequestService(
           { get: () => seed.org } as never,

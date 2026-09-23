@@ -10,6 +10,7 @@ export const workflowActivityTypes = {
 } as const satisfies Record<WorkflowAction, string>;
 
 export type RequestActivityType =
+  | 'request_auto_assigned'
   | 'request_assigned'
   | 'request_reassigned'
   | 'request_unassigned'

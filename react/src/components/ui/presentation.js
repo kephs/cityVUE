@@ -26,6 +26,11 @@ export const activityPresentation = {
     icon: "signpost-split",
     tone: "routing",
   },
+  request_auto_assigned: {
+    label: "Request automatically assigned",
+    icon: "person-check",
+    tone: "assignment",
+  },
   request_assigned: {
     label: "Request assigned",
     icon: "person-check",

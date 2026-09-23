@@ -1,3 +1,5 @@
+import { up as ownershipUp } from '../../migrations/20260920000000-add-assignment-watchers.js';
+import { up as defaultAssignmentUp } from '../../migrations/20260924000000-add-issue-default-assignment.js';
 import { EvaluateLocationEligibilityService } from '../../src/location-eligibility/evaluate-location-eligibility.service.js';
 import { DevelopmentLocationEligibilityProvider } from '../../src/location-eligibility/development-location-eligibility.provider.js';
 import { up as operationalUp } from '../../migrations/20260919050000-add-request-operational-activity.js';
@@ -82,6 +84,8 @@ test(
       await actionUp(db);
       await referenceUp(db);
       await operationalUp(db);
+      await ownershipUp(db);
+      await defaultAssignmentUp(db);
       await db
         .insertInto('organization')
         .values({

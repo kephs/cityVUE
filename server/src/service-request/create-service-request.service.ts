@@ -1,3 +1,7 @@
+import {
+  resolveIssueDefault,
+  applyInitialAssignment,
+} from './issue-default-assignment.js';
 import { Optional } from '@nestjs/common';
 import { AttachmentService } from '../attachments/attachment.service.js';
 import { checksum } from '../attachments/attachment.domain.js';
@@ -323,6 +327,13 @@ export class CreateServiceRequestService {
         throw new ConflictException(
           'This Issue is handled by an external service',
         );
+      const initialAssignment = await resolveIssueDefault(
+        trx,
+        context.organizationId,
+        definition.serviceDefinitionId,
+        definition.categoryId,
+        context.audience,
+      );
       const referenceNumber = await this.repository.allocateReference(
         trx,
         context.organizationId,
@@ -445,6 +456,14 @@ export class CreateServiceRequestService {
             referenceNumber,
             audience: context.audience,
             intakeChannel: context.intakeChannel,
+            ...(initialAssignment.outcome !== 'none'
+              ? {
+                  defaultAssignment: {
+                    source: 'issue_default',
+                    outcome: initialAssignment.outcome,
+                  },
+                }
+              : {}),
             ...(eligibilityResult
               ? {
                   locationEligibility: {
@@ -474,6 +493,13 @@ export class CreateServiceRequestService {
           intake_channel: context.intakeChannel,
         })
         .execute();
+      if (initialAssignment.target)
+        await applyInitialAssignment(
+          trx,
+          context.organizationId,
+          requestId,
+          initialAssignment.target,
+        );
       return {
         id: created.id,
         referenceNumber: created.reference_number,

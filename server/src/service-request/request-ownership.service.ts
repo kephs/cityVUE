@@ -1,3 +1,4 @@
+import { insertCurrentAssignment } from './assignment-write.js';
 import {
   BadRequestException,
   ConflictException,
@@ -312,24 +313,13 @@ export class RequestOwnershipService {
           .where('ended_at', 'is', null)
           .execute();
         if (target)
-          await db
-            .insertInto('service_request_assignment')
-            .values({
-              id: randomUUID(),
-              organization_id: access.organizationId,
-              service_request_id: id,
-              assignment_type:
-                target.type === 'staff' ? 'individual' : target.type,
-              staff_identity_id: target.type === 'staff' ? target.id : null,
-              operational_role_id: target.type === 'role' ? target.id : null,
-              work_group_id: target.type === 'group' ? target.id : null,
-              department_id: null,
-              assigned_by_actor_type: 'staff',
-              assigned_by_staff_identity_id: access.staffIdentityId,
-              ended_at: null,
-              reason: null,
-            })
-            .execute();
+          await insertCurrentAssignment(
+            db,
+            access.organizationId,
+            id,
+            target,
+            access.staffIdentityId,
+          );
         activity = target
           ? previous
             ? 'request_reassigned'
