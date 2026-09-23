@@ -10,6 +10,7 @@ export default function CollaborationPanel({
   repository,
   id,
   audience,
+  requesterIdentity,
   capabilities,
   onAccessFailure,
 }) {
@@ -72,6 +73,12 @@ export default function CollaborationPanel({
           hidden={selected !== tab.key}
           tabIndex={0}
         >
+          {tab.key === "communication" && requesterIdentity === "anonymous" && (
+            <p>
+              New requester communication is unavailable for anonymous requests.
+              Existing records remain available according to your permissions.
+            </p>
+          )}
           {visited[tab.key] &&
             (tab.key === "notes" ? (
               <InternalNotes

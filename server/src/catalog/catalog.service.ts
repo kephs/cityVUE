@@ -79,7 +79,11 @@ export class CatalogService {
       defaultPriority: issue.default_priority,
       locationPolicy: issue.location_policy,
       geographicEligibilityMode: issue.geographic_eligibility_mode,
-      anonymousReportingPolicy: issue.anonymous_reporting_policy,
+      anonymousReportingPolicy:
+        issue.requester_identity_policy === 'IDENTIFIED_REQUIRED'
+          ? 'not_allowed'
+          : 'allowed',
+      requesterIdentityPolicy: issue.requester_identity_policy,
       questions: questions.map((question) => ({
         id: question.id,
         key: question.question_key,

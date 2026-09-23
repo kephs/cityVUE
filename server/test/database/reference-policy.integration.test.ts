@@ -1,3 +1,4 @@
+import { up as identityPolicyUp } from '../../migrations/20260925000000-add-requester-identity-policy.js';
 import { up as ownershipUp } from '../../migrations/20260920000000-add-assignment-watchers.js';
 import { up as defaultAssignmentUp } from '../../migrations/20260924000000-add-issue-default-assignment.js';
 import { up as operationalUp } from '../../migrations/20260919050000-add-request-operational-activity.js';
@@ -242,6 +243,7 @@ test(
       await operationalUp(db);
       await ownershipUp(db);
       await defaultAssignmentUp(db);
+      await identityPolicyUp(db);
       const create = (seed: typeof a, date = '2026-09-15T12:00:00Z') =>
         new CreateServiceRequestService(
           { get: () => seed.org } as never,

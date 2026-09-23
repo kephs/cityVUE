@@ -57,6 +57,8 @@ export class QuestionDto {
 }
 
 export class IssueDetailDto extends IssueSummaryDto {
+  @ApiProperty({ enum: ['IDENTIFIED_REQUIRED', 'ANONYMOUS_ALLOWED'] })
+  requesterIdentityPolicy!: string;
   @ApiProperty({ format: 'uuid' }) serviceDefinitionVersionId!: string;
   @ApiProperty() version!: number;
   @ApiProperty({ enum: ['low', 'medium', 'high', 'urgent'] })

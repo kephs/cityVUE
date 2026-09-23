@@ -1,4 +1,8 @@
 import { configureIssueDefault } from '../../src/service-request/issue-default-assignment.js';
+import {
+  configureRequesterPolicy,
+  inspectRequesterPolicy,
+} from '../../src/service-request/requester-identity-policy.js';
 import type { Server } from 'node:http';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -416,6 +420,8 @@ export async function checkAttachments(
         const payload = { ...c.publicPayload } as Record<string, unknown>;
         delete payload.audience;
         delete payload.intakeChannel;
+        payload.reportingIdentity = 'anonymous';
+        delete payload.contact;
         const claim = claimOnly(
           (
             await request(api)
@@ -455,6 +461,11 @@ export async function checkAttachments(
           .send({ ...payload, attachments: claim })
           .expect(201);
         const requestId = (result.body as { id: string }).id;
+        await request(api)
+          .post(`${uploads}/requests/${requestId}/batches`)
+          .set('Authorization', `Bearer ${full.id}`)
+          .send({ context: 'REQUESTER_COMMUNICATION' })
+          .expect(403);
         trackingParents.push(requestId);
         const assignmentsBefore = await db
           .selectFrom('service_request_assignment')
@@ -476,6 +487,17 @@ export async function checkAttachments(
           }),
         );
         // Disposable fixture only: retry must not become an alternative status lookup.
+        await db.transaction().execute(async (trx) =>
+          configureRequesterPolicy(trx, org, issueId, c.creator, {
+            policy: 'IDENTIFIED_REQUIRED',
+            expectedRevision: (await inspectRequesterPolicy(trx, org, issueId))
+              .revision,
+          }),
+        );
+        await request(api)
+          .post('/api/v1/service-requests')
+          .send(payload)
+          .expect(400);
         await db
           .updateTable('service_request')
           .set({ status: 'in_progress' })
@@ -487,6 +509,26 @@ export async function checkAttachments(
           .expect(201);
         assert.equal((retry.body as { id: string }).id, requestId);
         assert.deepEqual(retry.body, result.body);
+        assert.equal(
+          (
+            await db
+              .selectFrom('service_request')
+              .select('reporting_identity')
+              .where('id', '=', requestId)
+              .executeTakeFirstOrThrow()
+          ).reporting_identity,
+          'anonymous',
+        );
+        assert.equal(
+          (
+            await db
+              .selectFrom('requester_contact')
+              .selectAll()
+              .where('service_request_id', '=', requestId)
+              .execute()
+          ).length,
+          0,
+        );
         for (const concurrent of await Promise.all(
           [1, 2].map(() =>
             request(api)
@@ -560,6 +602,13 @@ export async function checkAttachments(
             .orderBy('id')
             .execute(),
           manualHistory,
+        );
+        await db.transaction().execute(async (trx) =>
+          configureRequesterPolicy(trx, org, issueId, c.creator, {
+            policy: 'ANONYMOUS_ALLOWED',
+            expectedRevision: (await inspectRequesterPolicy(trx, org, issueId))
+              .revision,
+          }),
         );
         const next = await request(api)
           .post('/api/v1/service-requests')

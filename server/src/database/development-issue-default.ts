@@ -1,4 +1,9 @@
 import { sql, type Kysely } from 'kysely';
+import {
+  configureRequesterPolicy,
+  inspectRequesterPolicy,
+  type RequesterPolicyInput,
+} from '../service-request/requester-identity-policy.js';
 import type { DatabaseSchema } from './database.types.js';
 import {
   developmentOrganization,
@@ -23,6 +28,7 @@ export async function developmentIssueDefault(
     staffId: string;
     issueId: string;
     input?: DefaultAssignmentInput;
+    requesterPolicy?: RequesterPolicyInput | null;
   },
   dryRun: boolean,
 ) {
@@ -34,7 +40,7 @@ export async function developmentIssueDefault(
   )
     throw new Error('Invalid explicit development selection');
   return db.transaction().execute(async (trx) => {
-    if (dryRun || !selection.input)
+    if (dryRun || (!selection.input && !selection.requesterPolicy))
       await sql`set transaction read only`.execute(trx);
     const org = await trx
       .selectFrom('organization')
@@ -90,6 +96,22 @@ export async function developmentIssueDefault(
         .executeTakeFirst());
     if (!member || !division)
       throw new Error('Existing explicit development scope required');
+    if (selection.requesterPolicy !== undefined) {
+      return selection.requesterPolicy === null
+        ? inspectRequesterPolicy(
+            trx,
+            selection.organizationId,
+            selection.issueId,
+          )
+        : configureRequesterPolicy(
+            trx,
+            selection.organizationId,
+            selection.issueId,
+            selection.staffId,
+            selection.requesterPolicy,
+            dryRun,
+          );
+    }
     if (selection.input)
       return configureIssueDefault(
         trx,

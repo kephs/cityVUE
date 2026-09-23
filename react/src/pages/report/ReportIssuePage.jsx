@@ -19,7 +19,7 @@ const initialValues = {
   description: "",
   location: "",
   locationPoint: null,
-  reportingMode: "anonymous",
+  reportingMode: "",
   reporterName: "",
 };
 const labels = { service: "Issue", details: "Details", review: "Review" };
@@ -214,7 +214,13 @@ export default function ReportIssuePage({
     );
   };
   const changeValue = (name, value) => {
-    setValues((old) => ({ ...old, [name]: value }));
+    setValues((old) => ({
+      ...old,
+      [name]: value,
+      ...(name === "reportingMode" && value === "anonymous"
+        ? { reporterName: "" }
+        : {}),
+    }));
     setErrors((old) => ({ ...old, [name]: undefined }));
     setSaveError("");
   };
@@ -255,6 +261,13 @@ export default function ReportIssuePage({
     if (!values.description.trim()) next.description = "Describe your concern.";
     if (service.locationRequirement === "required" && !values.location.trim())
       next.location = "Enter the issue location.";
+    if (!["identified", "anonymous"].includes(values.reportingMode))
+      next.reportingMode = "Choose how you would like to submit this request.";
+    if (
+      service.anonymousPolicy === "not-allowed" &&
+      values.reportingMode !== "identified"
+    )
+      next.reportingMode = "This Issue requires contact information.";
     if (values.reportingMode === "identified" && !values.reporterName.trim())
       next.reporterName = "Enter your name.";
     if (Object.keys(next).length) setErrors(next);
@@ -303,6 +316,11 @@ export default function ReportIssuePage({
         <div className="card report-form-card">
           <div className="card-body p-5 text-center">
             <h1>Request submitted successfully.</h1>
+            <p>
+              {values.reportingMode === "anonymous"
+                ? "Submitted anonymously. No requester contact information was collected."
+                : "Submitted with contact information."}
+            </p>
             <p>Reference</p>
             <p className="display-6 request-reference" role="status">
               {result.referenceNumber}

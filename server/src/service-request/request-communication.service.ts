@@ -37,15 +37,18 @@ export class RequestCommunicationService {
     trx: Transaction<DatabaseSchema>,
     access: StaffAccess,
     id: string,
+    create = false,
   ) {
     if (!requestUuid.test(id)) throw new NotFoundException();
     // The persisted audience determines access; shared locks prevent routing during this operation.
     const row = await staffRequestReadScope(trx, access, 'public')
-      .select('request.id')
+      .select(['request.id', 'request.reporting_identity as requesterIdentity'])
       .where('request.id', '=', id)
       .forShare(['request', 'category', 'organization'])
       .executeTakeFirst();
     if (!row) throw new NotFoundException();
+    if (create && row.requesterIdentity === 'anonymous')
+      throw new ForbiddenException('Requester communication is unavailable');
   }
 
   async list(
@@ -100,7 +103,7 @@ export class RequestCommunicationService {
       throw new BadRequestException('Attachments unavailable');
     const normalized = normalizeCommunicationBody(body);
     return this.database.client.transaction().execute(async (trx) => {
-      await this.parent(trx, access, id);
+      await this.parent(trx, access, id, true);
       const attachmentDigest = checksum(normalized);
       const batch =
         attachmentClaim && attachments

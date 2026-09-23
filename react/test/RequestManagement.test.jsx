@@ -8,6 +8,7 @@ function setup({
   status = "not_issued",
   allowed = true,
   watchers,
+  requesterIdentity = "identified",
 } = {}) {
   const repository = {
     watchers:
@@ -31,6 +32,7 @@ function setup({
     id: "fictional-request",
     row: {
       audience: "public",
+      requesterIdentity,
       revision: 1,
       capabilities: { canManageRequesterTracking: allowed },
     },
@@ -41,6 +43,20 @@ function setup({
   };
   return { ...render(<RequestManagement {...props} />), props, repository };
 }
+
+test("F049 anonymous Contact is an explicit absence with no View action or disclosure", async () => {
+  const { props } = setup({ requesterIdentity: "anonymous" });
+  expect(
+    screen.getByText("Not provided — submitted anonymously"),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "View requester contact" }),
+  ).not.toBeInTheDocument();
+  expect(props.loadContact).not.toHaveBeenCalled();
+  expect(
+    await screen.findByText("Not issued · Secure requester access"),
+  ).toBeInTheDocument();
+});
 
 test.each([
   [0, "No watchers are following this request"],

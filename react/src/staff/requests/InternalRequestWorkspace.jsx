@@ -939,6 +939,7 @@ function RequestDetail({ repository, id, onSignIn }) {
                 repository={repository}
                 id={id}
                 audience={row.audience}
+                requesterIdentity={row.requesterIdentity}
                 capabilities={capabilities}
                 onAccessFailure={protectedContentAccessFailure}
               />

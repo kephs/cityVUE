@@ -145,6 +145,11 @@ function project(row, detail = false) {
     ...(detail
       ? {
           description: row.description,
+          requesterIdentity: ["identified", "anonymous"].includes(
+            row.requesterIdentity,
+          )
+            ? row.requesterIdentity
+            : null,
           revision: row.revision,
           intakeChannel: ["web", "phone", "walk_in", "staff", "api"].includes(
             row.intakeChannel,

@@ -6,6 +6,8 @@ Reqro remains independent of any one enterprise asset management (EAM) vendor. F
 
 ## Current status
 
+[F049 — Anonymous Request Policy](docs/features/F049-anonymous-request-policy.md) adds explicit anonymous/identified intake under two Issue policies while preserving protected Contact, staff attribution, independent tracking and default assignment. The [validation report](docs/features/F049-implementation-report.md) records 1,046 passing tests, authenticated UAT and the 25-migration personal-development baseline. This is a development foundation; production policy administration and privacy governance remain deferred. No F049 push/deployment or F050 work is authorized.
+
 The React/Vite application supports resident intake and a unified authenticated PUBLIC/INTERNAL staff workspace. The NestJS/PostgreSQL API supplies canonical requests, database-backed authorization, lifecycle/routing, assignment/watchers, Activity, protected requester contact and Internal Notes through F041.
 
 Legacy/demo Issue workflows still use browser `localStorage`; those records are not canonical PostgreSQL requests and are not migrated automatically. Local implementation does not establish production readiness or a deployed backend. No live EAM integration is implemented.

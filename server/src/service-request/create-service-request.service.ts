@@ -2,6 +2,10 @@ import {
   resolveIssueDefault,
   applyInitialAssignment,
 } from './issue-default-assignment.js';
+import {
+  inspectRequesterPolicy,
+  validateIdentityContact,
+} from './requester-identity-policy.js';
 import { Optional } from '@nestjs/common';
 import { AttachmentService } from '../attachments/attachment.service.js';
 import { checksum } from '../attachments/attachment.domain.js';
@@ -152,9 +156,14 @@ export class CreateServiceRequestService {
       );
     if (input.description.trim() === '')
       throw new BadRequestException('Description is required');
+    validateIdentityContact(
+      input.reportingIdentity,
+      input.contact,
+      context.audience === 'internal',
+    );
     validateRequesterPolicy(
       input.reportingIdentity,
-      definition.anonymousPolicy,
+      'allowed',
       context.audience === 'internal' || Boolean(input.contact?.name.trim()),
     );
     validateLocationPolicy(
@@ -326,6 +335,19 @@ export class CreateServiceRequestService {
       if (action?.action_type !== 'internal_intake')
         throw new ConflictException(
           'This Issue is handled by an external service',
+        );
+      const identityPolicy = await inspectRequesterPolicy(
+        trx,
+        context.organizationId,
+        definition.serviceDefinitionId,
+      );
+      if (context.audience === 'public')
+        validateRequesterPolicy(
+          input.reportingIdentity,
+          identityPolicy.policy === 'IDENTIFIED_REQUIRED'
+            ? 'not_allowed'
+            : 'allowed',
+          Boolean(input.contact?.name.trim()),
         );
       const initialAssignment = await resolveIssueDefault(
         trx,

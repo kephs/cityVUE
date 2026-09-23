@@ -22,14 +22,14 @@ export interface ContactRequestAccessPolicy {
     trx: Transaction<DatabaseSchema>,
     access: StaffAccess,
     id: string,
-  ): Promise<{ id: string } | undefined>;
+  ): Promise<{ id: string; reportingIdentity: string } | undefined>;
 }
 
 export const internalContactPolicy: ContactRequestAccessPolicy = {
   permission: 'service_request.internal.read',
   resolve: (trx, access, id) =>
     internalRequestScope(trx, access)
-      .select('request.id')
+      .select(['request.id', 'request.reporting_identity as reportingIdentity'])
       .where('request.id', '=', id)
       .forShare(['request', 'category', 'organization'])
       .executeTakeFirst(),
@@ -53,6 +53,8 @@ export class RequestContactService {
       // Shared request/classification locks prevent routing across the checked scope before disclosure commits.
       const parent = await policy.resolve(trx, access, id);
       if (parent?.id !== id) throw new NotFoundException();
+      if (parent.reportingIdentity === 'anonymous')
+        throw new NotFoundException();
       const contact = await trx
         .selectFrom('requester_contact')
         .select(['name', 'email'])

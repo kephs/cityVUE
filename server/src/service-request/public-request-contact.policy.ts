@@ -15,7 +15,7 @@ export const publicContactPolicy: ContactRequestAccessPolicy = {
     )
       throw new NotFoundException();
     return staffRequestReadScope(trx, access, 'public')
-      .select('request.id')
+      .select(['request.id', 'request.reporting_identity as reportingIdentity'])
       .where('request.id', '=', id)
       .forShare(['request', 'category', 'organization'])
       .executeTakeFirst();

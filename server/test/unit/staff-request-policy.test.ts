@@ -22,6 +22,29 @@ const actor = (permissions: Permission[]): StaffAccess => ({
   development: false,
 });
 
+test('F049 anonymity removes Contact and new correspondence but preserves independent tracking and historical reads', () => {
+  const access = actor([
+    'service_request.view',
+    'service_request.contact.read',
+    'service_request.communication.read',
+    'service_request.communication.create',
+    'service_request.tracking.manage',
+  ]);
+  const anonymous = requestCapabilities(access, 'public', 'open', 'anonymous');
+  assert.equal(anonymous.canReadContact, false);
+  assert.equal(anonymous.canCreateCommunication, false);
+  assert.equal(anonymous.canReadCommunications, true);
+  assert.equal(anonymous.canManageRequesterTracking, true);
+  const identified = requestCapabilities(
+    access,
+    'public',
+    'open',
+    'identified',
+  );
+  assert.equal(identified.canReadContact, true);
+  assert.equal(identified.canCreateCommunication, true);
+});
+
 test('F040 read admission never infers another audience or contact from operation permissions', () => {
   for (const keys of [
     [],

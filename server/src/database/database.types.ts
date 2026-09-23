@@ -425,6 +425,23 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  issue_requester_identity_policy: {
+    organization_id: string;
+    service_definition_id: string;
+    policy: 'IDENTIFIED_REQUIRED' | 'ANONYMOUS_ALLOWED';
+    revision: number;
+    updated_at: Timestamp;
+  };
+  issue_requester_identity_audit: {
+    id: Generated<string>;
+    organization_id: string;
+    service_definition_id: string;
+    staff_identity_id: string;
+    revision: number;
+    prior_policy: 'IDENTIFIED_REQUIRED' | 'ANONYMOUS_ALLOWED';
+    policy: 'IDENTIFIED_REQUIRED' | 'ANONYMOUS_ALLOWED';
+    occurred_at: Generated<Timestamp>;
+  };
   issue_default_assignment: {
     organization_id: string;
     service_definition_id: string;

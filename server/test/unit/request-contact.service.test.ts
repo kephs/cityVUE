@@ -28,7 +28,7 @@ const access: StaffAccess = {
 };
 const policy: ContactRequestAccessPolicy = {
   permission: 'service_request.internal.read',
-  resolve: async () => ({ id }),
+  resolve: async () => ({ id, reportingIdentity: 'identified' }),
 };
 test('F039 two independent permission keys and trusted identity are required before contact database access', async () => {
   let touched = false;
@@ -82,7 +82,7 @@ test('F039 PUBLIC contact service independently requires PUBLIC view and contact
   }
   assert.equal(touched, false);
 });
-test('F039 audience-independent policy cannot disclose contact for an unresolved or mismatched parent', async () => {
+test('F039/F049 contact cannot query or audit an unresolved, mismatched or anonymous parent', async () => {
   const database = {
     client: {
       transaction: () => ({
@@ -91,7 +91,11 @@ test('F039 audience-independent policy cannot disclose contact for an unresolved
     },
   } as unknown as DatabaseService;
   const service = new RequestContactService(database);
-  for (const result of [undefined, { id: 'different' }])
+  for (const result of [
+    undefined,
+    { id: 'different', reportingIdentity: 'identified' },
+    { id, reportingIdentity: 'anonymous' },
+  ])
     await assert.rejects(
       service.read(id, access, { ...policy, resolve: async () => result }),
       NotFoundException,

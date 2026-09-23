@@ -2,6 +2,8 @@
 
 **Status: Accepted** — F039 protected contact with F040 effective request scope.
 
+**Dated amendment, 2026-09-23:** [ADR-011 — Explicit requester identity](ADR-011-explicit-requester-identity.md) records the approved F049 exception for explicitly anonymous requests: no Contact View action, no successful Contact read/audit, and no Contact row. Identified Contact, including truthful historical absence, retains this decision's protections. Missing Contact alone does not imply anonymity. The original decision below is retained as historical context.
+
 ## Context
 
 Staff may need operational request information without needing requester identity/contact. Structured contact must not leak through broad list/detail projections or relationships such as assignment.

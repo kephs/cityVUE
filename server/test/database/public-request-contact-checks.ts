@@ -362,9 +362,19 @@ export async function checkPublicRequestContact(
         contact: undefined,
       });
       const partialId = await create({ contact: { name: contact.name } });
+      const before = await db
+        .selectFrom('activity')
+        .selectAll()
+        .where('service_request_id', '=', emptyId)
+        .execute();
+      await get(`${root}/${emptyId}/contact`, both.id).expect(404);
       assert.deepEqual(
-        (await get(`${root}/${emptyId}/contact`, both.id).expect(200)).body,
-        { name: null, email: null },
+        await db
+          .selectFrom('activity')
+          .selectAll()
+          .where('service_request_id', '=', emptyId)
+          .execute(),
+        before,
       );
       assert.deepEqual(
         (await get(`${root}/${partialId}/contact`, both.id).expect(200)).body,

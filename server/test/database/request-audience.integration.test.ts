@@ -1,4 +1,9 @@
 import { checkIssueDefaults } from './issue-default-assignment-checks.js';
+import { checkRequesterIdentityPolicy } from './requester-identity-policy-checks.js';
+import {
+  up as identityPolicyUp,
+  down as identityPolicyDown,
+} from '../../migrations/20260925000000-add-requester-identity-policy.js';
 import {
   up as defaultAssignmentUp,
   down as defaultAssignmentDown,
@@ -171,6 +176,11 @@ test(
         })
         .execute();
       const historical = randomUUID();
+      await db
+        .updateTable('service_definition')
+        .set({ current_published_version_id: version })
+        .where('id', '=', service)
+        .execute();
       await db
         .insertInto('service_request')
         .values({
@@ -463,6 +473,27 @@ test(
           await db.transaction().execute(defaultAssignmentUp);
           await db.transaction().execute(defaultAssignmentDown);
           await db.transaction().execute(defaultAssignmentUp);
+          assert.deepEqual(
+            await db
+              .selectFrom('service_request')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+            before,
+          );
+        },
+      );
+      await t.test(
+        'F049 migration preserves historical identities through apply/down/reapply',
+        async () => {
+          const before = await db
+            .selectFrom('service_request')
+            .selectAll()
+            .orderBy('id')
+            .execute();
+          await db.transaction().execute(identityPolicyUp);
+          await db.transaction().execute(identityPolicyDown);
+          await db.transaction().execute(identityPolicyUp);
           assert.deepEqual(
             await db
               .selectFrom('service_request')
@@ -1014,6 +1045,7 @@ test(
                 'description',
                 'revision',
                 'canReadContact',
+                'requesterIdentity',
               ].sort(),
             );
             assert.equal(
@@ -2342,6 +2374,15 @@ test(
           org,
           creator,
           department,
+          publicPayload: assisted,
+          internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkRequesterIdentityPolicy(t, {
+          app,
+          db,
+          org,
+          creator,
           publicPayload: assisted,
           internalPayload: internal,
           logs: contactLogs,

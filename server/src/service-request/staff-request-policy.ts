@@ -53,6 +53,7 @@ export function requestCapabilities(
   access: StaffAccess,
   audience: StaffRequestAudience,
   status: string,
+  requesterIdentity = 'identified',
 ) {
   assertStaffRequestRead(access, audience);
   const permitted = (operation: StaffRequestOperation) => {
@@ -79,11 +80,14 @@ export function requestCapabilities(
     canAssign: permitted('assign'),
     canManageWatchers: permitted('watchers'),
     canWatchSelf: permitted('self_watch'),
-    canReadContact: access.permissions.includes('service_request.contact.read'),
+    canReadContact:
+      requesterIdentity !== 'anonymous' &&
+      access.permissions.includes('service_request.contact.read'),
     canReadCommunications:
       audience === 'public' &&
       access.permissions.includes('service_request.communication.read'),
     canCreateCommunication:
+      requesterIdentity !== 'anonymous' &&
       audience === 'public' &&
       access.permissions.includes('service_request.communication.read') &&
       access.permissions.includes('service_request.communication.create'),

@@ -147,27 +147,35 @@ export default function IssueForm({
           </div>
         )
       )}
-      <fieldset className="mb-4">
+      <fieldset
+        className="mb-4"
+        aria-describedby="requester-identity-help"
+        aria-invalid={Boolean(errors.reportingMode)}
+        aria-errormessage={
+          errors.reportingMode ? "reportingMode-error" : undefined
+        }
+      >
         <legend className="h5">
           How would you like to report this concern?
         </legend>
-        <div className="form-check mb-2">
-          <input
-            className="form-check-input"
-            id="report-anonymous"
-            type="radio"
-            name="reportingMode"
-            value="anonymous"
-            checked={!identified}
-            disabled={service.anonymousPolicy === "not-allowed"}
-            onChange={(event) =>
-              onValueChange("reportingMode", event.target.value)
-            }
-          />
-          <label className="form-check-label" htmlFor="report-anonymous">
-            Report anonymously
-          </label>
-        </div>
+        {service.anonymousPolicy !== "not-allowed" && (
+          <div className="form-check mb-2">
+            <input
+              className="form-check-input"
+              id="report-anonymous"
+              type="radio"
+              name="reportingMode"
+              value="anonymous"
+              checked={values.reportingMode === "anonymous"}
+              onChange={(event) =>
+                onValueChange("reportingMode", event.target.value)
+              }
+            />
+            <label className="form-check-label" htmlFor="report-anonymous">
+              Report anonymously
+            </label>
+          </div>
+        )}
         <div className="form-check">
           <input
             className="form-check-input"
@@ -186,6 +194,19 @@ export default function IssueForm({
         </div>
         {service.anonymousPolicy === "not-allowed" && (
           <p className="form-text">This issue requires a reporter name.</p>
+        )}
+        <p id="requester-identity-help" className="form-text">
+          {service.anonymousPolicy === "not-allowed"
+            ? "Contact information is required for this Issue. Your name is required; email is optional."
+            : "Choose whether to provide contact information. If you submit anonymously, requester Contact will not be collected. Avoid identifying yourself in the description or evidence if you want to remain anonymous."}
+        </p>
+        {errors.reportingMode && (
+          <div role="alert">
+            <FieldError
+              id="reportingMode-error"
+              message={errors.reportingMode}
+            />
+          </div>
         )}
       </fieldset>
       {identified && (

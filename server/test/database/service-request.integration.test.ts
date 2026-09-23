@@ -1,3 +1,4 @@
+import { up as identityPolicyUp } from '../../migrations/20260925000000-add-requester-identity-policy.js';
 import { up as ownershipUp } from '../../migrations/20260920000000-add-assignment-watchers.js';
 import { up as defaultAssignmentUp } from '../../migrations/20260924000000-add-issue-default-assignment.js';
 import { EvaluateLocationEligibilityService } from '../../src/location-eligibility/evaluate-location-eligibility.service.js';
@@ -86,6 +87,7 @@ test(
       await operationalUp(db);
       await ownershipUp(db);
       await defaultAssignmentUp(db);
+      await identityPolicyUp(db);
       await db
         .insertInto('organization')
         .values({

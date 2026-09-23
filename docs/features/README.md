@@ -1,6 +1,8 @@
 # Reqro Feature Records
 
-[F048 — Issue-Based Default Assignment](F048-issue-based-default-assignment.md): implemented from synchronized F047. The [report](F048-implementation-report.md) records automated and authenticated UAT evidence, migration/integrity results, retained fictional state and passed completion gates. Production configuration administration is deferred. F049 is not selected or started.
+[F049 — Anonymous Request Policy](F049-anonymous-request-policy.md): implemented with the explicitly approved two-policy model. The [report](F049-implementation-report.md) records automated, migration, privacy, authenticated UAT and integrity evidence. Production administration and broader identity/history remain deferred; no push/deployment or F050 work is authorized.
+
+[F048 — Issue-Based Default Assignment](F048-issue-based-default-assignment.md): implemented from synchronized F047. The [report](F048-implementation-report.md) records automated and authenticated UAT evidence, migration/integrity results, retained fictional state and passed completion gates. Production configuration administration is deferred. F049 is recorded above; no F050 work is authorized.
 
 [F047 — Service Request Live Search](F047-service-request-live-search.md): implemented, validated and synchronized. The [report](F047-implementation-report.md) records its historical delivery evidence.
 

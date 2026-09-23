@@ -1,4 +1,5 @@
 import { developmentIssueDefault } from './development-issue-default.js';
+import type { RequesterIdentityPolicy } from '../service-request/requester-identity-policy.js';
 import type { TargetType } from '../service-request/ownership-targets.js';
 import { setupDevelopmentOperationalTargets } from './development-operational-targets.js';
 import 'reflect-metadata';
@@ -20,7 +21,8 @@ async function run() {
   const [command, ...flags] = process.argv.slice(2);
   if (command === '--help' || flags.includes('--help')) {
     process.stdout.write(`F036 personal development staff tooling
-Commands: inspect | provision | deprovision | setup-operations | issue-default
+Commands: inspect | provision | deprovision | setup-operations | issue-default | issue-identity
+issue-identity uses F049_ACTION=inspect|set, F049_ISSUE_ID, and for set F049_EXPECTED_REVISION plus F049_POLICY=IDENTIFIED_REQUIRED|ANONYMOUS_ALLOWED. Inspect/dry-run before --confirm. No grants or runtime request data are changed.
 setup-operations explicitly creates/reuses fictional operational roles/teams and memberships for the selected existing scopes. It changes no permissions.
 issue-default uses F048_ACTION=inspect|set|clear, F048_ISSUE_ID, and for mutations F048_EXPECTED_REVISION. Set additionally requires F048_TARGET_TYPE=staff|role|group and F048_TARGET_ID. Use inspect --dry-run before set/clear --dry-run, then --confirm. No HTTP configuration endpoint or grants are added.
 Flags: --dry-run (read-only), --confirm (explicit write)
@@ -45,6 +47,7 @@ Identity, requests, activity, catalog and unrelated roles are preserved.
       'deprovision',
       'setup-operations',
       'issue-default',
+      'issue-identity',
     ].includes(command ?? '') ||
     flags.some((flag) => !['--dry-run', '--confirm'].includes(flag)) ||
     new Set(flags).size !== flags.length ||
@@ -137,6 +140,44 @@ Identity, requests, activity, catalog and unrelated roles are preserved.
     const staffId = process.env.F036_STAFF_ID ?? '';
     if (!developmentUuid.test(staffId))
       throw new Error('Explicit staff ID required');
+    if (command === 'issue-identity') {
+      const action = process.env.F049_ACTION,
+        revision = process.env.F049_EXPECTED_REVISION;
+      if (
+        !['inspect', 'set'].includes(action ?? '') ||
+        (action === 'set' && !/^(0|[1-9][0-9]*)$/.test(revision ?? ''))
+      )
+        throw new Error('Explicit valid F049 action and revision required');
+      const result = await developmentIssueDefault(
+        db,
+        {
+          tenantId,
+          staffId,
+          organizationId: process.env.F036_ORGANIZATION_ID ?? '',
+          issueId: process.env.F049_ISSUE_ID ?? '',
+          requesterPolicy:
+            action === 'inspect'
+              ? null
+              : {
+                  policy: process.env.F049_POLICY as RequesterIdentityPolicy,
+                  expectedRevision: Number(revision),
+                },
+        },
+        dryRun,
+      );
+      process.stdout.write(
+        JSON.stringify(
+          {
+            profile: 'development',
+            database: 'localhost:5432 / reqro_dev / reqro_dev_user',
+            ...result,
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+      return;
+    }
     if (command === 'issue-default') {
       const action = process.env.F048_ACTION;
       if (!['inspect', 'set', 'clear'].includes(action ?? ''))

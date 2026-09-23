@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   BadRequestException,
   ConflictException,
   Injectable,
@@ -142,14 +143,18 @@ export class AttachmentService {
         );
     }
     if (create && context === 'REQUEST_EVIDENCE') throw new NotFoundException();
+    const authorizedParent = await parent
+      .select(['request.id', 'request.reporting_identity as requesterIdentity'])
+      .where('request.id', '=', requestId)
+      .forShare(['request', 'category', 'organization'])
+      .executeTakeFirst();
+    if (!authorizedParent) throw new NotFoundException();
     if (
-      !(await parent
-        .select('request.id')
-        .where('request.id', '=', requestId)
-        .forShare(['request', 'category', 'organization'])
-        .executeTakeFirst())
+      create &&
+      context === 'REQUESTER_COMMUNICATION' &&
+      authorizedParent.requesterIdentity === 'anonymous'
     )
-      throw new NotFoundException();
+      throw new ForbiddenException('Requester communication is unavailable');
   }
   private async audit(
     trx: Trx,

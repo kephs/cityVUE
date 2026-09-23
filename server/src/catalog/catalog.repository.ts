@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
+import { effectiveRequesterPolicy } from '../service-request/requester-identity-policy.js';
 import { DatabaseService } from '../database/database.service.js';
 
 @Injectable()
@@ -120,6 +121,10 @@ export class CatalogRepository {
         'version.location_policy',
         'version.geographic_eligibility_mode',
         'version.anonymous_reporting_policy',
+        effectiveRequesterPolicy(
+          sql.ref('service.organization_id'),
+          sql.ref('service.id'),
+        ).as('requester_identity_policy'),
       ])
       .where('service.organization_id', '=', organizationId)
       .where('service.id', '=', serviceDefinitionId)

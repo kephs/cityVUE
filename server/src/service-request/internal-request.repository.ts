@@ -354,6 +354,7 @@ export class InternalRequestRepository {
         'request.description',
         'request.revision',
         'request.intake_channel as intakeChannel',
+        'request.reporting_identity as requesterIdentity',
       ])
       .where('request.id', '=', id)
       .executeTakeFirst();
@@ -368,10 +369,12 @@ export class InternalRequestRepository {
               access,
               persistedRequestAudience(row.audience),
               row.status,
+              row.requesterIdentity,
             ),
           }
         : {}),
       canReadContact:
+        row.requesterIdentity !== 'anonymous' &&
         access?.permissions.includes('service_request.contact.read') === true,
     };
   }

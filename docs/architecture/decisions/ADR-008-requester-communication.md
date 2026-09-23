@@ -1,5 +1,7 @@
 # ADR-008 — Requester communication and truthful delivery semantics
 
+**Dated amendment, 2026-09-23:** [ADR-011 — Explicit requester identity](ADR-011-explicit-requester-identity.md) records approved F049 new-write eligibility: explicitly anonymous requests cannot create new correspondence or stage correspondence attachments. Existing records and authorized reads remain immutable and available. No delivery destination or identity is inferred from tracking. The original F042 decision is retained below.
+
 **Status: Accepted** — F042 scope and authorization decision; release validation
 and personal-development UAT are tracked separately in the feature record.
 

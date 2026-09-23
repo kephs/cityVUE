@@ -125,17 +125,25 @@ export default function RequestManagement({
       <div className="request-management-row">
         <div>
           <h4>Requester Contact</h4>
-          <p>{row.canReadContact ? "Separate, audited access" : "Protected"}</p>
+          <p>
+            {row.requesterIdentity === "anonymous"
+              ? "Not provided — submitted anonymously"
+              : row.canReadContact
+                ? "Separate, audited access"
+                : "Protected"}
+          </p>
         </div>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          aria-label="View requester contact"
-          disabled={busy}
-          onClick={() => open("contact")}
-        >
-          View
-        </button>
+        {row.requesterIdentity !== "anonymous" && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            aria-label="View requester contact"
+            disabled={busy}
+            onClick={() => open("contact")}
+          >
+            View
+          </button>
+        )}
       </div>
       {dialog && (
         <RequestDialog
