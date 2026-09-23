@@ -1,5 +1,10 @@
 import { checkIssueDefaults } from './issue-default-assignment-checks.js';
 import { checkRequesterIdentityPolicy } from './requester-identity-policy-checks.js';
+import { checkTrustedRequesterHistory } from './trusted-requester-history-checks.js';
+import {
+  up as trustedHistoryUp,
+  down as trustedHistoryDown,
+} from '../../migrations/20260926000000-add-trusted-requester-history.js';
 import {
   up as identityPolicyUp,
   down as identityPolicyDown,
@@ -502,6 +507,39 @@ test(
               .execute(),
             before,
           );
+        },
+      );
+      await t.test(
+        'F050 migration apply/down/reapply preserves historical rows and creates no inferred identities',
+        async () => {
+          const before = await db
+            .selectFrom('service_request')
+            .selectAll()
+            .orderBy('id')
+            .execute();
+          await db.transaction().execute(trustedHistoryUp);
+          assert.equal(
+            (await db.selectFrom('requester').selectAll().execute()).length,
+            0,
+          );
+          assert.deepEqual(
+            await db
+              .selectFrom('service_request')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+            before.map((row) => ({ ...row, requester_id: null })),
+          );
+          await db.transaction().execute(trustedHistoryDown);
+          assert.deepEqual(
+            await db
+              .selectFrom('service_request')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+            before,
+          );
+          await db.transaction().execute(trustedHistoryUp);
         },
       );
       const module = await Test.createTestingModule({ imports: [AppModule] })
@@ -2383,6 +2421,19 @@ test(
           db,
           org,
           creator,
+          publicPayload: assisted,
+          internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkTrustedRequesterHistory(t, {
+          app,
+          db,
+          org,
+          creator,
+          publicOnly,
+          otherStaff,
+          department,
+          targetDepartment,
           publicPayload: assisted,
           internalPayload: internal,
           logs: contactLogs,

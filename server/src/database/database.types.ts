@@ -121,6 +121,7 @@ interface ReferenceSequenceTable {
   updated_at: Generated<Timestamp>;
 }
 export interface ServiceRequestTable {
+  requester_id: Generated<string | null>;
   id: string;
   organization_id: string;
   reference_number: string;
@@ -425,6 +426,22 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  requester: {
+    id: Generated<string>;
+    organization_id: string;
+    identity_source: string;
+    identity_subject: string;
+    created_at: Generated<Timestamp>;
+  };
+  requester_history_audit: {
+    id: Generated<string>;
+    organization_id: string;
+    service_request_id: string;
+    staff_identity_id: string;
+    action: 'history_viewed';
+    correlation_id: string;
+    created_at: Generated<Timestamp>;
+  };
   issue_requester_identity_policy: {
     organization_id: string;
     service_definition_id: string;

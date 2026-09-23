@@ -1,5 +1,7 @@
 # Reqro Feature Records
 
+[F050 — Trusted Requester Identity & Authorized History](F050-trusted-requester-identity-history.md): implemented and validated as a development foundation from synchronized F049. The [report](F050-implementation-report.md) records trusted identity, authorization/count privacy, migration, responsive/keyboard UAT, logging and integrity evidence. Production resident authentication remains deferred. F050 is local-only; no push/deployment or F051 is authorized. Earlier entries describe historical checkpoint authorizations.
+
 [F049 — Anonymous Request Policy](F049-anonymous-request-policy.md): implemented with the explicitly approved two-policy model. The [report](F049-implementation-report.md) records automated, migration, privacy, authenticated UAT and integrity evidence. Production administration and broader identity/history remain deferred; no push/deployment or F050 work is authorized.
 
 [F048 — Issue-Based Default Assignment](F048-issue-based-default-assignment.md): implemented from synchronized F047. The [report](F048-implementation-report.md) records automated and authenticated UAT evidence, migration/integrity results, retained fictional state and passed completion gates. Production configuration administration is deferred. F049 is recorded above; no F050 work is authorized.

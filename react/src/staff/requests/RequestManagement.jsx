@@ -7,6 +7,7 @@ import RequestDialog from "./RequestDialog.jsx";
 import RequestOwnership, { TargetLabel } from "./RequestOwnership.jsx";
 import RequesterContact from "./RequesterContact.jsx";
 import RequesterTracking from "./RequesterTracking.jsx";
+import RequesterHistory from "./RequesterHistory.jsx";
 
 export default function RequestManagement({
   repository,
@@ -145,6 +146,24 @@ export default function RequestManagement({
           </button>
         )}
       </div>
+      {row.audience === "public" &&
+        row.requesterIdentity === "identified" &&
+        row.canReadRequesterHistory && (
+          <div className="request-management-row">
+            <div>
+              <h4>Requester History</h4>
+              <p>Trusted identity linked</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy}
+              onClick={() => open("history")}
+            >
+              View Request History
+            </button>
+          </div>
+        )}
       {dialog && (
         <RequestDialog
           title={
@@ -152,13 +171,22 @@ export default function RequestManagement({
               assignment: "Assignment",
               watchers: "Watchers",
               contact: "Requester Contact",
+              history: "Requester History",
             }[dialog]
           }
           onClose={close}
           busy={busy}
         >
           {error && <p role="alert">{error}</p>}
-          {dialog === "contact" ? (
+          {dialog === "history" ? (
+            <RequesterHistory
+              key={id}
+              repository={repository}
+              id={id}
+              onAccessFailure={denied}
+              onNavigate={close}
+            />
+          ) : dialog === "contact" ? (
             <RequesterContact
               embedded
               canRead={row.canReadContact}

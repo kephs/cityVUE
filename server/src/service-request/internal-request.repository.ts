@@ -355,16 +355,20 @@ export class InternalRequestRepository {
         'request.revision',
         'request.intake_channel as intakeChannel',
         'request.reporting_identity as requesterIdentity',
+        sql<boolean>`request.audience = 'public' and request.reporting_identity = 'identified' and request.requester_id is not null`.as(
+          'canReadRequesterHistory',
+        ),
       ])
       .where('request.id', '=', id)
       .executeTakeFirst();
     if (!row) return undefined;
-    const { intakeChannel, ...safeRow } = row;
+    const { intakeChannel, canReadRequesterHistory, ...safeRow } = row;
     return {
       ...safeRow,
       ...(audience === 'all' && access
         ? {
             intakeChannel,
+            canReadRequesterHistory,
             capabilities: requestCapabilities(
               access,
               persistedRequestAudience(row.audience),

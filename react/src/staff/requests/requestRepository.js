@@ -157,6 +157,10 @@ function project(row, detail = false) {
             ? row.intakeChannel
             : null,
           canReadContact: row.canReadContact === true,
+          canReadRequesterHistory:
+            row.canReadRequesterHistory === true &&
+            row.audience === "public" &&
+            row.requesterIdentity === "identified",
           capabilities: {
             workflowActions: Array.isArray(row.capabilities?.workflowActions)
               ? row.capabilities.workflowActions.filter((action) =>
@@ -287,6 +291,67 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
       )
         throw invalid();
       return { name: data.name, email: data.email };
+    },
+    async requesterHistory(id, page, signal, pageSize = 25) {
+      if (
+        !Number.isInteger(page) ||
+        page < 1 ||
+        page > 1000000 ||
+        !Number.isInteger(pageSize) ||
+        pageSize < 1 ||
+        pageSize > 100
+      )
+        throw invalid();
+      const data = await api.get(
+        `${path(id)}/requester-history?page=${page}&pageSize=${pageSize}`,
+        options(signal),
+      );
+      if (
+        !Array.isArray(data?.items) ||
+        data.items.length > pageSize ||
+        !Array.isArray(data.categories) ||
+        !Number.isInteger(data.total) ||
+        data.total < 0 ||
+        data.page !== page ||
+        data.pageSize !== pageSize
+      )
+        throw invalid();
+      return {
+        total: data.total,
+        page,
+        pageSize,
+        hasPreviousPage: data.hasPreviousPage === true,
+        hasNextPage: data.hasNextPage === true,
+        categories: data.categories.map((category) => {
+          if (
+            typeof category?.name !== "string" ||
+            !Number.isInteger(category.count) ||
+            category.count < 1
+          )
+            throw invalid();
+          return { name: category.name, count: category.count };
+        }),
+        items: data.items.map((item) => {
+          if (
+            !uuid.test(item?.serviceRequestId) ||
+            typeof item.referenceNumber !== "string" ||
+            typeof item.issueName !== "string" ||
+            !Object.hasOwn(statusLabels, item.status) ||
+            typeof item.createdAt !== "string" ||
+            !Number.isFinite(Date.parse(item.createdAt)) ||
+            typeof item.current !== "boolean"
+          )
+            throw invalid();
+          return {
+            serviceRequestId: item.serviceRequestId,
+            referenceNumber: item.referenceNumber,
+            issueName: item.issueName,
+            status: item.status,
+            createdAt: item.createdAt,
+            current: item.current,
+          };
+        }),
+      };
     },
     async list(filters, signal) {
       const query = new URLSearchParams();

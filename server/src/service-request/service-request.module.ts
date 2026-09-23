@@ -1,3 +1,5 @@
+import { RequesterHistoryController } from './requester-history.controller.js';
+import { RequesterHistoryService } from './requester-history.service.js';
 import { AttachmentService } from '../attachments/attachment.service.js';
 import {
   IntakeAttachmentController,
@@ -51,6 +53,7 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    RequesterHistoryController,
     IntakeAttachmentController,
     StaffAttachmentController,
     StaffRequestTrackingController,
@@ -68,6 +71,7 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
     InternalRequestMutationsController,
   ],
   providers: [
+    RequesterHistoryService,
     AttachmentService,
     AttachmentOriginGuard,
     AttachmentUploadGuard,
@@ -106,6 +110,10 @@ export class ServiceRequestModule implements NestModule {
       .forRoutes(RequestNoteController);
     consumer
       .apply(RequestContactPrivacyMiddleware)
-      .forRoutes(RequestContactController, PublicRequestContactController);
+      .forRoutes(
+        RequestContactController,
+        PublicRequestContactController,
+        RequesterHistoryController,
+      );
   }
 }

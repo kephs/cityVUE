@@ -1,5 +1,7 @@
 # Reqro architecture decisions
 
+[ADR-012 — Trusted requester identity and authorized history](ADR-012-trusted-requester-identity-history.md) records the F050 implementation decision, proposed for final review: Contact is not identity authority, synthetic development provenance is explicit, and history cannot expand request access.
+
 [ADR-011 — Explicit requester identity](ADR-011-explicit-requester-identity.md) records F049's approved two-policy model, immutable historical identity, anonymous Contact prohibition and dated F039/F042 amendments. Application-level anonymity does not establish infrastructure untraceability or production readiness.
 
 [ADR-010 — Secure attachment architecture](ADR-010-secure-attachment-architecture.md) records the accepted F046 development storage, parent-domain, Vite filesystem and expiring retry boundaries; production prerequisites remain deferred.

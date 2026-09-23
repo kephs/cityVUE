@@ -5,6 +5,7 @@ import { up as audienceUp } from '../../migrations/20260919000000-add-request-au
 import { up as lifecycleUp } from '../../migrations/20260919020000-add-internal-request-lifecycle.js';
 import { up as operationalUp } from '../../migrations/20260919050000-add-request-operational-activity.js';
 import 'reflect-metadata';
+import { up as trustedHistoryUp } from '../../migrations/20260926000000-add-trusted-requester-history.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -136,6 +137,7 @@ test(
         lifecycleUp,
         operationalUp,
         ownershipUp,
+        trustedHistoryUp,
       ])
         await migrate(db);
       await db

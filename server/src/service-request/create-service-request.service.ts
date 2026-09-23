@@ -1,4 +1,9 @@
 import {
+  assertTrustedRequester,
+  resolveTrustedRequester,
+  type TrustedRequesterContext,
+} from './trusted-requester.js';
+import {
   resolveIssueDefault,
   applyInitialAssignment,
 } from './issue-default-assignment.js';
@@ -60,6 +65,7 @@ const supportedQuestionTypes = new Set<SupportedQuestionType>([
 @Injectable()
 export class CreateServiceRequestService {
   private readonly organizationId: string;
+  private readonly trustedDevelopment: boolean;
   constructor(
     config: ConfigService<AppConfiguration, true>,
     private readonly database: DatabaseService,
@@ -70,6 +76,32 @@ export class CreateServiceRequestService {
     this.organizationId = config.get('catalog.developmentOrganizationId', {
       infer: true,
     });
+    this.trustedDevelopment =
+      ['development', 'test'].includes(
+        config.get('app.environment', { infer: true }),
+      ) && config.get('deployment.profile', { infer: true }) === 'development';
+  }
+
+  /** No HTTP route calls this. Only a verified provider context may select identity. */
+  async executeTrusted(
+    input: CreateServiceRequestDto,
+    trusted: TrustedRequesterContext,
+    now = new Date(),
+  ): Promise<CreateServiceRequestResponseDto> {
+    assertTrustedRequester(trusted);
+    if (!this.trustedDevelopment || input.reportingIdentity !== 'identified')
+      throw new ForbiddenException('Trusted requester creation unavailable');
+    return this.create(
+      input,
+      {
+        organizationId: trusted.organizationId,
+        audience: 'public',
+        intakeChannel: 'api',
+        staffId: null,
+        trusted,
+      },
+      now,
+    );
   }
 
   async execute(
@@ -138,6 +170,7 @@ export class CreateServiceRequestService {
       audience: 'public' | 'internal';
       intakeChannel: string;
       staffId: string | null;
+      trusted?: TrustedRequesterContext;
     },
     now: Date,
   ): Promise<CreateServiceRequestResponseDto> {
@@ -292,6 +325,14 @@ export class CreateServiceRequestService {
           answers: input.answers,
           contact: input.contact,
           location: input.location,
+          ...(context.trusted
+            ? {
+                trustedRequester: {
+                  source: context.trusted.source,
+                  subject: context.trusted.subject,
+                },
+              }
+            : {}),
         }),
       );
       const batch =
@@ -363,10 +404,14 @@ export class CreateServiceRequestService {
         definition.businessTimezone,
       );
       const requestId = randomUUID();
+      const requesterId = context.trusted
+        ? await resolveTrustedRequester(trx, context.trusted)
+        : null;
       const created = await trx
         .insertInto('service_request')
         .values({
           id: requestId,
+          ...(requesterId ? { requester_id: requesterId } : {}),
           organization_id: context.organizationId,
           reference_number: referenceNumber,
           service_definition_id: definition.serviceDefinitionId,

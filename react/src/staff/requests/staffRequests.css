@@ -781,3 +781,24 @@
     flex-wrap: wrap;
   }
 }
+/* History stays within the existing dialog's scroll and focus boundary. */
+.requester-history {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.requester-history-list {
+  padding-left: 1.25rem;
+}
+.requester-history-list li {
+  margin-block: 0.8rem;
+}
+.requester-history-list li > * {
+  display: block;
+}
+.requester-history-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block: 1rem;
+}
