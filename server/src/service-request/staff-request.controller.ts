@@ -11,6 +11,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import {
+  staffSortKeys,
+  staffSortDirections,
+  staffAssignmentFilters,
+} from './staff-list-controls.js';
 import { IsIn, IsOptional } from 'class-validator';
 import {
   CurrentStaff,
@@ -36,6 +41,18 @@ import {
 import { WorkflowActionDto } from './service-request.dto.js';
 
 export class StaffRequestListQueryDto extends InternalRequestListQueryDto {
+  @ApiPropertyOptional({ enum: staffSortKeys, default: 'created' })
+  @IsOptional()
+  @IsIn(staffSortKeys)
+  sort?: string;
+  @ApiPropertyOptional({ enum: staffSortDirections, default: 'desc' })
+  @IsOptional()
+  @IsIn(staffSortDirections)
+  direction?: string;
+  @ApiPropertyOptional({ enum: staffAssignmentFilters, default: 'all' })
+  @IsOptional()
+  @IsIn(staffAssignmentFilters)
+  assignment?: string;
   @ApiPropertyOptional({ enum: ['all', 'public', 'internal'], default: 'all' })
   @IsOptional()
   @IsIn(['all', 'public', 'internal'])

@@ -69,6 +69,16 @@ These requirements are recorded during F044 completion for future design and pri
 
 External delivery, notifications and vendor integrations remain separately reviewed work. None of these requirements starts F045.
 
+## Unnumbered future staff capabilities
+
+### Service Request Live Search
+
+Future, not implemented by the staff-list controls refinement; no feature ID is assigned. Provide debounced, server-side search over only the principal's independently authorized requests. Potential initial fields: Request Reference, Issue name and Service Location. Compose with audience, workspace view, existing filters, sorting and pagination. Internal Notes, Requester Communication bodies and protected Requester Contact are explicitly excluded until separate security/search design. The current reference field remains explicit-submit exact-reference filtering.
+
+### Issue-Based Default Assignment
+
+Future, not implemented; no feature ID is assigned. An Issue may optionally configure a default STAFF, operational ROLE, GROUP/TEAM, or no owner, establishing an initial F037 assignment during creation. Future design must cover Organization-scoped target integrity, active/eligible target validation, explicit Issue configuration and administration UI, atomic request plus assignment creation, operational Activity identifying automatic assignment, safe audit, concurrency and PUBLIC/INTERNAL policy. Preserve manual reassignment/unassignment and the separation of routing, ownership and authorization. Absent/invalid configuration creates no default assignment; inactive/deleted targets must fail safely. Do not build a general rules engine initially. Location or other advanced criteria remain separately reviewed work only if the simple Issue-based model proves insufficient.
+
 ## Longer-term platform direction
 
 **Catalog and intake:** extend narrow implemented configuration toward reviewed authoring/publication/preview administration, richer conditional intake, accessible discovery and routing policy. Preserve version/Answer history and distinguish platform intake from external redirect. Historical [domain requirements](features/F002-core-product-capabilities-domain-requirements.md) and [catalog direction](features/F003-dynamic-service-catalog-intelligent-intake.md) are broad requirements, not evidence every capability exists.

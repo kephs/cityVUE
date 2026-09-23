@@ -16,6 +16,12 @@ interface ListBody {
     serviceRequestId: string;
     audience: string;
     referenceNumber: string;
+    issueName: string;
+    status: string;
+    departmentName: string;
+    divisionName: string | null;
+    createdAt: string;
+    assignment: { displayName: string; type: string } | null;
   }[];
   total: number;
   page: number;
@@ -1298,6 +1304,249 @@ export async function checkStaffWorkspace(
         .execute();
       assert.ok(!JSON.stringify(audit).includes('F040 legacy fictional hold'));
       assertPrivate(audit);
+    },
+  );
+  await t.test(
+    'staff list sorting/filtering is global, stable, scoped and validated',
+    async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 28; i++) {
+        const fixture = await create(
+          i % 2 ? c.internalPayload : c.publicPayload,
+        );
+        ids.push(fixture.id);
+        await sql`update service_request set created_at=${new Date(Date.UTC(2026, 0, 1 + Math.floor(i / 2))).toISOString()}::timestamptz where id=${fixture.id}::uuid`.execute(
+          db,
+        );
+        await db
+          .updateTable('service_request')
+          .set({
+            status: i % 3 ? 'open' : 'on_hold',
+          })
+          .where('id', '=', fixture.id)
+          .execute();
+      }
+      const owned = ids[0];
+      const removed = ids[2];
+      assert.ok(owned && removed);
+      for (const requestId of [owned, removed]) {
+        await post(
+          root + '/' + requestId + '/assignment',
+          { expectedRevision: 1, targetType: 'group', targetId: team },
+          operator.id,
+        ).expect(200);
+      }
+      await post(
+        root + '/' + removed + '/assignment/remove',
+        { expectedRevision: 2 },
+        operator.id,
+      ).expect(200);
+      await post(
+        root + '/' + removed + '/watch-self',
+        { expectedRevision: 3 },
+        operator.id,
+      ).expect(200);
+      const list = async (query: string, actorId: string = operator.id) =>
+        (await get(root + '?pageSize=100&' + query, actorId).expect(200))
+          .body as ListBody;
+      const baseline = await list('');
+      assert.ok(baseline.total >= 28);
+      assertPrivate(baseline);
+      const defaultOrder = await list('sort=created&direction=desc');
+      assert.deepEqual(baseline, defaultOrder);
+      const keys = ['issue', 'status', 'department', 'assignment', 'created'];
+      const primary = (
+        row: ListBody['items'][number],
+        key: string,
+      ): (string | null)[] =>
+        key === 'issue'
+          ? [row.issueName, row.referenceNumber]
+          : key === 'status'
+            ? [row.status]
+            : key === 'department'
+              ? [row.departmentName, row.divisionName]
+              : key === 'assignment'
+                ? [
+                    row.assignment?.displayName ?? null,
+                    row.assignment?.type ?? null,
+                  ]
+                : [row.createdAt];
+      for (const sort of keys)
+        for (const direction of ['asc', 'desc']) {
+          const result = await list('sort=' + sort + '&direction=' + direction);
+          assert.equal(result.total, baseline.total);
+          assert.deepEqual(
+            result.items.map((r) => r.serviceRequestId).sort(),
+            baseline.items.map((r) => r.serviceRequestId).sort(),
+          );
+          for (let i = 1; i < result.items.length; i++) {
+            const a = result.items[i - 1],
+              b = result.items[i];
+            assert.ok(a && b);
+            const av = primary(a, sort),
+              bv = primary(b, sort);
+            let comparison = 0;
+            for (let j = 0; j < av.length; j++) {
+              const x = av[j],
+                y = bv[j];
+              if (x === y) continue;
+              if (x == null) {
+                comparison = 1;
+                break;
+              }
+              if (y == null) {
+                comparison = -1;
+                break;
+              }
+              comparison = (x < y ? -1 : 1) * (direction === 'asc' ? 1 : -1);
+              break;
+            }
+            assert.ok(
+              comparison < 0 ||
+                (comparison === 0 && a.serviceRequestId > b.serviceRequestId),
+              'sort ' +
+                sort +
+                ' ' +
+                direction +
+                ' must include deterministic descending ID ties and NULL last',
+            );
+          }
+          const first = (
+            await get(
+              root +
+                '?pageSize=25&page=1&sort=' +
+                sort +
+                '&direction=' +
+                direction,
+              operator.id,
+            ).expect(200)
+          ).body as ListBody;
+          const second = (
+            await get(
+              root +
+                '?pageSize=25&page=2&sort=' +
+                sort +
+                '&direction=' +
+                direction,
+              operator.id,
+            ).expect(200)
+          ).body as ListBody;
+          assert.deepEqual(
+            [...first.items, ...second.items].map((r) => r.serviceRequestId),
+            result.items.map((r) => r.serviceRequestId),
+          );
+          assert.equal(second.total, result.total);
+        }
+      for (const assignment of ['assigned', 'unassigned']) {
+        const result = await list(
+          'assignment=' + assignment + '&sort=issue&direction=asc',
+        );
+        assert.deepEqual(
+          result.items.map((r) => r.serviceRequestId).sort(),
+          baseline.items
+            .filter(
+              (r) => Boolean(r.assignment) === (assignment === 'assigned'),
+            )
+            .map((r) => r.serviceRequestId)
+            .sort(),
+        );
+        assert.equal(result.total, result.items.length);
+        for (const audience of ['public', 'internal']) {
+          const scoped = await list(
+            'audience=' +
+              audience +
+              '&assignment=' +
+              assignment +
+              '&sort=created&direction=desc',
+          );
+          assert.ok(
+            scoped.items.every(
+              (r) =>
+                r.audience === audience &&
+                Boolean(r.assignment) === (assignment === 'assigned'),
+            ),
+          );
+        }
+      }
+      const unassigned = await list('assignment=unassigned');
+      assert.ok(unassigned.items.some((r) => r.serviceRequestId === removed));
+      assert.ok(!unassigned.items.some((r) => r.serviceRequestId === owned));
+      const openUnassigned = await list(
+        'status=open&departmentId=' +
+          c.department +
+          '&assignment=unassigned&sort=issue&direction=asc',
+      );
+      assert.ok(openUnassigned.items.length);
+      assert.ok(
+        openUnassigned.items.every((r) => r.status === 'open' && !r.assignment),
+      );
+      for (const view of ['mine', 'team', 'watching'])
+        for (const assignment of ['assigned', 'unassigned']) {
+          const all = await list('view=' + view, bothReader.id);
+          const narrowed = await list(
+            'view=' +
+              view +
+              '&assignment=' +
+              assignment +
+              '&sort=created&direction=desc',
+            bothReader.id,
+          );
+          assert.deepEqual(
+            narrowed.items.map((r) => r.serviceRequestId).sort(),
+            all.items
+              .filter(
+                (r) => Boolean(r.assignment) === (assignment === 'assigned'),
+              )
+              .map((r) => r.serviceRequestId)
+              .sort(),
+          );
+        }
+      assert.ok(
+        (await list('view=team&assignment=assigned', bothReader.id)).items.some(
+          (r) => r.serviceRequestId === owned,
+        ),
+      );
+      for (const actorId of [
+        publicReader.id,
+        internalReader.id,
+        c.otherOrg,
+        c.otherInternal,
+      ]) {
+        const baselineResponse = await get(root + '?pageSize=100', actorId);
+        if (baselineResponse.status === 403) {
+          await get(
+            root + '?assignment=unassigned&sort=assignment&direction=desc',
+            actorId,
+          ).expect(403);
+          continue;
+        }
+        assert.equal(baselineResponse.status, 200);
+        const allowed = baselineResponse.body as ListBody;
+        for (const sort of keys) {
+          const result = await list(
+            'sort=' + sort + '&direction=asc&assignment=unassigned',
+            actorId,
+          );
+          assert.ok(
+            result.items.every((r) =>
+              allowed.items.some(
+                (a) => a.serviceRequestId === r.serviceRequestId,
+              ),
+            ),
+          );
+        }
+      }
+      for (const query of [
+        'sort=secret',
+        'sort=request.id%20desc',
+        'direction=up',
+        'assignment=watching',
+      ])
+        await get(root + '?' + query, operator.id).expect(400);
+      await get(
+        root + '?assignment=unassigned&sort=created',
+        neither.id,
+      ).expect(403);
     },
   );
 }

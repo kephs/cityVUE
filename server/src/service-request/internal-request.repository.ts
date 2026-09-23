@@ -1,3 +1,7 @@
+import {
+  validateStaffListControls,
+  type StaffListControls,
+} from './staff-list-controls.js';
 import { assignmentProjection, operationalView } from './ownership-targets.js';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { sql } from 'kysely';
@@ -27,7 +31,7 @@ export function assertInternalReadAccess(
   assertInternalAccess(access, 'service_request.internal.read');
 }
 
-export interface InternalRequestFilters {
+export interface InternalRequestFilters extends StaffListControls {
   audience?: StaffRequestAudienceFilter;
   view?: string;
   search?: string;
@@ -60,6 +64,7 @@ export class InternalRequestRepository {
     filters: InternalRequestFilters = {},
     audience: StaffRequestAudienceFilter = 'internal',
   ) {
+    const { assignment } = validateStaffListControls(filters);
     let query = this.scoped(access, audience);
     assertStaffRequestRead(access, audience);
     if (filters.audience && filters.audience !== 'all')
@@ -84,6 +89,12 @@ export class InternalRequestRepository {
         'request.reference_number',
         '=',
         search.toUpperCase(),
+      );
+    if (assignment !== 'all')
+      query = query.where(
+        assignmentProjection(access.organizationId),
+        assignment === 'assigned' ? 'is not' : 'is',
+        null,
       );
     return query;
   }
@@ -148,8 +159,47 @@ export class InternalRequestRepository {
     const count = await this.filtered(access, filters, audience)
       .select(sql<number>`count(*)::integer`.as('total'))
       .executeTakeFirstOrThrow();
-    const items = await this.projection(access, filters, audience)
-      .orderBy('request.created_at', 'desc')
+    const { sort, direction } = validateStaffListControls(filters);
+    let query = this.projection(access, filters, audience);
+    // These expressions are server-owned; browser values never become SQL identifiers.
+    switch (sort) {
+      case 'issue':
+        query = query
+          .orderBy('version.name', direction)
+          .orderBy('request.reference_number', direction);
+        break;
+      case 'status':
+        query = query.orderBy('request.status', direction);
+        break;
+      case 'department':
+        query = query
+          .orderBy('effective_department.name', direction)
+          .orderBy('effective_division.name', (order) =>
+            direction === 'asc'
+              ? order.asc().nullsLast()
+              : order.desc().nullsLast(),
+          );
+        break;
+      case 'assignment': {
+        assertStaffRequestRead(access, audience);
+        const owner = assignmentProjection(access.organizationId);
+        query = query
+          .orderBy(sql<string>`(${owner})::jsonb ->> 'displayName'`, (order) =>
+            direction === 'asc'
+              ? order.asc().nullsLast()
+              : order.desc().nullsLast(),
+          )
+          .orderBy(sql<string>`(${owner})::jsonb ->> 'type'`, (order) =>
+            direction === 'asc'
+              ? order.asc().nullsLast()
+              : order.desc().nullsLast(),
+          );
+        break;
+      }
+      default:
+        query = query.orderBy('request.created_at', direction);
+    }
+    const items = await query
       .orderBy('request.id', 'desc')
       .limit(pageSize)
       .offset((page - 1) * pageSize)

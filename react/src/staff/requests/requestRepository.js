@@ -283,6 +283,9 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         "divisionId",
         "page",
         "pageSize",
+        "sort",
+        "direction",
+        "assignment",
       ])
         if (filters[key]) query.set(key, String(filters[key]));
       const data = await api.get(`${root}?${query}`, options(signal));

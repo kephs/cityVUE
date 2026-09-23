@@ -94,11 +94,21 @@ function ScopeFields({
     </>
   );
 }
+const listSorts = {
+  issue: "Issue / Reference",
+  status: "Status",
+  department: "Department / Division",
+  assignment: "Assignment",
+  created: "Created",
+};
 function RequestList({ repository, onSignIn }) {
   const [params, setParams] = useSearchParams();
   const page = Math.max(1, Math.min(1000000, Number(params.get("page")) || 1));
   const filters = {
     audience: params.get("audience") || "all",
+    assignment: params.get("assignment") || "all",
+    sort: params.get("sort") || "created",
+    direction: params.get("direction") || "desc",
     view: params.get("view") || "all",
     search: params.get("search") || "",
     status: params.get("status") || "",
@@ -135,6 +145,9 @@ function RequestList({ repository, onSignIn }) {
     const query = new URLSearchParams();
     for (const field of [
       "audience",
+      "assignment",
+      "sort",
+      "direction",
       "view",
       "search",
       "status",
@@ -146,6 +159,7 @@ function RequestList({ repository, onSignIn }) {
     setParams(query);
   };
   const filtered = Boolean(
+    filters.assignment !== "all" ||
     filters.audience !== "all" ||
     filters.view !== "all" ||
     filters.search ||
@@ -196,6 +210,19 @@ function RequestList({ repository, onSignIn }) {
             <option value="mine">My Requests</option>
             <option value="team">My Team</option>
             <option value="watching">Watching</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="request-assignment">Assignment</label>
+          <select
+            id="request-assignment"
+            className="form-select"
+            value={draft.assignment}
+            onChange={(e) => setDraft({ ...draft, assignment: e.target.value })}
+          >
+            <option value="all">All assignments</option>
+            <option value="assigned">Assigned</option>
+            <option value="unassigned">Unassigned</option>
           </select>
         </div>
         <div className="request-search">
@@ -249,6 +276,39 @@ function RequestList({ repository, onSignIn }) {
           </button>
         </div>
       </form>
+      <div className="request-list-sort" aria-label="Request sorting">
+        <div>
+          <label htmlFor="request-sort">Sort by</label>
+          <select
+            id="request-sort"
+            className="form-select"
+            value={filters.sort}
+            onChange={(e) =>
+              apply({ ...filters, sort: e.target.value, page: 1 })
+            }
+          >
+            {Object.entries(listSorts).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="request-direction">Direction</label>
+          <select
+            id="request-direction"
+            className="form-select"
+            value={filters.direction}
+            onChange={(e) =>
+              apply({ ...filters, direction: e.target.value, page: 1 })
+            }
+          >
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
+        </div>
+      </div>
       <div className="request-results-heading">
         <h2 ref={heading} tabIndex="-1">
           Requests
@@ -297,20 +357,70 @@ function RequestList({ repository, onSignIn }) {
           ) : (
             <table className="staff-request-table">
               <caption className="visually-hidden">
-                Service Requests available to you, newest first
+                Service Requests available to you. Sorted by{" "}
+                {listSorts[filters.sort]},{" "}
+                {filters.direction === "asc" ? "ascending" : "descending"}. Row
+                # is the position in this result set, not a request identifier.
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">Issue / Reference</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Department / Division</th>
-                  <th scope="col">Assignment</th>
-                  <th scope="col">Created</th>
+                  <th scope="col" aria-label="Row position">
+                    #
+                  </th>
+                  {Object.entries(listSorts).map(([key, label]) => (
+                    <th
+                      scope="col"
+                      key={key}
+                      aria-sort={
+                        filters.sort === key
+                          ? filters.direction === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
+                    >
+                      <button
+                        type="button"
+                        className="request-sort-button"
+                        onClick={() =>
+                          apply({
+                            ...filters,
+                            sort: key,
+                            direction:
+                              filters.sort === key &&
+                              filters.direction === "asc"
+                                ? "desc"
+                                : "asc",
+                            page: 1,
+                          })
+                        }
+                        aria-label={`Sort by ${label}; ${filters.sort === key ? (filters.direction === "asc" ? "ascending" : "descending") : "not currently sorted"}`}
+                      >
+                        {label}{" "}
+                        <span aria-hidden="true">
+                          {filters.sort === key
+                            ? filters.direction === "asc"
+                              ? "↑"
+                              : "↓"
+                            : "↕"}
+                        </span>
+                      </button>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {current.data.items.map((row) => (
+                {current.data.items.map((row, rowIndex) => (
                   <tr key={row.serviceRequestId}>
+                    <td data-label="Row #" className="request-row-position">
+                      <span
+                        aria-label={`Row position ${(current.data.page - 1) * current.data.pageSize + rowIndex + 1}`}
+                      >
+                        {(current.data.page - 1) * current.data.pageSize +
+                          rowIndex +
+                          1}
+                      </span>
+                    </td>
                     <th scope="row" data-label="Issue / Reference">
                       <Link
                         className="request-issue-link"
@@ -320,8 +430,10 @@ function RequestList({ repository, onSignIn }) {
                         <span>{row.issueName}</span>
                       </Link>
                       <LocationDisplay value={row.serviceLocation} />
-                      <AudienceBadge value={row.audience} />
-                      <ReferenceDisplay value={row.referenceNumber} />
+                      <div className="request-identity-meta">
+                        <AudienceBadge value={row.audience} />
+                        <ReferenceDisplay value={row.referenceNumber} />
+                      </div>
                     </th>
                     <td data-label="Status">
                       <Status value={row.status} />

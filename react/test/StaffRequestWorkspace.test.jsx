@@ -637,6 +637,111 @@ test.each(["public", "internal"])(
   },
 );
 
+test.each(["public", "internal"])(
+  "list %s audience/reference spacing and paginated row positions",
+  async (audience) => {
+    repository.list.mockResolvedValue({
+      items: [{ ...row, audience }],
+      total: 40,
+      page: 2,
+      pageSize: 25,
+      hasPreviousPage: true,
+      hasNextPage: false,
+    });
+    const { container } = show(
+      "/staff/requests?page=2&sort=issue&direction=asc&assignment=unassigned",
+    );
+    expect(await screen.findByLabelText("Row position 26")).toHaveTextContent(
+      "26",
+    );
+    const metadata = container.querySelector(
+      ".staff-request-table .request-identity-meta",
+    );
+    expect(
+      within(metadata).getByText(
+        audience === "public" ? "Public request" : "Internal request",
+      ),
+    ).toBeInTheDocument();
+    expect(within(metadata).getByText(row.referenceNumber)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Previous" }));
+    await waitFor(() =>
+      expect(repository.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          page: 1,
+          sort: "issue",
+          direction: "asc",
+          assignment: "unassigned",
+        }),
+        expect.any(AbortSignal),
+      ),
+    );
+  },
+);
+
+test("list defaults, keyboard sort toggles, assignment composition and Reset", async () => {
+  show("/staff/requests");
+  expect(await screen.findByLabelText("Row position 1")).toHaveTextContent("1");
+  expect(repository.list).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      audience: "all",
+      view: "all",
+      assignment: "all",
+      sort: "created",
+      direction: "desc",
+      page: 1,
+      pageSize: 25,
+    }),
+    expect.any(AbortSignal),
+  );
+  const user = userEvent.setup();
+  const issue = screen.getByRole("button", {
+    name: "Sort by Issue / Reference; not currently sorted",
+  });
+  issue.focus();
+  await user.keyboard("{Enter}");
+  await waitFor(() =>
+    expect(repository.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: "issue", direction: "asc", page: 1 }),
+      expect.any(AbortSignal),
+    ),
+  );
+  const ascending = await screen.findByRole("button", {
+    name: "Sort by Issue / Reference; ascending",
+  });
+  expect(ascending.closest("th")).toHaveAttribute("aria-sort", "ascending");
+  await user.click(ascending);
+  await screen.findByRole("button", {
+    name: "Sort by Issue / Reference; descending",
+  });
+  await user.selectOptions(screen.getByLabelText("Assignment"), "unassigned");
+  await user.selectOptions(screen.getByLabelText("Status"), "open");
+  await user.click(screen.getByRole("button", { name: "Apply filters" }));
+  await waitFor(() =>
+    expect(repository.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        assignment: "unassigned",
+        status: "open",
+        sort: "issue",
+        direction: "desc",
+      }),
+      expect.any(AbortSignal),
+    ),
+  );
+  await user.click(screen.getByRole("button", { name: "Reset" }));
+  await waitFor(() =>
+    expect(repository.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        assignment: "all",
+        status: "",
+        sort: "created",
+        direction: "desc",
+        page: 1,
+      }),
+      expect.any(AbortSignal),
+    ),
+  );
+});
+
 test("F038 detail is Issue-first with configured icon and authorized location", async () => {
   repository.detail.mockResolvedValue({
     ...row,

@@ -16,6 +16,10 @@ PUBLIC CLASSIFICATION DOES NOT MAKE STAFF OPERATIONAL DATA PUBLICLY VISIBLE.
 
 PUBLIC describes the resident service domain; it does not make contact, staff operations or operational narratives anonymous internet data. Service location remains operational request data governed by normal request access. Structured requester name/email remain separately protected; phone is not supported by the existing contact domain. Free-text request content can contain incidental PII; no redaction capability is added.
 
+## Staff list controls refinement — 2026-09-22
+
+The post-F045 list enhancement adds validated server-side sorting and current-owner Assigned/Unassigned filtering to the existing staff list. Organization/audience/scope admission, membership/view narrowing and all command permissions are unchanged. No migration, grant or protected projection expansion. The [F043 sorting contract and validation](F043-service-request-workspace-ux-consolidation.md#staff-list-controls-refinement--2026-09-22) records actual semantics and evidence.
+
 ## Authorization and capabilities
 
 The shared HTTP controller requires normal Entra identity and at least one of the two audience-read permissions. This admission does not grant both audiences. The repository admits each persisted row only under its own audience's permission and the trusted active Organization and effective Department/Division scope. Every command repeats that parent admission before checking its operation-specific permission. No request body, filter, assignment, watcher or operational membership selects authorization policy.
