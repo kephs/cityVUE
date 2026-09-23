@@ -130,7 +130,7 @@ Typing updates local input immediately and starts a cancellable timer. URL state
 
 Captured real test-API structured logs omit the synthetic query marker on success, validation failure and denied access. Audit row counts do not change for those searches. Existing safe exception/log sanitation remains unchanged. The user separately confirmed the live developer-terminal marker was absent. Search history/analytics are not persisted by the application; URL/browser history is the documented exception inherent in existing navigation state.
 
-Visible label **Search requests**, described help, explicit **Clear search**, status/live count, zero-result text, separate `role=alert` failures and text-labeled controls preserve accessible meaning without reliance on color. Search is outside the filter form, so Enter cannot unexpectedly apply its draft fields. Reading order remains search → filters → list controls → count → results → paging.
+Visible label **Search requests**, described help, explicit **Clear search**, status/live count, zero-result text, separate `role=alert` failures and text-labeled controls preserve accessible meaning without reliance on color. Search is outside the filter form, so Enter cannot unexpectedly apply its draft fields. After the accepted placement follow-up, reading order is filters → list controls → search → count → results → paging.
 
 ## Data integrity and scope
 
@@ -171,3 +171,20 @@ No production or external client resources were used. Normal personally controll
 Temporary F047 test logs, baseline fingerprints and query-plan/review scripts were removed after their safe results were recorded here. No screenshots or local environment files are staged. The interrupted disposable test schema was also removed; development data and attachment storage remain intact.
 
 Required validation, authenticated UAT, live logging and integrity gates passed. Deliver the local commit only; do not push, deploy or start F048. Recommended next step: user review of the local commit. F048 remains unassigned. Deferred roadmap items retain their existing scope.
+
+## F047 placement polish follow-up
+
+Starting checkpoint: clean `main` at `7142d2c7928122e9cf8f7e2dcfb0c3d135961f5a`, 1 ahead / 0 behind local `origin/main`. This separate presentation-only follow-up moves the unchanged search JSX block in the actual DOM, with no CSS ordering or absolute positioning. The accepted F047 commit is not amended.
+
+Final desktop hierarchy: structured filter card → Requests heading with Sort by / Direction / Refresh → full-width Live Search and adjacent Clear → associated help → settled count/page → results. At 390px the existing toolbar wraps, search fills its own row, Clear wraps beneath the input, then help/count/request cards follow. No styling/color or search-handler changes were needed.
+
+Validation:
+
+- Affected React tests: 153 passed across `StaffLiveSearch`, `StaffRequestWorkspace` and `StaffRequestRepository`; the new test checks DOM hierarchy, preserved controls/help, responsive class structure and default keyboard order.
+- Authenticated browser UAT: normal list, active Issue search, search plus Unassigned, Clear and empty results at each of 1440/1280/1024/768/390 in light and dark (50 combinations). Counts were respectively 6/5/2/3/0; no horizontal overflow. Screenshots confirmed useful search width and mobile wrapping. No new UAT records or request mutations.
+- Real keyboard sequence: Reset → Sort by → Direction → Refresh → Search requests → Clear search. Enter on Clear restores input focus. Labels, help association, settled status announcement, error/empty distinction and sortable-header semantics are preserved. Not a WCAG certification.
+- Frontend production build passed; the existing >500 kB chunk warning remains. Formatting, whitespace, documentation links and private-value checks passed. Backend/database/security suites were not rerun for a JSX-only move.
+
+Files changed: `react/src/staff/requests/InternalRequestWorkspace.jsx`, `react/test/StaffLiveSearch.test.jsx`, this report and `F047-service-request-live-search.md`. No backend/API/search-semantic changes: Reference/Issue/Service Location matching, exclusions, debounce, authorization, Organization/count privacy, parameterization, wildcard escaping, filtering/sorting/pagination, cancellation and logging remain unchanged. No database, migration, grant or Requester Tracking changes or actions.
+
+Separate local commit: `fix(ui): align live search with request results`; final hash and clean-tree/ahead status are reported in the delivery message. No push/deployment; F048 not started. Stop for review.

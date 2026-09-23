@@ -64,6 +64,56 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+test("results hierarchy follows filters, toolbar, search, summary and rows in DOM and keyboard order", async () => {
+  show("?q=alpha");
+  await flush();
+  const filters = screen.getByRole("form", { name: "Request filters" });
+  const toolbar = screen.getByRole("group", { name: "Request list controls" });
+  const search = input().closest(".request-live-search");
+  const summary = screen.getByText("1 requests · Page 1");
+  const results = screen.getByRole("table");
+  const ordered = [filters, toolbar, search, summary, results];
+  for (let i = 1; i < ordered.length; i++)
+    expect(
+      ordered[i - 1].compareDocumentPosition(ordered[i]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  expect(toolbar).toHaveClass("request-list-toolbar");
+  expect(
+    search.querySelector(".request-live-search-controls"),
+  ).toContainElement(input());
+  expect(input()).toHaveAttribute(
+    "aria-describedby",
+    "request-live-search-help",
+  );
+  expect(
+    screen.getByText(
+      "Searches reference, Issue and displayed Service Location. Other filters still apply.",
+    ),
+  ).toBeInTheDocument();
+  expect(search).toContainElement(
+    screen.getByRole("button", { name: "Clear search" }),
+  );
+  expect(search.closest("form")).toBeNull();
+  const keyboard = [
+    screen.getByRole("button", { name: "Reset", exact: true }),
+    screen.getByLabelText("Sort by"),
+    screen.getByLabelText("Direction"),
+    screen.getByRole("button", { name: "Refresh", exact: true }),
+    input(),
+    screen.getByRole("button", { name: "Clear search" }),
+  ];
+  for (let i = 1; i < keyboard.length; i++)
+    expect(
+      keyboard[i - 1].compareDocumentPosition(keyboard[i]) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  for (const control of keyboard) expect(control.tabIndex).toBe(0);
+  for (const control of keyboard.slice(1, 4))
+    expect(toolbar).toContainElement(control);
+  expect(summary).toHaveAttribute("role", "status");
+});
+
 test.each([
   ["Sort by", "issue", { sort: "issue" }],
   ["Audience", "internal", { audience: "internal" }],

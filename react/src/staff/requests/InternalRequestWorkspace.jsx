@@ -209,40 +209,6 @@ function RequestList({ repository, onSignIn }) {
   );
   return (
     <>
-      <div className="request-live-search">
-        <label htmlFor="request-live-search">Search requests</label>
-        <div className="request-live-search-controls">
-          <input
-            ref={searchField}
-            id="request-live-search"
-            type="search"
-            className="form-control"
-            value={searchInput}
-            maxLength={160}
-            placeholder="Search reference, issue, or service location"
-            aria-describedby="request-live-search-help"
-            aria-invalid={invalidSearch || undefined}
-            onChange={(event) =>
-              setSearchDraft({ urlKey, value: event.target.value })
-            }
-          />
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={clearSearch}
-            disabled={!searchInput}
-          >
-            Clear search
-          </button>
-        </div>
-        <p id="request-live-search-help">
-          {searchInput.length > 160
-            ? "Use 160 characters or fewer."
-            : invalidSearch
-              ? "Enter at least 2 characters to search."
-              : "Searches reference, Issue and displayed Service Location. Other filters still apply."}
-        </p>
-      </div>
       <form
         className="request-filters"
         aria-label="Request filters"
@@ -400,6 +366,40 @@ function RequestList({ repository, onSignIn }) {
             Refresh
           </button>
         </div>
+      </div>
+      <div className="request-live-search">
+        <label htmlFor="request-live-search">Search requests</label>
+        <div className="request-live-search-controls">
+          <input
+            ref={searchField}
+            id="request-live-search"
+            type="search"
+            className="form-control"
+            value={searchInput}
+            maxLength={160}
+            placeholder="Search reference, issue, or service location"
+            aria-describedby="request-live-search-help"
+            aria-invalid={invalidSearch || undefined}
+            onChange={(event) =>
+              setSearchDraft({ urlKey, value: event.target.value })
+            }
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={clearSearch}
+            disabled={!searchInput}
+          >
+            Clear search
+          </button>
+        </div>
+        <p id="request-live-search-help">
+          {searchInput.length > 160
+            ? "Use 160 characters or fewer."
+            : invalidSearch
+              ? "Enter at least 2 characters to search."
+              : "Searches reference, Issue and displayed Service Location. Other filters still apply."}
+        </p>
       </div>
       {!current && !invalidSearch && (
         <p role="status" className="workspace-feedback">
