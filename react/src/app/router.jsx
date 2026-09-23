@@ -10,6 +10,9 @@ import StaffRouteGuard from "../auth/StaffRouteGuard.jsx";
 const StaffRequestsPage = lazy(
   () => import("../staff/requests/StaffRequestsPage.jsx"),
 );
+const ServiceParticipationPage = lazy(
+  () => import("../staff/ServiceParticipationPage.jsx"),
+);
 const RequesterTrackingPage = lazy(
   () => import("../tracking/RequesterTrackingPage.jsx"),
 );
@@ -68,6 +71,10 @@ const router = createBrowserRouter([
       </AuthRoot>
     ),
     children: [
+      {
+        path: "staff/analytics/service-participation",
+        element: <ServiceParticipationPage />,
+      },
       { path: "staff/requests", element: <StaffRequestsPage /> },
       { path: "staff/requests/:requestId", element: <StaffRequestsPage /> },
       {

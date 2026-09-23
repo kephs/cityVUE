@@ -121,6 +121,10 @@ interface ReferenceSequenceTable {
   updated_at: Generated<Timestamp>;
 }
 export interface ServiceRequestTable {
+  requester_geography_state: Generated<
+    'PROVIDED' | 'DECLINED' | 'NOT_COLLECTED'
+  >;
+  participation_area_id: Generated<string | null>;
   requester_id: Generated<string | null>;
   id: string;
   organization_id: string;
@@ -426,6 +430,26 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  participation_area: {
+    id: Generated<string>;
+    organization_id: string;
+    display_name: string;
+    active: Generated<boolean>;
+    display_order: Generated<number>;
+    created_at: Generated<Timestamp>;
+    updated_at: Generated<Timestamp>;
+  };
+  service_participation_audit: {
+    id: Generated<string>;
+    organization_id: string;
+    staff_identity_id: string;
+    action: 'participation_read';
+    start_date: string;
+    end_date: string;
+    threshold: number;
+    correlation_id: string;
+    created_at: Generated<Timestamp>;
+  };
   requester: {
     id: Generated<string>;
     organization_id: string;

@@ -1,5 +1,7 @@
 # Reqro Feature Records
 
+[F051 — Requester Geography & Service Participation](F051-requester-geography-service-participation.md): implemented and validated; development migration, authenticated UAT and user-confirmed logging privacy passed. See the [report](F051-implementation-report.md). Optional explicit request-level area stays independent of identity and Service Location. Dedicated analytics permission never expands existing request scope; positive small cells are suppressed server-side. No push/deployment or F052 authorization. Earlier entries retain historical checkpoint authorizations.
+
 [F050 — Trusted Requester Identity & Authorized History](F050-trusted-requester-identity-history.md): implemented and validated as a development foundation from synchronized F049. The [report](F050-implementation-report.md) records trusted identity, authorization/count privacy, migration, responsive/keyboard UAT, logging and integrity evidence. Production resident authentication remains deferred. F050 is local-only; no push/deployment or F051 is authorized. Earlier entries describe historical checkpoint authorizations.
 
 [F049 — Anonymous Request Policy](F049-anonymous-request-policy.md): implemented with the explicitly approved two-policy model. The [report](F049-implementation-report.md) records automated, migration, privacy, authenticated UAT and integrity evidence. Production administration and broader identity/history remain deferred; no push/deployment or F050 work is authorized.

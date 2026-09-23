@@ -81,6 +81,7 @@ export default function IssueForm({
   locationRepository,
   onLocationChange,
   attachmentControls,
+  participationControls,
   attachmentsReady = true,
 }) {
   const fieldProps = (name) => ({
@@ -218,6 +219,7 @@ export default function IssueForm({
           <FieldError id="reporterName-error" message={errors.reporterName} />
         </div>
       )}
+      {participationControls}
       {attachmentControls}
       <p className="small text-body-secondary">
         Email updates are not available in this prototype.

@@ -77,7 +77,16 @@ export class LocationInputDto {
   ])
   locationType?: string;
 }
+export class ParticipationInputDto {
+  @IsIn(['PROVIDED', 'DECLINED']) state!: 'PROVIDED' | 'DECLINED';
+  @IsOptional() @IsUUID('4') areaId?: string;
+}
 export class CreateServiceRequestDto {
+  @ApiPropertyOptional({ type: ParticipationInputDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ParticipationInputDto)
+  participation?: ParticipationInputDto;
   @ApiPropertyOptional({ type: AttachmentClaimDto })
   @IsOptional()
   @ValidateNested()

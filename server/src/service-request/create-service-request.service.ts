@@ -1,4 +1,8 @@
 import {
+  validateParticipation,
+  validateParticipationArea,
+} from './participation.domain.js';
+import {
   assertTrustedRequester,
   resolveTrustedRequester,
   type TrustedRequesterContext,
@@ -175,6 +179,7 @@ export class CreateServiceRequestService {
     now: Date,
   ): Promise<CreateServiceRequestResponseDto> {
     const attachments = this.attachments;
+    validateParticipation(input.participation, context.audience);
     if (input.attachments && !attachments)
       throw new BadRequestException('Attachments unavailable');
     const definition = await this.repository.loadSubmissionDefinition(
@@ -325,6 +330,9 @@ export class CreateServiceRequestService {
           answers: input.answers,
           contact: input.contact,
           location: input.location,
+          ...(input.participation
+            ? { participation: input.participation }
+            : {}),
           ...(context.trusted
             ? {
                 trustedRequester: {
@@ -390,6 +398,11 @@ export class CreateServiceRequestService {
             : 'allowed',
           Boolean(input.contact?.name.trim()),
         );
+      await validateParticipationArea(
+        trx,
+        context.organizationId,
+        input.participation,
+      );
       const initialAssignment = await resolveIssueDefault(
         trx,
         context.organizationId,
@@ -411,6 +424,12 @@ export class CreateServiceRequestService {
         .insertInto('service_request')
         .values({
           id: requestId,
+          ...(input.participation
+            ? {
+                requester_geography_state: input.participation.state,
+                participation_area_id: input.participation.areaId ?? null,
+              }
+            : {}),
           ...(requesterId ? { requester_id: requesterId } : {}),
           organization_id: context.organizationId,
           reference_number: referenceNumber,

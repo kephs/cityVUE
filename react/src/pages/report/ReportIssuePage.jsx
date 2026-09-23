@@ -13,6 +13,7 @@ import {
 import { createResidentIntakeRepositories } from "../../residentIntake/residentIntakeRepositories.js";
 import { resolveIssueIcon } from "../issues/issueIconPresentation.js";
 import IssueForm from "./IssueForm.jsx";
+import ParticipationInput from "../../residentIntake/ParticipationInput.jsx";
 import "./report.css";
 
 const initialValues = {
@@ -639,6 +640,17 @@ export default function ReportIssuePage({
                 </div>
               </div>
               <IssueForm
+                participationControls={
+                  data.participation && (
+                    <ParticipationInput
+                      repository={data.participation}
+                      value={values.participation}
+                      onChange={(participation) =>
+                        setValues((old) => ({ ...old, participation }))
+                      }
+                    />
+                  )
+                }
                 attachmentControls={
                   <AttachmentSelector
                     draft={evidence}
@@ -683,6 +695,18 @@ export default function ReportIssuePage({
                 </div>
               </div>
               <dl className="review-list">
+                {data.participation && (
+                  <div className="review-pair">
+                    <dt>Optional service participation</dt>
+                    <dd>
+                      {values.participation?.state === "PROVIDED"
+                        ? values.participation.label
+                        : values.participation?.state === "DECLINED"
+                          ? "Prefer not to say"
+                          : "Not provided"}
+                    </dd>
+                  </div>
+                )}
                 <div className="review-pair">
                   <dt>Selected Issue</dt>
                   <dd>

@@ -1,4 +1,5 @@
 import { createAttachmentRepository } from "../attachments/attachmentRepository.js";
+import { createParticipationRepository } from "./ParticipationInput.jsx";
 import { createIntakeLocationRepository } from "./locationSearch.js";
 import { createApiClient } from "../api/apiClient.js";
 import {
@@ -31,6 +32,7 @@ export function createResidentIntakeRepositories({
   });
   return {
     mode: "api",
+    participation: createParticipationRepository(client),
     attachments: createAttachmentRepository(client),
     location: createIntakeLocationRepository(client),
     detailsEnabled: config.developmentReadsEnabled || config.entra.enabled,

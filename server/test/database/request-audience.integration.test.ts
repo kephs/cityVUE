@@ -1,4 +1,5 @@
 import { checkIssueDefaults } from './issue-default-assignment-checks.js';
+import { checkParticipation } from './participation-checks.js';
 import { checkRequesterIdentityPolicy } from './requester-identity-policy-checks.js';
 import { checkTrustedRequesterHistory } from './trusted-requester-history-checks.js';
 import {
@@ -2426,6 +2427,19 @@ test(
           logs: contactLogs,
         });
         await checkTrustedRequesterHistory(t, {
+          app,
+          db,
+          org,
+          creator,
+          publicOnly,
+          otherStaff,
+          department,
+          targetDepartment,
+          publicPayload: assisted,
+          internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkParticipation(t, {
           app,
           db,
           org,

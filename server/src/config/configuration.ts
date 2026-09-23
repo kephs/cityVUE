@@ -1,4 +1,5 @@
 export interface AppConfiguration {
+  participation?: { suppressionThreshold: number };
   attachments?: { developmentEnabled: boolean };
   deployment: {
     profile: 'development' | 'client';
@@ -52,6 +53,11 @@ export function configuration(): AppConfiguration {
   const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
   return {
+    participation: {
+      suppressionThreshold: Number(
+        process.env.PARTICIPATION_SUPPRESSION_THRESHOLD ?? 5,
+      ),
+    },
     attachments: {
       developmentEnabled: process.env.ENABLE_DEVELOPMENT_ATTACHMENTS === 'true',
     },

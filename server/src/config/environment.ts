@@ -5,6 +5,7 @@ export type NodeEnvironment = 'development' | 'test' | 'production';
 export type DatabaseSslMode = 'disable' | 'require' | 'verify-full';
 
 export interface EnvironmentVariables {
+  PARTICIPATION_SUPPRESSION_THRESHOLD: number;
   CITYVUE_DEPLOYMENT_PROFILE: 'development' | 'client';
   CITYVUE_ENABLE_EXTERNAL_IDENTITY: boolean;
   ENABLE_DEVELOPMENT_ATTACHMENTS: boolean;
@@ -41,6 +42,11 @@ export interface EnvironmentVariables {
 }
 
 const environmentSchema = Joi.object<EnvironmentVariables>({
+  PARTICIPATION_SUPPRESSION_THRESHOLD: Joi.number()
+    .integer()
+    .min(5)
+    .max(1000)
+    .default(5),
   CITYVUE_DEPLOYMENT_PROFILE: Joi.string()
     .valid('development', 'client')
     .default('development'),

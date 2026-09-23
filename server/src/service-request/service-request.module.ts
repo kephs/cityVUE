@@ -1,3 +1,9 @@
+import { ParticipationService } from './participation.service.js';
+import {
+  ParticipationAreaController,
+  StaffParticipationAreaController,
+  ParticipationAnalyticsController,
+} from './participation.controller.js';
 import { RequesterHistoryController } from './requester-history.controller.js';
 import { RequesterHistoryService } from './requester-history.service.js';
 import { AttachmentService } from '../attachments/attachment.service.js';
@@ -53,6 +59,9 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    ParticipationAreaController,
+    StaffParticipationAreaController,
+    ParticipationAnalyticsController,
     RequesterHistoryController,
     IntakeAttachmentController,
     StaffAttachmentController,
@@ -71,6 +80,7 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
     InternalRequestMutationsController,
   ],
   providers: [
+    ParticipationService,
     RequesterHistoryService,
     AttachmentService,
     AttachmentOriginGuard,
@@ -114,6 +124,7 @@ export class ServiceRequestModule implements NestModule {
         RequestContactController,
         PublicRequestContactController,
         RequesterHistoryController,
+        ParticipationAnalyticsController,
       );
   }
 }

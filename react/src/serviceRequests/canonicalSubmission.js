@@ -7,11 +7,22 @@ export function mapIntakeToCreateServiceRequest({
   reportingMode,
   reporterName,
   attachments,
+  participation,
 }) {
   const visibleIds = new Set(
     (service.questions || []).map((question) => question.id),
   );
   return {
+    ...(participation
+      ? {
+          participation: {
+            state: participation.state,
+            ...(participation.state === "PROVIDED"
+              ? { areaId: participation.areaId }
+              : {}),
+          },
+        }
+      : {}),
     ...(attachments ? { attachments } : {}),
     serviceDefinitionId: service.id,
     serviceDefinitionVersionId: service.serviceDefinitionVersionId,

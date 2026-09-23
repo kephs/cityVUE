@@ -128,3 +128,16 @@ node --env-file=.env --env-file=.env.f036 node_modules/tsx/dist/cli.mjs src/data
 ```
 
 Keep `.env.f036` ignored and private. It contains only the explicitly selected personal tenant confirmation, internal principal ID, fictional Organization/scopes and permission selection described in the runbook. Never put tokens in it. Substitute `deprovision` for targeted removal after a reviewed dry run.
+
+## Service participation development foundation (F051)
+
+`PARTICIPATION_SUPPRESSION_THRESHOLD` is a server-only integer from 5 through 1000, default 5. Positive smaller counts are suppressed before disclosure, including declined/not-collected buckets. The protected `GET /api/v1/staff/analytics/service-participation?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD` additionally requires the explicit `analytics.service_participation.read` permission and existing PUBLIC request read/scope. UTC periods are inclusive, 28–366 days, with no future end date. No default or broad-bundle grant exists.
+
+After the F051 migration, the guarded `dev:participation` CLI creates/reuses three fictional Organization areas. It requires the verified personal `reqro_dev` target, explicit development environment/profile, and process-only `F051_FICTIONAL_DATA_ONLY=true`. From `server/`, with that explicit opt-in:
+
+```text
+node --env-file=.env node_modules/tsx/dist/cli.mjs src/database/development-participation-cli.ts --dry-run
+node --env-file=.env node_modules/tsx/dist/cli.mjs src/database/development-participation-cli.ts --confirm
+```
+
+The CLI changes no requests or permissions. Verify authenticated analytics denial before narrowly provisioning the dedicated development permission using F036; preserve existing request scopes. Use the developer-launched API outside the restricted sandbox for normal Entra signing-key retrieval. The protected preview is `/staff/analytics/service-participation`; it has no global navigation link. Production area administration and configuration audit are deferred. See [F051](../docs/features/F051-requester-geography-service-participation.md) and [ADR-013](../docs/architecture/decisions/ADR-013-operational-participation-geography.md) for privacy limitations and approved semantics.
