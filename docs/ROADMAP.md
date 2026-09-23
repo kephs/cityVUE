@@ -1,5 +1,7 @@
 # Reqro — Roadmap
 
+[F047 — Service Request Live Search](features/F047-service-request-live-search.md) is implemented and locally validated from synchronized F046 `f54f1e6`; see its [implementation record](features/F047-implementation-report.md). Authenticated UI UAT, integrity and live logging privacy checks passed. Delivery is a local commit only. F048 is unassigned and not started.
+
 [F046 — Secure Attachments & Photos Foundation](features/F046-secure-attachments-photos-foundation.md) is implemented and locally validated from synchronized `72081ec6121189c61bdc83acf2ef80d3dcfdf3dd`. Personal development now has **23 applied migrations / 0 pending**, three retained finalized fictional attachments on SR-202609-000008, and the unchanged **1 active / 5 revoked tracking baseline**. The [validation record](features/F046-implementation-report.md) records authenticated UAT, shared preview layout, approved Vite/retry security corrections and completed staging cleanup. This is a development foundation; production storage/scanning remain deferred. No push, deployment or F047 work was performed.
 
 [F045 — Requester Issue Location Experience](features/F045-requester-issue-location-experience.md) is implemented and locally validated from synchronized F044 `54bb498ba37edcd28c646c84a4a1274370939697`. Its [completion report](features/F045-implementation-report.md) records provider-neutral development search, MapLibre selection, explicit device geolocation, manual alternatives and the existing server-owned Service Location/eligibility boundary. The F045 report retains its historical 22-migration and zero-active/four-revoked UAT checkpoint. F045 and subsequent accepted staff workspace polish were synchronized before F046. The approved current F046 starting state is recorded above; historical counts are not the current tracking baseline.
@@ -71,11 +73,11 @@ These requirements are recorded during F044 completion for future design and pri
 
 External delivery, notifications and vendor integrations remain separately reviewed work. These deferred requirements do not select or start F047.
 
-## Unnumbered future staff capabilities
+## Staff capabilities
 
 ### Service Request Live Search
 
-Future, not implemented by the staff-list controls refinement; no feature ID is assigned. Provide debounced, server-side search over only the principal's independently authorized requests. Potential initial fields: Request Reference, Issue name and Service Location. Compose with audience, workspace view, existing filters, sorting and pagination. Internal Notes, Requester Communication bodies and protected Requester Contact are explicitly excluded until separate security/search design. The current reference field remains explicit-submit exact-reference filtering.
+Selected as [F047](features/F047-service-request-live-search.md), implemented and locally validated. Debounced server-side search narrows independently authorized requests by Reference, Issue name and displayed Service Location. Existing audience/view/filter/sort/page behavior composes with it; exact Reference filtering remains separate. Protected domains, UUIDs and tracking are excluded. Validation and live logging gates passed; no production deployment is implied.
 
 ### Issue-Based Default Assignment
 

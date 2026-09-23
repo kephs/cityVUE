@@ -523,6 +523,15 @@ export async function checkRequestCommunications(
       const correlation = result.headers['x-correlation-id'];
       assert.equal(typeof correlation, 'string');
       first = result.body as Communication;
+      const search = await get(
+        `${root}?q=${encodeURIComponent(marker)}`,
+        full.id,
+      ).expect(200);
+      assert.equal(
+        (search.body as { total: number }).total,
+        0,
+        'F047 must not match correspondence even for a communication reader',
+      );
       assert.deepEqual(Object.keys(first).sort(), [
         'author',
         'body',

@@ -45,11 +45,12 @@ test("authenticated requests allowlist filters and discard unexpected sensitive 
   const repository = createStaffRequestRepository({ client });
   const data = await repository.list({
     search: "REQ",
+    q: "50%_ café",
     organizationId: "forged",
     page: 1,
   });
   expect(client.get).toHaveBeenCalledWith(
-    "/staff/service-requests?search=REQ&page=1",
+    "/staff/service-requests?search=REQ&q=50%25_+caf%C3%A9&page=1",
     expect.objectContaining({ authenticated: true }),
   );
   expect(data.items[0]).not.toHaveProperty("contact");

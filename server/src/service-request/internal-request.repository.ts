@@ -3,6 +3,11 @@ import {
   type StaffListControls,
 } from './staff-list-controls.js';
 import { assignmentProjection, operationalView } from './ownership-targets.js';
+import {
+  normalizeStaffSearch,
+  staffLiveSearch,
+  staffServiceLocation,
+} from './staff-live-search.js';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { sql } from 'kysely';
 import type { StaffAccess } from '../auth/auth.types.js';
@@ -35,6 +40,7 @@ export interface InternalRequestFilters extends StaffListControls {
   audience?: StaffRequestAudienceFilter;
   view?: string;
   search?: string;
+  q?: string;
   status?: string;
   departmentId?: string;
   divisionId?: string;
@@ -67,6 +73,8 @@ export class InternalRequestRepository {
     const { assignment } = validateStaffListControls(filters);
     let query = this.scoped(access, audience);
     assertStaffRequestRead(access, audience);
+    const liveSearch = normalizeStaffSearch(filters.q);
+    if (liveSearch) query = query.where(staffLiveSearch(liveSearch));
     if (filters.audience && filters.audience !== 'all')
       query = query.where('request.audience', '=', filters.audience);
     if (filters.view)
@@ -138,11 +146,7 @@ export class InternalRequestRepository {
         'version.name as issueName',
         'version.icon_key as issueIcon',
         'category.name as categoryName',
-        sql<
-          string | null
-        >`(select coalesce(nullif(btrim(l.normalized_address), ''), nullif(btrim(l.entered_address), '')) from location l where l.organization_id=request.organization_id and l.service_request_id=request.id limit 1)`.as(
-          'serviceLocation',
-        ),
+        staffServiceLocation.as('serviceLocation'),
         'category.id as categoryId',
         internalDepartment.as('departmentId'),
         internalDivision.as('divisionId'),

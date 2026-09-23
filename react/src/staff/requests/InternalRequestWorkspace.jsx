@@ -102,6 +102,24 @@ const listSorts = {
   assignment: "Assignment",
   created: "Created",
 };
+function listParams(next) {
+  const query = new URLSearchParams();
+  for (const field of [
+    "audience",
+    "assignment",
+    "sort",
+    "direction",
+    "view",
+    "search",
+    "q",
+    "status",
+    "departmentId",
+    "divisionId",
+    "page",
+  ])
+    if (next[field]) query.set(field, String(next[field]));
+  return query;
+}
 function RequestList({ repository, onSignIn }) {
   const [params, setParams] = useSearchParams();
   const page = Math.max(1, Math.min(1000000, Number(params.get("page")) || 1));
@@ -112,6 +130,7 @@ function RequestList({ repository, onSignIn }) {
     direction: params.get("direction") || "desc",
     view: params.get("view") || "all",
     search: params.get("search") || "",
+    q: params.get("q") || "",
     status: params.get("status") || "",
     departmentId: params.get("departmentId") || "",
     divisionId: params.get("divisionId") || "",
@@ -119,12 +138,35 @@ function RequestList({ repository, onSignIn }) {
     pageSize: 25,
   };
   const key = JSON.stringify(filters);
+  const urlKey = params.toString();
+  const [searchDraft, setSearchDraft] = useState(null);
+  useEffect(() => setSearchDraft(null), [urlKey]);
+  const searchInput =
+    searchDraft?.urlKey === urlKey ? searchDraft.value : filters.q;
+  const normalizedSearch = searchInput.trim();
+  const invalidSearch =
+    normalizedSearch.length === 1 || searchInput.length > 160;
+  const pendingSearch = normalizedSearch !== filters.q;
+  const searchField = useRef(null);
   const [draft, setDraft] = useState(filters),
     [state, setState] = useState(null),
+    [options, setOptions] = useState({ departments: [], divisions: [] }),
     [retry, setRetry] = useState(0);
   const heading = useRef(null);
   useEffect(() => {
+    if (!pendingSearch || invalidSearch) return;
+    const timer = setTimeout(() => {
+      setParams(
+        listParams({ ...JSON.parse(key), q: normalizedSearch, page: 1 }),
+      );
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [key, normalizedSearch, pendingSearch, invalidSearch, setParams]);
+  useEffect(() => {
     setDraft(JSON.parse(key));
+  }, [key]);
+  useEffect(() => {
+    if (pendingSearch || invalidSearch) return;
     const controller = new AbortController();
     setState(null);
     Promise.all([
@@ -132,44 +174,75 @@ function RequestList({ repository, onSignIn }) {
       repository.options(controller.signal),
     ]).then(
       ([data, options]) => {
-        if (!controller.signal.aborted) setState({ key, data, options });
+        if (!controller.signal.aborted) {
+          setOptions(options);
+          setState({ key, data });
+        }
       },
       (error) => {
         if (!controller.signal.aborted) setState({ key, error });
       },
     );
     return () => controller.abort();
-  }, [repository, key, retry]);
-  const current = state?.key === key ? state : null;
-  const options = current?.options || { departments: [], divisions: [] };
+  }, [repository, key, retry, pendingSearch, invalidSearch]);
+  const current =
+    !pendingSearch && !invalidSearch && state?.key === key ? state : null;
   const apply = (next) => {
-    const query = new URLSearchParams();
-    for (const field of [
-      "audience",
-      "assignment",
-      "sort",
-      "direction",
-      "view",
-      "search",
-      "status",
-      "departmentId",
-      "divisionId",
-      "page",
-    ])
-      if (next[field]) query.set(field, String(next[field]));
+    const query = listParams({ ...next, q: normalizedSearch });
+    setSearchDraft({ urlKey: query.toString(), value: searchInput });
     setParams(query);
+  };
+  const clearSearch = () => {
+    setSearchDraft(null);
+    setParams(listParams({ ...filters, q: "", page: 1 }));
+    searchField.current?.focus();
   };
   const filtered = Boolean(
     filters.assignment !== "all" ||
     filters.audience !== "all" ||
     filters.view !== "all" ||
     filters.search ||
+    filters.q ||
     filters.status ||
     filters.departmentId ||
     filters.divisionId,
   );
   return (
     <>
+      <div className="request-live-search">
+        <label htmlFor="request-live-search">Search requests</label>
+        <div className="request-live-search-controls">
+          <input
+            ref={searchField}
+            id="request-live-search"
+            type="search"
+            className="form-control"
+            value={searchInput}
+            maxLength={160}
+            placeholder="Search reference, issue, or service location"
+            aria-describedby="request-live-search-help"
+            aria-invalid={invalidSearch || undefined}
+            onChange={(event) =>
+              setSearchDraft({ urlKey, value: event.target.value })
+            }
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={clearSearch}
+            disabled={!searchInput}
+          >
+            Clear search
+          </button>
+        </div>
+        <p id="request-live-search-help">
+          {searchInput.length > 160
+            ? "Use 160 characters or fewer."
+            : invalidSearch
+              ? "Enter at least 2 characters to search."
+              : "Searches reference, Issue and displayed Service Location. Other filters still apply."}
+        </p>
+      </div>
       <form
         className="request-filters"
         aria-label="Request filters"
@@ -271,7 +344,10 @@ function RequestList({ repository, onSignIn }) {
           <button
             className="btn btn-secondary"
             type="button"
-            onClick={() => apply({})}
+            onClick={() => {
+              setSearchDraft(null);
+              setParams(new URLSearchParams());
+            }}
           >
             Reset
           </button>
@@ -325,9 +401,9 @@ function RequestList({ repository, onSignIn }) {
           </button>
         </div>
       </div>
-      {!current && (
+      {!current && !invalidSearch && (
         <p role="status" className="workspace-feedback">
-          Loading requests…
+          {pendingSearch ? "Waiting for search…" : "Loading requests…"}
         </p>
       )}
       {current?.error && (

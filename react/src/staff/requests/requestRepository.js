@@ -289,6 +289,7 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
         "audience",
         "view",
         "search",
+        "q",
         "status",
         "departmentId",
         "divisionId",

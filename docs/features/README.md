@@ -1,5 +1,7 @@
 # Reqro Feature Records
 
+[F047 — Service Request Live Search](F047-service-request-live-search.md): implemented and locally validated. The [report](F047-implementation-report.md) records passed automated checks, authenticated UI UAT, integrity verification and user-confirmed live logging privacy. F048 is unassigned and not started.
+
 [F046 — Secure Attachments & Photos Foundation](F046-secure-attachments-photos-foundation.md): implemented and locally validated as a development foundation. The [validation record](F046-implementation-report.md) covers authenticated UAT, shared preview layout, approved security corrections, cleanup and retained fixture state.
 
 [F045 — Requester Issue Location Experience](F045-requester-issue-location-experience.md) is implemented and locally validated from synchronized F044 `54bb498ba37edcd28c646c84a4a1274370939697`. Its [completion report](F045-implementation-report.md) records provider-neutral development search, MapLibre selection, explicit device geolocation, manual alternatives and the existing server-owned Service Location/eligibility boundary. Its 22-migration and zero-active/four-revoked state records the historical F045 checkpoint. F045 and later accepted workspace polish were synchronized before F046; the F046 specification records the current approved starting baseline.

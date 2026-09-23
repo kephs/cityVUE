@@ -1,5 +1,7 @@
 # F043 — Service Request Workspace UX Consolidation
 
+F047 extension: [Service Request Live Search](F047-service-request-live-search.md) adds a separate live search control above this workspace's filters. The existing Reference field still explicitly applies an exact Reference filter, ANDed with live search. Existing sorting, row positions, authorization and protected detail domains remain intact. See the [F047 validation record](F047-implementation-report.md) for completion status; this addendum does not rewrite F043's historical acceptance.
+
 Implemented from accepted F042 commit `8018acf8f2caf9699faa682241a026f09b101e90` on `main`, initially clean and synchronized with the cached `origin/main`. Implementation, automated validation and authenticated UAT are complete. The local commit stops for review; this record does not authorize a push or deployment.
 
 ## Request Management polish — 2026-09-22

@@ -445,6 +445,15 @@ export async function checkRequestNotes(
       const correlation = result.headers['x-correlation-id'];
       assert.equal(typeof correlation, 'string');
       first = result.body as Note;
+      const search = await get(
+        `${root}?q=${encodeURIComponent(marker)}`,
+        full.id,
+      ).expect(200);
+      assert.equal(
+        (search.body as { total: number }).total,
+        0,
+        'F047 must not match protected note text even for a note reader',
+      );
       assert.deepEqual(Object.keys(first).sort(), [
         'author',
         'body',

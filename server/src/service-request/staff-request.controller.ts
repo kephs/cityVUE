@@ -16,7 +16,8 @@ import {
   staffSortDirections,
   staffAssignmentFilters,
 } from './staff-list-controls.js';
-import { IsIn, IsOptional } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { staffSearchMaxLength } from './staff-live-search.js';
 import {
   CurrentStaff,
   RequireAnyPermission,
@@ -41,6 +42,15 @@ import {
 import { WorkflowActionDto } from './service-request.dto.js';
 
 export class StaffRequestListQueryDto extends InternalRequestListQueryDto {
+  @ApiPropertyOptional({
+    maxLength: staffSearchMaxLength,
+    description:
+      'Literal case-insensitive search of reference, Issue and displayed Service Location; trim; empty or at least 2 characters.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(staffSearchMaxLength)
+  q?: string;
   @ApiPropertyOptional({ enum: staffSortKeys, default: 'created' })
   @IsOptional()
   @IsIn(staffSortKeys)

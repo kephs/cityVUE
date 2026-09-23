@@ -21,6 +21,31 @@
   font-weight: 700;
   color: var(--text-muted);
 }
+.request-live-search {
+  margin-bottom: 1rem;
+}
+.request-live-search label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.request-live-search-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.request-live-search-controls input {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+.request-live-search-controls button {
+  flex-shrink: 0;
+}
+.request-live-search p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
 .request-filters {
   display: grid;
   grid-template-columns: minmax(12rem, 2fr) repeat(3, minmax(9rem, 1fr));

@@ -17,6 +17,7 @@ interface ListBody {
     audience: string;
     referenceNumber: string;
     issueName: string;
+    serviceLocation: string | null;
     status: string;
     departmentName: string;
     divisionName: string | null;
@@ -1308,7 +1309,7 @@ export async function checkStaffWorkspace(
   );
   await t.test(
     'staff list sorting/filtering is global, stable, scoped and validated',
-    async () => {
+    async (listContext) => {
       const ids: string[] = [];
       for (let i = 0; i < 28; i++) {
         const fixture = await create(
@@ -1352,6 +1353,213 @@ export async function checkStaffWorkspace(
       const baseline = await list('');
       assert.ok(baseline.total >= 28);
       assertPrivate(baseline);
+      await listContext.test(
+        'F047 search composes with authorized audiences, views, filters, every sort and pagination',
+        async () => {
+          const location = { id: randomUUID() };
+          await sql`insert into location (id, organization_id, service_request_id, entered_address) values (${location.id}::uuid, ${org}::uuid, ${owned}::uuid, 'F047 temporary location')`.execute(
+            db,
+          );
+          try {
+            await db
+              .updateTable('location')
+              .set({
+                normalized_address: "  F047 café 東京 50%_\\ O'Neil Lane  ",
+                entered_address: 'F047-hidden-alternative',
+              })
+              .where('id', '=', location.id)
+              .execute();
+            for (const term of [
+              'CAFÉ',
+              '東京',
+              '50%_',
+              '%_\\',
+              "O'Neil",
+              '  F047 café  ',
+            ]) {
+              const matches = await list('q=' + encodeURIComponent(term));
+              assert.equal(matches.total, 1);
+              assert.equal(matches.items[0]?.serviceRequestId, owned);
+            }
+            assert.equal((await list('q=F047-hidden-alternative')).total, 0);
+            assert.equal((await list('q=cafe')).total, 0);
+            await db
+              .updateTable('location')
+              .set({
+                normalized_address: ' ',
+                entered_address: 'F047  entered fallback',
+              })
+              .where('id', '=', location.id)
+              .execute();
+            assert.equal((await list('q=F047%20%20entered')).total, 1);
+            assert.equal((await list('q=F047%20entered')).total, 0);
+            await db
+              .deleteFrom('location')
+              .where('id', '=', location.id)
+              .execute();
+            assert.equal((await list('q=F047%20%20entered')).total, 0);
+          } finally {
+            await db
+              .deleteFrom('location')
+              .where('id', '=', location.id)
+              .execute();
+          }
+          const firstRow = baseline.items[0];
+          assert.ok(firstRow);
+          const term = firstRow.issueName.slice(0, 3).toLowerCase();
+          const matches = (row: ListBody['items'][number]) =>
+            [row.referenceNumber, row.issueName, row.serviceLocation].some(
+              (value) => value?.toLowerCase().includes(term),
+            );
+          for (const actorId of [
+            operator.id,
+            publicReader.id,
+            internalReader.id,
+            bothReader.id,
+            c.otherOrg,
+            c.otherInternal,
+          ]) {
+            for (const filter of [
+              '',
+              'audience=public',
+              'audience=internal',
+              'view=mine',
+              'view=team',
+              'view=watching',
+              'assignment=assigned',
+              'assignment=unassigned',
+              'status=open',
+              'departmentId=' + c.department,
+              'divisionId=' + c.targetDivision,
+            ]) {
+              const response = await get(
+                root + '?pageSize=100&' + filter,
+                actorId,
+              );
+              if (response.status === 403) {
+                await get(
+                  root + '?q=' + encodeURIComponent(term) + '&' + filter,
+                  actorId,
+                ).expect(403);
+                continue;
+              }
+              assert.equal(response.status, 200);
+              const expected = (response.body as ListBody).items.filter(
+                matches,
+              );
+              const result = await list(
+                filter + '&q=' + encodeURIComponent('  ' + term + '  '),
+                actorId,
+              );
+              assert.deepEqual(result.items, expected);
+              assert.equal(result.total, expected.length);
+              assertPrivate(result);
+            }
+          }
+          for (const sort of [
+            'issue',
+            'created',
+            'status',
+            'department',
+            'assignment',
+          ]) {
+            for (const direction of ['asc', 'desc']) {
+              const controls = `sort=${sort}&direction=${direction}`;
+              const expected = (await list(controls)).items.filter(matches);
+              const query = controls + '&q=' + encodeURIComponent(term);
+              const result = await list(query);
+              assert.deepEqual(result.items, expected);
+              const pages = [];
+              for (
+                let page = 1;
+                page <= Math.ceil(expected.length / 5);
+                page++
+              ) {
+                const response = await get(
+                  root + `?${query}&pageSize=5&page=${String(page)}`,
+                  operator.id,
+                ).expect(200);
+                const body = response.body as ListBody;
+                assert.equal(body.total, expected.length);
+                assert.equal(body.hasNextPage, page * 5 < expected.length);
+                pages.push(...body.items);
+              }
+              assert.deepEqual(pages, expected);
+            }
+          }
+          const reference = firstRow.referenceNumber;
+          assert.equal(
+            (await list('q=' + encodeURIComponent(reference.toLowerCase())))
+              .total,
+            1,
+          );
+          assert.equal(
+            (await list('q=zzmissing47&search=' + reference)).total,
+            0,
+          );
+          assert.equal(
+            (await list('q=' + reference + '&search=' + reference)).total,
+            1,
+          );
+          assert.deepEqual(await list('q=%20%20'), baseline);
+          for (const term of [
+            publicRequest.id,
+            contact.name,
+            contact.email,
+            'F040 legacy fictional hold',
+            'zzmissing47',
+            "'; DROP TABLE service_request; --",
+            '%_',
+            'x'.repeat(160),
+          ]) {
+            assert.equal(
+              (await list('q=' + encodeURIComponent(term))).total,
+              0,
+            );
+          }
+          for (const query of [
+            'q=x',
+            'q=%20x%20',
+            'q=a&q=b',
+            'q[field]=tree',
+            'q=' + 'x'.repeat(161),
+          ])
+            await get(root + '?' + query, operator.id).expect(400);
+          await get(root + '?q=tree').expect(401);
+          for (const denied of [neither, contactOnly, updaterOnly])
+            await get(root + '?q=tree', denied.id).expect(403);
+          const revoked = await actor(['service_request.view']);
+          await get(root + '?q=' + encodeURIComponent(term), revoked.id).expect(
+            200,
+          );
+          await db
+            .deleteFrom('role_permission')
+            .where('role_id', '=', revoked.role)
+            .execute();
+          await get(root + '?q=' + encodeURIComponent(term), revoked.id).expect(
+            403,
+          );
+          const marker = 'F047-log-privacy-999-Fictional-Lane';
+          const logStart = c.logs.length;
+          const auditBefore = await db
+            .selectFrom('activity')
+            .select(sql<number>`count(*)::integer`.as('total'))
+            .executeTakeFirstOrThrow();
+          await list('q=' + marker);
+          await get(root + '?q=' + marker.repeat(6), operator.id).expect(400);
+          await get(root + '?q=' + marker, neither.id).expect(403);
+          const logs = c.logs.slice(logStart).join('\n');
+          assert.ok(logs.includes('/api/v1/staff/service-requests'));
+          assert.ok(!logs.includes(marker));
+          assert.deepEqual(
+            await db
+              .selectFrom('activity')
+              .select(sql<number>`count(*)::integer`.as('total'))
+              .executeTakeFirstOrThrow(),
+            auditBefore,
+          );
+        },
+      );
       const defaultOrder = await list('sort=created&direction=desc');
       assert.deepEqual(baseline, defaultOrder);
       const keys = ['issue', 'status', 'department', 'assignment', 'created'];

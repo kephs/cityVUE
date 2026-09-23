@@ -341,6 +341,14 @@ export async function checkAttachments(
             context === 'INTERNAL_NOTE' ? 'communications' : 'notes';
           await save(parent.id, wrongDomain, claim).expect(404);
           await save(internal.id, domain, claim).expect(404);
+          const search = await staffGet(
+            `${root}?q=${encodeURIComponent(filename)}`,
+          ).expect(200);
+          assert.equal(
+            (search.body as { total: number }).total,
+            0,
+            'F047 must not match protected attachment filenames',
+          );
           assert.ok(
             !JSON.stringify(
               (await staffGet(`${root}/${parent.id}`).expect(200)).body,
