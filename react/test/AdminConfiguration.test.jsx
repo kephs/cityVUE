@@ -72,6 +72,46 @@ function view(client, path = "/admin") {
   );
 }
 
+test.each([true, false])(
+  "F055 denied write rechecks read authority; retained read=%s",
+  async (retainRead) => {
+    const writer = {
+      ...snapshot,
+      capabilities: { canWriteParticipationAreas: true },
+    };
+    const client = {
+      get: vi.fn().mockResolvedValue(writer),
+      patch: vi.fn().mockRejectedValue({ status: 403 }),
+    };
+    view(client, "/admin/participation");
+    await screen.findByText("Fictional North");
+    if (retainRead)
+      client.get.mockResolvedValue({
+        ...snapshot,
+        capabilities: { canWriteParticipationAreas: false },
+      });
+    else client.get.mockRejectedValue({ status: 403 });
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "Rename Fictional North" }),
+    );
+    await user.type(screen.getByRole("textbox"), " New");
+    await user.click(screen.getByRole("button", { name: "Save area" }));
+    await waitFor(() => expect(client.get).toHaveBeenCalledTimes(2));
+    if (retainRead) await screen.findByText("Fictional North");
+    else {
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Administration access is not authorized",
+      );
+      expect(screen.queryByText("Fictional North")).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole("button", { name: "Rename Fictional North" }),
+    ).not.toBeInTheDocument();
+    expect(client.patch).toHaveBeenCalledTimes(1);
+  },
+);
+
 test.each([401, 403, 500])(
   "F052 %s state hides configuration and provides safe retry",
   async (status) => {
@@ -205,18 +245,16 @@ test("F052 empty states are truthful and configuration pagination is bounded", a
 
 test("F054 authorized branding clears on denied refresh; preview content stays excluded", async () => {
   const client = {
-    get: vi
-      .fn()
-      .mockResolvedValue({
-        ...snapshot,
-        branding: {
-          mode: "ORGANIZATION",
-          displayName: "Example Organization",
-          tagline: "Community Services",
-          logoKey: "example-organization",
-          revision: 2,
-        },
-      }),
+    get: vi.fn().mockResolvedValue({
+      ...snapshot,
+      branding: {
+        mode: "ORGANIZATION",
+        displayName: "Example Organization",
+        tagline: "Community Services",
+        logoKey: "example-organization",
+        revision: 2,
+      },
+    }),
   };
   view(client);
   expect(await screen.findByText("Example Organization")).toBeInTheDocument();

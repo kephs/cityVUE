@@ -19,7 +19,7 @@ export async function validateCollectionEnable(
   const area = await query.executeTakeFirst();
   if (!area)
     throw new BadRequestException(
-      'Service Participation cannot be enabled because no active Participation Areas are configured. Participation Area management is not available in this version.',
+      'Service Participation cannot be enabled because no active Participation Areas are configured. Manage areas in Participation Areas with the required write permission.',
     );
 }
 
@@ -28,6 +28,14 @@ export async function setParticipationCollection(
   organizationId: string,
   enabled: boolean,
 ) {
+  // Match Admin/request-intake Organization-first locking before area admission.
+  // Callers perform configuration changes inside a transaction.
+  await db
+    .selectFrom('organization')
+    .select('id')
+    .where('id', '=', organizationId)
+    .forUpdate()
+    .executeTakeFirstOrThrow();
   if (enabled) await validateCollectionEnable(db, organizationId);
   return db
     .updateTable('organization')

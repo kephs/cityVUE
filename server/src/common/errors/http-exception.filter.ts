@@ -48,6 +48,25 @@ export function buildErrorResponse(
       candidateCode && allowedCodes.has(candidateCode)
         ? candidateCode
         : undefined;
+    const areaMessages: Record<string, string> = {
+      PARTICIPATION_AREA_DUPLICATE:
+        'A Participation Area with this name already exists.',
+      PARTICIPATION_AREA_LAST_ACTIVE:
+        'At least one active Participation Area is required while Service Participation collection is enabled. First disable collection in Intake Settings.',
+    };
+    if (
+      statusCode === 400 &&
+      candidateCode &&
+      Object.hasOwn(areaMessages, candidateCode)
+    )
+      return {
+        statusCode,
+        error,
+        requestId,
+        code: candidateCode,
+        message:
+          areaMessages[candidateCode] ?? 'Invalid Participation Area change.',
+      };
     const message =
       code &&
       typeof response === 'object' &&

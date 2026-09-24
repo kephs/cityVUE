@@ -256,7 +256,10 @@ export async function checkAdminConfiguration(
         'participationAreas',
         'privacy',
       ]);
-      assert.deepEqual(one.capabilities, { canWriteIntakeSettings: false });
+      assert.deepEqual(one.capabilities, {
+        canWriteIntakeSettings: false,
+        canWriteParticipationAreas: false,
+      });
       assert.equal(one.privacy.source, 'deployment_policy');
       assert.ok(!('revision' in one.privacy));
       assert.ok(one.issues.items.length <= 25);

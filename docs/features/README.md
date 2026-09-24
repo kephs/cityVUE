@@ -55,3 +55,5 @@ F042 — [Requester Communication & Correspondence Foundation](F042-requester-co
 - [F022 client-neutral development](F022-client-neutral-architecture-development-isolation.md), [F023 map presentation](F023-client-neutral-gis-presentation-foundation.md), [F024 neutral geospatial data](F024-organization-scoped-neutral-geospatial-data-foundation.md), [F025 trusted Organization](F025-trusted-organization-context-geospatial-authorization.md), [F026 protected geospatial API](F026-protected-geospatial-read-api.md), [F027 controlled identity validation](F027-controlled-development-identity-geospatial-grant-validation.md) and [F028 protected map client](F028-protected-geospatial-client-integration.md).
 
 Other historical specifications remain in this directory. New features should link applicable prior evidence rather than copy every historical requirement into a new prompt.
+
+- [F055 — Admin Participation Area Management](F055-admin-participation-area-management.md): implemented and validated locally; see the [validation record](F055-implementation-report.md). No push or deployment.

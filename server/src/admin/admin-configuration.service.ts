@@ -143,6 +143,9 @@ export class AdminConfigurationService {
         return {
           branding,
           capabilities: {
+            canWriteParticipationAreas: access.permissions.includes(
+              'admin.participation_areas.write',
+            ),
             canWriteIntakeSettings: access.permissions.includes(
               'admin.intake_settings.write',
             ),

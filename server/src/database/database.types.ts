@@ -432,6 +432,23 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  participation_area_audit: {
+    id: Generated<string>;
+    organization_id: string;
+    staff_identity_id: string;
+    area_id: string;
+    action: 'created' | 'renamed' | 'activated' | 'deactivated' | 'reordered';
+    prior_name: string | null;
+    name: string;
+    prior_active: boolean | null;
+    active: boolean;
+    prior_display_order: number | null;
+    display_order: number;
+    prior_revision: number | null;
+    revision: number;
+    correlation_id: string;
+    occurred_at: Generated<Timestamp>;
+  };
   organization_branding: {
     organization_id: string;
     display_name: string | null;

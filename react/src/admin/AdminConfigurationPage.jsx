@@ -13,6 +13,7 @@ import {
   useAdminProductIdentity,
 } from "../branding/ReqroBrand.jsx";
 import IntakeCollectionEditor from "./IntakeCollectionEditor.jsx";
+import ParticipationAreaEditor from "./ParticipationAreaEditor.jsx";
 
 const sections = [
   ["", "Overview"],
@@ -202,8 +203,8 @@ export function AdminConfiguration({ client }) {
             {title || "Administration page not found"}
           </h1>
           <p>
-            Only Service Participation collection can be changed with separate
-            Intake Settings write permission. Other configuration is read-only.
+            Service Participation collection and Participation Areas each
+            require separate write permission. Other configuration is read-only.
           </p>
           {saveNotice && (
             <p role="status" tabIndex="-1" ref={saveStatus}>
@@ -377,32 +378,28 @@ export function AdminConfiguration({ client }) {
               )}
               {section === "participation" && (
                 <>
-                  <p>
-                    Collection:{" "}
-                    <strong>
-                      {data.collection.enabled ? "Enabled" : "Disabled"}
-                    </strong>
-                    . {data.participationAreas.active} active areas. Area
-                    configuration does not identify requesters or show
-                    participation counts.
-                  </p>
-                  {!data.participationAreas.total && (
-                    <p>No Participation Areas are configured.</p>
-                  )}
-                  <ul className="configuration-cards">
-                    {data.participationAreas.items.map((area) => (
-                      <li key={area.id}>
-                        <h2>{area.name}</h2>
-                        <Values
-                          items={[
-                            ["Status", area.active ? "Active" : "Inactive"],
-                            ["Display order", area.displayOrder],
-                            ["Area revision", area.revision],
-                          ]}
-                        />
-                      </li>
-                    ))}
-                  </ul>
+                  <ParticipationAreaEditor
+                    key={attempt}
+                    client={client}
+                    areas={data.participationAreas}
+                    collection={data.collection}
+                    canWrite={
+                      data.capabilities?.canWriteParticipationAreas === true
+                    }
+                    onRefresh={refresh}
+                    onSaved={(_result, notice) => {
+                      setSaveNotice(notice);
+                      refresh();
+                    }}
+                    onDenied={(status) => {
+                      setSaveNotice(
+                        status === 401
+                          ? "Your staff session has expired. Please sign in again."
+                          : "You are not authorized to manage Participation Areas.",
+                      );
+                      refresh();
+                    }}
+                  />
                   <Paging
                     name="Areas"
                     data={data.participationAreas}

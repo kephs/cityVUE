@@ -11,6 +11,15 @@ export class CityVueApiError extends Error {
 }
 
 function publicMessage(status, path, code) {
+  if (status === 400 && path.startsWith("/admin/participation-areas")) {
+    if (code === "PARTICIPATION_AREA_DUPLICATE")
+      return [code, "A Participation Area with this name already exists."];
+    if (code === "PARTICIPATION_AREA_LAST_ACTIVE")
+      return [
+        code,
+        "At least one active Participation Area is required while Service Participation collection is enabled. First disable collection in Intake Settings.",
+      ];
+  }
   if (code === "LOCATION_INELIGIBLE")
     return [
       code,

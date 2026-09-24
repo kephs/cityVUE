@@ -153,8 +153,8 @@ export default function IntakeCollectionEditor({
           {activeAreas === 0 && !collection.enabled && (
             <p>
               At least one active Participation Area is required before
-              collection can be enabled. Participation Area management is not
-              available in this version.
+              collection can be enabled. Manage areas in Participation Areas
+              with the required write permission.
             </p>
           )}
           <div className="d-flex flex-wrap gap-2 mb-3">
@@ -192,7 +192,7 @@ export default function IntakeCollectionEditor({
                 : error === "session"
                   ? "Your staff session has expired. Please sign in again."
                   : error === "areas"
-                    ? "Service Participation cannot be enabled because no active Participation Areas are configured. Participation Area management is not available in this version."
+                    ? "Service Participation cannot be enabled because no active Participation Areas are configured. Manage areas in Participation Areas with the required write permission."
                     : "The setting could not be saved. Refresh to check its current state before retrying."}
           </p>
         )}

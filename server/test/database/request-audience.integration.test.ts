@@ -1,5 +1,6 @@
 import { checkOrganizationBranding } from './organization-branding-checks.js';
 import { checkAdminIntakeSettings } from './admin-intake-settings-checks.js';
+import { checkAdminParticipationAreas } from './admin-participation-area-checks.js';
 import { checkIssueDefaults } from './issue-default-assignment-checks.js';
 import { checkParticipation } from './participation-checks.js';
 import { checkAdminConfiguration } from './admin-configuration-checks.js';
@@ -2476,6 +2477,13 @@ test(
           org,
           creator,
           otherStaff,
+          logs: contactLogs,
+        });
+        await checkAdminParticipationAreas(t, {
+          app,
+          db,
+          org,
+          creator,
           logs: contactLogs,
         });
       } finally {
