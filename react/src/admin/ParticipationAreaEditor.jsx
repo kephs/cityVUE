@@ -23,8 +23,9 @@ function DeactivationDialog({ area, busy, onCancel, onConfirm, returnFocus }) {
     >
       <h2 id="area-deactivate-title">Deactivate {area.name}?</h2>
       <p id="area-deactivate-help">
-        Requesters will no longer be able to select this area on new Service
-        Requests. Existing requests and historical analytics will be preserved.
+        Requesters will no longer be able to choose this area. Existing
+        responses and historical analytics will be kept. You can activate it
+        again later.
       </p>
       <div className="d-flex flex-wrap gap-2 justify-content-end">
         <button
@@ -51,6 +52,10 @@ export default function ParticipationAreaEditor({
   onSaved,
   onRefresh,
   onDenied,
+  onDirtyChange,
+  onBusyChange,
+  notice,
+  refreshing = false,
 }) {
   const [edit, setEdit] = useState(null),
     [value, setValue] = useState("");
@@ -82,6 +87,20 @@ export default function ParticipationAreaEditor({
   useEffect(() => {
     if (error) feedback.current?.focus();
   }, [error]);
+  const areaElements = useRef(new Map()),
+    noticeElement = useRef(null);
+  useEffect(() => {
+    onDirtyChange?.(!!edit);
+  }, [edit, onDirtyChange]);
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
+  useEffect(() => {
+    if (notice)
+      (
+        areaElements.current.get(notice.areaId) || noticeElement.current
+      )?.focus();
+  }, [notice]);
   const writable = canWrite && !denied;
   const normalized = value.trim();
   const valid =
@@ -132,7 +151,7 @@ export default function ParticipationAreaEditor({
       if (!mounted.current || controller.signal.aborted) return;
       setConfirm(null);
       setEdit(null);
-      onSaved(
+      await onSaved(
         result,
         result.changed ? notice : "Participation Area is unchanged.",
       );
@@ -156,7 +175,7 @@ export default function ParticipationAreaEditor({
               : failure.code === "PARTICIPATION_AREA_DUPLICATE"
                 ? "A Participation Area with this name already exists. Inactive names remain reserved; reactivate the existing area to use that name again."
                 : failure.code === "PARTICIPATION_AREA_LAST_ACTIVE"
-                  ? "At least one active Participation Area is required while Service Participation collection is enabled. First disable collection in Intake Settings."
+                  ? "Turn off Service Participation first if you want to deactivate the last active area."
                   : failure.status === 400
                     ? "Check the name or display order. The Participation Area could not be saved."
                     : failure.status === 404
@@ -169,38 +188,56 @@ export default function ParticipationAreaEditor({
     }
   }
   return (
-    <section aria-label="Participation Area configuration">
-      <p>
-        Collection:{" "}
-        <strong>{collection.enabled ? "Enabled" : "Disabled"}</strong>.{" "}
-        {areas.active} active areas; {areas.total - areas.active} inactive. Area
-        configuration does not identify requesters or show participation counts.
-      </p>
-      <p>
-        Lower display-order values appear first. Equal values sort by name.
-        Inactive areas keep their place and their name. Changes do not enable or
-        disable collection.
+    <section
+      className="participation-section"
+      id="participation-areas"
+      aria-labelledby="participation-areas-title"
+    >
+      <div className="participation-section-heading">
+        <div>
+          <h2 id="participation-areas-title">Participation Areas</h2>
+          <p>Choose the areas requesters can select.</p>
+        </div>
+        <span className="participation-count">
+          {areas.active} active
+          {areas.total > areas.active
+            ? ` • ${areas.total - areas.active} inactive`
+            : ""}
+        </span>
+      </div>
+      {!collection.enabled && (
+        <p className="participation-context">
+          Areas are kept for future use and historical records.
+        </p>
+      )}
+      <p className="participation-order-help">
+        Lower numbers appear first. Areas with the same number are sorted by
+        name.
       </p>
       {collection.enabled && areas.active === 0 && (
-        <p role="alert">
-          Service Participation collection is enabled, but no active
-          Participation Areas are available. Add or reactivate an area.
+        <p role="alert" className="configuration-warning">
+          Service Participation is On, but no active areas are available. Add or
+          reactivate an area, or turn Service Participation off.
         </p>
       )}
       {!areas.total && <p>No Participation Areas are configured.</p>}
-      {!writable && (
-        <p>
-          Participation Areas are read-only. Management requires Participation
-          Area write permission.
+      {notice && (
+        <p
+          ref={noticeElement}
+          tabIndex="-1"
+          role="status"
+          className="participation-notice"
+        >
+          {notice.message}
         </p>
       )}
       {writable && (
         <button
           className="btn btn-primary mb-3"
-          disabled={busy || blocked || !!edit}
+          disabled={busy || refreshing || blocked || !!edit}
           onClick={(e) => open("add", null, e)}
         >
-          Add Participation Area
+          <span aria-hidden="true">+ </span>Add area
         </button>
       )}
       {edit && writable && (
@@ -217,18 +254,18 @@ export default function ParticipationAreaEditor({
                 edit.type === "add"
                   ? "Participation Area added."
                   : edit.type === "order"
-                    ? "Participation Area order updated."
+                    ? "Order updated."
                     : "Participation Area renamed.",
               );
           }}
         >
-          <h2>
+          <h3>
             {edit.type === "add"
               ? "Add Participation Area"
               : edit.type === "order"
-                ? `Change display order for ${edit.area.name}`
+                ? `Change order for ${edit.area.name}`
                 : `Rename ${edit.area.name}`}
-          </h2>
+          </h3>
           <label className="form-label" htmlFor="area-edit-value">
             {edit.type === "order"
               ? "Display order"
@@ -256,7 +293,7 @@ export default function ParticipationAreaEditor({
             {edit.type === "order"
               ? "Use a whole number. Only this area's order changes."
               : "Use 1–120 characters. Names must be unique, including inactive areas, regardless of capitalization."}{" "}
-            Refresh configuration discards this edit.
+            Refresh asks before discarding this edit.
           </p>
           <p id="area-form-validation">
             {!valid
@@ -265,12 +302,7 @@ export default function ParticipationAreaEditor({
                 : "Enter a plain-text name of 1–120 characters."
               : ""}
           </p>
-          {edit.type === "add" && (
-            <p>
-              New areas are active. Service Participation collection remains{" "}
-              {collection.enabled ? "enabled" : "disabled"}.
-            </p>
-          )}
+          {edit.type === "add" && <p>New areas are active.</p>}
           <div className="d-flex flex-wrap gap-2">
             <button
               className="btn btn-primary"
@@ -303,26 +335,35 @@ export default function ParticipationAreaEditor({
           </>
         )}
       </div>
-      <ul className="configuration-cards">
+      <ul className="configuration-cards participation-area-list">
         {areas.items.map((area) => (
-          <li key={area.id}>
-            <h2>{area.name}</h2>
-            <details>
-              <summary>Configuration details</summary>
-              <dl>
-                <dt>Area revision</dt>
-                <dd>{area.revision}</dd>
-              </dl>
-            </details>
-            <p>
-              <strong>{area.active ? "Active" : "Inactive"}</strong> · Display
-              order: {area.displayOrder}
-            </p>
+          <li
+            key={area.id}
+            tabIndex="-1"
+            ref={(el) => {
+              if (el) areaElements.current.set(area.id, el);
+              else areaElements.current.delete(area.id);
+            }}
+            aria-label={area.name}
+          >
+            <div className="participation-area-heading">
+              <h3>{area.name}</h3>
+              <span
+                className={
+                  area.active
+                    ? "participation-state is-active"
+                    : "participation-state"
+                }
+              >
+                {area.active ? "Active" : "Inactive"}
+              </span>
+            </div>
+            <p className="participation-order">Order {area.displayOrder}</p>
             {writable && (
               <div className="d-flex flex-wrap gap-2">
                 <button
                   className="btn btn-outline-primary"
-                  disabled={busy || blocked || !!edit}
+                  disabled={busy || refreshing || blocked || !!edit}
                   aria-label={`Rename ${area.name}`}
                   onClick={(e) => open("rename", area, e)}
                 >
@@ -330,16 +371,17 @@ export default function ParticipationAreaEditor({
                 </button>
                 <button
                   className="btn btn-outline-primary"
-                  disabled={busy || blocked || !!edit}
-                  aria-label={`Change display order for ${area.name}`}
+                  disabled={busy || refreshing || blocked || !!edit}
+                  aria-label={`Change order for ${area.name}`}
                   onClick={(e) => open("order", area, e)}
                 >
-                  Change display order
+                  Change order
                 </button>
                 <button
                   className="btn btn-outline-primary"
                   disabled={
                     busy ||
+                    refreshing ||
                     blocked ||
                     !!edit ||
                     (area.active && collection.enabled && areas.active === 1)
@@ -365,9 +407,8 @@ export default function ParticipationAreaEditor({
               collection.enabled &&
               areas.active === 1 && (
                 <p>
-                  At least one active Participation Area is required while
-                  Service Participation collection is enabled. First disable
-                  collection in Intake Settings.
+                  Turn off Service Participation first if you want to deactivate
+                  the last active area.
                 </p>
               )}
           </li>

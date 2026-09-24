@@ -29,3 +29,7 @@ Required: migration apply/rollback/reapply and collision refusal without data ch
 Baseline: 31 applied migrations, zero pending; three active areas at revisions 1 and orders 0/1/2; collection Enabled/revision 3; REQRO_DEFAULT/revision 3; one each Admin read, Intake write and analytics grant; two F053 audits; 13 requests including SR-202609-000013; tracking 1 active/5 revoked. No trimmed/case-insensitive area-name collisions.
 
 Production administrator provisioning/governance, retention, change management and recovery remain separate prerequisites. GIS, destructive deletion, area-based routing, privacy policy editing, permission-management UI, production branding and future features remain deferred.
+
+## Post-F055 presentation refinement
+
+See [Participation Setup consolidation](F055-participation-setup-refinement.md). The canonical `/admin/participation` composes Service Participation and Participation Areas; `/admin/intake` redirects there. Backend resources, write permissions, revisions, APIs and audits remain separate. The approved numeric Change order workflow retains persisted values. Historical evidence above describes its original checkpoint; the user subsequently created Fictional North-East Area, producing the reconciled five-area/nine-audit baseline.

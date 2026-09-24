@@ -151,7 +151,11 @@ test.each([
   async (section, text) => {
     const client = { get: vi.fn().mockResolvedValue(snapshot) };
     view(client, `/admin/${section}`);
-    await screen.findByRole("button", { name: "Refresh configuration" });
+    await screen.findByRole("button", {
+      name: ["intake", "participation"].includes(section)
+        ? "Refresh Participation Setup"
+        : "Refresh configuration",
+    });
     expect(
       screen.getByText(text, {
         selector: section === "status" ? "h1" : undefined,
@@ -179,21 +183,24 @@ test("F052 refresh clears denied data, resource revisions stay stable on reads a
   const client = { get: vi.fn().mockResolvedValue(snapshot) };
   view(client, "/admin/participation");
   await screen.findByText("Fictional North");
-  expect(screen.getByText("Area revision").nextSibling).toHaveTextContent("4");
+  expect(screen.getByText("Order 0")).toBeInTheDocument();
+  expect(screen.queryByText("Area revision")).not.toBeInTheDocument();
   await userEvent.click(
-    screen.getByRole("button", { name: "Refresh configuration" }),
+    screen.getByRole("button", { name: "Refresh Participation Setup" }),
   );
   await screen.findByText("Fictional North");
-  expect(screen.getByText("Area revision").nextSibling).toHaveTextContent("4");
-  await userEvent.click(screen.getByRole("link", { name: "Intake Settings" }));
-  expect(screen.getByRole("link", { name: "Intake Settings" })).toHaveAttribute(
-    "aria-current",
-    "page",
+  expect(screen.getByText("Order 0")).toBeInTheDocument();
+  expect(screen.queryByText("Area revision")).not.toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("link", { name: "Participation Setup" }),
   );
+  expect(
+    screen.getByRole("link", { name: "Participation Setup" }),
+  ).toHaveAttribute("aria-current", "page");
   expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
   client.get.mockRejectedValue({ status: 403 });
   await userEvent.click(
-    screen.getByRole("button", { name: "Refresh configuration" }),
+    screen.getByRole("button", { name: "Refresh Participation Setup" }),
   );
   await screen.findByRole("alert");
   expect(screen.queryByText("Collection revision")).not.toBeInTheDocument();

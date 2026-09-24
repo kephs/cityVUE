@@ -57,3 +57,5 @@ F042 — [Requester Communication & Correspondence Foundation](F042-requester-co
 Other historical specifications remain in this directory. New features should link applicable prior evidence rather than copy every historical requirement into a new prompt.
 
 - [F055 — Admin Participation Area Management](F055-admin-participation-area-management.md): implemented and validated locally; see the [validation record](F055-implementation-report.md). No push or deployment.
+
+- [Post-F055 Participation Setup UX consolidation](F055-participation-setup-refinement.md): unnumbered presentation refinement; separate F053/F055 backend contracts, no F056.

@@ -68,10 +68,10 @@ export function OrganizationBrand({ branding, dark = true }) {
     </div>
   );
 }
-export function useAdminProductIdentity() {
+export function useAdminProductIdentity(title = "Reqro Administration") {
   useEffect(() => {
     const oldTitle = document.title;
-    document.title = "Reqro Administration";
+    document.title = title;
     const icon = document.createElement("link");
     icon.rel = "icon";
     icon.type = "image/png";
@@ -82,5 +82,5 @@ export function useAdminProductIdentity() {
       document.title = oldTitle;
       icon.remove();
     };
-  }, []);
+  }, [title]);
 }

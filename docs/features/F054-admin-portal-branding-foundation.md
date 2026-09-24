@@ -15,3 +15,7 @@ Development CLI follows explicit profile/target/fictional-data opt-in, status, d
 Final personal branding state must be REQRO_DEFAULT. Preserve collection Enabled/revision 3, both F053 audits, grants, 13 requests and tracking 1 active/5 revoked. Temporary integrity/UAT artifacts must be physically removed before commit. Run protocol suites, responsive/themed/keyboard and authenticated branding UAT, privacy confirmation and final integrity checks. No push, deployment or F055.
 
 Completed evidence and production limitations: [F054 implementation report](F054-implementation-report.md). Final development branding is REQRO_DEFAULT at revision 3. No push, deployment or F055.
+
+## Post-F055 presentation refinement
+
+See [Participation Setup consolidation](F055-participation-setup-refinement.md). The canonical `/admin/participation` composes Service Participation and Participation Areas; `/admin/intake` redirects there. Backend resources, write permissions, revisions, APIs and audits remain separate. The approved numeric Change order workflow retains persisted values. Historical evidence above describes its original checkpoint; the user subsequently created Fictional North-East Area, producing the reconciled five-area/nine-audit baseline.

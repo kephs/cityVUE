@@ -27,3 +27,7 @@ Production administrator governance/provisioning, retention/change management, s
 ## F055 concurrency follow-up
 
 [F055](F055-admin-participation-area-management.md) adds independent area writes and final-active-area protection. The shared collection provisioning helper now obtains the Organization lock before active-area admission, matching F053/request-intake lock order. This serializes enabling against final-area deactivation without changing collection permission, expectedRevision, audit or revision semantics. UI validation now directs administrators to Participation Areas instead of saying management is unavailable.
+
+## Post-F055 presentation refinement
+
+See [Participation Setup consolidation](F055-participation-setup-refinement.md). The canonical `/admin/participation` composes Service Participation and Participation Areas; `/admin/intake` redirects there. Backend resources, write permissions, revisions, APIs and audits remain separate. The approved numeric Change order workflow retains persisted values. Historical evidence above describes its original checkpoint; the user subsequently created Fictional North-East Area, producing the reconciled five-area/nine-audit baseline.

@@ -23,8 +23,8 @@ function setup(options = {}) {
 }
 test("F053 reader sees current setting without edit control or Save", () => {
   setup({ canWrite: false });
-  expect(screen.getByText("Enabled")).toBeInTheDocument();
-  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(screen.getByText("On")).toBeInTheDocument();
+  expect(screen.queryByRole("switch")).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Save changes" }),
   ).not.toBeInTheDocument();
@@ -32,31 +32,29 @@ test("F053 reader sees current setting without edit control or Save", () => {
 test("F053 dirty choice is separate from current; Cancel never writes", async () => {
   const { user, client } = setup();
   expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-  await user.selectOptions(screen.getByRole("combobox"), "false");
+  await user.click(screen.getByRole("switch"));
   expect(screen.getByText(/Unsaved change/)).toBeInTheDocument();
-  expect(
-    screen.getByText("Current collection:").querySelector("strong"),
-  ).toHaveTextContent("Enabled");
+  expect(screen.getByText(/Currently On/)).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Cancel change" }));
-  expect(screen.getByRole("combobox")).toHaveValue("true");
+  expect(screen.getByRole("switch")).toBeChecked();
   expect(client.patch).not.toHaveBeenCalled();
 });
 test("F053 disable confirms, Cancel restores focus, success submits exact revision and uses authoritative response", async () => {
   const { user, client, onSaved } = setup();
-  await user.selectOptions(screen.getByRole("combobox"), "false");
+  await user.click(screen.getByRole("switch"));
   const save = screen.getByRole("button", { name: "Save changes" });
   await user.click(save);
   expect(screen.getByRole("dialog")).toHaveAccessibleName(
-    "Disable Service Participation collection?",
+    "Turn off Service Participation?",
   );
   expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
-    /historical analytics will be preserved/,
+    /historical analytics will be kept/,
   );
   await user.click(screen.getByRole("button", { name: "Cancel", exact: true }));
   expect(save).toHaveFocus();
   expect(client.patch).not.toHaveBeenCalled();
   await user.click(save);
-  await user.click(screen.getByRole("button", { name: "Disable collection" }));
+  await user.click(screen.getByRole("button", { name: "Turn off" }));
   expect(client.patch).toHaveBeenCalledWith(
     "/admin/intake-settings/service-participation",
     { enabled: false, expectedRevision: 7 },
@@ -80,14 +78,14 @@ test.each([403, 401, 409, 400, 500])(
         patch: vi.fn().mockRejectedValue({ status, message: "private SQL" }),
       },
     });
-    await user.selectOptions(screen.getByRole("combobox"), "true");
+    await user.click(screen.getByRole("switch"));
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     expect(await screen.findByRole("alert")).not.toHaveTextContent(
       "private SQL",
     );
     expect(onSaved).not.toHaveBeenCalled();
     if (status === 403 || status === 401)
-      expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+      expect(screen.queryByRole("switch")).not.toBeInTheDocument();
     if (status === 409) {
       expect(screen.getByRole("alert")).toHaveTextContent(
         "Configuration changed",
@@ -107,9 +105,11 @@ test("F053 no active areas prevents enabling but never prevents disabling", asyn
     collection: { enabled: false, revision: 1 },
     activeAreas: 0,
   });
-  await user.selectOptions(screen.getByRole("combobox"), "true");
+  await user.click(screen.getByRole("switch"));
   expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-  expect(screen.getByText(/At least one active/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/Add or reactivate at least one/),
+  ).toBeInTheDocument();
   expect(client.patch).not.toHaveBeenCalled();
 });
 test("F053 in-flight save prevents duplicate calls and ignores completion after unmount", async () => {
@@ -126,7 +126,7 @@ test("F053 in-flight save prevents duplicate calls and ignores completion after 
     client,
     collection: { enabled: false, revision: 1 },
   });
-  await user.selectOptions(screen.getByRole("combobox"), "true");
+  await user.click(screen.getByRole("switch"));
   await user.click(screen.getByRole("button", { name: "Save changes" }));
   expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
   expect(client.patch).toHaveBeenCalledOnce();

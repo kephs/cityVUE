@@ -201,3 +201,7 @@ All 80 answers match the required outcomes. Ordering answers refer to the approv
 | 78  | Is Requester Tracking operated during F055?                                                          | NO     |
 | 79  | Are production/client/cloud resources changed?                                                       | NO     |
 | 80  | Is deployment performed?                                                                             | NO     |
+
+## Post-F055 presentation refinement
+
+See [Participation Setup consolidation](F055-participation-setup-refinement.md). The canonical `/admin/participation` composes Service Participation and Participation Areas; `/admin/intake` redirects there. Backend resources, write permissions, revisions, APIs and audits remain separate. The approved numeric Change order workflow retains persisted values. Historical evidence above describes its original checkpoint; the user subsequently created Fictional North-East Area, producing the reconciled five-area/nine-audit baseline.

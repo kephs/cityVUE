@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, NavLink, useParams } from "react-router-dom";
+import { Link, NavLink, Navigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import StaffRouteGuard from "../auth/StaffRouteGuard.jsx";
 import ThemeToggle from "../components/theme/ThemeToggle.jsx";
@@ -12,14 +12,12 @@ import {
   reqroBrand,
   useAdminProductIdentity,
 } from "../branding/ReqroBrand.jsx";
-import IntakeCollectionEditor from "./IntakeCollectionEditor.jsx";
-import ParticipationAreaEditor from "./ParticipationAreaEditor.jsx";
+import ParticipationSetup from "./ParticipationSetup.jsx";
 
 const sections = [
   ["", "Overview"],
   ["issues", "Issues"],
-  ["intake", "Intake Settings"],
-  ["participation", "Participation Areas"],
+  ["participation", "Participation Setup"],
   ["privacy", "Analytics & Privacy"],
   ["status", "Configuration Status"],
 ];
@@ -67,19 +65,14 @@ export function AdminConfiguration({ client }) {
   const title = sections.find(([key]) => key === section)?.[1];
   const [state, setState] = useState(null),
     [attempt, setAttempt] = useState(0);
-  const [issuePage, setIssuePage] = useState(1),
-    [areaPage, setAreaPage] = useState(1);
+  const [issuePage, setIssuePage] = useState(1);
+  const areaPage = 1;
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationButton = useRef(null);
   const closeNavigation = () => {
     setNavigationOpen(false);
     navigationButton.current?.focus();
   };
-  const [saveNotice, setSaveNotice] = useState("");
-  const saveStatus = useRef(null);
-  useEffect(() => {
-    if (saveNotice) saveStatus.current?.focus();
-  }, [saveNotice]);
   const heading = useRef(null);
   useEffect(() => {
     heading.current?.focus();
@@ -106,13 +99,15 @@ export function AdminConfiguration({ client }) {
         },
       );
     return () => controller.abort();
-  }, [client, attempt, issuePage, areaPage]);
+  }, [client, attempt, issuePage, areaPage, section]);
   const current = state?.client === client ? state : null,
     data = current?.data;
   const refresh = () => {
     setState(null);
     setAttempt((n) => n + 1);
   };
+  if (section === "intake")
+    return <Navigate to="/admin/participation" replace />;
   return (
     <div className="configuration-shell">
       <a className="skip-link" href="#configuration-main">
@@ -168,9 +163,9 @@ export function AdminConfiguration({ client }) {
             >
               {[
                 ["Workspace", sections.slice(0, 1), "grid"],
-                ["Service Requests", sections.slice(1, 4), "inboxes"],
-                ["Analytics & Privacy", sections.slice(4, 5), "shield-check"],
-                ["System", sections.slice(5), "gear"],
+                ["Service Requests", sections.slice(1, 3), "inboxes"],
+                ["Analytics & Privacy", sections.slice(3, 4), "shield-check"],
+                ["System", sections.slice(4), "gear"],
               ].map(([group, items, icon]) => (
                 <section className="configuration-nav-group" key={group}>
                   <h2>{group}</h2>
@@ -203,14 +198,10 @@ export function AdminConfiguration({ client }) {
             {title || "Administration page not found"}
           </h1>
           <p>
-            Service Participation collection and Participation Areas each
-            require separate write permission. Other configuration is read-only.
+            {section === "participation"
+              ? "Configure optional service-participation information for new requests."
+              : "Review your Organization’s configuration."}
           </p>
-          {saveNotice && (
-            <p role="status" tabIndex="-1" ref={saveStatus}>
-              {saveNotice}
-            </p>
-          )}
           {!title ? (
             <Link to="/admin">Return to Administration</Link>
           ) : !current ? (
@@ -228,12 +219,14 @@ export function AdminConfiguration({ client }) {
             </div>
           ) : (
             <>
-              <button
-                className="btn btn-outline-primary mb-4"
-                onClick={refresh}
-              >
-                Refresh configuration
-              </button>
+              {section !== "participation" && (
+                <button
+                  className="btn btn-outline-primary mb-4"
+                  onClick={refresh}
+                >
+                  Refresh configuration
+                </button>
+              )}
               {section === "" && (
                 <>
                   <div className="configuration-welcome">
@@ -268,6 +261,9 @@ export function AdminConfiguration({ client }) {
                   <p>
                     These are configuration facts, not Service Request or
                     requester statistics.
+                  </p>
+                  <p>
+                    <Link to="/admin/participation">Participation Setup</Link>
                   </p>
                   <p>
                     Each managed resource has its own revision. This page has no
@@ -335,77 +331,14 @@ export function AdminConfiguration({ client }) {
                   />
                 </>
               )}
-              {section === "intake" && (
-                <>
-                  <IntakeCollectionEditor
-                    key={`${data.collection.revision}-${attempt}`}
-                    client={client}
-                    collection={data.collection}
-                    activeAreas={data.participationAreas.active}
-                    canWrite={
-                      data.capabilities?.canWriteIntakeSettings === true
-                    }
-                    onRefresh={refresh}
-                    onSaved={(result) => {
-                      setState({
-                        client,
-                        data: {
-                          ...data,
-                          collection: {
-                            enabled: result.enabled,
-                            revision: result.revision,
-                          },
-                        },
-                      });
-                      setSaveNotice(
-                        `Service Participation collection ${result.enabled ? "enabled" : "disabled"}.`,
-                      );
-                      setAttempt((n) => n + 1);
-                    }}
-                  />
-                  <p>
-                    When enabled and active areas are available, requesters may
-                    optionally provide a self-reported service-participation
-                    area. This is separate from Service Location and requester
-                    identity.
-                  </p>
-                  <p>
-                    Disabling collection does not delete historical information
-                    or revoke analytics access. Issue-specific requester
-                    policies are shown under Issues.
-                  </p>
-                </>
-              )}
               {section === "participation" && (
-                <>
-                  <ParticipationAreaEditor
-                    key={attempt}
-                    client={client}
-                    areas={data.participationAreas}
-                    collection={data.collection}
-                    canWrite={
-                      data.capabilities?.canWriteParticipationAreas === true
-                    }
-                    onRefresh={refresh}
-                    onSaved={(_result, notice) => {
-                      setSaveNotice(notice);
-                      refresh();
-                    }}
-                    onDenied={(status) => {
-                      setSaveNotice(
-                        status === 401
-                          ? "Your staff session has expired. Please sign in again."
-                          : "You are not authorized to manage Participation Areas.",
-                      );
-                      refresh();
-                    }}
-                  />
-                  <Paging
-                    name="Areas"
-                    data={data.participationAreas}
-                    setPage={setAreaPage}
-                  />
-                </>
+                <ParticipationSetup
+                  key={attempt}
+                  client={client}
+                  initial={data}
+                  onRefresh={refresh}
+                  onDenied={refresh}
+                />
               )}
               {section === "privacy" && (
                 <>
@@ -455,6 +388,11 @@ export function AdminConfiguration({ client }) {
                         >
                           <strong>{check.severity}:</strong> {check.message}
                         </p>
+                        {check.resource === "Service Participation" && (
+                          <Link to="/admin/participation">
+                            Participation Setup
+                          </Link>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -472,7 +410,12 @@ export function AdminConfiguration({ client }) {
 }
 export default function AdminConfigurationPage() {
   const auth = useAuth();
-  useAdminProductIdentity();
+  const { section } = useParams();
+  useAdminProductIdentity(
+    section === "participation" || section === "intake"
+      ? "Participation Setup | Reqro Administration"
+      : "Reqro Administration",
+  );
   const client = useMemo(
     () =>
       createApiClient({

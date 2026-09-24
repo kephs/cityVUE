@@ -44,9 +44,7 @@ test("F055 reader sees names/state/order and no management controls", () => {
 });
 test("F055 Add validates trims and submits once; authoritative result is passed to parent", async () => {
   const { user, client, onSaved } = setup();
-  await user.click(
-    screen.getByRole("button", { name: "Add Participation Area" }),
-  );
+  await user.click(screen.getByRole("button", { name: "Add area" }));
   const field = screen.getByRole("textbox");
   expect(field).toHaveFocus();
   expect(screen.getByRole("button", { name: "Save area" })).toBeDisabled();
@@ -90,9 +88,7 @@ test("F055 duplicate preserves entered name and offers reactivation guidance", a
     status: 400,
     code: "PARTICIPATION_AREA_DUPLICATE",
   });
-  await user.click(
-    screen.getByRole("button", { name: "Add Participation Area" }),
-  );
+  await user.click(screen.getByRole("button", { name: "Add area" }));
   await user.type(screen.getByRole("textbox"), "North District");
   await user.click(screen.getByRole("button", { name: "Save area" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -107,7 +103,7 @@ test("F055 deactivate confirmation starts on Cancel, Escape/cancel preserves dat
   });
   await user.click(button);
   expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
-    /historical analytics will be preserved/,
+    /historical analytics will be kept/,
   );
   expect(
     screen.getByRole("button", { name: "Cancel", exact: true }),
@@ -132,7 +128,9 @@ test("F055 final-active UI blocks deactivation and backend validation does not f
   expect(
     screen.getByRole("button", { name: "Deactivate North District" }),
   ).toBeDisabled();
-  expect(screen.getByText(/First disable collection/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/Turn off Service Participation first/),
+  ).toBeInTheDocument();
   rerender(
     <ParticipationAreaEditor
       client={client}
@@ -154,7 +152,7 @@ test("F055 final-active UI blocks deactivation and backend validation does not f
     screen.getByRole("button", { name: "Deactivate area", exact: true }),
   );
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "At least one active Participation Area",
+    "Turn off Service Participation first",
   );
   expect(onSaved).not.toHaveBeenCalled();
 });
@@ -170,7 +168,7 @@ test("F055 activate does not submit collection; numeric order is keyboard editab
   );
   await user.click(
     screen.getByRole("button", {
-      name: "Change display order for North District",
+      name: "Change order for North District",
     }),
   );
   const field = screen.getByRole("spinbutton");
@@ -184,7 +182,7 @@ test("F055 activate does not submit collection; numeric order is keyboard editab
     expect.anything(),
   );
 });
-for (const type of ["Rename", "Change display order for"])
+for (const type of ["Rename", "Change order for"])
   test(`F055 ${type} conflict requires Refresh without retry or false success`, async () => {
     const { user, client, onSaved, onRefresh } = setup();
     client.patch.mockRejectedValue({ status: 409 });
@@ -219,7 +217,7 @@ for (const status of [401, 403])
       status === 403 ? "not authorized" : "session has expired",
     );
     expect(
-      screen.queryByRole("button", { name: "Add Participation Area" }),
+      screen.queryByRole("button", { name: "Add area" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: north.name }),
@@ -248,9 +246,7 @@ test("F055 empty disabled is valid; enabled empty warns; HTML-like names render 
       onRefresh={vi.fn()}
     />,
   );
-  expect(screen.getByRole("alert")).toHaveTextContent(
-    "no active Participation Areas",
-  );
+  expect(screen.getByRole("alert")).toHaveTextContent("no active areas");
   expect(
     screen.getByRole("heading", { name: '<img src=x onerror="attack()">' }),
   ).toBeInTheDocument();
@@ -264,9 +260,7 @@ test("F055 double submit is blocked and unmount aborts/ignores pending response"
       resolve = r;
     }),
   );
-  await user.click(
-    screen.getByRole("button", { name: "Add Participation Area" }),
-  );
+  await user.click(screen.getByRole("button", { name: "Add area" }));
   await user.type(screen.getByRole("textbox"), "West");
   await user.dblClick(screen.getByRole("button", { name: "Save area" }));
   expect(client.post).toHaveBeenCalledTimes(1);
