@@ -141,3 +141,17 @@ node --env-file=.env node_modules/tsx/dist/cli.mjs src/database/development-part
 ```
 
 The CLI changes no requests or permissions. Verify authenticated analytics denial before narrowly provisioning the dedicated development permission using F036; preserve existing request scopes. Use the developer-launched API outside the restricted sandbox for normal Entra signing-key retrieval. The protected preview is `/staff/analytics/service-participation`; it has no global navigation link. Production area administration and configuration audit are deferred. See [F051](../docs/features/F051-requester-geography-service-participation.md) and [ADR-013](../docs/architecture/decisions/ADR-013-operational-participation-geography.md) for privacy limitations and approved semantics.
+
+### F051 Organization collection control
+
+New Organizations default to collection disabled. Area provisioning does not enable collection. After the separate `20260928000000-add-participation-collection-setting` migration, explicitly preserve the approved fictional development setup using the same guarded CLI and process-only `F051_FICTIONAL_DATA_ONLY=true` opt-in:
+
+```text
+node --env-file=.env node_modules/tsx/dist/cli.mjs src/database/development-participation-cli.ts status
+node --env-file=.env node_modules/tsx/dist/cli.mjs src/database/development-participation-cli.ts enable --dry-run
+node --env-file=.env node_modules/tsx/dist/cli.mjs src/database/development-participation-cli.ts enable --confirm
+node --env-file=.env node_modules/tsx/dist/cli.mjs src/database/development-participation-cli.ts disable --dry-run
+node --env-file=.env node_modules/tsx/dist/cli.mjs src/database/development-participation-cli.ts disable --confirm
+```
+
+Status distinguishes `disabled`, `ready`, and `incomplete`; incomplete means enabled with no active areas. Disabled/incomplete hides the optional intake section and normal requests remain NOT_COLLECTED, while explicit geography is rejected. Area configuration, historical geography, grants/scopes and authorized historical analytics are untouched. After temporary disable UAT, explicitly re-enable the development Organization. Production administrative mutation authorization/UI/audit is deferred; no ordinary staff mutation endpoint exists.

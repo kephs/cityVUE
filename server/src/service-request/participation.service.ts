@@ -27,8 +27,17 @@ export class ParticipationService {
     const org =
       organizationId ??
       this.config.get('catalog.developmentOrganizationId', { infer: true });
-    if (!org) return { items: [] };
+    if (!org) return { collectionEnabled: false, items: [] };
+    const organization = await this.database.client
+      .selectFrom('organization')
+      .select('service_participation_collection_enabled')
+      .where('id', '=', org)
+      .where('status', '=', 'active')
+      .executeTakeFirst();
+    if (!organization?.service_participation_collection_enabled)
+      return { collectionEnabled: false, items: [] };
     return {
+      collectionEnabled: true,
       items: await this.database.client
         .selectFrom('participation_area as area')
         .innerJoin('organization', 'organization.id', 'area.organization_id')

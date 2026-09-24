@@ -22,6 +22,11 @@ import {
   down,
 } from '../../migrations/20260927000000-add-service-participation.js';
 
+import {
+  up as collectionUp,
+  down as collectionDown,
+} from '../../migrations/20260928000000-add-participation-collection-setting.js';
+
 function required<T>(value: T | null | undefined): T {
   if (value === null || value === undefined)
     throw Error('Missing test fixture');
@@ -95,6 +100,36 @@ export async function checkParticipation(
         original,
       );
       await db.transaction().execute(up);
+    },
+  );
+  await t.test(
+    'F051 collection setting defaults every Organization off, migrates down/up without grants or request changes',
+    async () => {
+      await db.transaction().execute(collectionUp);
+      assert.ok(
+        (
+          await db
+            .selectFrom('organization')
+            .select('service_participation_collection_enabled')
+            .execute()
+        ).every((x) => !x.service_participation_collection_enabled),
+      );
+      await db.transaction().execute(collectionDown);
+      await db.transaction().execute(collectionUp);
+      assert.deepEqual(
+        await db
+          .selectFrom('role_permission')
+          .selectAll()
+          .orderBy('role_id')
+          .orderBy('permission_key')
+          .execute(),
+        grants,
+      );
+      await db
+        .updateTable('organization')
+        .set({ service_participation_collection_enabled: true })
+        .where('id', '=', org)
+        .execute();
     },
   );
   const foreign = (
@@ -831,6 +866,194 @@ export async function checkParticipation(
       assert.ok(
         !c.logs.join('\n').includes('Fictional Participation Sentinel'),
       );
+    },
+  );
+  await t.test(
+    'F051 collection disable/incomplete rejects web, assisted and trusted input; normal intake and retained analytics remain independent',
+    async () => {
+      const beforeRequests = await db
+        .selectFrom('service_request')
+        .selectAll()
+        .orderBy('id')
+        .execute();
+      const beforeAreas = await db
+        .selectFrom('participation_area')
+        .selectAll()
+        .orderBy('id')
+        .execute();
+      const beforeGrants = await db
+        .selectFrom('role_permission')
+        .selectAll()
+        .orderBy('role_id')
+        .orderBy('permission_key')
+        .execute();
+      const beforeAnalytics = await analytics.read(access, ...period);
+      const anonymous = { ...input, reportingIdentity: 'anonymous' as const };
+      delete anonymous.contact;
+      await db
+        .updateTable('organization')
+        .set({ service_participation_collection_enabled: false })
+        .where('id', '=', org)
+        .execute();
+      const catalog = await request(api)
+        .get('/api/v1/intake/participation-areas')
+        .expect(200);
+      assert.deepEqual(catalog.body, { collectionEnabled: false, items: [] });
+      assert.deepEqual(
+        await analytics.read(access, ...period),
+        beforeAnalytics,
+      );
+      const beforeInvalid = await snapshot();
+      for (const participation of [
+        { state: 'PROVIDED', areaId: b },
+        { state: 'DECLINED' },
+      ]) {
+        await request(api)
+          .post('/api/v1/service-requests')
+          .send({ ...anonymous, participation })
+          .expect(400);
+        await request(api)
+          .post('/api/v1/staff/service-requests')
+          .set('Authorization', `Bearer ${c.creator}`)
+          .send({
+            ...anonymous,
+            audience: 'public',
+            intakeChannel: 'phone',
+            participation,
+          })
+          .expect(400);
+        const trusted = developmentRequesterContext(
+          {
+            NODE_ENV: 'test',
+            CITYVUE_DEPLOYMENT_PROFILE: 'development',
+            F050_ENABLE_SYNTHETIC: 'true',
+          },
+          org,
+          'fictional-disabled-collection',
+        );
+        await assert.rejects(
+          create.executeTrusted(
+            {
+              ...input,
+              participation: participation as {
+                state: 'PROVIDED' | 'DECLINED';
+                areaId?: string;
+              },
+            },
+            trusted,
+          ),
+        );
+      }
+      assert.deepEqual(await snapshot(), beforeInvalid);
+      const skipped = await create.execute(anonymous);
+      const skippedRow = await db
+        .selectFrom('service_request')
+        .selectAll()
+        .where('id', '=', skipped.id)
+        .executeTakeFirstOrThrow();
+      assert.equal(skippedRow.requester_geography_state, 'NOT_COLLECTED');
+      assert.equal(skippedRow.participation_area_id, null);
+      assert.equal(skippedRow.requester_id, null);
+      assert.equal(
+        (
+          await db
+            .selectFrom('requester_contact')
+            .select('id')
+            .where('service_request_id', '=', skipped.id)
+            .execute()
+        ).length,
+        0,
+      );
+      await db
+        .updateTable('organization')
+        .set({ service_participation_collection_enabled: true })
+        .where('id', '=', org)
+        .execute();
+      assert.equal((await analytics.areas(org)).collectionEnabled, true);
+      const declined = await create.execute({
+        ...anonymous,
+        participation: { state: 'DECLINED' },
+      });
+      assert.equal(
+        (
+          await db
+            .selectFrom('service_request')
+            .select('requester_geography_state')
+            .where('id', '=', declined.id)
+            .executeTakeFirstOrThrow()
+        ).requester_geography_state,
+        'DECLINED',
+      );
+      await db
+        .updateTable('participation_area')
+        .set({ active: false })
+        .where('organization_id', '=', org)
+        .execute();
+      assert.deepEqual(await analytics.areas(org), {
+        collectionEnabled: true,
+        items: [],
+      });
+      for (const participation of [
+        { state: 'PROVIDED' as const, areaId: b },
+        { state: 'DECLINED' as const },
+      ])
+        await assert.rejects(create.execute({ ...anonymous, participation }));
+      const incomplete = await create.execute(anonymous);
+      assert.equal(
+        (
+          await db
+            .selectFrom('service_request')
+            .select('requester_geography_state')
+            .where('id', '=', incomplete.id)
+            .executeTakeFirstOrThrow()
+        ).requester_geography_state,
+        'NOT_COLLECTED',
+      );
+      for (const area of beforeAreas)
+        await db
+          .updateTable('participation_area')
+          .set({ active: area.active })
+          .where('id', '=', area.id)
+          .execute();
+      assert.deepEqual(
+        await db
+          .selectFrom('participation_area')
+          .selectAll()
+          .orderBy('id')
+          .execute(),
+        beforeAreas,
+      );
+      assert.deepEqual(
+        await db
+          .selectFrom('service_request')
+          .selectAll()
+          .where(
+            'id',
+            'in',
+            beforeRequests.map((x) => x.id),
+          )
+          .orderBy('id')
+          .execute(),
+        beforeRequests,
+      );
+      assert.deepEqual(
+        await db
+          .selectFrom('service_request')
+          .selectAll()
+          .where('id', '=', skipped.id)
+          .executeTakeFirstOrThrow(),
+        skippedRow,
+      );
+      assert.deepEqual(
+        await db
+          .selectFrom('role_permission')
+          .selectAll()
+          .orderBy('role_id')
+          .orderBy('permission_key')
+          .execute(),
+        beforeGrants,
+      );
+      await assert.rejects(db.transaction().execute(collectionDown));
     },
   );
 }

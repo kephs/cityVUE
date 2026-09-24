@@ -164,3 +164,7 @@ No tracking operation, production/client resource change, deployment, push or F0
 - `server/test/database/participation-checks.ts`
 - `server/test/database/request-audience.integration.test.ts`
 - `server/test/unit/participation.test.ts`
+
+## Separate Organization collection follow-up
+
+The accepted F051 commit is preserved. A separately authorized follow-up introduces disabled-by-default Organization collection policy, explicit development opt-in, safe intake configuration and strict creation enforcement. Original F051 evidence above is historical; see [the follow-up report](F051-collection-setting-report.md) for the new migration count, toggle UAT, unchanged historical data/grants and separate commit. Analytics authorization and suppression remain independent of collection policy.

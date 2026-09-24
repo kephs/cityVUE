@@ -6,6 +6,7 @@ type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type JsonValue = ColumnType<unknown, unknown, unknown>;
 
 interface OrganizationTable {
+  service_participation_collection_enabled: Generated<boolean>;
   id: string;
   name: string;
   short_name: string;

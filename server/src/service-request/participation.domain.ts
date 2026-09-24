@@ -27,7 +27,29 @@ export async function validateParticipationArea(
   org: string,
   input?: ParticipationInput,
 ) {
-  if (input?.state !== 'PROVIDED') return;
+  if (!input) return;
+  const organization = await trx
+    .selectFrom('organization')
+    .select('service_participation_collection_enabled')
+    .where('id', '=', org)
+    .where('status', '=', 'active')
+    .forShare()
+    .executeTakeFirst();
+  if (!organization?.service_participation_collection_enabled)
+    throw new BadRequestException('Participation collection is unavailable');
+  if (input.state === 'DECLINED') {
+    const active = await trx
+      .selectFrom('participation_area')
+      .select('id')
+      .where('organization_id', '=', org)
+      .where('active', '=', true)
+      .limit(1)
+      .forShare()
+      .executeTakeFirst();
+    if (!active)
+      throw new BadRequestException('Participation collection is unavailable');
+    return;
+  }
   if (!input.areaId)
     throw new BadRequestException('Participation area is required');
   const area = await trx

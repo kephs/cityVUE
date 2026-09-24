@@ -8,16 +8,19 @@ import {
 import { DatabaseService } from './database.service.js';
 
 async function run() {
-  const [flag] = process.argv.slice(2);
+  const [command, mode] = process.argv.slice(2);
+  const setting = command === 'enable' || command === 'disable';
+  const flag = setting ? mode : command;
+  const statusOnly = command === 'status';
   if (flag === '--help') {
     process.stdout.write(
-      'F051 fictional area provisioning: --dry-run or --confirm. Requires explicit NODE_ENV=development, CITYVUE_DEPLOYMENT_PROFILE=development, F051_FICTIONAL_DATA_ONLY=true and personal reqro_dev target. Creates only three fictional areas; no grants or request changes.\n',
+      'F051 fictional area provisioning: --dry-run or --confirm. Requires explicit NODE_ENV=development, CITYVUE_DEPLOYMENT_PROFILE=development, F051_FICTIONAL_DATA_ONLY=true and personal reqro_dev target. Default operation creates three fictional areas without enabling collection. Use enable or disable followed by --dry-run/--confirm to change only collection; status reports disabled/ready/incomplete. No requests or grants change.\n',
     );
     return;
   }
   if (
-    process.argv.length !== 3 ||
-    !['--dry-run', '--confirm'].includes(flag ?? '') ||
+    process.argv.length !== (setting ? 4 : 3) ||
+    (!statusOnly && !['--dry-run', '--confirm'].includes(flag ?? '')) ||
     process.env.NODE_ENV !== 'development' ||
     process.env.CITYVUE_DEPLOYMENT_PROFILE !== 'development' ||
     process.env.F051_FICTIONAL_DATA_ONLY !== 'true'
@@ -31,7 +34,9 @@ async function run() {
   });
   try {
     const db = app.get(DatabaseService).client;
-    await db.transaction().execute(async (trx) => {
+    const diagnostic = await db.transaction().execute(async (trx) => {
+      if (flag !== '--confirm')
+        await sql`set transaction read only`.execute(trx);
       const target = await sql<{
         database: string;
         role: string;
@@ -48,9 +53,13 @@ async function run() {
         throw Error('Unexpected target');
       const org = await trx
         .selectFrom('organization')
-        .select(['name', 'slug', 'status'])
+        .select([
+          'name',
+          'slug',
+          'status',
+          'service_participation_collection_enabled',
+        ])
         .where('id', '=', developmentOrganization.id)
-        .forShare()
         .executeTakeFirst();
       if (
         org?.name !== developmentOrganization.name ||
@@ -58,7 +67,15 @@ async function run() {
         org.status !== 'active'
       )
         throw Error('Unexpected Organization');
-      if (flag === '--confirm')
+      if (setting && flag === '--confirm')
+        await trx
+          .updateTable('organization')
+          .set({
+            service_participation_collection_enabled: command === 'enable',
+          })
+          .where('id', '=', developmentOrganization.id)
+          .execute();
+      if (!setting && !statusOnly && flag === '--confirm')
         for (const [index, label] of [
           'Fictional North Area',
           'Fictional Central Area',
@@ -75,10 +92,28 @@ async function run() {
               oc.columns(['organization_id', 'display_name']).doNothing(),
             )
             .execute();
+      const enabled =
+        setting && flag === '--confirm'
+          ? command === 'enable'
+          : org.service_participation_collection_enabled;
+      const active = await trx
+        .selectFrom('participation_area')
+        .select('id')
+        .where('organization_id', '=', developmentOrganization.id)
+        .where('active', '=', true)
+        .execute();
+      return {
+        collectionEnabled: enabled,
+        activeAreaCount: active.length,
+        state: !enabled ? 'disabled' : active.length ? 'ready' : 'incomplete',
+        dryRun: flag === '--dry-run',
+        requestedCollection: setting ? command : undefined,
+      };
     });
+    process.stdout.write(JSON.stringify(diagnostic) + '\n');
     process.stdout.write(
       flag === '--confirm'
-        ? 'PASS: three fictional areas provisioned; no requests or grants changed.\n'
+        ? 'PASS: explicit development configuration applied; no requests or grants changed.\n'
         : 'PASS: personal development target validated; no writes.\n',
     );
   } finally {

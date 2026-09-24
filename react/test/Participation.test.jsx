@@ -17,7 +17,10 @@ import { ParticipationPreview } from "../src/staff/ServiceParticipationPage.jsx"
 
 const area = "10000000-0000-4000-8000-000000000051";
 const repository = {
-  areas: async () => [{ id: area, label: "Fictional Participation Area" }],
+  areas: async () => ({
+    collectionEnabled: true,
+    items: [{ id: area, label: "Fictional Participation Area" }],
+  }),
 };
 const question =
   "Which area do you associate with this service request? (Optional)";
@@ -71,7 +74,7 @@ test("F051 area selection stays independent of manual/device Service Location ch
     current,
   );
 });
-test.each(["anonymous", "identified"])(
+test.each(["anonymous", "identified", "disabled", "incomplete"])(
   "F051 %s intake preserves area across Review/Back and maps only explicit geography",
   async (mode) => {
     const service = {
@@ -90,7 +93,14 @@ test.each(["anonymous", "identified"])(
       .mockResolvedValue({ id: "result", referenceNumber: "FICTIONAL-51" });
     const data = {
       mode: "api",
-      participation: repository,
+      participation: ["disabled", "incomplete"].includes(mode)
+        ? {
+            areas: async () => ({
+              collectionEnabled: mode === "incomplete",
+              items: [],
+            }),
+          }
+        : repository,
       catalog: {
         loadCategories: async () => [
           {
@@ -128,11 +138,28 @@ test.each(["anonymous", "identified"])(
     );
     await user.click(
       screen.getByRole("radio", {
-        name: mode === "anonymous" ? "Report anonymously" : "Provide my name",
+        name: mode === "identified" ? "Provide my name" : "Report anonymously",
       }),
     );
     if (mode === "identified")
       await user.type(screen.getByLabelText("Your name *"), "Fictional Person");
+    if (["disabled", "incomplete"].includes(mode)) {
+      await waitFor(() =>
+        expect(
+          screen.queryByText("Optional service participation"),
+        ).not.toBeInTheDocument(),
+      );
+      await user.click(screen.getByRole("button", { name: "Review request" }));
+      expect(
+        screen.queryByText("Optional service participation"),
+      ).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Submit Request" }));
+      await waitFor(() => expect(create).toHaveBeenCalledOnce());
+      const payload = mapIntakeToCreateServiceRequest(create.mock.calls[0][0]);
+      expect(payload).not.toHaveProperty("participation");
+      expect(payload).not.toHaveProperty("contact");
+      return;
+    }
     await user.selectOptions(await screen.findByLabelText(question), area);
     await user.click(screen.getByRole("button", { name: "Review request" }));
     expect(
@@ -155,23 +182,39 @@ test.each(["anonymous", "identified"])(
     expect(payload.location.enteredAddress).toBe("Fictional Service Lane");
   },
 );
-test("F051 unavailable area catalog is optional and retries without exposing error details", async () => {
-  const repo = {
-    areas: vi
-      .fn()
-      .mockRejectedValueOnce(Error("private"))
-      .mockResolvedValueOnce([]),
-  };
-  render(<ParticipationInput repository={repo} onChange={vi.fn()} />);
-  expect(
-    await screen.findByText(/submit without this optional/),
-  ).toBeInTheDocument();
-  expect(screen.queryByText("private")).not.toBeInTheDocument();
-  await userEvent.click(
-    screen.getByRole("button", { name: "Retry participation areas" }),
-  );
-  expect(await screen.findByLabelText(question)).not.toBeRequired();
-});
+test.each([
+  { collectionEnabled: false, items: [] },
+  { collectionEnabled: true, items: [] },
+  null,
+])(
+  "F051 unavailable collection is absent, clears stale selection and has no orphaned controls",
+  async (configuration) => {
+    const repo = {
+      areas: vi.fn(async () => {
+        if (configuration === null) throw Error("private diagnostic");
+        return configuration;
+      }),
+    };
+    const changed = vi.fn(),
+      available = vi.fn();
+    const { container } = render(
+      <ParticipationInput
+        repository={repo}
+        value={{ state: "PROVIDED", areaId: area }}
+        onChange={changed}
+        onAvailabilityChange={available}
+      />,
+    );
+    await waitFor(() => expect(changed).toHaveBeenCalledWith(undefined));
+    expect(container).toBeEmptyDOMElement();
+    expect(
+      screen.queryByText("Optional service participation"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(question)).not.toBeInTheDocument();
+    expect(screen.queryByText("Prefer not to say")).not.toBeInTheDocument();
+    expect(available).toHaveBeenCalledWith(false);
+  },
+);
 const summary = {
   period: { startDate: "2026-01-01", endDate: "2026-02-28" },
   suppressionThreshold: 5,

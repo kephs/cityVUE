@@ -93,6 +93,7 @@ export default function ReportIssuePage({
   });
   const [answers, setAnswers] = useState({});
   const [values, setValues] = useState(initialValues);
+  const [participationAvailable, setParticipationAvailable] = useState(false);
   const [errors, setErrors] = useState({});
   const [catalog, setCatalog] = useState({
     loading: data.mode === "api",
@@ -644,6 +645,7 @@ export default function ReportIssuePage({
                   data.participation && (
                     <ParticipationInput
                       repository={data.participation}
+                      onAvailabilityChange={setParticipationAvailable}
                       value={values.participation}
                       onChange={(participation) =>
                         setValues((old) => ({ ...old, participation }))
@@ -695,7 +697,7 @@ export default function ReportIssuePage({
                 </div>
               </div>
               <dl className="review-list">
-                {data.participation && (
+                {participationAvailable && (
                   <div className="review-pair">
                     <dt>Optional service participation</dt>
                     <dd>
