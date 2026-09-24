@@ -6,6 +6,12 @@ import ThemeToggle from "../components/theme/ThemeToggle.jsx";
 import { createApiClient } from "../api/apiClient.js";
 import { readResidentIntakeConfig } from "../config/runtimeConfig.js";
 import "./adminConfiguration.css";
+import {
+  ReqroBrand,
+  OrganizationBrand,
+  reqroBrand,
+  useAdminProductIdentity,
+} from "../branding/ReqroBrand.jsx";
 import IntakeCollectionEditor from "./IntakeCollectionEditor.jsx";
 
 const sections = [
@@ -63,6 +69,11 @@ export function AdminConfiguration({ client }) {
   const [issuePage, setIssuePage] = useState(1),
     [areaPage, setAreaPage] = useState(1);
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationButton = useRef(null);
+  const closeNavigation = () => {
+    setNavigationOpen(false);
+    navigationButton.current?.focus();
+  };
   const [saveNotice, setSaveNotice] = useState("");
   const saveStatus = useRef(null);
   useEffect(() => {
@@ -107,36 +118,80 @@ export function AdminConfiguration({ client }) {
         Skip to administration content
       </a>
       <header className="configuration-header">
-        <Link to="/staff/requests">← Staff workspace</Link>
-        <span>Administration</span>
-        <ThemeToggle />
+        <div className="configuration-product">
+          <ReqroBrand compact />
+          <div>
+            <span className="configuration-portal-name">
+              Reqro Administration
+            </span>
+            <span className="configuration-portal-subtitle">
+              Organization configuration
+            </span>
+          </div>
+        </div>
+        <div className="configuration-header-actions">
+          <Link to="/staff/requests">← Staff workspace</Link>
+          <ThemeToggle />
+        </div>
       </header>
       <div className="configuration-layout">
-        <aside className="configuration-navigation">
+        <aside
+          className="configuration-navigation"
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && navigationOpen) {
+              event.preventDefault();
+              closeNavigation();
+            }
+          }}
+        >
           <button
-            className="btn btn-outline-primary configuration-menu"
+            ref={navigationButton}
+            className="btn configuration-menu"
             aria-expanded={navigationOpen}
             aria-controls="configuration-navigation"
             onClick={() => setNavigationOpen(!navigationOpen)}
           >
-            Administration sections
+            <i className="bi bi-list" aria-hidden="true" />{" "}
+            {navigationOpen ? "Close navigation" : "Administration sections"}
           </button>
-          <nav
-            id="configuration-navigation"
-            aria-label="Administration sections"
-            className={navigationOpen ? "is-open" : ""}
+          <div
+            className={
+              navigationOpen
+                ? "configuration-navigation-content is-open"
+                : "configuration-navigation-content"
+            }
           >
-            {sections.map(([key, label]) => (
-              <NavLink
-                key={key}
-                to={key ? `/admin/${key}` : "/admin"}
-                end
-                onClick={() => setNavigationOpen(false)}
-              >
-                {label}
-              </NavLink>
-            ))}
-          </nav>
+            <nav
+              id="configuration-navigation"
+              aria-label="Administration sections"
+            >
+              {[
+                ["Workspace", sections.slice(0, 1), "grid"],
+                ["Service Requests", sections.slice(1, 4), "inboxes"],
+                ["Analytics & Privacy", sections.slice(4, 5), "shield-check"],
+                ["System", sections.slice(5), "gear"],
+              ].map(([group, items, icon]) => (
+                <section className="configuration-nav-group" key={group}>
+                  <h2>{group}</h2>
+                  {items.map(([key, label]) => (
+                    <NavLink
+                      key={key}
+                      to={key ? `/admin/${key}` : "/admin"}
+                      end
+                      onClick={() => {
+                        setNavigationOpen(false);
+                        heading.current?.focus();
+                      }}
+                    >
+                      <i className={`bi bi-${icon}`} aria-hidden="true" />
+                      {label}
+                    </NavLink>
+                  ))}
+                </section>
+              ))}
+            </nav>
+            <OrganizationBrand branding={data?.branding} />
+          </div>
         </aside>
         <main
           id="configuration-main"
@@ -180,6 +235,16 @@ export function AdminConfiguration({ client }) {
               </button>
               {section === "" && (
                 <>
+                  <div className="configuration-welcome">
+                    <p className="configuration-eyebrow">
+                      Your administration workspace
+                    </p>
+                    <h2>Configuration at a glance</h2>
+                    <p>
+                      Review your Organization’s service setup and keep intake
+                      working clearly and consistently.
+                    </p>
+                  </div>
                   <Values
                     items={[
                       ["Issues configured", data.issues.total],
@@ -400,6 +465,9 @@ export function AdminConfiguration({ client }) {
               )}
             </>
           )}
+          {section === "" && (
+            <p className="configuration-brand-message">{reqroBrand.message}</p>
+          )}
         </main>
       </div>
     </div>
@@ -407,6 +475,7 @@ export function AdminConfiguration({ client }) {
 }
 export default function AdminConfigurationPage() {
   const auth = useAuth();
+  useAdminProductIdentity();
   const client = useMemo(
     () =>
       createApiClient({
@@ -416,18 +485,26 @@ export default function AdminConfigurationPage() {
     [auth.getAccessToken],
   );
   return (
-    <StaffRouteGuard
-      requireEntra
-      title="Administration"
-      disabledMessage="Administration requires configured staff sign-in."
-      signInMessage="Sign in with an authorized staff account to view Organization configuration."
-    >
-      {auth.enabled && auth.isAuthenticated && (
-        <AdminConfiguration
-          key={auth.account?.homeAccountId || "staff"}
-          client={client}
-        />
+    <>
+      {(!auth.enabled || !auth.isAuthenticated) && (
+        <div className="configuration-signin-brand">
+          <ReqroBrand />
+          <p>{reqroBrand.tagline}</p>
+        </div>
       )}
-    </StaffRouteGuard>
+      <StaffRouteGuard
+        requireEntra
+        title="Reqro Administration"
+        disabledMessage="Administration requires configured staff sign-in."
+        signInMessage="Sign in with an authorized staff account to view Organization configuration."
+      >
+        {auth.enabled && auth.isAuthenticated && (
+          <AdminConfiguration
+            key={auth.account?.homeAccountId || "staff"}
+            client={client}
+          />
+        )}
+      </StaffRouteGuard>
+    </>
   );
 }

@@ -202,3 +202,45 @@ test("F052 empty states are truthful and configuration pagination is bounded", a
   await screen.findByText("No Issues are configured.");
   expect(screen.getByRole("button", { name: "Next issues" })).toBeDisabled();
 });
+
+test("F054 authorized branding clears on denied refresh; preview content stays excluded", async () => {
+  const client = {
+    get: vi
+      .fn()
+      .mockResolvedValue({
+        ...snapshot,
+        branding: {
+          mode: "ORGANIZATION",
+          displayName: "Example Organization",
+          tagline: "Community Services",
+          logoKey: "example-organization",
+          revision: 2,
+        },
+      }),
+  };
+  view(client);
+  expect(await screen.findByText("Example Organization")).toBeInTheDocument();
+  expect(screen.queryByText("Administrator (Demo)")).not.toBeInTheDocument();
+  expect(screen.queryByText("Total Issues")).not.toBeInTheDocument();
+  client.get.mockRejectedValue({ status: 403 });
+  await userEvent.click(
+    screen.getByRole("button", { name: "Refresh configuration" }),
+  );
+  await screen.findByRole("alert");
+  expect(screen.queryByText("Example Organization")).not.toBeInTheDocument();
+  expect(screen.getByText("People • Requests • Progress")).toBeInTheDocument();
+});
+test("F054 navigation opens, Escape closes and restores focus without changing configuration", async () => {
+  const client = { get: vi.fn().mockResolvedValue(snapshot) };
+  view(client);
+  await screen.findByRole("button", { name: "Refresh configuration" });
+  const toggle = screen.getByRole("button", {
+    name: "Administration sections",
+  });
+  await userEvent.click(toggle);
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await userEvent.keyboard("{Escape}");
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(toggle).toHaveFocus();
+  expect(client.get).toHaveBeenCalledTimes(1);
+});

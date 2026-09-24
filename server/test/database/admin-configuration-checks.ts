@@ -1,3 +1,4 @@
+import { up as brandingUp } from '../../migrations/20261001000000-add-organization-branding.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { TestContext } from 'node:test';
@@ -82,6 +83,7 @@ export async function checkAdminConfiguration(
       );
     },
   );
+  await db.transaction().execute(brandingUp);
   const identity = await db
     .selectFrom('staff_identity')
     .select(['entra_tenant_id'])
@@ -246,6 +248,7 @@ export async function checkAdminConfiguration(
       ]);
       assert.deepEqual(one, two);
       assert.deepEqual(Object.keys(one).sort(), [
+        'branding',
         'capabilities',
         'collection',
         'health',

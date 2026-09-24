@@ -1,5 +1,7 @@
 # Reqro Feature Records
 
+[F054 — Admin Portal and branding foundation](F054-admin-portal-branding-foundation.md): implementation, automated/live validation and privacy/integrity gates passed; approved Reqro assets, independent Organization branding and protected Admin presentation.
+
 [F053 — Admin Intake Settings Management](F053-admin-intake-settings-management.md): implemented and validated; narrow collection write, optimistic concurrency and safe immutable audit. See the [report](F053-implementation-report.md). No push/deployment/F054.
 
 [F052 — Organization Administration & Configuration Foundation](F052-organization-administration-foundation.md): implemented and validated; read-only configuration, independent administrative permission and resource revisions. No push/deployment/F053.

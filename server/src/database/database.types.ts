@@ -432,6 +432,15 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  organization_branding: {
+    organization_id: string;
+    display_name: string | null;
+    tagline: string | null;
+    logo_key: string | null;
+    revision: Generated<number>;
+    created_at: Generated<Timestamp>;
+    updated_at: Generated<Timestamp>;
+  };
   participation_collection_audit: {
     id: Generated<string>;
     organization_id: string;

@@ -1,3 +1,4 @@
+import { brandingProjection } from '../database/organization-branding.js';
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { sql } from 'kysely';
@@ -89,6 +90,13 @@ export class AdminConfigurationService {
           .where('status', '=', 'active')
           .executeTakeFirst();
         if (!organization) throw new ForbiddenException('Access denied');
+        const brand = await trx
+          .selectFrom('organization_branding')
+          .select(['display_name', 'tagline', 'logo_key', 'revision'])
+          .where('organization_id', '=', org)
+          .executeTakeFirst();
+        if (!brand) throw new Error('Branding configuration unavailable');
+        const branding = brandingProjection(brand);
         const issues = issueConfiguration(org);
         const totals = (
           await sql<{
@@ -133,6 +141,7 @@ export class AdminConfigurationService {
           revision: organization.participation_collection_revision,
         };
         return {
+          branding,
           capabilities: {
             canWriteIntakeSettings: access.permissions.includes(
               'admin.intake_settings.write',
@@ -203,6 +212,14 @@ export class AdminConfigurationService {
               resource: 'Analytics privacy',
               severity: 'OK',
               message: `The deployment privacy threshold is ${String(threshold)} requests and meets the hard minimum of 5.`,
+            },
+            {
+              resource: 'Organization branding',
+              severity: 'OK',
+              message:
+                branding.mode === 'ORGANIZATION'
+                  ? 'Organization branding configured. Product identity remains Reqro.'
+                  : 'Using Reqro default branding.',
             },
           ],
         };

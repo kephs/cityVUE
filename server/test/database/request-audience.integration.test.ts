@@ -1,3 +1,4 @@
+import { checkOrganizationBranding } from './organization-branding-checks.js';
 import { checkAdminIntakeSettings } from './admin-intake-settings-checks.js';
 import { checkIssueDefaults } from './issue-default-assignment-checks.js';
 import { checkParticipation } from './participation-checks.js';
@@ -2467,6 +2468,14 @@ test(
           db,
           org,
           creator,
+          logs: contactLogs,
+        });
+        await checkOrganizationBranding(t, {
+          app,
+          db,
+          org,
+          creator,
+          otherStaff,
           logs: contactLogs,
         });
       } finally {

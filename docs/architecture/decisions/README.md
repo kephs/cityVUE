@@ -1,5 +1,7 @@
 # Reqro architecture decisions
 
+[ADR-015 — Product and Organization branding](ADR-015-product-organization-branding.md): F054 implementation decision for review; trusted packaged assets, independent resource and protected projection, deferred production uploads/writes.
+
 [ADR-014 — Administrative configuration authorization](ADR-014-administrative-configuration-authorization.md): F052 separate administrative domain, read-only snapshot, resource revisions and deployment-policy separation.
 
 [ADR-013 — Explicit participation geography and scoped aggregates](ADR-013-operational-participation-geography.md) records the explicitly approved F051 design: service-participation area rather than residence, request-only voluntary collection, independent identity/location, dedicated permission plus existing PUBLIC scope, and server suppression without totals or percentages. Automated and live development validation passed; see the [report](../../features/F051-implementation-report.md).
