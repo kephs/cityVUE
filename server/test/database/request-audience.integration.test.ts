@@ -1,5 +1,6 @@
 import { checkIssueDefaults } from './issue-default-assignment-checks.js';
 import { checkParticipation } from './participation-checks.js';
+import { checkAdminConfiguration } from './admin-configuration-checks.js';
 import { checkRequesterIdentityPolicy } from './requester-identity-policy-checks.js';
 import { checkTrustedRequesterHistory } from './trusted-requester-history-checks.js';
 import {
@@ -2450,6 +2451,14 @@ test(
           targetDepartment,
           publicPayload: assisted,
           internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkAdminConfiguration(t, {
+          app,
+          db,
+          org,
+          creator,
+          otherStaff,
           logs: contactLogs,
         });
       } finally {

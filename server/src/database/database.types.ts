@@ -6,6 +6,7 @@ type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type JsonValue = ColumnType<unknown, unknown, unknown>;
 
 interface OrganizationTable {
+  participation_collection_revision: Generated<number>;
   service_participation_collection_enabled: Generated<boolean>;
   id: string;
   name: string;
@@ -432,6 +433,7 @@ export interface RequestCommunicationTable {
 
 export interface DatabaseSchema {
   participation_area: {
+    revision: Generated<number>;
     id: Generated<string>;
     organization_id: string;
     display_name: string;

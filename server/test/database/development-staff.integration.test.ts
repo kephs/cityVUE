@@ -826,6 +826,46 @@ test(
         },
       );
       await t.test(
+        'F052 narrow Admin provisioning is dry-run safe, idempotent and separately revocable without other permissions or scope changes',
+        async () => {
+          const before = await state(),
+            prior = await auth.resolve(principal);
+          const existingDepartment = prior.departmentIds[0];
+          assert.ok(existingDepartment);
+          const selection: DevelopmentStaffSelection = {
+            ...input,
+            scopes: [{ departmentId: existingDepartment, divisionId: null }],
+            permissions: ['admin.configuration.read'],
+          };
+          assert.ok(!prior.permissions.includes('admin.configuration.read'));
+          await changeDevelopmentStaffGrants(db, selection, 'provision', true);
+          assert.deepEqual(await state(), before);
+          await changeDevelopmentStaffGrants(db, selection, 'provision', false);
+          const granted = await auth.resolve(principal);
+          assert.deepEqual(
+            granted.permissions
+              .filter((p) => p !== 'admin.configuration.read')
+              .sort(),
+            prior.permissions.sort(),
+          );
+          assert.deepEqual(granted.departmentIds, prior.departmentIds);
+          assert.deepEqual(granted.divisionIds, prior.divisionIds);
+          const applied = await state();
+          await changeDevelopmentStaffGrants(db, selection, 'provision', false);
+          assert.deepEqual(await state(), applied);
+          await changeDevelopmentStaffGrants(
+            db,
+            selection,
+            'deprovision',
+            false,
+          );
+          assert.deepEqual(
+            (await auth.resolve(principal)).permissions.sort(),
+            prior.permissions.sort(),
+          );
+        },
+      );
+      await t.test(
         'externally altered or shared F036 role fails closed',
         async () => {
           const role = await db

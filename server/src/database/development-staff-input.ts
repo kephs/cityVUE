@@ -27,6 +27,7 @@ const fullUatOperatorPermissions = [
 ] as const satisfies readonly Permission[];
 
 export const developmentStaffPermissions = [
+  'admin.configuration.read',
   'analytics.service_participation.read',
   ...fullUatOperatorPermissions,
   'geospatial.read',

@@ -6,6 +6,7 @@ import {
   developmentOrganization,
 } from './development-staff-input.js';
 import { DatabaseService } from './database.service.js';
+import { setParticipationCollection } from './participation-configuration.js';
 
 async function run() {
   const [command, mode] = process.argv.slice(2);
@@ -58,6 +59,7 @@ async function run() {
           'slug',
           'status',
           'service_participation_collection_enabled',
+          'participation_collection_revision',
         ])
         .where('id', '=', developmentOrganization.id)
         .executeTakeFirst();
@@ -67,14 +69,14 @@ async function run() {
         org.status !== 'active'
       )
         throw Error('Unexpected Organization');
-      if (setting && flag === '--confirm')
-        await trx
-          .updateTable('organization')
-          .set({
-            service_participation_collection_enabled: command === 'enable',
-          })
-          .where('id', '=', developmentOrganization.id)
-          .execute();
+      const updated =
+        setting && flag === '--confirm'
+          ? await setParticipationCollection(
+              trx,
+              developmentOrganization.id,
+              command === 'enable',
+            )
+          : undefined;
       if (!setting && !statusOnly && flag === '--confirm')
         for (const [index, label] of [
           'Fictional North Area',
@@ -104,6 +106,9 @@ async function run() {
         .execute();
       return {
         collectionEnabled: enabled,
+        collectionRevision:
+          updated?.participation_collection_revision ??
+          org.participation_collection_revision,
         activeAreaCount: active.length,
         state: !enabled ? 'disabled' : active.length ? 'ready' : 'incomplete',
         dryRun: flag === '--dry-run',

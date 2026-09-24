@@ -19,6 +19,9 @@ const RequesterTrackingPage = lazy(
 const HomePage = lazy(() => import("../pages/HomePage.jsx"));
 const AIPreviewPage = lazy(() => import("../ai/AIPreviewPage.jsx"));
 const AdminPreviewPage = lazy(() => import("../admin/AdminPreviewPage.jsx"));
+const AdminConfigurationPage = lazy(
+  () => import("../admin/AdminConfigurationPage.jsx"),
+);
 const MapPreviewPage = lazy(() => import("../map/MapPreviewPage.jsx"));
 const AIWorkspacePage = lazy(() => import("../ai/AIWorkspacePage.jsx"));
 const IssuesPage = lazy(() => import("../pages/issues/IssuesPage.jsx"));
@@ -42,6 +45,16 @@ function redirectLegacyReport({ request }) {
 }
 
 const router = createBrowserRouter([
+  {
+    path: "/admin/:section?",
+    element: (
+      <AuthRoot>
+        <Suspense fallback={<p role="status">Loading administration…</p>}>
+          <AdminConfigurationPage />
+        </Suspense>
+      </AuthRoot>
+    ),
+  },
   {
     path: "/track",
     element: (

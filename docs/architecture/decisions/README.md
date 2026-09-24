@@ -1,5 +1,7 @@
 # Reqro architecture decisions
 
+[ADR-014 — Administrative configuration authorization](ADR-014-administrative-configuration-authorization.md): F052 separate administrative domain, read-only snapshot, resource revisions and deployment-policy separation.
+
 [ADR-013 — Explicit participation geography and scoped aggregates](ADR-013-operational-participation-geography.md) records the explicitly approved F051 design: service-participation area rather than residence, request-only voluntary collection, independent identity/location, dedicated permission plus existing PUBLIC scope, and server suppression without totals or percentages. Automated and live development validation passed; see the [report](../../features/F051-implementation-report.md).
 
 [ADR-012 — Trusted requester identity and authorized history](ADR-012-trusted-requester-identity-history.md) records the F050 implementation decision, proposed for final review: Contact is not identity authority, synthetic development provenance is explicit, and history cannot expand request access.

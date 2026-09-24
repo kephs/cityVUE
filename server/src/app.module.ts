@@ -18,6 +18,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { AlertsModule } from './alerts/alerts.module.js';
 import { AiModule } from './ai/ai.module.js';
 import { GeospatialModule } from './geospatial/geospatial.module.js';
+import { AdminModule } from './admin/admin.module.js';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { GeospatialModule } from './geospatial/geospatial.module.js';
     AuthModule,
     AiModule,
     GeospatialModule,
+    AdminModule,
     HealthModule,
     CatalogModule,
     AlertsModule,
