@@ -51,6 +51,7 @@ export async function configureRequesterPolicy(
   staffId: string,
   input: RequesterPolicyInput,
   dryRun = false,
+  allowInactive = false,
 ) {
   if (
     !requesterPolicies.includes(input.policy) ||
@@ -66,7 +67,7 @@ export async function configureRequesterPolicy(
     .select('id')
     .where('organization_id', '=', org)
     .where('id', '=', issueId)
-    .where('status', '=', 'active');
+    .where('status', 'in', allowInactive ? ['active', 'inactive'] : ['active']);
   if (!dryRun) query = query.forUpdate();
   if (!(await query.executeTakeFirst()))
     throw new NotFoundException('Issue unavailable');

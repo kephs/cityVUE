@@ -118,6 +118,33 @@
 .participation-setup {
   max-width: 68rem;
 }
+.issue-configuration {
+  max-width: 68rem;
+}
+.issue-configuration .configuration-area-form > label {
+  display: block;
+  font-weight: 600;
+  margin-top: 1rem;
+}
+.issue-configuration fieldset {
+  margin-top: 1rem;
+}
+.issue-configuration .btn {
+  min-height: 2.75rem;
+  white-space: normal;
+}
+.issue-configuration [tabindex="-1"]:focus {
+  outline: 3px solid var(--bs-primary);
+  outline-offset: 3px;
+}
+.issue-configuration h2 {
+  overflow-wrap: anywhere;
+  font-size: 1.2rem;
+}
+.issue-configuration .form-control,
+.issue-configuration .form-select {
+  min-width: 0;
+}
 .participation-page-actions {
   display: flex;
   justify-content: flex-end;

@@ -46,3 +46,7 @@ Build the server before using `dist`; the equivalent package command is `dev:iss
 ## Query impact
 
 No new list query or filter is introduced. Single-Issue catalog reads and creation resolve policy with bounded Organization/Issue-keyed lookups, using primary keys and the current-published-version relationship. Creation adds one bounded policy query after its existing Issue lock; finalized retries bypass it. No per-list-row lookup, unbounded history load, content index or speculative search index is added. Larger-volume performance was not benchmarked for F049.
+
+## F056 integration (2026-09-24)
+
+The approved [F056 Issue editor](F056-admin-issue-configuration-management.md) composes stable core/catalog, action, requester-policy and default-assignment resources in one atomic transaction with independent expected revisions. It preserves this feature’s historical contract, permissions and domain audits. F048/F049 internal helpers explicitly permit inactive configuration only for the authorized coordinator; existing CLI defaults remain unchanged. See [ADR-017](../architecture/decisions/ADR-017-atomic-issue-configuration.md) and the [validation record](F056-implementation-report.md).

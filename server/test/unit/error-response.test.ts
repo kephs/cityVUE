@@ -26,3 +26,16 @@ test('HTTP errors retain only safe status metadata', () => {
     },
   );
 });
+test('F056 duplicate response uses fixed safe text rather than supplied exception content', () => {
+  const response = buildErrorResponse(
+    new BadRequestException({
+      code: 'ISSUE_DUPLICATE',
+      error: 'Bad Request',
+      message: 'private database detail',
+    }),
+    'request-1234',
+  );
+  assert.equal(response.message, 'An Issue with this name already exists.');
+  assert.equal(response.code, 'ISSUE_DUPLICATE');
+  assert.ok(!JSON.stringify(response).includes('private database detail'));
+});

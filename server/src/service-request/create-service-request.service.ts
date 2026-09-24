@@ -376,12 +376,16 @@ export class CreateServiceRequestService {
       // Serialize action changes against final submission, including stale published versions.
       const action = await trx
         .selectFrom('service_definition')
-        .select('action_type')
+        .select(['action_type', 'status'])
         .where('organization_id', '=', context.organizationId)
         .where('id', '=', definition.serviceDefinitionId)
         .forShare()
         .executeTakeFirst();
-      if (action?.action_type !== 'internal_intake')
+      if (action?.status !== 'active')
+        throw new ConflictException(
+          'This Issue is no longer available for new requests',
+        );
+      if (action.action_type !== 'internal_intake')
         throw new ConflictException(
           'This Issue is handled by an external service',
         );

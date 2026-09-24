@@ -32,3 +32,5 @@ The earlier `docs/decisions/` series remains at its original paths: [staff AI ga
 New decisions in this series use the next unused number and include title, status, context, decision, consequences, security/privacy implications and related evidence. Use Accepted only after approval; undecided work stays in the roadmap or an explicitly proposed record. Supersede an accepted ADR with linked history, or record a dated explicit amendment and rationale. Do not silently rewrite an accepted decision to conceal a change. Feature reports retain their historical implementation/UAT details.
 
 - [ADR-016 — Participation Area name uniqueness](ADR-016-participation-area-name-uniqueness.md): approved Organization-scoped trimmed/case-insensitive namespace across active and inactive areas.
+
+- [ADR-017 — Atomic Issue configuration](ADR-017-atomic-issue-configuration.md): approved independent revisions, immutable history, template creation, ordering and name integrity.

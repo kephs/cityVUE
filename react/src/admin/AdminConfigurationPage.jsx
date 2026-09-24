@@ -13,6 +13,7 @@ import {
   useAdminProductIdentity,
 } from "../branding/ReqroBrand.jsx";
 import ParticipationSetup from "./ParticipationSetup.jsx";
+import IssueConfiguration from "./IssueConfiguration.jsx";
 
 const sections = [
   ["", "Overview"],
@@ -33,39 +34,12 @@ function Values({ items }) {
     </dl>
   );
 }
-function Paging({ data, name, setPage }) {
-  return (
-    <nav
-      className="d-flex flex-wrap gap-3 align-items-center my-3"
-      aria-label={`${name} pages`}
-    >
-      <button
-        className="btn btn-outline-primary"
-        disabled={data.page <= 1}
-        onClick={() => setPage(data.page - 1)}
-      >
-        Previous {name.toLowerCase()}
-      </button>
-      <span>
-        Page {data.page} of {Math.max(1, Math.ceil(data.total / data.pageSize))}
-      </span>
-      <button
-        className="btn btn-outline-primary"
-        disabled={data.page * data.pageSize >= data.total}
-        onClick={() => setPage(data.page + 1)}
-      >
-        Next {name.toLowerCase()}
-      </button>
-    </nav>
-  );
-}
-
 export function AdminConfiguration({ client }) {
   const { section = "" } = useParams();
   const title = sections.find(([key]) => key === section)?.[1];
   const [state, setState] = useState(null),
     [attempt, setAttempt] = useState(0);
-  const [issuePage, setIssuePage] = useState(1);
+  const issuePage = 1;
   const areaPage = 1;
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationButton = useRef(null);
@@ -219,7 +193,7 @@ export function AdminConfiguration({ client }) {
             </div>
           ) : (
             <>
-              {section !== "participation" && (
+              {section !== "participation" && section !== "issues" && (
                 <button
                   className="btn btn-outline-primary mb-4"
                   onClick={refresh}
@@ -272,64 +246,11 @@ export function AdminConfiguration({ client }) {
                 </>
               )}
               {section === "issues" && (
-                <>
-                  <p>
-                    Published catalog versions, Issue action, identity policy
-                    and default assignment have separate version/revision
-                    values. Availability reflects the current catalog.
-                  </p>
-                  {!data.issues.total && <p>No Issues are configured.</p>}
-                  <ul className="configuration-cards">
-                    {data.issues.items.map((issue) => (
-                      <li key={issue.key}>
-                        <h2>{issue.name}</h2>
-                        <Values
-                          items={[
-                            ["Category", issue.category],
-                            [
-                              "Availability",
-                              issue.available ? "Available" : "Unavailable",
-                            ],
-                            [
-                              "Requester policy",
-                              issue.identityPolicy.value === "ANONYMOUS_ALLOWED"
-                                ? "Anonymous submission allowed"
-                                : "Identification required",
-                            ],
-                            [
-                              "Default assignment",
-                              issue.defaultAssignment.label,
-                            ],
-                            [
-                              "Published version",
-                              issue.publishedVersion ?? "Not published",
-                            ],
-                            ["Action revision", issue.action.revision],
-                            [
-                              "Identity policy revision",
-                              issue.identityPolicy.revision,
-                            ],
-                            [
-                              "Assignment revision",
-                              issue.defaultAssignment.revision,
-                            ],
-                          ]}
-                        />
-                        {issue.defaultAssignment.state === "unavailable" && (
-                          <p className="configuration-warning">
-                            <strong>WARNING:</strong> Configured target is
-                            unavailable. No repair has been performed.
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  <Paging
-                    name="Issues"
-                    data={data.issues}
-                    setPage={setIssuePage}
-                  />
-                </>
+                <IssueConfiguration
+                  key={attempt}
+                  client={client}
+                  onDenied={refresh}
+                />
               )}
               {section === "participation" && (
                 <ParticipationSetup

@@ -58,6 +58,7 @@ export async function configureIssueDefault(
   staffId: string,
   input: DefaultAssignmentInput,
   dryRun = false,
+  allowInactive = false,
 ) {
   validateDefaultAssignment(input);
   let issueQuery = db
@@ -70,7 +71,11 @@ export async function configureIssueDefault(
     .select(['issue.id', 'category.department_id', 'category.division_id'])
     .where('issue.organization_id', '=', org)
     .where('issue.id', '=', issueId)
-    .where('issue.status', '=', 'active')
+    .where(
+      'issue.status',
+      'in',
+      allowInactive ? ['active', 'inactive'] : ['active'],
+    )
     .where('category.status', '=', 'active');
   if (!dryRun) issueQuery = issueQuery.forUpdate('issue').forShare('category');
   const issue = await issueQuery.executeTakeFirst();

@@ -49,6 +49,7 @@ export function buildErrorResponse(
         ? candidateCode
         : undefined;
     const areaMessages: Record<string, string> = {
+      ISSUE_DUPLICATE: 'An Issue with this name already exists.',
       PARTICIPATION_AREA_DUPLICATE:
         'A Participation Area with this name already exists.',
       PARTICIPATION_AREA_LAST_ACTIVE:

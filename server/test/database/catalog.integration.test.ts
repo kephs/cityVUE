@@ -1,4 +1,5 @@
 import { up as identityPolicyUp } from '../../migrations/20260925000000-add-requester-identity-policy.js';
+import { up as issueConfigurationUp } from '../../migrations/20261003000000-add-admin-issue-configuration.js';
 import { up as requestUp } from '../../migrations/20260902010000-create-service-request-foundation.js';
 import { up as staffUp } from '../../migrations/20260903010000-add-staff-assignment-workflow-foundation.js';
 import { up as authUp } from '../../migrations/20260903020000-add-entra-rbac-foundation.js';
@@ -47,6 +48,7 @@ test(
       await authUp(db);
       await actionUp(db);
       await identityPolicyUp(db);
+      await issueConfigurationUp(db);
       const org1 = randomUUID();
       const org2 = randomUUID();
       const department1 = randomUUID();

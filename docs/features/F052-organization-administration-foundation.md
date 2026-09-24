@@ -68,3 +68,7 @@ Production prerequisites remain approved administrator governance/provisioning, 
 ## F055 management follow-up
 
 [F055](F055-admin-participation-area-management.md) extends only Participation Areas with independent read-plus-area-write authorization. The existing per-area revisions and paginated read projection remain; numeric order changes check the affected area revision without introducing a global revision. The snapshot adds an independently derived canWriteParticipationAreas capability.
+
+## F056 integration (2026-09-24)
+
+The approved [F056 Issue editor](F056-admin-issue-configuration-management.md) composes stable core/catalog, action, requester-policy and default-assignment resources in one atomic transaction with independent expected revisions. It preserves this feature’s historical contract, permissions and domain audits. F048/F049 internal helpers explicitly permit inactive configuration only for the authorized coordinator; existing CLI defaults remain unchanged. See [ADR-017](../architecture/decisions/ADR-017-atomic-issue-configuration.md) and the [validation record](F056-implementation-report.md).

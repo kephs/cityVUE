@@ -28,6 +28,7 @@ const fullUatOperatorPermissions = [
 
 export const developmentStaffPermissions = [
   'admin.participation_areas.write',
+  'admin.issues.write',
   'admin.intake_settings.write',
   'admin.configuration.read',
   'analytics.service_participation.read',

@@ -59,3 +59,5 @@ Other historical specifications remain in this directory. New features should li
 - [F055 — Admin Participation Area Management](F055-admin-participation-area-management.md): implemented and validated locally; see the [validation record](F055-implementation-report.md). No push or deployment.
 
 - [Post-F055 Participation Setup UX consolidation](F055-participation-setup-refinement.md): unnumbered presentation refinement; separate F053/F055 backend contracts, no F056.
+
+- [F056 — Admin Issue Configuration Management](F056-admin-issue-configuration-management.md): implemented and validated locally; [validation record](F056-implementation-report.md).

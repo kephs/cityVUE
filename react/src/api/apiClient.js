@@ -11,6 +11,12 @@ export class CityVueApiError extends Error {
 }
 
 function publicMessage(status, path, code) {
+  if (
+    status === 400 &&
+    path.startsWith("/admin/issues") &&
+    code === "ISSUE_DUPLICATE"
+  )
+    return [code, "An Issue with this name already exists."];
   if (status === 400 && path.startsWith("/admin/participation-areas")) {
     if (code === "PARTICIPATION_AREA_DUPLICATE")
       return [code, "A Participation Area with this name already exists."];

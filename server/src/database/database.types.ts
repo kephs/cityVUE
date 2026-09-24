@@ -39,6 +39,9 @@ interface CategoryTable extends DepartmentTable {
   keywords: string[];
 }
 interface ServiceDefinitionTable {
+  display_order: Generated<number>;
+  core_revision: Generated<number>;
+  current_display_name: Generated<string | null>;
   id: string;
   organization_id: string;
   category_id: string;

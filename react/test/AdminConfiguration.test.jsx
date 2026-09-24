@@ -149,15 +149,15 @@ test.each([
 ])(
   "F052 %s renders authoritative read-only values and meaningful navigation",
   async (section, text) => {
-    const client = { get: vi.fn().mockResolvedValue(snapshot) };
+    const client = { get: vi.fn(async (url) => url.startsWith("/admin/issues?") ? { total: 1, active: 1, page: 1, pageSize: 25, canWrite: false, items: [{ id: "fictional", name: "Fictional Sign Issue", category: "Fictional Roads", active: true, displayOrder: 0, requesterPolicy: "ANONYMOUS_ALLOWED", defaultAssignment: null }] } : snapshot) };
     view(client, `/admin/${section}`);
     await screen.findByRole("button", {
       name: ["intake", "participation"].includes(section)
         ? "Refresh Participation Setup"
-        : "Refresh configuration",
+        : section === "issues" ? "Refresh Issues" : "Refresh configuration",
     });
     expect(
-      screen.getByText(text, {
+      await screen.findByText(text, {
         selector: section === "status" ? "h1" : undefined,
       }),
     ).toBeInTheDocument();
@@ -240,14 +240,11 @@ test("F052 an old authenticated client cannot repopulate configuration after acc
 });
 test("F052 empty states are truthful and configuration pagination is bounded", async () => {
   const client = {
-    get: vi.fn().mockResolvedValue({
-      ...snapshot,
-      issues: { ...snapshot.issues, total: 0, items: [] },
-    }),
+    get: vi.fn(async url => url.startsWith("/admin/issues?") ? {total:0,active:0,items:[],page:1,pageSize:25,canWrite:false} : snapshot),
   };
   view(client, "/admin/issues");
-  await screen.findByText("No Issues are configured.");
-  expect(screen.getByRole("button", { name: "Next issues" })).toBeDisabled();
+  await screen.findByText(/No Issues are configured/);
+  expect(screen.queryByRole("navigation", { name: "Issue pages" })).not.toBeInTheDocument();
 });
 
 test("F054 authorized branding clears on denied refresh; preview content stays excluded", async () => {

@@ -90,7 +90,11 @@ export class CatalogRepository {
         ]),
       );
     }
-    return query.orderBy('version.name').execute();
+    return query
+      .orderBy('service.display_order')
+      .orderBy('version.name')
+      .orderBy('service.id')
+      .execute();
   }
 
   async getPublishedIssue(organizationId: string, serviceDefinitionId: string) {
