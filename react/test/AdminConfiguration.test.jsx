@@ -102,7 +102,7 @@ test.each([401, 403, 500])(
 );
 test.each([
   ["issues", "Fictional Sign Issue"],
-  ["intake", "Collection revision"],
+  ["intake", "Service Participation"],
   ["participation", "Fictional North"],
   ["privacy", "Deployment policy"],
   ["status", "Configuration Status"],

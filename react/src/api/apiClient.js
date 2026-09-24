@@ -162,5 +162,7 @@ export function createApiClient({
     get: (path, options) => request(path, options),
     post: (path, body, options) =>
       request(path, { ...options, method: "POST", body }),
+    patch: (path, body, options) =>
+      request(path, { ...options, method: "PATCH", body }),
   };
 }

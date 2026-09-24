@@ -98,6 +98,26 @@
   padding: 0.75rem;
   border-radius: 0.5rem;
 }
+.configuration-choice {
+  max-width: 24rem;
+}
+.configuration-dialog {
+  width: min(36rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding: 1.5rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  color: var(--bs-body-color);
+  background: var(--bs-body-bg);
+}
+.configuration-dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+.configuration-dialog h2 {
+  font-size: 1.5rem;
+}
 @media (max-width: 991.98px) {
   .configuration-layout {
     grid-template-columns: minmax(0, 1fr);

@@ -1,13 +1,34 @@
 import type { Kysely } from 'kysely';
+import { BadRequestException } from '@nestjs/common';
 import type { DatabaseSchema } from './database.types.js';
 
 /** Internal provisioning helper; caller establishes the explicit development target.
  * The database advances only this resource's revision for a meaningful change. */
-export function setParticipationCollection(
+export async function validateCollectionEnable(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  lock = true,
+) {
+  let query = db
+    .selectFrom('participation_area')
+    .select('id')
+    .where('organization_id', '=', organizationId)
+    .where('active', '=', true)
+    .limit(1);
+  if (lock) query = query.forShare();
+  const area = await query.executeTakeFirst();
+  if (!area)
+    throw new BadRequestException(
+      'Service Participation cannot be enabled because no active Participation Areas are configured. Participation Area management is not available in this version.',
+    );
+}
+
+export async function setParticipationCollection(
   db: Kysely<DatabaseSchema>,
   organizationId: string,
   enabled: boolean,
 ) {
+  if (enabled) await validateCollectionEnable(db, organizationId);
   return db
     .updateTable('organization')
     .set({ service_participation_collection_enabled: enabled })

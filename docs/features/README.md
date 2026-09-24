@@ -1,5 +1,7 @@
 # Reqro Feature Records
 
+[F053 — Admin Intake Settings Management](F053-admin-intake-settings-management.md): implemented and validated; narrow collection write, optimistic concurrency and safe immutable audit. See the [report](F053-implementation-report.md). No push/deployment/F054.
+
 [F052 — Organization Administration & Configuration Foundation](F052-organization-administration-foundation.md): implemented and validated; read-only configuration, independent administrative permission and resource revisions. No push/deployment/F053.
 
 [F051 — Requester Geography & Service Participation](F051-requester-geography-service-participation.md): implemented and validated; development migration, authenticated UAT and user-confirmed logging privacy passed. See the [report](F051-implementation-report.md). Optional explicit request-level area stays independent of identity and Service Location. Dedicated analytics permission never expands existing request scope; positive small cells are suppressed server-side. No push/deployment or F052 authorization. Earlier entries retain historical checkpoint authorizations.

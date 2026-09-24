@@ -432,6 +432,18 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  participation_collection_audit: {
+    id: Generated<string>;
+    organization_id: string;
+    staff_identity_id: string;
+    action: 'service_participation_collection_changed';
+    prior_enabled: boolean;
+    enabled: boolean;
+    prior_revision: number;
+    revision: number;
+    correlation_id: string;
+    occurred_at: Generated<Timestamp>;
+  };
   participation_area: {
     revision: Generated<number>;
     id: Generated<string>;

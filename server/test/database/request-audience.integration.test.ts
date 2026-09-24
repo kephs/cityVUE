@@ -1,3 +1,4 @@
+import { checkAdminIntakeSettings } from './admin-intake-settings-checks.js';
 import { checkIssueDefaults } from './issue-default-assignment-checks.js';
 import { checkParticipation } from './participation-checks.js';
 import { checkAdminConfiguration } from './admin-configuration-checks.js';
@@ -2459,6 +2460,13 @@ test(
           org,
           creator,
           otherStaff,
+          logs: contactLogs,
+        });
+        await checkAdminIntakeSettings(t, {
+          app,
+          db,
+          org,
+          creator,
           logs: contactLogs,
         });
       } finally {

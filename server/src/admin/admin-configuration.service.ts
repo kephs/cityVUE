@@ -133,6 +133,11 @@ export class AdminConfigurationService {
           revision: organization.participation_collection_revision,
         };
         return {
+          capabilities: {
+            canWriteIntakeSettings: access.permissions.includes(
+              'admin.intake_settings.write',
+            ),
+          },
           collection,
           issues: {
             page: issuePage,

@@ -6,7 +6,10 @@ import {
   developmentOrganization,
 } from './development-staff-input.js';
 import { DatabaseService } from './database.service.js';
-import { setParticipationCollection } from './participation-configuration.js';
+import {
+  setParticipationCollection,
+  validateCollectionEnable,
+} from './participation-configuration.js';
 
 async function run() {
   const [command, mode] = process.argv.slice(2);
@@ -69,6 +72,8 @@ async function run() {
         org.status !== 'active'
       )
         throw Error('Unexpected Organization');
+      if (command === 'enable' && flag === '--dry-run')
+        await validateCollectionEnable(trx, developmentOrganization.id, false);
       const updated =
         setting && flag === '--confirm'
           ? await setParticipationCollection(

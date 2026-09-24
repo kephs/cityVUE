@@ -6,6 +6,7 @@ import ThemeToggle from "../components/theme/ThemeToggle.jsx";
 import { createApiClient } from "../api/apiClient.js";
 import { readResidentIntakeConfig } from "../config/runtimeConfig.js";
 import "./adminConfiguration.css";
+import IntakeCollectionEditor from "./IntakeCollectionEditor.jsx";
 
 const sections = [
   ["", "Overview"],
@@ -62,6 +63,11 @@ export function AdminConfiguration({ client }) {
   const [issuePage, setIssuePage] = useState(1),
     [areaPage, setAreaPage] = useState(1);
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [saveNotice, setSaveNotice] = useState("");
+  const saveStatus = useRef(null);
+  useEffect(() => {
+    if (saveNotice) saveStatus.current?.focus();
+  }, [saveNotice]);
   const heading = useRef(null);
   useEffect(() => {
     heading.current?.focus();
@@ -140,7 +146,15 @@ export function AdminConfiguration({ client }) {
           <h1 tabIndex="-1" ref={heading}>
             {title || "Administration page not found"}
           </h1>
-          <p>Organization configuration is read-only in this version.</p>
+          <p>
+            Only Service Participation collection can be changed with separate
+            Intake Settings write permission. Other configuration is read-only.
+          </p>
+          {saveNotice && (
+            <p role="status" tabIndex="-1" ref={saveStatus}>
+              {saveNotice}
+            </p>
+          )}
           {!title ? (
             <Link to="/admin">Return to Administration</Link>
           ) : !current ? (
@@ -257,14 +271,31 @@ export function AdminConfiguration({ client }) {
               )}
               {section === "intake" && (
                 <>
-                  <Values
-                    items={[
-                      [
-                        "Service Participation collection",
-                        data.collection.enabled ? "Enabled" : "Disabled",
-                      ],
-                      ["Collection revision", data.collection.revision],
-                    ]}
+                  <IntakeCollectionEditor
+                    key={`${data.collection.revision}-${attempt}`}
+                    client={client}
+                    collection={data.collection}
+                    activeAreas={data.participationAreas.active}
+                    canWrite={
+                      data.capabilities?.canWriteIntakeSettings === true
+                    }
+                    onRefresh={refresh}
+                    onSaved={(result) => {
+                      setState({
+                        client,
+                        data: {
+                          ...data,
+                          collection: {
+                            enabled: result.enabled,
+                            revision: result.revision,
+                          },
+                        },
+                      });
+                      setSaveNotice(
+                        `Service Participation collection ${result.enabled ? "enabled" : "disabled"}.`,
+                      );
+                      setAttempt((n) => n + 1);
+                    }}
                   />
                   <p>
                     When enabled and active areas are available, requesters may

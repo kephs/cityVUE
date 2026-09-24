@@ -246,12 +246,14 @@ export async function checkAdminConfiguration(
       ]);
       assert.deepEqual(one, two);
       assert.deepEqual(Object.keys(one).sort(), [
+        'capabilities',
         'collection',
         'health',
         'issues',
         'participationAreas',
         'privacy',
       ]);
+      assert.deepEqual(one.capabilities, { canWriteIntakeSettings: false });
       assert.equal(one.privacy.source, 'deployment_policy');
       assert.ok(!('revision' in one.privacy));
       assert.ok(one.issues.items.length <= 25);
