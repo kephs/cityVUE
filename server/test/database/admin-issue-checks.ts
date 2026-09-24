@@ -10,6 +10,7 @@ import type { Permission } from '../../src/auth/auth.types.js';
 import type { IssueProjection } from '../../src/admin/admin-issue.service.js';
 import { ServiceRequestRepository } from '../../src/service-request/service-request.repository.js';
 import { CatalogRepository } from '../../src/catalog/catalog.repository.js';
+import { checkAdminIssueDiscovery } from './admin-issue-discovery-checks.js';
 import {
   up,
   down,
@@ -715,6 +716,14 @@ export async function checkAdminIssues(
       assert.ok((await auditCount()) > 0);
     },
   );
+  await checkAdminIssueDiscovery(t, {
+    db,
+    app,
+    org,
+    actor,
+    logs: c.logs,
+    templateId: template.id,
+  });
   await t.test(
     'F056 normal logs exclude mutation bodies, selected identities and descriptions',
     () => {

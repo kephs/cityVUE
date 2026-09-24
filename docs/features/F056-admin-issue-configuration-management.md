@@ -1,5 +1,7 @@
 # F056 — Admin Issue Configuration Management
 
+Subsequent [F056.1 discovery refinement](F056-1-issue-management-scalability-ux.md) replaces the UI’s current-page template dropdown and full-row list loading with dedicated summary/template search endpoints and authoritative detail on action entry. This F056 record retains its original checkpoint evidence; its mutation contract and existing list API remain compatible.
+
 Status: implemented and validated locally from synchronized `79f26a111cba380c3620f1095919ee625934c9fb`. No push, deployment or F057. Follow the [development protocol](../development/REQRO_CODEX_PROTOCOL.md).
 
 ## Approved design decisions

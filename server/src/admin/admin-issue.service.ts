@@ -95,6 +95,14 @@ export class AdminIssueService {
     if (!row) throw new NotFoundException('Issue unavailable');
     return row;
   }
+  async detail(access: StaffAccess | undefined, id: string) {
+    assertConfigurationRead(access);
+    if (!requestUuid.test(id)) throw new NotFoundException('Issue unavailable');
+    return this.database.client.transaction().execute(async (trx) => {
+      await sql`set transaction read only`.execute(trx);
+      return { issue: await this.readOne(trx, access.organizationId, id) };
+    });
+  }
   async list(access: StaffAccess | undefined, page = 1) {
     assertConfigurationRead(access);
     return this.database.client

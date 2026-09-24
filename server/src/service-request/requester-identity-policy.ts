@@ -23,9 +23,9 @@ export function effectiveRequesterPolicy(
 ) {
   return sql<RequesterIdentityPolicy>`coalesce(
     (select p.policy from issue_requester_identity_policy p where p.organization_id=${org} and p.service_definition_id=${issue}),
-    (select case when v.anonymous_reporting_policy in ('allowed','allowed_with_limitations') then 'ANONYMOUS_ALLOWED' else 'IDENTIFIED_REQUIRED' end
-     from service_definition i left join service_definition_version v on v.organization_id=i.organization_id and v.id=i.current_published_version_id
-     where i.organization_id=${org} and i.id=${issue}), 'IDENTIFIED_REQUIRED')`;
+    (select case when fallback_version.anonymous_reporting_policy in ('allowed','allowed_with_limitations') then 'ANONYMOUS_ALLOWED' else 'IDENTIFIED_REQUIRED' end
+     from service_definition fallback_issue left join service_definition_version fallback_version on fallback_version.organization_id=fallback_issue.organization_id and fallback_version.id=fallback_issue.current_published_version_id
+     where fallback_issue.organization_id=${org} and fallback_issue.id=${issue}), 'IDENTIFIED_REQUIRED')`;
 }
 
 export function validateIdentityContact(

@@ -171,11 +171,13 @@ export function AdminConfiguration({ client }) {
           <h1 tabIndex="-1" ref={heading}>
             {title || "Administration page not found"}
           </h1>
-          <p>
-            {section === "participation"
-              ? "Configure optional service-participation information for new requests."
-              : "Review your Organization’s configuration."}
-          </p>
+          {section !== "issues" && (
+            <p>
+              {section === "participation"
+                ? "Configure optional service-participation information for new requests."
+                : "Review your Organization’s configuration."}
+            </p>
+          )}
           {!title ? (
             <Link to="/admin">Return to Administration</Link>
           ) : !current ? (

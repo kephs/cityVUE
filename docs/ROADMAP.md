@@ -122,3 +122,5 @@ Selected and implemented as [F048](features/F048-issue-based-default-assignment.
 ## Decision and feature records
 
 Move a candidate through design, explicit approval, implementation and validation before marking it complete. Use [feature records](features/README.md) for requirements/evidence and the [ADR convention](architecture/decisions/README.md) for durable choices. Do not silently rewrite accepted decisions or turn roadmap entries into permission to use client resources.
+
+[F056.1 — Issue Management Scalability & UX](features/F056-1-issue-management-scalability-ux.md) adds bounded lightweight Issue discovery, URL-backed search/filter/sort/page-size controls, fresh detail loading and searchable intake templates from synchronized F056 `36065c0693b4855fe3587576bf327aef31f7bbaf`. Existing F056 APIs, permissions, writes and historical references remain intact. No migration or development configuration mutation was performed. See the [validation report](features/F056-1-implementation-report.md) for completion gates. No push, deployment, dynamic intake/redirect work or F057. Earlier checkpoint entries retain their historical scope.

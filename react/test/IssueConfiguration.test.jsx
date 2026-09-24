@@ -1,6 +1,7 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import IssueConfiguration from "../src/admin/IssueConfiguration.jsx";
 const sample = {
   id: "fictional-issue",
@@ -22,24 +23,32 @@ function setup(canWrite = true) {
   const onDenied = vi.fn();
   const client = {
     get: vi.fn(async (url) =>
-      url.includes("assignment-targets")
-        ? {
-            items: [
-              {
-                type: "role",
-                id: "fictional-role",
-                displayName: "Fictional Traffic Operations",
-              },
-            ],
-          }
-        : {
-            items,
-            total: items.length,
-            active: items.filter((i) => i.active).length,
-            page: 1,
-            pageSize: 25,
-            canWrite,
-          },
+      url === "/admin/issues/categories"
+        ? { items: [] }
+        : url.includes("templates?")
+          ? { items, hasMore: false }
+          : !url.includes("?") && !url.includes("assignment-targets")
+            ? { issue: items.find((i) => url.endsWith(i.id)) }
+            : url.includes("assignment-targets")
+              ? {
+                  items: [
+                    {
+                      type: "role",
+                      id: "fictional-role",
+                      displayName: "Fictional Traffic Operations",
+                    },
+                  ],
+                }
+              : {
+                  items,
+                  total: items.length,
+                  organizationTotal: items.length,
+                  inactive: items.filter((i) => !i.active).length,
+                  active: items.filter((i) => i.active).length,
+                  page: 1,
+                  pageSize: 25,
+                  canWrite,
+                },
     ),
     patch: vi.fn(async (id, body) => {
       const issue = {
@@ -67,13 +76,17 @@ function setup(canWrite = true) {
       return { issue, changed: true };
     }),
   };
-  render(<IssueConfiguration client={client} onDenied={onDenied} />);
+  render(
+    <MemoryRouter>
+      <IssueConfiguration client={client} onDenied={onDenied} />
+    </MemoryRouter>,
+  );
   return { client, onDenied, user: userEvent.setup() };
 }
 test("F056 read-only shows human configuration and no mutation controls", async () => {
   const { client } = setup(false);
   await screen.findByText(sample.name);
-  expect(screen.getByText("Identification required")).toBeInTheDocument();
+  expect(screen.getAllByText("Identification required")[0]).toBeInTheDocument();
   expect(screen.getByText("No default assignment")).toBeInTheDocument();
   expect(
     screen.queryByRole("button", {
@@ -88,7 +101,10 @@ test("F056 create requires explicit template, selected policy and deliberate Sav
   await user.click(screen.getByRole("button", { name: "+ Add issue" }));
   expect(screen.getByRole("button", { name: "Create issue" })).toBeDisabled();
   await user.type(screen.getByLabelText("Issue name"), " New Fictional Issue ");
-  await user.selectOptions(screen.getByLabelText("Intake template"), sample.id);
+  await user.click(screen.getByRole("combobox", { name: "Intake template" }));
+  await user.click(
+    await screen.findByRole("option", { name: /Fictional Street Sign/ }),
+  );
   await user.click(screen.getByLabelText("Anonymous requests allowed"));
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Create issue" })).toBeEnabled(),
@@ -108,14 +124,14 @@ test("F056 create requires explicit template, selected policy and deliberate Sav
     },
     expect.objectContaining({ authenticated: true }),
   );
-  expect(screen.getByText("Inactive")).toBeInTheDocument();
+  expect(screen.getAllByText("Inactive").at(-1)).toBeInTheDocument();
 });
 test("F056 editor uses independent expected revisions and authoritative response/focus", async () => {
   const { user, client } = setup();
   await screen.findByText(sample.name);
   await user.click(
     screen.getByRole("button", {
-      name: `Edit configuration for ${sample.name}`,
+      name: `Edit ${sample.name}`,
     }),
   );
   expect(screen.getByLabelText("Issue name")).toHaveFocus();
@@ -159,7 +175,7 @@ test("F056 Cancel restores action focus and performs no write", async () => {
   const { user, client } = setup();
   await screen.findByText(sample.name);
   const action = screen.getByRole("button", {
-    name: `Edit configuration for ${sample.name}`,
+    name: `Edit ${sample.name}`,
   });
   await user.click(action);
   await user.type(screen.getByLabelText("Description"), " edited");
@@ -185,7 +201,7 @@ test("F056 deactivation confirmation cancels by keyboard and only confirm sends 
   expect(client.patch).not.toHaveBeenCalled();
   await user.click(action);
   await user.click(screen.getByRole("button", { name: "Deactivate issue" }));
-  await screen.findByText("Inactive");
+  await screen.findByRole("button", { name: `Activate ${sample.name}` });
   expect(client.patch).toHaveBeenCalledWith(
     expect.anything(),
     expect.objectContaining({ active: false, expectedCoreRevision: 4 }),
@@ -194,7 +210,7 @@ test("F056 deactivation confirmation cancels by keyboard and only confirm sends 
   await user.click(
     screen.getByRole("button", { name: `Activate ${sample.name}` }),
   );
-  await screen.findByText("Active");
+  await screen.findByRole("button", { name: `Deactivate ${sample.name}` });
 });
 test("F056 stale conflict blocks retry until explicit discard/refresh; no replay", async () => {
   const { user, client } = setup();
@@ -234,7 +250,7 @@ test("F056 unsafe markup and negative order cannot be saved", async () => {
   await screen.findByText(sample.name);
   await user.click(
     screen.getByRole("button", {
-      name: `Edit configuration for ${sample.name}`,
+      name: `Edit ${sample.name}`,
     }),
   );
   await user.clear(screen.getByLabelText("Issue name"));
@@ -253,7 +269,7 @@ test("F056 duplicate rejection gives reactivation guidance and keeps the draft",
   await screen.findByText(sample.name);
   await user.click(
     screen.getByRole("button", {
-      name: `Edit configuration for ${sample.name}`,
+      name: `Edit ${sample.name}`,
     }),
   );
   await user.clear(screen.getByLabelText("Issue name"));

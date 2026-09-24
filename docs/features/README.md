@@ -61,3 +61,5 @@ Other historical specifications remain in this directory. New features should li
 - [Post-F055 Participation Setup UX consolidation](F055-participation-setup-refinement.md): unnumbered presentation refinement; separate F053/F055 backend contracts, no F056.
 
 - [F056 — Admin Issue Configuration Management](F056-admin-issue-configuration-management.md): implemented and validated locally; [validation record](F056-implementation-report.md).
+
+- [F056.1 — Issue Management Scalability & UX](F056-1-issue-management-scalability-ux.md): bounded summary discovery and searchable templates; [validation record](F056-1-implementation-report.md).

@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import {
+  issueQueryDefaults,
+  issueQueryParams,
+  readIssueQuery,
+} from "./issueDiscovery.js";
+import IssueDiscoveryControls from "./IssueDiscoveryControls.jsx";
+import IssueTemplatePicker from "./IssueTemplatePicker.jsx";
 
 const policyLabel = (value) =>
   value === "ANONYMOUS_ALLOWED"
@@ -56,8 +64,66 @@ function Confirmation({
   );
 }
 export default function IssueConfiguration({ client, onDenied }) {
+  const [params, setParams] = useSearchParams();
+  const query = readIssueQuery(params),
+    queryKey = issueQueryParams(query).toString();
+  const page = Number(query.page);
+  const [search, setSearch] = useState(query.search),
+    [categories, setCategories] = useState([]),
+    [categoryError, setCategoryError] = useState(false),
+    [categoryAttempt, setCategoryAttempt] = useState(0),
+    [detailLoading, setDetailLoading] = useState(false);
+  const detailAbort = useRef(null);
+  const latestQuery = useRef(queryKey);
+  latestQuery.current = queryKey;
+  const updateQuery = (changes, replace = false) =>
+    setParams(issueQueryParams({ ...query, ...changes }), { replace });
+  const clearFilters = () => {
+    setSearch("");
+    updateQuery({
+      ...issueQueryDefaults,
+      pageSize: query.pageSize,
+      sort: query.sort,
+      direction: query.direction,
+    });
+  };
+  useEffect(() => {
+    if (params.toString() !== queryKey) setParams(queryKey, { replace: true });
+  }, [queryKey, params, setParams]);
+  useEffect(() => {
+    setSearch(query.search);
+  }, [query.search]);
+  useEffect(() => {
+    if (search.trim() === query.search) return;
+    const timer = setTimeout(
+      () => updateQuery({ search: search.trim(), page: "1" }),
+      300,
+    );
+    return () => clearTimeout(timer);
+  }, [search, queryKey]);
+  useEffect(() => {
+    const abort = new AbortController();
+    setCategoryError(false);
+    client
+      .get("/admin/issues/categories", {
+        authenticated: true,
+        signal: abort.signal,
+      })
+      .then(
+        (result) => {
+          if (!abort.signal.aborted) setCategories(result.items);
+        },
+        (failure) => {
+          if (!abort.signal.aborted) {
+            setCategories([]);
+            setCategoryError(true);
+            if ([401, 403].includes(failure.status)) onDenied();
+          }
+        },
+      );
+    return () => abort.abort();
+  }, [client, categoryAttempt, onDenied]);
   const [data, setData] = useState(null),
-    [page, setPage] = useState(1),
     [attempt, setAttempt] = useState(0),
     [loading, setLoading] = useState(true);
   const [edit, setEdit] = useState(null),
@@ -84,6 +150,7 @@ export default function IssueConfiguration({ client, onDenied }) {
     return () => {
       mounted.current = false;
       mutation.current?.abort();
+      detailAbort.current?.abort();
     };
   }, []);
   useEffect(() => {
@@ -91,7 +158,7 @@ export default function IssueConfiguration({ client, onDenied }) {
     setLoading(true);
     setError(null);
     client
-      .get(`/admin/issues?page=${page}`, {
+      .get(`/admin/issues/summaries?${queryKey}`, {
         authenticated: true,
         signal: abort.signal,
       })
@@ -99,6 +166,8 @@ export default function IssueConfiguration({ client, onDenied }) {
         (result) => {
           if (!abort.signal.aborted) {
             setData(result);
+            if (result.page !== page)
+              updateQuery({ page: String(result.page) }, true);
             setLoading(false);
             if (refreshFocus.current) {
               setNotice({
@@ -113,6 +182,12 @@ export default function IssueConfiguration({ client, onDenied }) {
           if (!abort.signal.aborted) {
             setData(null);
             setLoading(false);
+            if ([401, 403].includes(failure.status)) {
+              setEdit(null);
+              setDraft(fields());
+              setTargets([]);
+              onDenied();
+            }
             setError({
               message: [401, 403].includes(failure.status)
                 ? "You are not authorized to view Issue configuration."
@@ -123,12 +198,15 @@ export default function IssueConfiguration({ client, onDenied }) {
         },
       );
     return () => abort.abort();
-  }, [client, page, attempt]);
+  }, [client, queryKey, attempt]);
   useEffect(() => {
     if (edit) input.current?.focus();
     else if (restoreFocus.current) {
       restoreFocus.current = false;
-      origin.current?.focus();
+      (origin.current?.isConnected
+        ? origin.current
+        : add.current || feedback.current
+      )?.focus();
     }
   }, [edit]);
   useEffect(() => {
@@ -184,13 +262,55 @@ export default function IssueConfiguration({ client, onDenied }) {
     /^\d+$/.test(draft.displayOrder) &&
     Number(draft.displayOrder) <= 2147483647 &&
     (edit?.issue || draft.templateId);
-  function open(issue, kind, event) {
+  async function open(issue, kind, event) {
     origin.current = event.currentTarget;
+    setError(null);
+    setNotice(null);
+    if (issue) {
+      detailAbort.current?.abort();
+      const abort = new AbortController();
+      detailAbort.current = abort;
+      setDetailLoading(true);
+      try {
+        const result = await client.get(
+          `/admin/issues/${encodeURIComponent(issue.id)}`,
+          { authenticated: true, signal: abort.signal },
+        );
+        if (abort.signal.aborted) return;
+        issue = result.issue;
+      } catch (failure) {
+        if (!abort.signal.aborted) {
+          if ([401, 403].includes(failure.status)) onDenied();
+          else
+            setError({
+              message:
+                "The latest Issue configuration could not be loaded. Try the action again.",
+              blocked: false,
+            });
+        }
+        return;
+      } finally {
+        if (!abort.signal.aborted) setDetailLoading(false);
+      }
+    }
+    if (kind === "state") {
+      const command = () =>
+        save(issue, {
+          ...payload(issue, fields(issue)),
+          active: !issue.active,
+        });
+      if (issue.active)
+        setConfirmation({
+          returnFocus: origin.current,
+          kind: "deactivate",
+          action: command,
+        });
+      else command();
+      return;
+    }
     setEdit({ issue, kind });
     setDraft(fields(issue));
     setTargetSearch("");
-    setError(null);
-    setNotice(null);
   }
   function cancel() {
     restoreFocus.current = true;
@@ -203,8 +323,8 @@ export default function IssueConfiguration({ client, onDenied }) {
       setEdit(null);
       setNotice(null);
       setError(null);
-      setPage(nextPage);
-      setAttempt((n) => n + 1);
+      if (nextPage !== page) updateQuery({ page: String(nextPage) });
+      else setAttempt((n) => n + 1);
     };
     if (edit)
       setConfirmation({
@@ -261,11 +381,20 @@ export default function IssueConfiguration({ client, onDenied }) {
             : "Issue created Inactive. Review it before activation."
           : "Issue configuration is unchanged.",
       });
-      const next = await client.get(`/admin/issues?page=${page}`, {
+      const savedQuery = latestQuery.current;
+      const next = await client.get(`/admin/issues/summaries?${savedQuery}`, {
         authenticated: true,
         signal: abort.signal,
       });
-      if (!abort.signal.aborted) setData(next);
+      if (!abort.signal.aborted && latestQuery.current === savedQuery) {
+        setData(next);
+        const currentQuery = readIssueQuery(new URLSearchParams(savedQuery));
+        if (next.page !== Number(currentQuery.page))
+          setParams(
+            issueQueryParams({ ...currentQuery, page: String(next.page) }),
+            { replace: true },
+          );
+      }
     } catch (failure) {
       if (abort.signal.aborted) return;
       if ([401, 403].includes(failure.status)) {
@@ -300,42 +429,85 @@ export default function IssueConfiguration({ client, onDenied }) {
           <p>Manage the request types available for new requests.</p>
           {data && (
             <p>
-              {data.active} active · {data.total - data.active} inactive
+              {data.active} active · {data.inactive} inactive
             </p>
           )}
         </div>
-        <button
-          className="btn btn-outline-primary"
-          disabled={busy || loading}
-          onClick={() => refresh()}
-        >
-          Refresh Issues
-        </button>
+        <div className="d-flex flex-wrap gap-2">
+          {data?.canWrite && (
+            <button
+              ref={add}
+              className="btn btn-primary"
+              disabled={
+                busy || loading || detailLoading || !!edit || error?.blocked
+              }
+              onClick={(event) => open(null, "create", event)}
+            >
+              + Add issue
+            </button>
+          )}
+          <button
+            className="btn btn-outline-primary"
+            disabled={busy || loading}
+            onClick={() => refresh()}
+          >
+            Refresh Issues
+          </button>
+        </div>
       </div>
+      <IssueDiscoveryControls
+        query={query}
+        search={search}
+        setSearch={setSearch}
+        update={updateQuery}
+        clear={clearFilters}
+        categories={categories}
+        categoryError={categoryError}
+        retryCategories={() => setCategoryAttempt((n) => n + 1)}
+        disabled={busy || !!edit || detailLoading}
+      />
       <div ref={feedback} tabIndex="-1">
         {error && <p role="alert">{error.message}</p>}
-        {notice && <p role="status">{notice.message}</p>}
+        {notice && (
+          <p role="status">
+            {notice.message}{" "}
+            {notice.id &&
+              data &&
+              !data.items.some((i) => i.id === notice.id) && (
+                <>
+                  This Issue is outside the current page or filters.{" "}
+                  <button
+                    className="btn btn-link"
+                    disabled={busy || !!edit}
+                    onClick={(event) => open({ id: notice.id }, "edit", event)}
+                  >
+                    Review saved Issue
+                  </button>
+                </>
+              )}
+          </p>
+        )}
       </div>
       {loading && <p role="status">Loading Issues…</p>}
+      {detailLoading && (
+        <p role="status">Loading the latest Issue configuration…</p>
+      )}
       {data && (
         <>
           <p className="participation-order-help">
             Within each Category, lower numbers appear first. Issues with the
             same number are sorted by name.
           </p>
-          {data.canWrite && (
-            <button
-              ref={add}
-              className="btn btn-primary mb-3"
-              disabled={busy || loading || !!edit || error?.blocked}
-              onClick={(e) => open(null, "create", e)}
-            >
-              + Add issue
-            </button>
-          )}
-          {!data.total && (
+          {!loading && !data.total && (
             <p>
-              No Issues are configured.
+              {data.organizationTotal === 0
+                ? "No Issues are configured."
+                : "No Issues match these filters."}
+              {data.organizationTotal > 0 && (
+                <button className="btn btn-link" onClick={clearFilters}>
+                  Clear filters and try again
+                </button>
+              )}
               {!data.canWrite && " This page is read-only."}
             </p>
           )}
@@ -362,32 +534,12 @@ export default function IssueConfiguration({ client, onDenied }) {
                     New Issues are created Inactive. You can review the Issue
                     before making it available for new requests.
                   </p>
-                  <label htmlFor="issue-template">Intake template</label>
-                  <select
-                    id="issue-template"
-                    className="form-select"
-                    value={draft.templateId}
+                  <IssueTemplatePicker
+                    client={client}
                     disabled={busy}
-                    onChange={(e) => {
-                      set("templateId", e.target.value);
-                      set("target", "");
-                    }}
-                    required
-                  >
-                    <option value="">Choose an existing Issue</option>
-                    {data.items
-                      .filter((i) => i.templateEligible)
-                      .map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {i.name} — {i.category}
-                        </option>
-                      ))}
-                  </select>
-                  <p>
-                    Copies this Issue’s Category and intake form/settings once.
-                    Later template changes do not affect the new Issue.
-                    Templates shown are from this page.
-                  </p>
+                    onDenied={onDenied}
+                    onChange={(id) => set("templateId", id)}
+                  />
                 </>
               )}
               {edit.kind !== "order" && (
@@ -544,85 +696,91 @@ export default function IssueConfiguration({ client, onDenied }) {
               </div>
             </form>
           )}
-          <ul className="configuration-cards participation-area-list">
-            {data.items.map((issue) => (
-              <li
-                key={issue.id}
-                tabIndex="-1"
-                aria-label={issue.name}
-                ref={(node) => {
-                  if (node) cards.current.set(issue.id, node);
-                  else cards.current.delete(issue.id);
-                }}
-              >
-                <div className="participation-area-heading">
-                  <h2>{issue.name}</h2>
-                  <span
-                    className={`participation-state ${issue.active ? "is-active" : ""}`}
-                  >
-                    {issue.active ? "Active" : "Inactive"}
-                  </span>
-                </div>
-                <p>{issue.description}</p>
-                <p>{issue.category}</p>
-                <dl>
-                  <dt>Requester</dt>
-                  <dd>{policyLabel(issue.requesterPolicy)}</dd>
-                  <dt>Default assignment</dt>
-                  <dd>
-                    {issue.defaultAssignment?.displayName ??
-                      "No default assignment"}
-                  </dd>
-                </dl>
-                <p>Order {issue.displayOrder}</p>
-                {data.canWrite && (
-                  <div className="d-flex gap-2 flex-wrap">
-                    <button
-                      className="btn btn-outline-primary"
-                      disabled={busy || loading || !!edit || error?.blocked}
-                      aria-label={`Edit configuration for ${issue.name}`}
-                      onClick={(e) => open(issue, "edit", e)}
+          <p role="status">
+            {!loading &&
+              `${data.total} matching Issues · Page ${data.page} of ${Math.max(1, Math.ceil(data.total / data.pageSize))}`}
+          </p>
+          <ul className="issue-summary-list" aria-busy={loading}>
+            {!loading &&
+              data.items.map((issue) => (
+                <li
+                  key={issue.id}
+                  tabIndex="-1"
+                  aria-label={issue.name}
+                  ref={(node) => {
+                    if (node) cards.current.set(issue.id, node);
+                    else cards.current.delete(issue.id);
+                  }}
+                >
+                  <div className="participation-area-heading">
+                    <h2>{issue.name}</h2>
+                    <span
+                      className={`participation-state ${issue.active ? "is-active" : ""}`}
                     >
-                      Edit configuration
-                    </button>
-                    <button
-                      className="btn btn-outline-primary"
-                      disabled={busy || loading || !!edit || error?.blocked}
-                      aria-label={`Change order for ${issue.name}`}
-                      onClick={(e) => open(issue, "order", e)}
-                    >
-                      Change order
-                    </button>
-                    <button
-                      className="btn btn-outline-primary"
-                      disabled={busy || loading || !!edit || error?.blocked}
-                      aria-label={`${issue.active ? "Deactivate" : "Activate"} ${issue.name}`}
-                      onClick={() => {
-                        const command = () =>
-                          save(issue, {
-                            ...payload(issue, fields(issue)),
-                            active: !issue.active,
-                          });
-                        if (issue.active)
-                          setConfirmation({
-                            returnFocus: document.activeElement,
-                            kind: "deactivate",
-                            action: command,
-                          });
-                        else command();
-                      }}
-                    >
-                      {issue.active ? "Deactivate" : "Activate"}
-                    </button>
+                      {issue.active ? "Active" : "Inactive"}
+                    </span>
                   </div>
-                )}
-              </li>
-            ))}
+                  <p>{issue.category}</p>
+                  <dl className="issue-summary-metadata">
+                    <dt>Requester</dt>
+                    <dd>{policyLabel(issue.requesterPolicy)}</dd>
+                    <dt>Default assignment</dt>
+                    <dd>{issue.assignmentLabel ?? "No default assignment"}</dd>
+                  </dl>
+                  <p>Order {issue.displayOrder}</p>
+                  {data.canWrite && (
+                    <div className="d-flex gap-2 flex-wrap">
+                      <button
+                        className="btn btn-outline-primary"
+                        disabled={
+                          busy ||
+                          loading ||
+                          detailLoading ||
+                          !!edit ||
+                          error?.blocked
+                        }
+                        aria-label={`Edit ${issue.name}`}
+                        onClick={(e) => open(issue, "edit", e)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="btn btn-outline-primary"
+                        disabled={
+                          busy ||
+                          loading ||
+                          detailLoading ||
+                          !!edit ||
+                          error?.blocked
+                        }
+                        aria-label={`Change order for ${issue.name}`}
+                        onClick={(e) => open(issue, "order", e)}
+                      >
+                        Change order
+                      </button>
+                      <button
+                        className="btn btn-outline-primary"
+                        disabled={
+                          busy ||
+                          loading ||
+                          detailLoading ||
+                          !!edit ||
+                          error?.blocked
+                        }
+                        aria-label={`${issue.active ? "Deactivate" : "Activate"} ${issue.name}`}
+                        onClick={(event) => open(issue, "state", event)}
+                      >
+                        {issue.active ? "Deactivate" : "Activate"}
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
           </ul>
           {data.total > data.pageSize && (
             <nav
               aria-label="Issue pages"
-              className="d-flex gap-3 align-items-center mt-3"
+              className="d-flex flex-wrap gap-3 align-items-center mt-3"
             >
               <button
                 className="btn btn-outline-primary"

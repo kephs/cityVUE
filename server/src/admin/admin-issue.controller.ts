@@ -30,6 +30,7 @@ import {
 import type { StaffAccess } from '../auth/auth.types.js';
 import { StaffAccessGuard } from '../auth/staff-access.guard.js';
 import { AdminIssueService } from './admin-issue.service.js';
+import { AdminIssueDiscoveryService } from './admin-issue-discovery.service.js';
 import { configurationPage } from './admin-configuration.domain.js';
 import type { IssueFields } from './admin-issue.domain.js';
 
@@ -59,13 +60,62 @@ export class IssueListQuery {
 export class IssueTargetQuery {
   @IsOptional() @IsString() search?: string;
 }
+export class IssueDiscoveryQuery {
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() requesterPolicy?: string;
+  @IsOptional() @IsString() assignmentState?: string;
+  @IsOptional() @IsString() sort?: string;
+  @IsOptional() @IsString() direction?: string;
+  @IsOptional() @IsString() page?: string;
+  @IsOptional() @IsString() pageSize?: string;
+}
 export class IssueEmptyQuery {}
 @RequireEntra()
 @RequirePermission('admin.configuration.read')
 @UseGuards(StaffAccessGuard)
 @Controller('admin/issues')
 export class AdminIssueController {
-  constructor(private readonly service: AdminIssueService) {}
+  constructor(
+    private readonly service: AdminIssueService,
+    private readonly discovery: AdminIssueDiscoveryService,
+  ) {}
+  @Get('summaries')
+  @Header('Cache-Control', 'no-store')
+  summaries(
+    @CurrentStaff() access: StaffAccess,
+    @Query() query: IssueDiscoveryQuery,
+  ) {
+    return this.discovery.list(access, query);
+  }
+  @Get('templates')
+  @Header('Cache-Control', 'no-store')
+  templates(
+    @CurrentStaff() access: StaffAccess,
+    @Query() query: IssueTargetQuery,
+  ) {
+    return this.discovery.templates(access, query.search);
+  }
+  @Get('categories')
+  @Header('Cache-Control', 'no-store')
+  categories(
+    @CurrentStaff() access: StaffAccess,
+    @Query() query: IssueEmptyQuery,
+  ) {
+    void query;
+    return this.discovery.categories(access);
+  }
+  @Get(':id')
+  @Header('Cache-Control', 'no-store')
+  detail(
+    @CurrentStaff() access: StaffAccess,
+    @Param('id') id: string,
+    @Query() query: IssueEmptyQuery,
+  ) {
+    void query;
+    return this.service.detail(access, id);
+  }
   @Get()
   @Header('Cache-Control', 'no-store')
   list(@CurrentStaff() access: StaffAccess, @Query() query: IssueListQuery) {
