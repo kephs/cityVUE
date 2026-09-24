@@ -49,6 +49,10 @@ export function buildErrorResponse(
         ? candidateCode
         : undefined;
     const areaMessages: Record<string, string> = {
+      QUESTION_CONFIGURATION_INVALID:
+        'Check follow-up question text, options and unique order numbers.',
+      QUESTION_DEPENDENCY:
+        'This change would break inherited conditional behavior.',
       ISSUE_DUPLICATE: 'An Issue with this name already exists.',
       PARTICIPATION_AREA_DUPLICATE:
         'A Participation Area with this name already exists.',

@@ -9,27 +9,6 @@ import type { StaffAccess } from '../auth/auth.types.js';
 const uuidV4 =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function answerValue(answer: {
-  question_type: string;
-  text_value: string | null;
-  number_value: string | null;
-  boolean_value: boolean | null;
-  option_key: string | null;
-  display_value: string | null;
-}): string | number | boolean {
-  if (answer.question_type === 'number') return Number(answer.number_value);
-  if (answer.question_type === 'yes_no') return Boolean(answer.boolean_value);
-  if (answer.question_type === 'single_select') return answer.option_key ?? '';
-  return answer.text_value ?? '';
-}
-
-function answerDisplay(answer: Parameters<typeof answerValue>[0]): string {
-  if (answer.display_value) return answer.display_value;
-  const value = answerValue(answer);
-  if (answer.question_type === 'yes_no') return value ? 'Yes' : 'No';
-  return String(value);
-}
-
 function safeActivityMetadata(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const source = value as Record<string, unknown>;
@@ -87,7 +66,7 @@ export class GetServiceRequestDetailsService {
         ),
       );
     if (!details) throw new NotFoundException();
-    const { request, answers, location, activity, assignments } = details;
+    const { request, location, activity, assignments } = details;
     if (
       access &&
       !access.development &&
@@ -126,6 +105,11 @@ export class GetServiceRequestDetailsService {
       (entry) => !('endedAt' in entry),
     );
     return {
+      canReadAnswers: Boolean(
+        access &&
+        !access.development &&
+        access.permissions.includes('service_request.answers.read'),
+      ),
       serviceRequest: {
         id: request.id,
         referenceNumber: request.reference_number,
@@ -154,15 +138,6 @@ export class GetServiceRequestDetailsService {
           : {}),
       },
       request: { description: request.description },
-      answers: answers.map((answer) => ({
-        questionId: answer.question_id,
-        questionKey: answer.question_key,
-        label: answer.question_label,
-        type: answer.question_type,
-        order: answer.display_order,
-        displayValue: answerDisplay(answer),
-        value: answerValue(answer),
-      })),
       ...(location
         ? {
             location: {

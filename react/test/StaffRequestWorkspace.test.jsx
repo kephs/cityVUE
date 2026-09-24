@@ -53,6 +53,44 @@ const id = "10000000-0000-4000-8000-000000000001",
   target = "20000000-0000-4000-8000-000000000002",
   division = "30000000-0000-4000-8000-000000000001";
 
+test.each([false, true])(
+  "F056.2A unified detail uses protected answer reads only with capability %s",
+  async (allowed) => {
+    repository.readAnswers = vi.fn().mockResolvedValue({
+      answers: [
+        {
+          questionId: "historical",
+          label: "Historical prompt",
+          displayValue: "Historical choice",
+        },
+      ],
+    });
+    repository.detail.mockResolvedValue({
+      ...row,
+      capabilities: { ...row.capabilities, canReadAnswers: allowed },
+    });
+    show(`/staff/requests/${id}`);
+    await screen.findByRole("heading", { name: row.issueName });
+    if (allowed) {
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: "View submitted information",
+        }),
+      );
+      await screen.findByText("Historical choice");
+      expect(repository.readAnswers).toHaveBeenCalledWith(
+        id,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    } else {
+      expect(
+        screen.queryByText("Submitted information"),
+      ).not.toBeInTheDocument();
+      expect(repository.readAnswers).not.toHaveBeenCalled();
+    }
+  },
+);
+
 test.each([
   [true, false],
   [false, true],
@@ -1478,6 +1516,7 @@ test("activity loading, plain-text narrative, safe actor, routing and older page
   );
   show(`/staff/requests/${id}`);
   await screen.findByText("Loading activity…");
+  await waitFor(() => expect(resolve).toBeTypeOf("function"));
   await act(async () =>
     resolve({
       items: [

@@ -1,5 +1,7 @@
 # Reqro Feature Records
 
+[F056.2A — Dynamic Question Management & Protected Responses](F056-2A-dynamic-question-management-protected-responses.md): immutable question authoring and current-version validation; independent protected historical answer reads. See [ADR-018](../architecture/decisions/ADR-018-dynamic-questions-protected-answers.md) and the [implementation report](F056-2A-implementation-report.md) for compatibility, permission and validation evidence. No F056.2B/C or F057 authorization.
+
 [F054 — Admin Portal and branding foundation](F054-admin-portal-branding-foundation.md): implementation, automated/live validation and privacy/integrity gates passed; approved Reqro assets, independent Organization branding and protected Admin presentation.
 
 [F053 — Admin Intake Settings Management](F053-admin-intake-settings-management.md): implemented and validated; narrow collection write, optimistic concurrency and safe immutable audit. See the [report](F053-implementation-report.md). No push/deployment/F054.

@@ -1,3 +1,10 @@
+import { isDeepStrictEqual } from 'node:util';
+import {
+  loadQuestions,
+  validateQuestions,
+  insertQuestions,
+  type QuestionConfiguration,
+} from './admin-question.domain.js';
 import {
   BadRequestException,
   ConflictException,
@@ -34,6 +41,8 @@ import { requestUuid } from '../service-request/staff-request-scope.js';
 
 type Tx = Transaction<DatabaseSchema>;
 export interface IssueProjection {
+  questions?: QuestionConfiguration[];
+  catalogVersionId?: string | null;
   id: string;
   name: string;
   description: string;
@@ -93,15 +102,30 @@ export class AdminIssueService {
       )
     ).rows[0];
     if (!row) throw new NotFoundException('Issue unavailable');
-    return row;
+    const stable = await trx
+      .selectFrom('service_definition')
+      .select('current_published_version_id')
+      .where('organization_id', '=', org)
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
+    return {
+      ...row,
+      catalogVersionId: stable.current_published_version_id,
+      questions: stable.current_published_version_id
+        ? await loadQuestions(trx, org, stable.current_published_version_id)
+        : [],
+    };
   }
   async detail(access: StaffAccess | undefined, id: string) {
     assertConfigurationRead(access);
     if (!requestUuid.test(id)) throw new NotFoundException('Issue unavailable');
-    return this.database.client.transaction().execute(async (trx) => {
-      await sql`set transaction read only`.execute(trx);
-      return { issue: await this.readOne(trx, access.organizationId, id) };
-    });
+    return this.database.client
+      .transaction()
+      .setIsolationLevel('repeatable read')
+      .execute(async (trx) => {
+        await sql`set transaction read only`.execute(trx);
+        return { issue: await this.readOne(trx, access.organizationId, id) };
+      });
   }
   async list(access: StaffAccess | undefined, page = 1) {
     assertConfigurationRead(access);
@@ -177,6 +201,7 @@ export class AdminIssueService {
     name: string,
     description: string,
     newPolicy: string | null = null,
+    questions?: QuestionConfiguration[],
   ) {
     const version = randomUUID();
     // Explicit copy allowlist. New version/form identities; no ownership, history or action configuration.
@@ -186,21 +211,29 @@ export class AdminIssueService {
       case when ${newPolicy}::text is null then keywords else '{}'::text[] end,
       default_priority,location_policy,geographic_eligibility_mode,geographic_eligibility_policy_reference,unable_to_determine_behavior,
       case when ${newPolicy}::text is null then anonymous_reporting_policy when ${newPolicy}='ANONYMOUS_ALLOWED' then 'allowed' else 'not_allowed' end,
-      'published',clock_timestamp(),case when ${newPolicy}::text is null then routing_metadata else null end
+      'draft',null,case when ${newPolicy}::text is null then routing_metadata else null end
       from service_definition_version where organization_id=${org} and id=${source} and status='published'`.execute(
       trx,
     );
-    await sql`insert into question(id,organization_id,service_definition_version_id,question_key,label,help_text,question_type,is_required,display_order,validation_metadata,visibility_condition,status)
+    if (questions) await insertQuestions(trx, org, version, questions);
+    else {
+      await sql`insert into question(id,organization_id,service_definition_version_id,question_key,label,help_text,question_type,is_required,display_order,validation_metadata,visibility_condition,status)
       select gen_random_uuid(),organization_id,${version},question_key,label,help_text,question_type,is_required,display_order,validation_metadata,visibility_condition,status from question where organization_id=${org} and service_definition_version_id=${source}`.execute(
-      trx,
-    );
-    await sql`insert into question_option(id,organization_id,question_id,option_key,label,display_order,status)
+        trx,
+      );
+      await sql`insert into question_option(id,organization_id,question_id,option_key,label,display_order,status)
       select gen_random_uuid(),o.organization_id,n.id,o.option_key,o.label,o.display_order,o.status from question_option o
       join question old on old.organization_id=o.organization_id and old.id=o.question_id
       join question n on n.organization_id=old.organization_id and n.question_key=old.question_key and n.service_definition_version_id=${version}
       where old.organization_id=${org} and old.service_definition_version_id=${source}`.execute(
-      trx,
-    );
+        trx,
+      );
+    }
+    await trx
+      .updateTable('service_definition_version')
+      .set({ status: 'published', published_at: new Date() })
+      .where('id', '=', version)
+      .execute();
     return version;
   }
   private async audit(
@@ -219,8 +252,20 @@ export class AdminIssueService {
           ? 'activated'
           : 'deactivated'
         : 'changed';
-    await sql`insert into issue_configuration_audit(organization_id,issue_id,staff_identity_id,action,changed_fields,prior_core_revision,core_revision,policy_revision,assignment_revision,correlation_id)
-      values(${access.organizationId},${id},${access.staffIdentityId},${action},${fields},${old?.coreRevision ?? null},${next.coreRevision},${next.policyRevision},${next.assignmentRevision},${correlation && requestUuid.test(correlation) ? correlation : randomUUID()})`.execute(
+    const schemaSummary = fields.includes('questions')
+      ? {
+          priorVersion: old?.catalogVersionId ?? null,
+          version: next.catalogVersionId,
+          priorQuestions: old?.questions?.length ?? 0,
+          questions: next.questions?.length ?? 0,
+          priorOptions:
+            old?.questions?.reduce((n, q) => n + q.options.length, 0) ?? 0,
+          options:
+            next.questions?.reduce((n, q) => n + q.options.length, 0) ?? 0,
+        }
+      : null;
+    await sql`insert into issue_configuration_audit(organization_id,issue_id,staff_identity_id,action,changed_fields,prior_core_revision,core_revision,policy_revision,assignment_revision,correlation_id${schemaSummary ? sql`,schema_summary` : sql``})
+      values(${access.organizationId},${id},${access.staffIdentityId},${action},${fields},${old?.coreRevision ?? null},${next.coreRevision},${next.policyRevision},${next.assignmentRevision},${correlation && requestUuid.test(correlation) ? correlation : randomUUID()}${schemaSummary ? sql`,${JSON.stringify(schemaSummary)}::jsonb` : sql``})`.execute(
       trx,
     );
   }
@@ -360,6 +405,12 @@ export class AdminIssueService {
         const name = issueText(input.name, true),
           description = issueText(input.description, false),
           fields: string[] = [];
+        const questions =
+          input.questions === undefined
+            ? old.questions
+            : validateQuestions(input.questions, old.questions);
+        if (!isDeepStrictEqual(questions, old.questions))
+          fields.push('questions');
         if (name !== old.name) fields.push('name');
         if (description !== old.description) fields.push('description');
         if (input.displayOrder !== old.displayOrder)
@@ -393,7 +444,11 @@ export class AdminIssueService {
         if (assignment.changed) fields.push('defaultAssignment');
         if (!fields.length) return { issue: old, changed: false };
         let version = stable.current_published_version_id;
-        if (name !== old.name || description !== old.description)
+        if (
+          name !== old.name ||
+          description !== old.description ||
+          fields.includes('questions')
+        )
           version = await this.publish(
             trx,
             org,
@@ -401,6 +456,8 @@ export class AdminIssueService {
             version,
             name,
             description,
+            null,
+            questions,
           );
         await trx
           .updateTable('service_definition')

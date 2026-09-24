@@ -1,5 +1,9 @@
 # F036 — Safe Development Staff Authorization Provisioning
 
+## F056.2A explicit answer-read selection
+
+`service_request.answers.read` is accepted as an explicitly selected permission, never added to FULL_UAT_OPERATOR or another bundle. After the required authenticated pre-grant 403 and user confirmation, dry-run/review and provision only this key for the existing personal development principal and unchanged scopes. Parent request authorization remains independently required. The local F056.2A run retained exactly one new grant; see its [report](F056-2A-implementation-report.md). No production provisioning is authorized.
+
 ## F044 tracking-management addition (locally validated)
 
 `service_request.tracking.manage` is registered in the known-permission manifest and added explicitly to `FULL_UAT_OPERATOR`: the F042/F043 20-key expansion plus this one key becomes 21. The bundle remains CLI shorthand, never runtime authority. No existing grant changes automatically. For a new environment, prove the authenticated ungranted baseline after migration validation/application, then dry-run and explicitly provision only this key in the approved fictional scope. F044 completed that sequence in personal development and retained exactly the 21 approved keys, with Public Works / Streets and Community Services / Parks scope unchanged. Parent PUBLIC read remains independently required. No production/client provisioning is enabled. See the [F044 UAT record](F044-secure-requester-tracking-foundation.md) and [completion report](F044-implementation-report.md).

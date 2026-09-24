@@ -413,12 +413,20 @@ test(
       assert.equal(readModel.classification.department.name, 'Works');
       assert.equal(readModel.classification.category.name, 'Roads');
       assert.equal(readModel.classification.division, undefined);
+      assert.equal('answers' in readModel, false);
+      const snapshots = await db
+        .selectFrom('answer')
+        .selectAll()
+        .where('service_request_id', '=', september.id)
+        .orderBy('display_order')
+        .execute();
       assert.deepEqual(
-        readModel.answers.map((answer) => answer.label),
+        snapshots.map((a) => a.question_label),
         ['Blocked?', 'Details', 'Condition'],
       );
-      assert.equal(readModel.answers[2]?.value, 'bad');
-      assert.equal(readModel.answers[2].displayValue, 'Damaged');
+      assert.ok(snapshots[2]);
+      assert.equal(snapshots[2].option_key, 'bad');
+      assert.equal(snapshots[2].display_value, 'Damaged');
       assert.equal(readModel.location?.enteredAddress, '1 Main Street');
       const locationSnapshot = await db
         .selectFrom('location')
@@ -730,6 +738,12 @@ test(
           longitude: 0,
         },
       };
+      await assert.rejects(coordinateCreator.execute(coordinatePayload));
+      await db
+        .updateTable('service_definition')
+        .set({ current_published_version_id: draftVersion })
+        .where('id', '=', serviceId)
+        .execute();
       await coordinateCreator.execute(coordinatePayload);
       const beforeBoundaryFailure = await snapshot();
       await assert.rejects(

@@ -22,6 +22,7 @@ export interface IssueCreate extends IssueFields {
   templateId: string;
 }
 export interface IssueChange extends IssueFields {
+  questions?: unknown;
   expectedCoreRevision: number;
   expectedActionRevision: number;
   expectedPolicyRevision: number;
@@ -77,7 +78,9 @@ export function validateIssue(
         ]),
   ];
   if (
-    Object.keys(row).some((k) => !keys.includes(k)) ||
+    Object.keys(row).some(
+      (k) => !keys.includes(k) && !(k === 'questions' && !create),
+    ) ||
     keys.some((k) => !(k in row))
   )
     throw new BadRequestException('Invalid Issue fields');

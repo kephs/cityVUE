@@ -1,3 +1,5 @@
+import { RequestAnswerController } from './request-answer.controller.js';
+import { RequestAnswerService } from './request-answer.service.js';
 import { ParticipationService } from './participation.service.js';
 import {
   ParticipationAreaController,
@@ -59,6 +61,7 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
 @Module({
   imports: [LocationEligibilityModule],
   controllers: [
+    RequestAnswerController,
     ParticipationAreaController,
     StaffParticipationAreaController,
     ParticipationAnalyticsController,
@@ -80,6 +83,7 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
     InternalRequestMutationsController,
   ],
   providers: [
+    RequestAnswerService,
     ParticipationService,
     RequesterHistoryService,
     AttachmentService,
@@ -121,6 +125,7 @@ export class ServiceRequestModule implements NestModule {
     consumer
       .apply(RequestContactPrivacyMiddleware)
       .forRoutes(
+        RequestAnswerController,
         RequestContactController,
         PublicRequestContactController,
         RequesterHistoryController,

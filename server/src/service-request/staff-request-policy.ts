@@ -91,6 +91,7 @@ export function requestCapabilities(
       audience === 'public' &&
       access.permissions.includes('service_request.communication.read') &&
       access.permissions.includes('service_request.communication.create'),
+    canReadAnswers: access.permissions.includes('service_request.answers.read'),
     canReadNotes: access.permissions.includes('service_request.note.read'),
     canCreateNotes:
       access.permissions.includes('service_request.note.read') &&

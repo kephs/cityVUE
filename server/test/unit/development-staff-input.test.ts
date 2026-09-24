@@ -138,6 +138,19 @@ test('F036/F041 bundles expand to approved explicit permissions without geospati
   );
 });
 
+test('answer read requires an explicit selection and is absent from broad bundles', () => {
+  assert.deepEqual(
+    selectedDevelopmentPermissions('service_request.answers.read', undefined),
+    ['service_request.answers.read'],
+  );
+  assert.equal(
+    selectedDevelopmentPermissions(undefined, 'FULL_UAT_OPERATOR').includes(
+      'service_request.answers.read',
+    ),
+    false,
+  );
+});
+
 test('F036 scope inputs require explicit validated hierarchy identifiers without authority extras', () => {
   const scope = {
     departmentId: '20000000-0000-4000-8000-000000000001',

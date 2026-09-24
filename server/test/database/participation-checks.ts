@@ -178,6 +178,12 @@ export async function checkParticipation(
     (select to_jsonb(v) || jsonb_build_object('id',${locationVersion}::text,'version_number',(select max(version_number)+1 from service_definition_version where service_definition_id=v.service_definition_id),'location_policy','optional') from service_definition_version v where id=${input.serviceDefinitionVersionId}))`.execute(
     db,
   );
+
+  await db
+    .updateTable('service_definition')
+    .set({ current_published_version_id: locationVersion })
+    .where('id', '=', input.serviceDefinitionId)
+    .execute();
   input.serviceDefinitionVersionId = locationVersion;
   input.answers = [];
   const access: StaffAccess = {

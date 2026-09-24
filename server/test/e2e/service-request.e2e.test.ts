@@ -165,7 +165,7 @@ before(async () => {
             },
           },
           request: { description: 'Synthetic road damage' },
-          answers: [],
+          canReadAnswers: false,
           location: {
             enteredAddress: '123 Test Street',
             locationType: 'entered_address',
@@ -331,6 +331,7 @@ test('GET returns development-only Organization-scoped details and safe not foun
   };
   assert.equal(body.classification.department.name, 'Public Works');
   assert.equal(body.location.enteredAddress, '123 Test Street');
+  assert.equal('answers' in body, false);
   assert.equal('organizationId' in body, false);
   await request(app.getHttpServer())
     .get('/api/v1/service-requests/not-a-uuid')

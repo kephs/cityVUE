@@ -118,6 +118,7 @@ test("F040 mixed results retain audience, allowlist audience filters and derive 
     canManageWatchers: true,
     canRoute: true,
     canReadContact: false,
+    canReadAnswers: false,
     canReadNotes: false,
     canCreateNotes: false,
     canReadCommunications: false,

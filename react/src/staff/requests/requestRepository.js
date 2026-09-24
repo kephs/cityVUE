@@ -177,6 +177,7 @@ function project(row, detail = false) {
                 "canWatchSelf",
                 "canReadContact",
                 "canReadNotes",
+                "canReadAnswers",
                 "canCreateNotes",
                 "canReadCommunications",
                 "canManageRequesterTracking",
@@ -204,6 +205,8 @@ export function createStaffRequestRepository({ getAccessToken, client } = {}) {
     return `${root}/${id}`;
   };
   return {
+    readAnswers: (id, { signal } = {}) =>
+      api.get(`${path(id)}/answers`, options(signal)),
     attachments: createAttachmentRepository(api, true),
     async notes(id, cursor, signal) {
       const query = new URLSearchParams({ pageSize: "25" });

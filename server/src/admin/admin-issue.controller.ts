@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -48,6 +49,7 @@ export class IssueCreateDto extends IssueFieldsDto {
   @IsUUID('4') templateId!: string;
 }
 export class IssueChangeDto extends IssueFieldsDto {
+  @IsOptional() @IsArray() questions?: unknown[];
   @IsBoolean() active!: boolean;
   @IsInt() @Min(1) @Max(2147483646) expectedCoreRevision!: number;
   @IsInt() @Min(1) @Max(2147483646) expectedActionRevision!: number;

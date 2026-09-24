@@ -503,6 +503,32 @@ export async function checkAttachments(
           .set({ status: 'in_progress' })
           .where('id', '=', requestId)
           .execute();
+        // F056.2A: a finalized receipt survives later catalog/action/availability changes.
+        // Only this disposable fixture is changed; restore its pointer before new submissions.
+        const priorIssue = await db
+          .selectFrom('service_definition')
+          .selectAll()
+          .where('id', '=', issueId)
+          .executeTakeFirstOrThrow();
+        const replacement = randomUUID();
+        await sql`insert into service_definition_version select * from jsonb_populate_record(null::service_definition_version,
+          (select to_jsonb(v)||jsonb_build_object('id',${replacement}::text,'version_number',
+            (select max(version_number)+1 from service_definition_version where service_definition_id=${issueId}))
+          from service_definition_version v where id=${priorIssue.current_published_version_id}))`.execute(
+          db,
+        );
+        await db
+          .updateTable('service_definition')
+          .set({
+            current_published_version_id: replacement,
+            status: 'inactive',
+            action_type: 'external_redirect',
+            redirect_url: 'https://example.com/fictional-handoff',
+            redirect_message: 'Fictional handoff',
+            redirect_label: 'Continue',
+          })
+          .where('id', '=', issueId)
+          .execute();
         const retry = await request(api)
           .post('/api/v1/service-requests')
           .send({ ...payload, attachments: claim })
@@ -603,6 +629,19 @@ export async function checkAttachments(
             .execute(),
           manualHistory,
         );
+        await db
+          .updateTable('service_definition')
+          .set({
+            current_published_version_id:
+              priorIssue.current_published_version_id,
+            status: priorIssue.status,
+            action_type: priorIssue.action_type,
+            redirect_url: priorIssue.redirect_url,
+            redirect_message: priorIssue.redirect_message,
+            redirect_label: priorIssue.redirect_label,
+          })
+          .where('id', '=', issueId)
+          .execute();
         await db.transaction().execute(async (trx) =>
           configureRequesterPolicy(trx, org, issueId, c.creator, {
             policy: 'ANONYMOUS_ALLOWED',

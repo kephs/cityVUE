@@ -1,3 +1,5 @@
+import { useAuth } from "../../auth/AuthContext.jsx";
+import DynamicQuestion, { displayAnswer } from "./DynamicQuestion.jsx";
 import {
   AttachmentSelector,
   useAttachmentDraft,
@@ -23,15 +25,22 @@ const initialValues = {
   reportingMode: "",
   reporterName: "",
 };
-const labels = { service: "Issue", details: "Details", review: "Review" };
+const labels = {
+  service: "Issue",
+  details: "Details",
+  questions: "Additional information",
+  review: "Review",
+};
 
-function Progress({ step }) {
-  const steps = Object.keys(labels);
+function Progress({ step, hasQuestions }) {
+  const steps = hasQuestions
+    ? ["service", "details", "questions", "review"]
+    : ["service", "details", "review"];
   const current = steps.indexOf(step);
   return (
     <nav className="intake-progress" aria-label="Request progress">
       <p className="visually-hidden" aria-live="polite">
-        Step {current + 1} of 3
+        Step {current + 1} of {steps.length}
       </p>
       <ol>
         {steps.map((name, index) => (
@@ -92,6 +101,10 @@ export default function ReportIssuePage({
     versionId: service?.serviceDefinitionVersionId,
   });
   const [answers, setAnswers] = useState({});
+  const auth = useAuth();
+  useEffect(() => {
+    setAnswers({});
+  }, [auth.account?.homeAccountId, auth.isAuthenticated]);
   const [values, setValues] = useState(initialValues);
   const [participationAvailable, setParticipationAvailable] = useState(false);
   const [errors, setErrors] = useState({});
@@ -257,9 +270,6 @@ export default function ReportIssuePage({
       );
       return;
     }
-    for (const q of visible)
-      if (q.required && String(answers[q.id] ?? "").trim() === "")
-        next[`question:${q.id}`] = "This question is required.";
     if (!values.description.trim()) next.description = "Describe your concern.";
     if (service.locationRequirement === "required" && !values.location.trim())
       next.location = "Enter the issue location.";
@@ -273,7 +283,34 @@ export default function ReportIssuePage({
     if (values.reportingMode === "identified" && !values.reporterName.trim())
       next.reporterName = "Enter your name.";
     if (Object.keys(next).length) setErrors(next);
-    else move("review");
+    else move(service.questions?.length ? "questions" : "review");
+  };
+  const continueQuestions = () => {
+    const next = {};
+    for (const q of visible) {
+      const value = answers[q.id];
+      const empty = String(value ?? "").trim() === "";
+      if (q.required && empty)
+        next[`question:${q.id}`] = "This question is required.";
+      if (
+        !empty &&
+        ["short-text", "long-text"].includes(q.type) &&
+        [...String(value).trim()].length >
+          (q.type === "short-text" ? 300 : 2000)
+      )
+        next[`question:${q.id}`] = "This answer is too long.";
+      if (
+        !empty &&
+        q.type === "number" &&
+        (!Number.isFinite(Number(value)) ||
+          Math.abs(Number(value)) > 1000000000 ||
+          !/^-?\d+(?:\.\d{1,6})?$/.test(String(value)))
+      )
+        next[`question:${q.id}`] =
+          "Enter a number with at most six decimal places within the allowed range.";
+    }
+    setErrors(next);
+    if (!Object.keys(next).length) move("review");
   };
   const submit = async () => {
     if (
@@ -294,6 +331,7 @@ export default function ReportIssuePage({
         ...(evidence.claim() ? { attachments: evidence.claim() } : {}),
       });
       evidence.clear();
+      setAnswers({});
       if (onSuccess) onSuccess(response);
       else if (data.mode === "legacy")
         navigate("/issues", {
@@ -301,6 +339,12 @@ export default function ReportIssuePage({
         });
       else setResult(response);
     } catch (error) {
+      if (data.mode === "api" && error.code === "catalog-version") {
+        setAnswers({});
+        evidence.clear();
+        move("service");
+        await selectService(service.id);
+      }
       setSaveError(
         data.mode === "legacy"
           ? "The issue could not be saved. Please try again."
@@ -362,7 +406,12 @@ export default function ReportIssuePage({
             <p>Find the issue that best matches your concern.</p>
           </div>
         </header>
-        {step !== "handoff" && <Progress step={step} />}
+        {step !== "handoff" && (
+          <Progress
+            step={step}
+            hasQuestions={Boolean(service?.questions?.length)}
+          />
+        )}
       </div>
       {saveError && (
         <div className="alert alert-danger" role="alert">
@@ -662,7 +711,12 @@ export default function ReportIssuePage({
                 }
                 attachmentsReady={evidence.ready}
                 service={service}
-                visibleQuestions={visible}
+                visibleQuestions={[]}
+                continueLabel={
+                  service.questions?.length
+                    ? "Continue to additional information"
+                    : "Review request"
+                }
                 values={values}
                 answers={answers}
                 errors={errors}
@@ -684,6 +738,42 @@ export default function ReportIssuePage({
                     : undefined
                 }
               />
+            </div>
+          )}
+          {step === "questions" && service && (
+            <div className="step-panel">
+              <h2 data-step-heading tabIndex="-1">
+                Additional information
+              </h2>
+              <form
+                noValidate
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  continueQuestions();
+                }}
+              >
+                {visible.map((q) => (
+                  <DynamicQuestion
+                    key={q.id}
+                    question={q}
+                    value={answers[q.id]}
+                    error={errors[`question:${q.id}`]}
+                    onChange={changeAnswer}
+                  />
+                ))}
+                <div className="intake-actions action-footer">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => move("details")}
+                  >
+                    Back to Details
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Review request
+                  </button>
+                </div>
+              </form>
             </div>
           )}
           {step === "review" && (
@@ -747,7 +837,14 @@ export default function ReportIssuePage({
                   .map((q) => (
                     <div className="review-pair" key={q.id}>
                       <dt>{q.label}</dt>
-                      <dd>{String(answers[q.id])}</dd>
+                      <dd
+                        style={{
+                          whiteSpace: "pre-wrap",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
+                        {displayAnswer(q, answers[q.id])}
+                      </dd>
                     </div>
                   ))}
               </dl>
@@ -764,7 +861,9 @@ export default function ReportIssuePage({
               <div className="intake-actions action-footer">
                 <button
                   className="btn btn-outline-secondary"
-                  onClick={() => move("details")}
+                  onClick={() =>
+                    move(service?.questions?.length ? "questions" : "details")
+                  }
                 >
                   Back / Edit
                 </button>

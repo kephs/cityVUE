@@ -594,6 +594,11 @@ export async function checkIssueDefaults(
         select ${locationVersion},organization_id,service_definition_id,999,name,resident_description,icon_key,aliases,keywords,default_priority,'optional',geographic_eligibility_mode,anonymous_reporting_policy,'published',clock_timestamp() from service_definition_version where id=${originalVersion}`.execute(
         db,
       );
+      await db
+        .updateTable('service_definition')
+        .set({ current_published_version_id: locationVersion })
+        .where('current_published_version_id', '=', originalVersion)
+        .execute();
       for (const enteredAddress of [
         'F048 fictional location A',
         'F048 fictional location B',
@@ -605,6 +610,11 @@ export async function checkIssueDefaults(
         });
         assert.equal(required((await owner(r.id))[0]).work_group_id, groupA);
       }
+      await db
+        .updateTable('service_definition')
+        .set({ current_published_version_id: originalVersion })
+        .where('current_published_version_id', '=', locationVersion)
+        .execute();
     },
   );
   await t.test(

@@ -1,3 +1,4 @@
+import SubmittedInformation from "./SubmittedInformation.jsx";
 import { RequestEvidence } from "../../attachments/Attachments.jsx";
 import {
   StatusBadge as Status,
@@ -928,6 +929,12 @@ function RequestDetail({ repository, id, onSignIn }) {
               </section>
             </ContentCard>
             <div className="request-supporting-content">
+              <SubmittedInformation
+                key={id}
+                id={id}
+                repository={repository}
+                canRead={capabilities.canReadAnswers}
+              />
               <RequestEvidence
                 key={id}
                 repository={repository.attachments}

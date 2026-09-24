@@ -14,6 +14,21 @@ function publicMessage(status, path, code) {
   if (
     status === 400 &&
     path.startsWith("/admin/issues") &&
+    code === "QUESTION_CONFIGURATION_INVALID"
+  )
+    return [
+      code,
+      "Check follow-up question text, options and unique order numbers.",
+    ];
+  if (
+    status === 400 &&
+    path.startsWith("/admin/issues") &&
+    code === "QUESTION_DEPENDENCY"
+  )
+    return [code, "This change would break inherited conditional behavior."];
+  if (
+    status === 400 &&
+    path.startsWith("/admin/issues") &&
     code === "ISSUE_DUPLICATE"
   )
     return [code, "An Issue with this name already exists."];

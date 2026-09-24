@@ -119,6 +119,7 @@ test('F040 PUBLIC action capabilities require their exact key and a valid lifecy
     canManageWatchers: false,
     canWatchSelf: true,
     canReadContact: false,
+    canReadAnswers: false,
     canReadNotes: false,
     canCreateNotes: false,
     canReadCommunications: false,

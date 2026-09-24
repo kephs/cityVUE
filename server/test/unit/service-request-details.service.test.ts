@@ -102,9 +102,9 @@ function service(enabled = true, result: unknown = record) {
 test('details service assembles snapshots, typed values, requester, location, and safe activity', async () => {
   const details = await service().execute(id);
   assert.equal(details.classification.department.name, 'Public Works');
-  assert.equal(details.answers[0]?.value, false);
-  assert.equal(details.answers[1]?.value, 'retired-key');
-  assert.equal(details.answers[1].displayValue, 'Saved retired label');
+  assert.equal('answers' in details, false);
+  assert.equal(details.canReadAnswers, false);
+  assert.ok(!JSON.stringify(details).includes('Saved retired label'));
   assert.deepEqual(details.requester, {
     anonymous: false,
   });

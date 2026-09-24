@@ -1,5 +1,7 @@
 # Reqro architecture decisions
 
+[ADR-018 — Immutable Dynamic Questions and protected submitted answers](ADR-018-dynamic-questions-protected-answers.md): approved F056.2A publication, history and independently audited disclosure, including the legacy compatibility migration.
+
 [ADR-015 — Product and Organization branding](ADR-015-product-organization-branding.md): F054 implementation decision for review; trusted packaged assets, independent resource and protected projection, deferred production uploads/writes.
 
 [ADR-014 — Administrative configuration authorization](ADR-014-administrative-configuration-authorization.md): F052 separate administrative domain, read-only snapshot, resource revisions and deployment-policy separation.

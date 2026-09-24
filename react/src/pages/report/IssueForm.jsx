@@ -1,3 +1,4 @@
+import DynamicQuestion from "./DynamicQuestion.jsx";
 import ServiceLocationInput from "../../residentIntake/ServiceLocationInput.jsx";
 function FieldError({ id, message }) {
   return message ? (
@@ -5,67 +6,6 @@ function FieldError({ id, message }) {
       {message}
     </div>
   ) : null;
-}
-
-function DynamicQuestion({ question, value = "", error, onChange }) {
-  const common = {
-    id: `question-${question.id}`,
-    value,
-    onChange: (event) => onChange(question.id, event.target.value),
-    "aria-invalid": Boolean(error),
-    "aria-errormessage": error ? `question-${question.id}-error` : undefined,
-    className: `form-control${error ? " is-invalid" : ""}`,
-    required: question.required,
-  };
-  let control;
-  if (question.type === "long-text")
-    control = <textarea {...common} rows="4" />;
-  else if (question.type === "single-select")
-    control = (
-      <select
-        {...common}
-        className={`form-select${error ? " is-invalid" : ""}`}
-      >
-        <option value="">Choose an option</option>
-        {question.options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    );
-  else if (question.type === "yes-no")
-    control = (
-      <select
-        {...common}
-        className={`form-select${error ? " is-invalid" : ""}`}
-      >
-        <option value="">Choose Yes or No</option>
-        <option value="yes">Yes</option>
-        <option value="no">No</option>
-      </select>
-    );
-  else
-    control = (
-      <input
-        {...common}
-        type={question.type === "number" ? "number" : "text"}
-      />
-    );
-
-  return (
-    <div className="mb-3">
-      <label className="form-label" htmlFor={`question-${question.id}`}>
-        {question.label}{" "}
-        {question.required && <span aria-hidden="true">*</span>}
-      </label>
-      {question.helpText && (
-        <div className="form-text mb-2">{question.helpText}</div>
-      )}
-      {control}
-      <FieldError id={`question-${question.id}-error`} message={error} />
-    </div>
-  );
 }
 
 export default function IssueForm({
@@ -83,6 +23,7 @@ export default function IssueForm({
   attachmentControls,
   participationControls,
   attachmentsReady = true,
+  continueLabel = "Review request",
 }) {
   const fieldProps = (name) => ({
     id: name,
@@ -238,7 +179,7 @@ export default function IssueForm({
           type="submit"
           disabled={!attachmentsReady}
         >
-          Review request
+          {continueLabel}
           <i className="bi bi-arrow-right ms-2" aria-hidden="true" />
         </button>
       </div>

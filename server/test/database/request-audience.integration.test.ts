@@ -1934,8 +1934,24 @@ test(
                 answers: [{ questionId, value: 'preserved' }],
               })
               .expect(201);
-            await postAs(staffPath, assisted, creator).expect(201);
-            await postAs(staffPath, internal, creator).expect(201);
+            await postAs(staffPath, assisted, creator).expect(409);
+            await postAs(staffPath, internal, creator).expect(409);
+            await postAs(
+              staffPath,
+              { ...assisted, serviceDefinitionVersionId: actionVersion },
+              creator,
+            ).expect(201);
+            await postAs(
+              staffPath,
+              { ...internal, serviceDefinitionVersionId: actionVersion },
+              creator,
+            ).expect(201);
+            // Restore the original current pointer for independent downstream fixtures.
+            await db
+              .updateTable('service_definition')
+              .set({ current_published_version_id: version })
+              .where('id', '=', service)
+              .execute();
           },
         );
         await t.test(

@@ -139,6 +139,7 @@ export class CreateServiceRequestResponseDto {
 }
 
 export class ServiceRequestDetailsResponseDto {
+  @ApiProperty() canReadAnswers!: boolean;
   @ApiProperty({ type: Object }) serviceRequest!: {
     id: string;
     referenceNumber: string;
@@ -157,15 +158,6 @@ export class ServiceRequestDetailsResponseDto {
     division?: { id: string; name: string };
   };
   @ApiProperty({ type: Object }) request!: { description: string };
-  @ApiProperty({ type: [Object] }) answers!: {
-    questionId: string;
-    questionKey: string;
-    label: string;
-    type: string;
-    order: number;
-    displayValue: string;
-    value: string | number | boolean;
-  }[];
   @ApiPropertyOptional({ type: Object }) location?: Record<string, unknown>;
   @ApiProperty({ type: Object }) requester!: {
     anonymous: boolean;

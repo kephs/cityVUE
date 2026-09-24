@@ -1,3 +1,7 @@
+import FollowUpQuestions, {
+  questionPayload,
+  validQuestions,
+} from "./FollowUpQuestions.jsx";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -14,6 +18,7 @@ const policyLabel = (value) =>
     : "Identification required";
 const targetKey = (target) => (target ? `${target.type}:${target.id}` : "");
 const fields = (issue) => ({
+  questions: issue?.questions ?? [],
   name: issue?.name ?? "",
   description: issue?.description ?? "",
   displayOrder: String(issue?.displayOrder ?? 0),
@@ -249,9 +254,30 @@ export default function IssueConfiguration({ client, onDenied }) {
   }, [client, edit, targetIssue, targetSearch]);
   const dirty =
     !!edit && JSON.stringify(draft) !== JSON.stringify(fields(edit.issue));
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const leave = (e) => {
+      const link = e.target.closest?.("a[href]");
+      if (link && !window.confirm("Discard unsaved Issue changes?")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    document.addEventListener("click", leave, true);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      document.removeEventListener("click", leave, true);
+    };
+  }, [dirty]);
   const name = draft.name.trim(),
     description = draft.description.trim();
   const valid =
+    validQuestions(draft.questions) &&
     name.length > 0 &&
     Array.from(name).length <= 200 &&
     Array.from(description).length <= 1000 &&
@@ -344,6 +370,7 @@ export default function IssueConfiguration({ client, onDenied }) {
       defaultAssignment: values.target ? { type, id } : null,
       ...(issue
         ? {
+            questions: questionPayload(values.questions),
             active: issue.active,
             expectedCoreRevision: issue.coreRevision,
             expectedActionRevision: issue.actionRevision,
@@ -411,7 +438,7 @@ export default function IssueConfiguration({ client, onDenied }) {
             : failure.status === 400
               ? failure.code === "ISSUE_DUPLICATE"
                 ? "An Issue with this name already exists. Inactive names remain reserved; reactivate the existing Issue to use its name again."
-                : "Check the Issue name, description and assignment. Names must be unique, including inactive Issues. Refresh if a selected target is no longer available."
+                : "Check the Issue name, description, follow-up questions and assignment. Names must be unique, including inactive Issues. Refresh if a selected target is no longer available."
               : "The Issue could not be saved or refreshed. Refresh to check its current state before trying again.",
       });
     } finally {
@@ -510,6 +537,18 @@ export default function IssueConfiguration({ client, onDenied }) {
               )}
               {!data.canWrite && " This page is read-only."}
             </p>
+          )}
+          {edit && !data.canWrite && (
+            <section>
+              <FollowUpQuestions questions={draft.questions} readOnly />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={cancel}
+              >
+                Close questions
+              </button>
+            </section>
           )}
           {edit && data.canWrite && (
             <form
@@ -646,6 +685,13 @@ export default function IssueConfiguration({ client, onDenied }) {
                   )}
                 </>
               )}
+              {edit.issue && edit.kind !== "order" && (
+                <FollowUpQuestions
+                  questions={draft.questions}
+                  onChange={(value) => set("questions", value)}
+                  disabled={busy}
+                />
+              )}
               <label htmlFor="issue-order">Display order</label>
               <input
                 ref={edit.kind === "order" ? input : undefined}
@@ -728,6 +774,16 @@ export default function IssueConfiguration({ client, onDenied }) {
                     <dd>{issue.assignmentLabel ?? "No default assignment"}</dd>
                   </dl>
                   <p>Order {issue.displayOrder}</p>
+                  {!data.canWrite && (
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary"
+                      disabled={detailLoading || !!edit}
+                      onClick={(e) => open(issue, "view", e)}
+                    >
+                      View questions
+                    </button>
+                  )}
                   {data.canWrite && (
                     <div className="d-flex gap-2 flex-wrap">
                       <button

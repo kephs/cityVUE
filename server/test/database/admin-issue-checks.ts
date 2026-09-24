@@ -1,3 +1,4 @@
+import { checkDynamicQuestions } from './dynamic-question-checks.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { TestContext } from 'node:test';
@@ -533,7 +534,7 @@ export async function checkAdminIssues(
     },
   );
   await t.test(
-    'F056 deactivation between pre-validation and transactional lock rejects stale creation',
+    'F056.2A schema validation holds the Issue lock and later deactivation rejects stale creation',
     async () => {
       const repo = app.get(ServiceRequestRepository),
         catalog = app.get(CatalogRepository);
@@ -569,19 +570,38 @@ export async function checkAdminIssues(
         .send({
           serviceDefinitionId: issue.id,
           serviceDefinitionVersionId: version.current_published_version_id,
-          description: 'F056 never persisted',
+          description: '  ',
           reportingIdentity: 'anonymous',
           answers: [],
         })
         .then((r) => r);
       try {
         await loaded;
-        issue = (
-          (await patch(issue.id, { ...body(issue), active: false }).expect(200))
-            .body as { issue: IssueProjection }
-        ).issue;
+        let changed = false;
+        const deactivation = patch(issue.id, {
+          ...body(issue),
+          active: false,
+        }).then((r) => {
+          changed = true;
+          return r;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.equal(changed, false);
         release();
-        assert.equal((await pending).status, 409);
+        assert.equal((await pending).status, 400);
+        const deactivated = await deactivation;
+        assert.equal(deactivated.status, 200);
+        issue = (deactivated.body as { issue: IssueProjection }).issue;
+        await request(api)
+          .post('/api/v1/service-requests')
+          .send({
+            serviceDefinitionId: issue.id,
+            serviceDefinitionVersionId: version.current_published_version_id,
+            description: 'F056 never persisted',
+            reportingIdentity: 'anonymous',
+            answers: [],
+          })
+          .expect(409);
         assert.ok(
           !(await catalog.listPublishedIssues(org, version.category_id)).some(
             (i) => i.id === issue.id,
@@ -738,4 +758,5 @@ export async function checkAdminIssues(
         assert.ok(!logs.includes(sensitive));
     },
   );
+  await checkDynamicQuestions(t, { db, app, org, actor, role });
 }

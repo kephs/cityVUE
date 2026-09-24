@@ -235,15 +235,7 @@ export class ServiceRequestRepository {
       .where('request.id', '=', serviceRequestId)
       .executeTakeFirst();
     if (!request) return undefined;
-    const [answers, location, activity, assignments] = await Promise.all([
-      trx
-        .selectFrom('answer')
-        .selectAll()
-        .where('organization_id', '=', organizationId)
-        .where('service_request_id', '=', serviceRequestId)
-        .orderBy('display_order')
-        .orderBy('id')
-        .execute(),
+    const [location, activity, assignments] = await Promise.all([
       trx
         .selectFrom('location')
         .selectAll()
@@ -313,7 +305,7 @@ export class ServiceRequestRepository {
         .orderBy('assignment.id')
         .execute(),
     ]);
-    return { request, answers, location, activity, assignments };
+    return { request, location, activity, assignments };
   }
 
   async loadSubmissionDefinition(

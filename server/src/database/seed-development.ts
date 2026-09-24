@@ -537,18 +537,18 @@ async function seed(db: Kysely<DatabaseSchema>): Promise<void> {
           location_policy: 'required',
           geographic_eligibility_mode: 'no_geographic_restriction',
           anonymous_reporting_policy: service.anonymous,
-          status: 'published',
-          published_at: new Date('2026-09-02T00:00:00Z'),
+          status: 'draft',
+          published_at: null,
           routing_metadata: null,
         })
         .onConflict((oc) => oc.column('id').doNothing())
         .execute();
-      await trx
-        .updateTable('service_definition')
-        .set({ current_published_version_id: versionId })
-        .where('id', '=', serviceId)
-        .where('current_published_version_id', 'is', null)
-        .execute();
+      const existingVersion = await trx
+        .selectFrom('service_definition_version')
+        .select('status')
+        .where('id', '=', versionId)
+        .executeTakeFirstOrThrow();
+      if (existingVersion.status === 'published') continue;
       for (const [index, question] of service.questions.entries()) {
         const qid = `60000000-0000-4${String(service.n).padStart(3, '0')}-8000-${String(index + 1).padStart(12, '0')}`;
         await trx
@@ -588,6 +588,20 @@ async function seed(db: Kysely<DatabaseSchema>): Promise<void> {
               .execute();
           }
       }
+      await trx
+        .updateTable('service_definition_version')
+        .set({
+          status: 'published',
+          published_at: new Date('2026-09-02T00:00:00Z'),
+        })
+        .where('id', '=', versionId)
+        .execute();
+      await trx
+        .updateTable('service_definition')
+        .set({ current_published_version_id: versionId })
+        .where('id', '=', serviceId)
+        .where('current_published_version_id', 'is', null)
+        .execute();
     }
   });
 }

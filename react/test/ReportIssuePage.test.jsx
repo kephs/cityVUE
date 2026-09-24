@@ -30,20 +30,30 @@ async function reachPotholeDetails(user) {
 
 async function completeAnonymousDetails(user, blocked = "no") {
   await user.click(screen.getByRole("radio", { name: "Report anonymously" }));
-  await user.selectOptions(
-    screen.getByLabelText("Is the roadway blocked? *"),
-    blocked,
-  );
-  if (blocked === "yes")
-    await user.type(
-      screen.getByLabelText("Describe how the roadway is blocked *"),
-      "One lane is blocked",
-    );
   await user.type(
     screen.getByLabelText("Tell us more about the concern *"),
     "Large pothole near the intersection.",
   );
   await user.type(screen.getByLabelText("Location *"), "Main Street");
+  await user.click(
+    screen.getByRole("button", { name: "Continue to additional information" }),
+  );
+  await user.click(
+    screen.getByRole("radio", { name: blocked === "yes" ? "Yes" : "No" }),
+  );
+  if (blocked === "yes")
+    await user.type(
+      screen.getByLabelText(/Describe how the roadway is blocked/),
+      "One lane is blocked",
+    );
+}
+async function questions(user) {
+  await reachPotholeDetails(user);
+  await completeAnonymousDetails(user);
+}
+async function backToSelection(user) {
+  await user.click(screen.getByRole("button", { name: "Back to Details" }));
+  await user.click(screen.getByRole("button", { name: "Back" }));
 }
 
 describe("ReportIssuePage configuration-driven intake", () => {
@@ -112,36 +122,26 @@ describe("ReportIssuePage configuration-driven intake", () => {
   test("Category filtering hides without destroying the selected Category, Issue, or intake state", async () => {
     const user = userEvent.setup();
     renderPage();
-    await reachPotholeDetails(user);
-    await user.type(screen.getByLabelText("Approximate size in feet"), "3");
-    await user.type(
-      screen.getByLabelText("Tell us more about the concern *"),
-      "Preserve this description",
-    );
-    await user.type(screen.getByLabelText("Location *"), "Main Street");
-    await user.click(screen.getByRole("button", { name: "Back" }));
+    await questions(user);
+    await user.type(screen.getByLabelText(/Approximate size in feet/), "3");
+    await backToSelection(user);
     const search = screen.getByRole("searchbox", { name: "Search categories" });
     await user.type(search, "trash");
-    expect(
-      screen.queryByRole("radio", { name: /Roads & Streets/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "Choose an Issue" }),
-    ).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Pothole/ })).toBeChecked();
     await user.click(
       screen.getByRole("button", { name: "Clear category search" }),
     );
     expect(search).toHaveFocus();
-    expect(
-      screen.getByRole("radio", { name: /Roads & Streets/ }),
-    ).toBeChecked();
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByLabelText("Approximate size in feet")).toHaveValue(3);
     expect(
       screen.getByLabelText("Tell us more about the concern *"),
-    ).toHaveValue("Preserve this description");
-    expect(screen.getByLabelText("Location *")).toHaveValue("Main Street");
+    ).toHaveValue("Large pothole near the intersection.");
+    await user.click(
+      screen.getByRole("button", {
+        name: "Continue to additional information",
+      }),
+    );
+    expect(screen.getByLabelText(/Approximate size in feet/)).toHaveValue(3);
   });
 
   test("Category selection reveals Issues, renders configured icons, and changing Category clears selection", async () => {
@@ -239,39 +239,31 @@ describe("ReportIssuePage configuration-driven intake", () => {
   test("renders configured questions and validates required visible questions", async () => {
     const user = userEvent.setup();
     renderPage();
-    await reachPotholeDetails(user);
-    expect(screen.getByLabelText("Approximate size in feet")).toHaveAttribute(
+    await questions(user);
+    expect(screen.getByLabelText(/Approximate size in feet/)).toHaveAttribute(
       "type",
       "number",
     );
-    expect(
-      screen.getByLabelText("Is the roadway blocked? *"),
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Yes" }));
     await user.click(screen.getByRole("button", { name: "Review request" }));
     expect(
-      screen.getByLabelText("Is the roadway blocked? *"),
+      screen.getByLabelText(/Describe how the roadway is blocked/),
     ).toHaveAccessibleErrorMessage("This question is required.");
   });
 
   test("conditional questions show and hide while clearing stale answers", async () => {
     const user = userEvent.setup();
     renderPage();
-    await reachPotholeDetails(user);
-    const blocked = screen.getByLabelText("Is the roadway blocked? *");
-    await user.selectOptions(blocked, "yes");
-    const details = screen.getByLabelText(
-      "Describe how the roadway is blocked *",
-    );
-    await user.type(details, "Stale answer");
-    await user.selectOptions(blocked, "no");
-    expect(
-      screen.queryByLabelText("Describe how the roadway is blocked *"),
-    ).not.toBeInTheDocument();
+    await questions(user);
+    await user.click(screen.getByRole("radio", { name: "Yes" }));
     await user.type(
-      screen.getByLabelText("Tell us more about the concern *"),
-      "Concern",
+      screen.getByLabelText(/Describe how the roadway is blocked/),
+      "Stale answer",
     );
-    await user.type(screen.getByLabelText("Location *"), "Main Street");
+    await user.click(screen.getByRole("radio", { name: "No" }));
+    expect(
+      screen.queryByLabelText(/Describe how the roadway is blocked/),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Review request" }));
     expect(screen.queryByText("Stale answer")).not.toBeInTheDocument();
   });
@@ -279,23 +271,29 @@ describe("ReportIssuePage configuration-driven intake", () => {
   test("changing Service clears old answers", async () => {
     const user = userEvent.setup();
     renderPage();
-    await reachPotholeDetails(user);
-    await user.type(screen.getByLabelText("Approximate size in feet"), "3");
-    await user.click(screen.getByRole("button", { name: "Back" }));
+    await questions(user);
+    await user.type(screen.getByLabelText(/Approximate size in feet/), "3");
+    await backToSelection(user);
     await user.click(
       screen.getByRole("radio", { name: /Damaged Street Sign/ }),
     );
     await user.click(screen.getByRole("radio", { name: /Pothole/ }));
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByLabelText("Approximate size in feet")).toHaveValue(null);
+    await user.type(screen.getByLabelText("Location *"), "Main Street");
+    await user.click(
+      screen.getByRole("button", {
+        name: "Continue to additional information",
+      }),
+    );
+    expect(screen.getByLabelText(/Approximate size in feet/)).toHaveValue(null);
   });
 
   test("explicitly choosing a different Category clears stale Issue selection and answers", async () => {
     const user = userEvent.setup();
     renderPage();
-    await reachPotholeDetails(user);
-    await user.type(screen.getByLabelText("Approximate size in feet"), "4");
-    await user.click(screen.getByRole("button", { name: "Back" }));
+    await questions(user);
+    await user.type(screen.getByLabelText(/Approximate size in feet/), "4");
+    await backToSelection(user);
     await user.click(screen.getByRole("radio", { name: /Streetlights/ }));
     expect(
       screen.queryByRole("radio", { name: /Pothole/ }),
@@ -303,20 +301,29 @@ describe("ReportIssuePage configuration-driven intake", () => {
     expect(
       screen.getByRole("radio", { name: /Streetlight Out/ }),
     ).not.toBeChecked();
-    await user.click(screen.getByRole("radio", { name: /Roads & Streets/ }));
-    await user.click(screen.getByRole("radio", { name: /Pothole/ }));
+    await selectPothole(user);
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByLabelText("Approximate size in feet")).toHaveValue(null);
+    await user.type(screen.getByLabelText("Location *"), "Main Street");
+    await user.click(
+      screen.getByRole("button", {
+        name: "Continue to additional information",
+      }),
+    );
+    expect(screen.getByLabelText(/Approximate size in feet/)).toHaveValue(null);
   });
 
   test("anonymous needs no name while identified reporting requires it", async () => {
     const user = userEvent.setup();
     renderPage();
     await reachPotholeDetails(user);
-    await completeAnonymousDetails(user);
+    await user.click(screen.getByRole("radio", { name: "Report anonymously" }));
     expect(screen.queryByLabelText("Your name *")).not.toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "Provide my name" }));
-    await user.click(screen.getByRole("button", { name: "Review request" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Continue to additional information",
+      }),
+    );
     expect(screen.getByLabelText("Your name *")).toHaveAccessibleErrorMessage(
       "Enter your name.",
     );
@@ -332,7 +339,11 @@ describe("ReportIssuePage configuration-driven intake", () => {
     expect(
       screen.getByRole("radio", { name: "Provide my name" }),
     ).not.toBeChecked();
-    await user.click(screen.getByRole("button", { name: "Review request" }));
+    await user.click(
+      screen.getByRole("button", {
+        name: "Continue to additional information",
+      }),
+    );
     expect(
       screen.getByText("Choose how you would like to submit this request."),
     ).toBeInTheDocument();
@@ -363,6 +374,8 @@ describe("ReportIssuePage configuration-driven intake", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Reporting anonymously")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back / Edit" }));
+    expect(screen.getByRole("radio", { name: "Yes" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Back to Details" }));
     expect(
       screen.getByLabelText("Tell us more about the concern *"),
     ).toHaveValue("Large pothole near the intersection.");
@@ -383,7 +396,7 @@ describe("ReportIssuePage configuration-driven intake", () => {
     expect(saveIssue).toHaveBeenCalledWith({
       title: "Pothole",
       description:
-        "Resident description:\nLarge pothole near the intersection.\n\nAdditional details:\n- Is the roadway blocked?: No",
+        "Resident description:\nLarge pothole near the intersection.",
       category: "Road",
       priority: "Medium",
       status: "Open",

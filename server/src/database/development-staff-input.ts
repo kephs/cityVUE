@@ -27,6 +27,7 @@ const fullUatOperatorPermissions = [
 ] as const satisfies readonly Permission[];
 
 export const developmentStaffPermissions = [
+  'service_request.answers.read',
   'admin.participation_areas.write',
   'admin.issues.write',
   'admin.intake_settings.write',

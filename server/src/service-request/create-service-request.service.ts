@@ -182,144 +182,6 @@ export class CreateServiceRequestService {
     validateParticipation(input.participation, context.audience);
     if (input.attachments && !attachments)
       throw new BadRequestException('Attachments unavailable');
-    const definition = await this.repository.loadSubmissionDefinition(
-      this.database.client,
-      context.organizationId,
-      input.serviceDefinitionId,
-      input.serviceDefinitionVersionId,
-    );
-    if (!definition)
-      throw new NotFoundException(
-        'Published service definition version not found',
-      );
-    if (input.description.trim() === '')
-      throw new BadRequestException('Description is required');
-    validateIdentityContact(
-      input.reportingIdentity,
-      input.contact,
-      context.audience === 'internal',
-    );
-    validateRequesterPolicy(
-      input.reportingIdentity,
-      'allowed',
-      context.audience === 'internal' || Boolean(input.contact?.name.trim()),
-    );
-    validateLocationPolicy(
-      definition.locationPolicy,
-      Boolean(input.location?.enteredAddress.trim()),
-    );
-    if (input.location?.enteredAddress.trim() === '')
-      throw new BadRequestException('Location address must not be blank');
-    if (
-      input.location &&
-      (input.location.latitude !== undefined ||
-        input.location.longitude !== undefined) &&
-      !validServicePoint(input.location.latitude, input.location.longitude)
-    )
-      throw new BadRequestException(
-        'Provide valid latitude and longitude together',
-      );
-
-    const supplied = new Map<string, unknown>();
-    for (const answer of input.answers) {
-      if (supplied.has(answer.questionId))
-        throw new BadRequestException('A question may be answered only once');
-      supplied.set(answer.questionId, answer.value);
-    }
-    const knownIds = new Set(
-      definition.questions.map((question) => question.id),
-    );
-    if ([...supplied.keys()].some((id) => !knownIds.has(id)))
-      throw new BadRequestException(
-        'Answer does not belong to the submitted service version',
-      );
-    const normalizedByKey = new Map<string, CanonicalAnswerValue>();
-    const normalizedById = new Map<string, CanonicalAnswerValue>();
-    for (const question of definition.questions) {
-      if (!supportedQuestionTypes.has(question.type as SupportedQuestionType))
-        throw new BadRequestException(
-          'The published form contains an unsupported question type',
-        );
-      const raw = supplied.get(question.id);
-      if (raw !== undefined) {
-        const value = normalizeAnswer(
-          question.type as SupportedQuestionType,
-          raw,
-        );
-        normalizedById.set(question.id, value);
-        normalizedByKey.set(question.key, value);
-      }
-    }
-    const persistedAnswers: {
-      id: string;
-      key: string;
-      label: string;
-      type: SupportedQuestionType;
-      order: number;
-      value: CanonicalAnswerValue;
-      optionLabel: string | null;
-    }[] = [];
-    for (const question of definition.questions) {
-      const condition = question.visibility as Condition | null;
-      const visible =
-        !condition ||
-        conditionMatches(
-          normalizedByKey.get(condition.questionKey),
-          condition.value,
-        );
-      const value = normalizedById.get(question.id);
-      if (!visible && value !== undefined)
-        throw new BadRequestException('Hidden questions must not be submitted');
-      if (visible && question.required && value === undefined)
-        throw new BadRequestException('A required question is missing');
-      if (!visible || value === undefined) continue;
-      const validation = question.validation as Validation | null;
-      if (
-        typeof value === 'number' &&
-        ((validation?.min !== undefined && value < validation.min) ||
-          (validation?.max !== undefined && value > validation.max))
-      )
-        throw new BadRequestException(
-          'Numeric answer is outside allowed bounds',
-        );
-      if (
-        typeof value === 'string' &&
-        question.type !== 'single_select' &&
-        ((validation?.minLength !== undefined &&
-          value.length < validation.minLength) ||
-          (validation?.maxLength !== undefined &&
-            value.length > validation.maxLength))
-      )
-        throw new BadRequestException('Text answer is outside allowed length');
-      const option =
-        question.type === 'single_select'
-          ? question.options.find((candidate) => candidate.key === value)
-          : undefined;
-      if (question.type === 'single_select' && !option)
-        throw new BadRequestException('Selected option is invalid');
-      persistedAnswers.push({
-        id: question.id,
-        key: question.key,
-        label: question.label,
-        type: question.type as SupportedQuestionType,
-        order: question.order,
-        value,
-        optionLabel: option?.label ?? null,
-      });
-    }
-
-    const eligibilityResult = input.location
-      ? await this.eligibility.execute({
-          organizationId: context.organizationId,
-          policyType: definition.geographicEligibilityMode,
-          policyReference: definition.geographicEligibilityPolicyReference,
-          unableToDetermineBehavior: definition.unableToDetermineBehavior,
-          enteredAddress: input.location.enteredAddress.trim(),
-          locationType: input.location.locationType ?? 'entered_address',
-          latitude: input.location.latitude,
-          longitude: input.location.longitude,
-        })
-      : null;
     return this.database.client.transaction().execute(async (trx) => {
       const attachmentDigest = checksum(
         JSON.stringify({
@@ -376,12 +238,13 @@ export class CreateServiceRequestService {
       // Serialize action changes against final submission, including stale published versions.
       const action = await trx
         .selectFrom('service_definition')
-        .select(['action_type', 'status'])
+        .select(['action_type', 'status', 'current_published_version_id'])
         .where('organization_id', '=', context.organizationId)
-        .where('id', '=', definition.serviceDefinitionId)
+        .where('id', '=', input.serviceDefinitionId)
         .forShare()
         .executeTakeFirst();
-      if (action?.status !== 'active')
+      if (!action) throw new NotFoundException();
+      if (action.status !== 'active')
         throw new ConflictException(
           'This Issue is no longer available for new requests',
         );
@@ -389,6 +252,165 @@ export class CreateServiceRequestService {
         throw new ConflictException(
           'This Issue is handled by an external service',
         );
+      if (
+        action.current_published_version_id !== input.serviceDefinitionVersionId
+      )
+        throw new ConflictException(
+          'The Issue form has changed. Review the current form.',
+        );
+      if (Buffer.byteLength(JSON.stringify(input.answers), 'utf8') > 32768)
+        throw new BadRequestException(
+          'Answer payload exceeds the allowed size',
+        );
+      const definition = await this.repository.loadSubmissionDefinition(
+        trx,
+        context.organizationId,
+        input.serviceDefinitionId,
+        input.serviceDefinitionVersionId,
+      );
+      if (!definition)
+        throw new NotFoundException(
+          'Published service definition version not found',
+        );
+      if (input.description.trim() === '')
+        throw new BadRequestException('Description is required');
+      validateIdentityContact(
+        input.reportingIdentity,
+        input.contact,
+        context.audience === 'internal',
+      );
+      validateRequesterPolicy(
+        input.reportingIdentity,
+        'allowed',
+        context.audience === 'internal' || Boolean(input.contact?.name.trim()),
+      );
+      validateLocationPolicy(
+        definition.locationPolicy,
+        Boolean(input.location?.enteredAddress.trim()),
+      );
+      if (input.location?.enteredAddress.trim() === '')
+        throw new BadRequestException('Location address must not be blank');
+      if (
+        input.location &&
+        (input.location.latitude !== undefined ||
+          input.location.longitude !== undefined) &&
+        !validServicePoint(input.location.latitude, input.location.longitude)
+      )
+        throw new BadRequestException(
+          'Provide valid latitude and longitude together',
+        );
+
+      const supplied = new Map<string, unknown>();
+      for (const answer of input.answers) {
+        if (supplied.has(answer.questionId))
+          throw new BadRequestException('A question may be answered only once');
+        supplied.set(answer.questionId, answer.value);
+      }
+      const knownIds = new Set(
+        definition.questions.map((question) => question.id),
+      );
+      if ([...supplied.keys()].some((id) => !knownIds.has(id)))
+        throw new BadRequestException(
+          'Answer does not belong to the submitted service version',
+        );
+      const normalizedByKey = new Map<string, CanonicalAnswerValue>();
+      const normalizedById = new Map<string, CanonicalAnswerValue>();
+      for (const question of definition.questions) {
+        if (!supportedQuestionTypes.has(question.type as SupportedQuestionType))
+          throw new BadRequestException(
+            'The published form contains an unsupported question type',
+          );
+        const raw = supplied.get(question.id);
+        if (raw !== undefined) {
+          if (
+            !question.required &&
+            (question.type === 'short_text' || question.type === 'long_text') &&
+            typeof raw === 'string' &&
+            !raw.trim()
+          )
+            continue;
+          const value = normalizeAnswer(
+            question.type as SupportedQuestionType,
+            raw,
+          );
+          normalizedById.set(question.id, value);
+          normalizedByKey.set(question.key, value);
+        }
+      }
+      const persistedAnswers: {
+        id: string;
+        key: string;
+        label: string;
+        type: SupportedQuestionType;
+        order: number;
+        value: CanonicalAnswerValue;
+        optionLabel: string | null;
+      }[] = [];
+      for (const question of definition.questions) {
+        const condition = question.visibility as Condition | null;
+        const visible =
+          !condition ||
+          conditionMatches(
+            normalizedByKey.get(condition.questionKey),
+            condition.value,
+          );
+        const value = normalizedById.get(question.id);
+        if (!visible && value !== undefined)
+          throw new BadRequestException(
+            'Hidden questions must not be submitted',
+          );
+        if (visible && question.required && value === undefined)
+          throw new BadRequestException('A required question is missing');
+        if (!visible || value === undefined) continue;
+        const validation = question.validation as Validation | null;
+        if (
+          typeof value === 'number' &&
+          ((validation?.min !== undefined && value < validation.min) ||
+            (validation?.max !== undefined && value > validation.max))
+        )
+          throw new BadRequestException(
+            'Numeric answer is outside allowed bounds',
+          );
+        if (
+          typeof value === 'string' &&
+          question.type !== 'single_select' &&
+          ((validation?.minLength !== undefined &&
+            value.length < validation.minLength) ||
+            (validation?.maxLength !== undefined &&
+              value.length > validation.maxLength))
+        )
+          throw new BadRequestException(
+            'Text answer is outside allowed length',
+          );
+        const option =
+          question.type === 'single_select'
+            ? question.options.find((candidate) => candidate.key === value)
+            : undefined;
+        if (question.type === 'single_select' && !option)
+          throw new BadRequestException('Selected option is invalid');
+        persistedAnswers.push({
+          id: question.id,
+          key: question.key,
+          label: question.label,
+          type: question.type as SupportedQuestionType,
+          order: question.order,
+          value,
+          optionLabel: option?.label ?? null,
+        });
+      }
+
+      const eligibilityResult = input.location
+        ? await this.eligibility.execute({
+            organizationId: context.organizationId,
+            policyType: definition.geographicEligibilityMode,
+            policyReference: definition.geographicEligibilityPolicyReference,
+            unableToDetermineBehavior: definition.unableToDetermineBehavior,
+            enteredAddress: input.location.enteredAddress.trim(),
+            locationType: input.location.locationType ?? 'entered_address',
+            latitude: input.location.latitude,
+            longitude: input.location.longitude,
+          })
+        : null;
       const identityPolicy = await inspectRequesterPolicy(
         trx,
         context.organizationId,

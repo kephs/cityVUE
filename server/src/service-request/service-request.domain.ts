@@ -64,11 +64,20 @@ export function normalizeAnswer(
   ) {
     if (typeof value !== 'string' || value.trim() === '')
       throw new BadRequestException('Answer has an invalid value');
+    if (
+      type !== 'single_select' &&
+      Array.from(value.trim()).length > (type === 'short_text' ? 300 : 2000)
+    )
+      throw new BadRequestException('Text answer is too long');
     return value.trim();
   }
   if (type === 'number') {
     if (typeof value !== 'number' || !Number.isFinite(value))
       throw new BadRequestException('Answer must be a finite number');
+    const [mantissa, exponent = '0'] = String(value).toLowerCase().split('e');
+    const decimals = (mantissa?.split('.')[1]?.length ?? 0) - Number(exponent);
+    if (Math.abs(value) > 1_000_000_000 || decimals > 6)
+      throw new BadRequestException('Numeric answer is outside allowed bounds');
     return value;
   }
   if (typeof value !== 'boolean')
