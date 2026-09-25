@@ -9,6 +9,9 @@ export const questionTypes = [
   'number',
   'yes_no',
   'single_select',
+  'multi_select',
+  'date',
+  'information',
 ] as const;
 export interface QuestionConfiguration {
   key: string;
@@ -98,10 +101,12 @@ export function validateQuestions(
       orders.add(position);
       if (!Array.isArray(q.options)) throw invalid();
       if (
-        q.type === 'single_select'
+        q.type === 'single_select' || q.type === 'multi_select'
           ? q.options.length < 2 || q.options.length > 25
           : q.options.length !== 0
       )
+        throw invalid();
+      if (q.type === 'information' && (q.required || q.help !== ''))
         throw invalid();
       const labels = new Set<string>(),
         optionKeys = new Set<string>(),
@@ -156,6 +161,7 @@ export function validateQuestions(
     const controller = result.find((x) => x.key === c.questionKey);
     if (
       !controller ||
+      ['multi_select', 'information'].includes(controller.type) ||
       c.operator !== 'equals' ||
       (controller.type === 'single_select' &&
         !controller.options.some((x) => x.key === c.value))

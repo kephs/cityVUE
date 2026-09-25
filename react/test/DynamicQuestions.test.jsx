@@ -37,9 +37,7 @@ test("F056.2A builder edits local schema, exposes supported types and preserves 
   expect(screen.getByText("<b>Plain text</b>")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Add question" }));
   expect(screen.getByLabelText("Type")).not.toBeDisabled();
-  expect(
-    screen.queryByRole("option", { name: "Date" }),
-  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Date" })).toBeInTheDocument();
   await user.selectOptions(screen.getByLabelText("Type"), "single_select");
   await user.click(screen.getByRole("button", { name: "Add option" }));
   expect(screen.getByLabelText("Option 1")).toBeInTheDocument();

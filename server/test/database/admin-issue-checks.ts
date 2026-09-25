@@ -1,5 +1,6 @@
 import { up as availabilityUp } from '../../migrations/20261005000000-issue-availability-external-history.js';
 import { checkDynamicQuestions } from './dynamic-question-checks.js';
+import { checkExtendedQuestions } from './extended-question-checks.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { TestContext } from 'node:test';
@@ -765,4 +766,5 @@ export async function checkAdminIssues(
     },
   );
   await checkDynamicQuestions(t, { db, app, org, actor, role });
+  await checkExtendedQuestions(t, { db, app, org, actor, role, logs: c.logs });
 }

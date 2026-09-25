@@ -386,6 +386,7 @@ export class ServiceRequestRepository {
             .where('question_id', 'in', ids)
             .where('status', '=', 'active')
             .orderBy('display_order')
+            .orderBy('option_key')
             .execute();
     return {
       organizationId: definition.organization_id,

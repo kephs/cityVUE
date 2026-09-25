@@ -1,4 +1,11 @@
+import { formatCalendarDate } from "../../components/ui/calendarDate.js";
 export function displayAnswer(question, value) {
+  if (question.type === "information") return "";
+  if (question.type === "date") return formatCalendarDate(value);
+  if (question.type === "multi-select")
+    return question.options
+      .filter((o) => Array.isArray(value) && value.includes(o.value))
+      .map((o) => o.label);
   if (question.type === "single-select")
     return question.options.find((o) => o.value === value)?.label ?? "";
   if (question.type === "yes-no")
@@ -41,12 +48,57 @@ export default function DynamicQuestion({
         </p>
       )}
       {error && (
-        <p id={errorId} className="invalid-feedback d-block">
+        <p id={errorId} role="alert" className="invalid-feedback d-block">
           {error}
         </p>
       )}
     </>
   );
+  if (question.type === "information")
+    return (
+      <div
+        className="border-start border-3 ps-3 py-2 mb-3"
+        style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+      >
+        <p className="mb-0">{question.label}</p>
+      </div>
+    );
+  if (question.type === "multi-select") {
+    const selected = Array.isArray(value) ? value : [];
+    return (
+      <fieldset
+        className="mb-3"
+        aria-describedby={common["aria-describedby"]}
+        aria-invalid={Boolean(error)}
+        aria-errormessage={error ? errorId : undefined}
+      >
+        <legend className="form-label">{label}</legend>
+        {question.options.map((option) => (
+          <label
+            key={option.value}
+            className="d-flex align-items-start gap-2 py-2"
+            style={{ overflowWrap: "anywhere" }}
+          >
+            <input
+              type="checkbox"
+              className="form-check-input flex-shrink-0"
+              checked={selected.includes(option.value)}
+              onChange={(e) =>
+                onChange(
+                  question.id,
+                  e.target.checked
+                    ? [...selected, option.value]
+                    : selected.filter((key) => key !== option.value),
+                )
+              }
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+        {assistance}
+      </fieldset>
+    );
+  }
   if (question.type === "yes-no")
     return (
       <fieldset className="mb-3" aria-describedby={common["aria-describedby"]}>
@@ -91,10 +143,18 @@ export default function DynamicQuestion({
       ) : (
         <input
           {...common}
-          type={question.type === "number" ? "number" : "text"}
+          type={
+            question.type === "number"
+              ? "number"
+              : question.type === "date"
+                ? "date"
+                : "text"
+          }
           {...(question.type === "number"
             ? { step: "0.000001", min: -1000000000, max: 1000000000 }
-            : { maxLength: 600 })}
+            : question.type === "date"
+              ? {}
+              : { maxLength: 600 })}
         />
       )}
       {assistance}

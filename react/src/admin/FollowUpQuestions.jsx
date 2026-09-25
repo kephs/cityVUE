@@ -5,7 +5,11 @@ export const questionTypeLabels = {
   number: "Number",
   yes_no: "Yes / No",
   single_select: "Single choice",
+  multi_select: "Multiple choice",
+  date: "Date",
+  information: "Information",
 };
+const choiceType = (type) => ["single_select", "multi_select"].includes(type);
 export const questionPayload = (questions) =>
   questions.map(({ key, prompt, help, type, required, order, options }) => ({
     key,
@@ -36,7 +40,8 @@ export function validQuestions(questions) {
         [...q.help.trim()].length <= 500 &&
         validOrder(q.order) &&
         questionTypeLabels[q.type] &&
-        (q.type === "single_select"
+        (q.type !== "information" || (!q.required && q.help === "")) &&
+        (choiceType(q.type)
           ? q.options.length >= 2 && q.options.length <= 25
           : q.options.length === 0) &&
         unique(q.options.map((o) => o.label.trim().toLowerCase())) &&
@@ -110,10 +115,13 @@ export default function FollowUpQuestions({
               <strong>{q.prompt || "New question"}</strong>
               <p>
                 {questionTypeLabels[q.type]} ·{" "}
-                {q.required ? "Required" : "Optional"} · Order {q.order}
-                {q.type === "single_select"
-                  ? ` · ${q.options.length} options`
-                  : ""}
+                {q.type === "information"
+                  ? "Display only"
+                  : q.required
+                    ? "Required"
+                    : "Optional"}{" "}
+                · Order {q.order}
+                {choiceType(q.type) ? ` · ${q.options.length} options` : ""}
               </p>
               {q.condition && <p>Conditional behavior inherited</p>}
               {!readOnly && (
@@ -172,9 +180,19 @@ export default function FollowUpQuestions({
                     id={`follow-${i}-type`}
                     value={q.type}
                     disabled={q.key !== null}
-                    onChange={(e) =>
-                      update(i, { type: e.target.value, options: [] })
-                    }
+                    onChange={(e) => {
+                      const type = e.target.value;
+                      update(i, {
+                        type,
+                        options:
+                          choiceType(type) && choiceType(q.type)
+                            ? q.options
+                            : [],
+                        ...(type === "information"
+                          ? { required: false, help: "" }
+                          : {}),
+                      });
+                    }}
                   >
                     {Object.entries(questionTypeLabels).map(
                       ([value, label]) => (
@@ -184,8 +202,10 @@ export default function FollowUpQuestions({
                       ),
                     )}
                   </select>
-                  <label htmlFor={`follow-${i}-prompt`}>Question</label>
-                  <input
+                  <label htmlFor={`follow-${i}-prompt`}>
+                    {q.type === "information" ? "Information text" : "Question"}
+                  </label>
+                  <textarea
                     className="form-control"
                     id={`follow-${i}-prompt`}
                     value={q.prompt}
@@ -193,23 +213,27 @@ export default function FollowUpQuestions({
                     aria-describedby="follow-up-validation"
                     onChange={(e) => update(i, { prompt: e.target.value })}
                   />
-                  <label htmlFor={`follow-${i}-help`}>Help text</label>
-                  <textarea
-                    className="form-control"
-                    id={`follow-${i}-help`}
-                    value={q.help}
-                    onChange={(e) => update(i, { help: e.target.value })}
-                  />
-                  <label className="d-block my-2">
-                    <input
-                      type="checkbox"
-                      checked={q.required}
-                      onChange={(e) =>
-                        update(i, { required: e.target.checked })
-                      }
-                    />{" "}
-                    Required
-                  </label>
+                  {q.type !== "information" && (
+                    <>
+                      <label htmlFor={`follow-${i}-help`}>Help text</label>
+                      <textarea
+                        className="form-control"
+                        id={`follow-${i}-help`}
+                        value={q.help}
+                        onChange={(e) => update(i, { help: e.target.value })}
+                      />
+                      <label className="d-block my-2">
+                        <input
+                          type="checkbox"
+                          checked={q.required}
+                          onChange={(e) =>
+                            update(i, { required: e.target.checked })
+                          }
+                        />{" "}
+                        Required
+                      </label>
+                    </>
+                  )}
                   <label htmlFor={`follow-${i}-order`}>Display order</label>
                   <input
                     className="form-control"
@@ -221,7 +245,7 @@ export default function FollowUpQuestions({
                     value={q.order}
                     onChange={(e) => update(i, { order: e.target.value })}
                   />
-                  {q.type === "single_select" && (
+                  {choiceType(q.type) && (
                     <fieldset className="mt-3">
                       <legend className="h6">Options</legend>
                       {q.options.map((o, n) => (

@@ -41,8 +41,31 @@ export function validateWorkflowInput(
 }
 
 export type SupportedQuestionType =
-  'short_text' | 'long_text' | 'number' | 'yes_no' | 'single_select';
-export type CanonicalAnswerValue = string | number | boolean;
+  | 'short_text'
+  | 'long_text'
+  | 'number'
+  | 'yes_no'
+  | 'single_select'
+  | 'multi_select'
+  | 'date'
+  | 'information';
+export type CanonicalAnswerValue = string | number | boolean | string[];
+
+/** Calendar components only: no Date constructor, timezone, locale or instant. */
+export function validCalendarDate(value: unknown): value is string {
+  if (
+    typeof value !== 'string' ||
+    value.length !== 10 ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  )
+    return false;
+  const [year = 0, month = 0, day = 0] = value.split('-').map(Number);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const limit =
+    [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ??
+    0;
+  return year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= limit;
+}
 
 export function conditionMatches(
   actual: CanonicalAnswerValue | undefined,
@@ -57,6 +80,25 @@ export function normalizeAnswer(
   type: SupportedQuestionType,
   value: unknown,
 ): CanonicalAnswerValue {
+  if (type === 'information')
+    throw new BadRequestException('Information does not accept an answer');
+  if (type === 'date') {
+    if (!validCalendarDate(value))
+      throw new BadRequestException('Enter a valid calendar date');
+    return value;
+  }
+  if (type === 'multi_select') {
+    if (
+      !Array.isArray(value) ||
+      value.length > 25 ||
+      value.some(
+        (key: unknown) => typeof key !== 'string' || !key || key.length > 100,
+      ) ||
+      new Set(value).size !== value.length
+    )
+      throw new BadRequestException('Selected options are invalid');
+    return value as string[];
+  }
   if (
     type === 'short_text' ||
     type === 'long_text' ||

@@ -7,7 +7,7 @@
 .report-form-card { overflow: hidden; border: 1px solid var(--border-default) !important; border-radius: 1rem; box-shadow: 0 .8rem 2.5rem rgba(20, 43, 70, .09); }
 
 .intake-progress { margin-bottom: 0; }
-.intake-progress ol { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; padding: 0; list-style: none; }
+.intake-progress ol { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); margin: 0; padding: 0; list-style: none; }
 .intake-progress li { position: relative; display: grid; justify-items: center; gap: .2rem; color: var(--text-muted); text-align: center; font-weight: 600; }
 .intake-progress li:not(:last-child)::after { position: absolute; top: 1rem; left: calc(50% + 1.4rem); width: calc(100% - 2.8rem); height: 2px; background: var(--border-default); content: ""; }
 .intake-progress li.completed::after { background: var(--bs-primary); }

@@ -1,5 +1,7 @@
 import { useAuth } from "../../auth/AuthContext.jsx";
 import DynamicQuestion, { displayAnswer } from "./DynamicQuestion.jsx";
+import AnswerValue from "../../components/ui/AnswerValue.jsx";
+import { parseCalendarDate } from "../../components/ui/calendarDate.js";
 import {
   AttachmentSelector,
   useAttachmentDraft,
@@ -345,10 +347,13 @@ export default function ReportIssuePage({
   const continueQuestions = () => {
     const next = {};
     for (const q of visible) {
+      if (q.type === "information") continue;
       const value = answers[q.id];
       const empty = String(value ?? "").trim() === "";
       if (q.required && empty)
         next[`question:${q.id}`] = "This question is required.";
+      if (!empty && q.type === "date" && !parseCalendarDate(value))
+        next[`question:${q.id}`] = "Enter a valid calendar date.";
       if (
         !empty &&
         ["short-text", "long-text"].includes(q.type) &&
@@ -894,7 +899,12 @@ export default function ReportIssuePage({
                 </div>
                 {visible
                   .filter(
-                    (q) => answers[q.id] !== "" && answers[q.id] !== undefined,
+                    (q) =>
+                      q.type !== "information" &&
+                      answers[q.id] !== "" &&
+                      answers[q.id] !== undefined &&
+                      (!Array.isArray(answers[q.id]) ||
+                        answers[q.id].length > 0),
                   )
                   .map((q) => (
                     <div className="review-pair" key={q.id}>
@@ -905,7 +915,7 @@ export default function ReportIssuePage({
                           overflowWrap: "anywhere",
                         }}
                       >
-                        {displayAnswer(q, answers[q.id])}
+                        <AnswerValue value={displayAnswer(q, answers[q.id])} />
                       </dd>
                     </div>
                   ))}

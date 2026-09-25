@@ -10,7 +10,9 @@ export function mapIntakeToCreateServiceRequest({
   participation,
 }) {
   const visibleIds = new Set(
-    (service.questions || []).map((question) => question.id),
+    (service.questions || [])
+      .filter((question) => question.type !== "information")
+      .map((question) => question.id),
   );
   return {
     ...(participation
@@ -30,13 +32,26 @@ export function mapIntakeToCreateServiceRequest({
     reportingIdentity: reportingMode,
     answers: Object.entries(answers)
       .filter(
-        ([questionId, value]) => visibleIds.has(questionId) && value !== "",
+        ([questionId, value]) =>
+          visibleIds.has(questionId) &&
+          value !== "" &&
+          (!Array.isArray(value) || value.length > 0),
       )
       .map(([questionId, value]) => {
         const question = service.questions.find(
           (candidate) => candidate.id === questionId,
         );
         let typedValue = value;
+        if (question.type === "multi-select")
+          return {
+            questionId,
+            optionKeys: question.options
+              .filter(
+                (option) =>
+                  Array.isArray(value) && value.includes(option.value),
+              )
+              .map((option) => option.value),
+          };
         if (question.type === "number") typedValue = Number(value);
         if (question.type === "yes-no") typedValue = value === "yes";
         return { questionId, value: typedValue };

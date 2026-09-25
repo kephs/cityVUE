@@ -218,8 +218,18 @@ interface AnswerTable {
   boolean_value: boolean | null;
   option_key: string | null;
   display_value: string | null;
+  date_value: Generated<string | null>;
+  selected_option_count: Generated<number | null>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
+}
+interface AnswerSelectedOptionTable {
+  organization_id: string;
+  answer_id: string;
+  question_id: string;
+  option_key: string;
+  option_label: Generated<string>;
+  display_order: Generated<number>;
 }
 interface RequestOperationalActivityTable {
   from_target_type: Generated<string | null>;
@@ -623,6 +633,7 @@ export interface DatabaseSchema {
   requester_contact: RequesterContactTable;
   location: LocationTable;
   answer: AnswerTable;
+  answer_selected_option: AnswerSelectedOptionTable;
   activity: ActivityTable;
   request_operational_activity: RequestOperationalActivityTable;
   staff_identity: StaffIdentityTable;

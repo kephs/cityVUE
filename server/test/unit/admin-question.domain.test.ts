@@ -68,7 +68,7 @@ for (const change of [
   { prompt: '' },
   { prompt: 'x'.repeat(201) },
   { help: 'x'.repeat(501) },
-  { type: 'date' },
+  { type: 'timestamp' },
   { type: 'multi_select' },
   { type: 'information' },
   { order: -1 },

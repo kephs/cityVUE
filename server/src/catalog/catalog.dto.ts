@@ -47,7 +47,16 @@ export class QuestionDto {
   @ApiProperty() label!: string;
   @ApiPropertyOptional({ nullable: true }) helpText!: string | null;
   @ApiProperty({
-    enum: ['short_text', 'long_text', 'number', 'yes_no', 'single_select'],
+    enum: [
+      'short_text',
+      'long_text',
+      'number',
+      'yes_no',
+      'single_select',
+      'multi_select',
+      'date',
+      'information',
+    ],
   })
   type!: string;
   @ApiProperty() required!: boolean;

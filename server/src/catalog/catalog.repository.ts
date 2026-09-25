@@ -183,6 +183,7 @@ export class CatalogRepository {
             .where('question_id', 'in', questionIds)
             .where('status', '=', 'active')
             .orderBy('display_order')
+            .orderBy('option_key')
             .execute();
     return { issue, questions, options };
   }

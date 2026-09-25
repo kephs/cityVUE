@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../auth/AuthContext.jsx";
+import AnswerValue from "../../components/ui/AnswerValue.jsx";
+import { formatCalendarDate } from "../../components/ui/calendarDate.js";
 
 /** Protected content stays in memory and is never inferred from ordinary detail. */
 export default function SubmittedInformation({ id, repository, canRead }) {
@@ -59,7 +61,15 @@ export default function SubmittedInformation({ id, repository, canRead }) {
                 <dd
                   style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
                 >
-                  {answer.displayValue}
+                  <AnswerValue
+                    value={
+                      answer.type === "multi_select"
+                        ? answer.selectedLabels
+                        : answer.type === "date"
+                          ? formatCalendarDate(answer.dateValue)
+                          : answer.displayValue
+                    }
+                  />
                 </dd>
               </div>
             ))}

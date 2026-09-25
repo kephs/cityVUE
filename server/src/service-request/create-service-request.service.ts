@@ -36,6 +36,7 @@ import type {
   CreateServiceRequestDto,
   CreateStaffServiceRequestDto,
   CreateServiceRequestResponseDto,
+  AnswerInputDto,
 } from './service-request.dto.js';
 import {
   conditionMatches,
@@ -65,6 +66,9 @@ const supportedQuestionTypes = new Set<SupportedQuestionType>([
   'number',
   'yes_no',
   'single_select',
+  'multi_select',
+  'date',
+  'information',
 ]);
 
 @Injectable()
@@ -312,11 +316,11 @@ export class CreateServiceRequestService {
           'Provide valid latitude and longitude together',
         );
 
-      const supplied = new Map<string, unknown>();
+      const supplied = new Map<string, AnswerInputDto>();
       for (const answer of input.answers) {
         if (supplied.has(answer.questionId))
           throw new BadRequestException('A question may be answered only once');
-        supplied.set(answer.questionId, answer.value);
+        supplied.set(answer.questionId, answer);
       }
       const knownIds = new Set(
         definition.questions.map((question) => question.id),
@@ -332,11 +336,27 @@ export class CreateServiceRequestService {
           throw new BadRequestException(
             'The published form contains an unsupported question type',
           );
-        const raw = supplied.get(question.id);
-        if (raw !== undefined) {
+        const entry = supplied.get(question.id);
+        if (entry !== undefined) {
+          if (question.type === 'information')
+            throw new BadRequestException(
+              'Information does not accept an answer',
+            );
+          if (
+            question.type === 'multi_select'
+              ? entry.value !== undefined || entry.optionKeys === undefined
+              : entry.optionKeys !== undefined || entry.value === undefined
+          )
+            throw new BadRequestException(
+              'Answer representation does not match the question',
+            );
+          const raw =
+            question.type === 'multi_select' ? entry.optionKeys : entry.value;
           if (
             !question.required &&
-            (question.type === 'short_text' || question.type === 'long_text') &&
+            (question.type === 'short_text' ||
+              question.type === 'long_text' ||
+              (question.type === 'date' && raw === '')) &&
             typeof raw === 'string' &&
             !raw.trim()
           )
@@ -345,11 +365,13 @@ export class CreateServiceRequestService {
             question.type as SupportedQuestionType,
             raw,
           );
+          if (Array.isArray(value) && !value.length) continue;
           normalizedById.set(question.id, value);
           normalizedByKey.set(question.key, value);
         }
       }
       const persistedAnswers: {
+        answerId: string;
         id: string;
         key: string;
         label: string;
@@ -371,7 +393,12 @@ export class CreateServiceRequestService {
           throw new BadRequestException(
             'Hidden questions must not be submitted',
           );
-        if (visible && question.required && value === undefined)
+        if (
+          visible &&
+          question.type !== 'information' &&
+          question.required &&
+          value === undefined
+        )
           throw new BadRequestException('A required question is missing');
         if (!visible || value === undefined) continue;
         const validation = question.validation as Validation | null;
@@ -400,13 +427,22 @@ export class CreateServiceRequestService {
             : undefined;
         if (question.type === 'single_select' && !option)
           throw new BadRequestException('Selected option is invalid');
+        const selected =
+          question.type === 'multi_select' && Array.isArray(value)
+            ? question.options
+                .filter((candidate) => value.includes(candidate.key))
+                .map((candidate) => candidate.key)
+            : null;
+        if (selected && selected.length !== (value as string[]).length)
+          throw new BadRequestException('Selected option is invalid');
         persistedAnswers.push({
+          answerId: randomUUID(),
           id: question.id,
           key: question.key,
           label: question.label,
           type: question.type as SupportedQuestionType,
           order: question.order,
-          value,
+          value: selected ?? value,
           optionLabel: option?.label ?? null,
         });
       }
@@ -539,7 +575,7 @@ export class CreateServiceRequestService {
           .insertInto('answer')
           .values(
             persistedAnswers.map((answer) => ({
-              id: randomUUID(),
+              id: answer.answerId,
               organization_id: context.organizationId,
               service_request_id: requestId,
               question_id: answer.id,
@@ -559,8 +595,29 @@ export class CreateServiceRequestService {
                 answer.type === 'single_select' ? String(answer.value) : null,
               display_value:
                 answer.type === 'single_select' ? answer.optionLabel : null,
+              ...(answer.type === 'date'
+                ? { date_value: String(answer.value) }
+                : {}),
+              ...(answer.type === 'multi_select'
+                ? { selected_option_count: (answer.value as string[]).length }
+                : {}),
             })),
           )
+          .execute();
+      const selections = persistedAnswers.flatMap((answer) =>
+        answer.type === 'multi_select'
+          ? (answer.value as string[]).map((key) => ({
+              organization_id: context.organizationId,
+              answer_id: answer.answerId,
+              question_id: answer.id,
+              option_key: key,
+            }))
+          : [],
+      );
+      if (selections.length)
+        await trx
+          .insertInto('answer_selected_option')
+          .values(selections)
           .execute();
       await trx
         .insertInto('activity')

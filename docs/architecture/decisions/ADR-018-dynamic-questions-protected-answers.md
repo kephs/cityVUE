@@ -18,6 +18,8 @@ Reqro already stores version-owned questions/options and typed answer snapshots.
 
 ## Consequences and privacy
 
+F056.2C amendment (2026-09-24): [ADR-020](ADR-020-extended-question-answer-storage.md) extends the authorable type set with multi-select, Date and Information. The five-type limit above records the F056.2A checkpoint; the history, authorization and disclosure decisions remain authoritative.
+
 Ordinary request readers retain their other authorized details but no longer receive submitted answers or answer-existence metadata. Existing clients must migrate to the protected path. Historical requests retain their original definitions after edits/removals. Rollback refuses to discard retained schema-change audits, answer-read audits or the explicit grant; rollback/reapply is tested before such use in disposable schemas.
 
 Bounds limit new authoring and submissions, not historical preservation. Free text can contain sensitive information; authorization is not automatic classification/redaction. Already disclosed browser content cannot be retroactively erased. No answer publication to tracking, search, analytics, AI, exports or notifications is authorized. Production privacy, retention, correction and deployment remain separate decisions.

@@ -17,16 +17,31 @@ import {
   Max,
   Min,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AnswerInputDto {
   @ApiProperty({ format: 'uuid' }) @IsUUID('4') questionId!: string;
-  @ApiProperty({
+  @ApiPropertyOptional({
     oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }],
+    description:
+      'Required for scalar answers, including a YYYY-MM-DD Date; omit for Multi-select.',
   })
+  @ValidateIf((object: AnswerInputDto) => object.optionKeys === undefined)
   @IsDefined()
-  value!: unknown;
+  value?: unknown;
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 25,
+    description: 'Multi-select only; mutually exclusive with value.',
+  })
+  @ValidateIf((object: AnswerInputDto) => object.optionKeys !== undefined)
+  @IsArray()
+  @ArrayMaxSize(25)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  optionKeys?: string[];
 }
 export class ContactInputDto {
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(200) name!: string;
