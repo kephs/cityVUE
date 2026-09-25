@@ -21,6 +21,7 @@ const base: StaffAccess = {
   development: false,
 };
 const create = {
+  availability: 'INTERNAL_AND_EXTERNAL',
   name: 'Fictional',
   description: 'Short description',
   displayOrder: 0,
@@ -103,8 +104,9 @@ test('F056 create rejects authority, active forgery, unrelated fields and unsafe
     });
 });
 test('F056 edit requires each independent expected revision, no generalized revision', () => {
-  const { templateId, ...fields } = create;
+  const { templateId, availability, ...fields } = create;
   void templateId;
+  void availability;
   const edit = {
     ...fields,
     active: false,

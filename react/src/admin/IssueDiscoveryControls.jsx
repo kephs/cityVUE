@@ -13,6 +13,25 @@ export default function IssueDiscoveryControls({
   const [expanded, setExpanded] = useState(false);
   const selects = [
     [
+      "availability",
+      "Availability",
+      [
+        ["all", "All availability"],
+        ["INTERNAL_ONLY", "Internal only"],
+        ["EXTERNAL_ONLY", "External only"],
+        ["INTERNAL_AND_EXTERNAL", "Internal and external"],
+      ],
+    ],
+    [
+      "handling",
+      "Handling",
+      [
+        ["all", "All handling"],
+        ["internal_intake", "Reqro Intake"],
+        ["external_redirect", "External Redirect"],
+      ],
+    ],
+    [
       "status",
       "Status",
       [

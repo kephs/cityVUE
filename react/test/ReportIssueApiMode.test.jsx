@@ -225,15 +225,9 @@ test("external Issue displays a keyboard-accessible handoff, suppresses question
   expect(
     screen.queryByRole("button", { name: "Submit Request" }),
   ).not.toBeInTheDocument();
-  const link = screen.getByRole("link", {
+  const link = screen.getByRole("button", {
     name: /Continue to External Service/,
   });
-  expect(link).toHaveAttribute(
-    "href",
-    "https://example.com/service?allowed=value",
-  );
-  expect(link).toHaveAttribute("referrerpolicy", "no-referrer");
-  expect(link).not.toHaveAttribute("target");
   await waitFor(() =>
     expect(
       screen.getByRole("heading", { name: "Continue to External Service" }),
@@ -243,10 +237,16 @@ test("external Issue displays a keyboard-accessible handoff, suppresses question
   expect(screen.getByRole("button", { name: "Go Back" })).toHaveFocus();
   await user.tab();
   expect(link).toHaveFocus();
-  link.addEventListener("click", (event) => event.preventDefault(), {
-    once: true,
-  });
+  const navigation = vi
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(() => {});
   await user.keyboard("{Enter}");
+  await waitFor(() => expect(navigation).toHaveBeenCalledOnce());
+  const destination = navigation.mock.instances[0];
+  expect(destination.href).toBe("https://example.com/service?allowed=value");
+  expect(destination.referrerPolicy).toBe("no-referrer");
+  expect(destination.target).toBe("");
+  navigation.mockRestore();
   expect(create).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Go Back" }));
   expect(
@@ -257,6 +257,126 @@ test("external Issue displays a keyboard-accessible handoff, suppresses question
   ).not.toBeInTheDocument();
   expect(create).not.toHaveBeenCalled();
 });
+
+test.each(["destination", "message", "label"])(
+  "F056.2B stale %s refreshes handoff and requires another Continue",
+  async (field) => {
+    const user = userEvent.setup(),
+      create = vi.fn(),
+      repositories = apiRepositories(create);
+    const initial = {
+      ...service,
+      actionType: "external_redirect",
+      actionRevision: 1,
+      redirect: {
+        destination: "https://example.com/path",
+        message: "Original handoff",
+        label: "Continue safely",
+      },
+    };
+    const next = {
+      ...initial,
+      actionRevision: 2,
+      redirect: {
+        ...initial.redirect,
+        [field]:
+          field === "destination"
+            ? "https://example.org/new"
+            : "Updated handoff",
+      },
+    };
+    repositories.catalog.loadDefinition
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValue(next);
+    const navigation = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    render(
+      <MemoryRouter>
+        <ReportIssuePage repositories={repositories} />
+      </MemoryRouter>,
+    );
+    await user.click(await screen.findByRole("radio", { name: /Roads/ }));
+    await user.click(await screen.findByRole("radio", { name: /Pothole/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Continue safely/ }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "This service link changed",
+    );
+    expect(navigation).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Continue to External Service" }),
+    ).toHaveFocus();
+    await user.click(
+      screen.getByRole("button", { name: new RegExp(next.redirect.label) }),
+    );
+    await waitFor(() => expect(navigation).toHaveBeenCalledOnce());
+    expect(navigation.mock.instances[0].href).toBe(next.redirect.destination);
+    expect(create).not.toHaveBeenCalled();
+    navigation.mockRestore();
+  },
+);
+
+test.each(["inactive", "reqro"])(
+  "F056.2B %s current state prevents stale navigation",
+  async (state) => {
+    const user = userEvent.setup(),
+      create = vi.fn(),
+      repositories = apiRepositories(create);
+    repositories.catalog.loadDefinition.mockResolvedValueOnce({
+      ...service,
+      actionType: "external_redirect",
+      actionRevision: 1,
+      redirect: {
+        destination: "https://example.com/",
+        message: "Fictional handoff",
+        label: "Continue safely",
+      },
+    });
+    if (state === "inactive")
+      repositories.catalog.loadDefinition.mockRejectedValueOnce(
+        new Error("unavailable"),
+      );
+    else
+      repositories.catalog.loadDefinition.mockResolvedValueOnce({
+        ...service,
+        actionType: "internal_intake",
+        actionRevision: 2,
+        anonymousPolicy: "not-allowed",
+      });
+    const navigation = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    render(
+      <MemoryRouter>
+        <ReportIssuePage repositories={repositories} />
+      </MemoryRouter>,
+    );
+    await user.click(await screen.findByRole("radio", { name: /Roads/ }));
+    await user.click(await screen.findByRole("radio", { name: /Pothole/ }));
+    await user.click(
+      await screen.findByRole("button", { name: /Continue safely/ }),
+    );
+    if (state === "inactive")
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "currently unavailable",
+      );
+    else
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: /Continue safely/ }),
+        ).not.toBeInTheDocument(),
+      );
+    expect(navigation).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    if (state === "reqro")
+      expect(
+        screen.getByRole("radio", { name: "Provide my name" }),
+      ).toBeChecked();
+    navigation.mockRestore();
+  },
+);
 
 test("unsafe catalog redirect data fails closed without a navigation control", async () => {
   const user = userEvent.setup();

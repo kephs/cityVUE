@@ -1,3 +1,4 @@
+import { legacyAvailabilityFixture } from '../helpers/legacy-availability.js';
 import { up as identityPolicyUp } from '../../migrations/20260925000000-add-requester-identity-policy.js';
 import { up as ownershipUp } from '../../migrations/20260920000000-add-assignment-watchers.js';
 import { up as defaultAssignmentUp } from '../../migrations/20260924000000-add-issue-default-assignment.js';
@@ -83,6 +84,7 @@ test(
       await audienceUp(db);
       await lifecycleUp(db);
       await actionUp(db);
+      await legacyAvailabilityFixture(db);
       await referenceUp(db);
       await operationalUp(db);
       await ownershipUp(db);

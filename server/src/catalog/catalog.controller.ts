@@ -1,4 +1,11 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  ParseUUIDPipe,
+  Query,
+} from '@nestjs/common';
 import {
   ApiOkResponse,
   ApiOperation,
@@ -14,6 +21,7 @@ import { CategoryDto, IssueDetailDto, IssueSummaryDto } from './catalog.dto.js';
 export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}
   @Get('categories')
+  @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: 'List active resident catalog categories' })
   @ApiQuery({ name: 'search', required: false })
   @ApiOkResponse({ type: [CategoryDto] })
@@ -22,6 +30,7 @@ export class CatalogController {
   }
 
   @Get('categories/:categoryId/issues')
+  @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: 'List published issues in an active category' })
   @ApiParam({ name: 'categoryId', format: 'uuid' })
   @ApiQuery({ name: 'search', required: false })
@@ -35,6 +44,7 @@ export class CatalogController {
   }
 
   @Get('issues/:serviceDefinitionId')
+  @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: 'Load a published issue and its resident form' })
   @ApiParam({ name: 'serviceDefinitionId', format: 'uuid' })
   @ApiOkResponse({ type: IssueDetailDto })

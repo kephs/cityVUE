@@ -1,4 +1,6 @@
 import { brandingProjection } from '../database/organization-branding.js';
+import { validateHandling } from '../catalog/issue-availability.js';
+import { issueActionProjection } from '../catalog/issue-action.domain.js';
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { sql } from 'kysely';
@@ -97,6 +99,36 @@ export class AdminConfigurationService {
           .executeTakeFirst();
         if (!brand) throw new Error('Branding configuration unavailable');
         const branding = brandingProjection(brand);
+        let invalidHandling = 0,
+          after: string | null = null;
+        // Bounded batches; destination text stays inside the health evaluator.
+        for (;;) {
+          let query = trx
+            .selectFrom('service_definition')
+            .select([
+              'id',
+              'availability',
+              'action_type',
+              'redirect_url',
+              'redirect_message',
+              'redirect_label',
+            ])
+            .where('organization_id', '=', org)
+            .orderBy('id')
+            .limit(100);
+          if (after) query = query.where('id', '>', after);
+          const batch = await query.execute();
+          for (const row of batch) {
+            try {
+              validateHandling(row.availability, row.action_type);
+              issueActionProjection(row);
+            } catch {
+              invalidHandling++;
+            }
+          }
+          if (batch.length < 100) break;
+          after = batch.at(-1)?.id ?? null;
+        }
         const issues = issueConfiguration(org);
         const totals = (
           await sql<{
@@ -197,6 +229,13 @@ export class AdminConfigurationService {
           },
           health: [
             participationHealth(collection.enabled, totals.activeAreas),
+            {
+              resource: 'Issue availability and handling',
+              severity: invalidHandling ? 'WARNING' : 'OK',
+              message: invalidHandling
+                ? 'Issue availability or external handoff configuration needs review.'
+                : 'Issue availability and handling configuration is valid.',
+            },
             {
               resource: 'Issue identity policies',
               severity: totals.invalidPolicies ? 'WARNING' : 'OK',

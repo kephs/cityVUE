@@ -2,6 +2,7 @@ import {
   validateParticipation,
   validateParticipationArea,
 } from './participation.domain.js';
+import { allowsIntake } from '../catalog/issue-availability.js';
 import {
   assertTrustedRequester,
   resolveTrustedRequester,
@@ -238,7 +239,12 @@ export class CreateServiceRequestService {
       // Serialize action changes against final submission, including stale published versions.
       const action = await trx
         .selectFrom('service_definition')
-        .select(['action_type', 'status', 'current_published_version_id'])
+        .select([
+          'action_type',
+          'availability',
+          'status',
+          'current_published_version_id',
+        ])
         .where('organization_id', '=', context.organizationId)
         .where('id', '=', input.serviceDefinitionId)
         .forShare()
@@ -248,9 +254,15 @@ export class CreateServiceRequestService {
         throw new ConflictException(
           'This Issue is no longer available for new requests',
         );
-      if (action.action_type !== 'internal_intake')
+      if (
+        action.action_type !== 'internal_intake' ||
+        !allowsIntake(
+          action.availability,
+          context.audience === 'internal' ? 'internal' : 'external',
+        )
+      )
         throw new ConflictException(
-          'This Issue is handled by an external service',
+          'This Issue is unavailable for this intake context',
         );
       if (
         action.current_published_version_id !== input.serviceDefinitionVersionId

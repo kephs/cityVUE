@@ -1,4 +1,5 @@
 import { issueActionProjection } from './issue-action.domain.js';
+import type { IntakeContext } from './issue-availability.js';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AppConfiguration } from '../config/configuration.js';
@@ -64,12 +65,18 @@ export class CatalogService {
   async getIssueForOrganization(
     organizationId: string,
     id: string,
+    context: IntakeContext = 'external',
   ): Promise<IssueDetailDto> {
-    const record = await this.repository.getPublishedIssue(organizationId, id);
+    const record = await this.repository.getPublishedIssue(
+      organizationId,
+      id,
+      context,
+    );
     if (!record) throw new NotFoundException('Issue not found');
     const { issue, questions, options } = record;
     return {
       id: issue.id,
+      actionRevision: issue.action_revision,
       ...issueActionProjection(issue),
       name: issue.name,
       description: issue.resident_description,

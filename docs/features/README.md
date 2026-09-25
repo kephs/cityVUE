@@ -65,3 +65,5 @@ Other historical specifications remain in this directory. New features should li
 - [F056 — Admin Issue Configuration Management](F056-admin-issue-configuration-management.md): implemented and validated locally; [validation record](F056-implementation-report.md).
 
 - [F056.1 — Issue Management Scalability & UX](F056-1-issue-management-scalability-ux.md): bounded summary discovery and searchable templates; [validation record](F056-1-implementation-report.md).
+
+[F056.2B — Issue availability and external handling](F056-2B-issue-availability-external-handling.md): implemented and validated locally; [validation record](F056-2B-implementation-report.md) and [security review](F056-2B-security-review.md). No push or deployment.

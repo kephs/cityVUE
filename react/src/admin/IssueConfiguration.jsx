@@ -11,6 +11,11 @@ import {
 } from "./issueDiscovery.js";
 import IssueDiscoveryControls from "./IssueDiscoveryControls.jsx";
 import IssueTemplatePicker from "./IssueTemplatePicker.jsx";
+import IssueHandling, {
+  availabilityLabels,
+  handlingPayload,
+  validHandoff,
+} from "./IssueHandling.jsx";
 
 const policyLabel = (value) =>
   value === "ANONYMOUS_ALLOWED"
@@ -18,6 +23,11 @@ const policyLabel = (value) =>
     : "Identification required";
 const targetKey = (target) => (target ? `${target.type}:${target.id}` : "");
 const fields = (issue) => ({
+  availability: issue?.availability ?? "",
+  actionType: issue?.actionType ?? "internal_intake",
+  destination: issue?.handling?.redirect?.destination ?? "",
+  message: issue?.handling?.redirect?.message ?? "",
+  label: issue?.handling?.redirect?.label ?? "Continue to external service",
   questions: issue?.questions ?? [],
   name: issue?.name ?? "",
   description: issue?.description ?? "",
@@ -287,7 +297,8 @@ export default function IssueConfiguration({ client, onDenied }) {
     !/[\r\n\t]/u.test(name) &&
     /^\d+$/.test(draft.displayOrder) &&
     Number(draft.displayOrder) <= 2147483647 &&
-    (edit?.issue || draft.templateId);
+    (edit?.issue || (draft.templateId && draft.availability)) &&
+    (!edit?.issue?.canManageHandling || validHandoff(draft));
   async function open(issue, kind, event) {
     origin.current = event.currentTarget;
     setError(null);
@@ -377,7 +388,12 @@ export default function IssueConfiguration({ client, onDenied }) {
             expectedPolicyRevision: issue.policyRevision,
             expectedAssignmentRevision: issue.assignmentRevision,
           }
-        : { templateId: values.templateId }),
+        : { templateId: values.templateId, availability: values.availability }),
+      ...(issue?.canManageHandling &&
+      JSON.stringify(handlingPayload(values)) !==
+        JSON.stringify(handlingPayload(fields(issue)))
+        ? { handling: handlingPayload(values) }
+        : {}),
     };
   }
   async function save(issue, body) {
@@ -438,7 +454,7 @@ export default function IssueConfiguration({ client, onDenied }) {
             : failure.status === 400
               ? failure.code === "ISSUE_DUPLICATE"
                 ? "An Issue with this name already exists. Inactive names remain reserved; reactivate the existing Issue to use its name again."
-                : "Check the Issue name, description, follow-up questions and assignment. Names must be unique, including inactive Issues. Refresh if a selected target is no longer available."
+                : "Check the Issue name, description, follow-up questions, assignment and external handoff settings. Use a public HTTPS destination without sign-in credentials. Names must be unique, including inactive Issues. Refresh if a selected target is no longer available."
               : "The Issue could not be saved or refreshed. Refresh to check its current state before trying again.",
       });
     } finally {
@@ -540,6 +556,7 @@ export default function IssueConfiguration({ client, onDenied }) {
           )}
           {edit && !data.canWrite && (
             <section>
+              <IssueHandling issue={edit.issue} draft={draft} readOnly />
               <FollowUpQuestions questions={draft.questions} readOnly />
               <button
                 type="button"
@@ -583,6 +600,12 @@ export default function IssueConfiguration({ client, onDenied }) {
               )}
               {edit.kind !== "order" && (
                 <>
+                  <IssueHandling
+                    issue={edit.issue}
+                    draft={draft}
+                    set={set}
+                    disabled={busy}
+                  />
                   <label htmlFor="issue-name">Issue name</label>
                   <input
                     ref={input}
@@ -608,90 +631,101 @@ export default function IssueConfiguration({ client, onDenied }) {
                   <p id="issue-description-help">
                     Optional plain text, up to 1,000 characters.
                   </p>
-                  <fieldset disabled={busy}>
-                    <legend className="h5">Who can submit this request?</legend>
-                    {["IDENTIFIED_REQUIRED", "ANONYMOUS_ALLOWED"].map(
-                      (policy) => (
-                        <label className="d-block" key={policy}>
-                          <input
-                            type="radio"
-                            name="issue-policy"
-                            value={policy}
-                            checked={draft.requesterPolicy === policy}
-                            onChange={() => set("requesterPolicy", policy)}
-                          />{" "}
-                          {policyLabel(policy)}
-                        </label>
-                      ),
-                    )}
-                    <p>
-                      {draft.requesterPolicy === "ANONYMOUS_ALLOWED"
-                        ? "Requesters may submit this request without identifying themselves."
-                        : "Requesters must provide the required identity information for this request."}
-                    </p>
-                  </fieldset>
-                  <label htmlFor="issue-target-search">
-                    Find an assignment target
-                  </label>
-                  <input
-                    id="issue-target-search"
-                    className="form-control"
-                    value={targetSearch}
-                    disabled={busy || !targetIssue}
-                    onChange={(e) => setTargetSearch(e.target.value)}
-                    maxLength={100}
-                  />
-                  <label htmlFor="issue-assignment">Default assignment</label>
-                  <select
-                    id="issue-assignment"
-                    className="form-select"
-                    value={draft.target}
-                    disabled={busy || targetsLoading || !targetIssue}
-                    onChange={(e) => set("target", e.target.value)}
-                    aria-describedby="issue-assignment-help"
-                  >
-                    <option value="">No default assignment</option>
-                    {edit.issue?.defaultAssignment &&
-                      !targets.some(
-                        (t) =>
-                          targetKey(t) ===
-                          targetKey(edit.issue.defaultAssignment),
-                      ) && (
-                        <option value={targetKey(edit.issue.defaultAssignment)}>
-                          {edit.issue.defaultAssignment.displayName} (current
-                          selection)
-                        </option>
+                  <div hidden={draft.actionType === "external_redirect"}>
+                    <fieldset disabled={busy}>
+                      <legend className="h5">
+                        Who can submit this request?
+                      </legend>
+                      {["IDENTIFIED_REQUIRED", "ANONYMOUS_ALLOWED"].map(
+                        (policy) => (
+                          <label className="d-block" key={policy}>
+                            <input
+                              type="radio"
+                              name="issue-policy"
+                              value={policy}
+                              checked={draft.requesterPolicy === policy}
+                              onChange={() => set("requesterPolicy", policy)}
+                            />{" "}
+                            {policyLabel(policy)}
+                          </label>
+                        ),
                       )}
-                    {targets.map((target) => (
-                      <option key={targetKey(target)} value={targetKey(target)}>
-                        {target.displayName} —{" "}
-                        {target.type === "staff"
-                          ? "Staff"
-                          : target.type === "role"
-                            ? "Role"
-                            : "Team"}
-                      </option>
-                    ))}
-                  </select>
-                  <p id="issue-assignment-help">
-                    New requests use this assignment by default. Existing
-                    assignments are not changed.
-                  </p>
-                  {targetError && (
-                    <p role="alert">
-                      Assignment targets could not be loaded. Refresh before
-                      saving.
+                      <p>
+                        {draft.requesterPolicy === "ANONYMOUS_ALLOWED"
+                          ? "Requesters may submit this request without identifying themselves."
+                          : "Requesters must provide the required identity information for this request."}
+                      </p>
+                    </fieldset>
+                    <label htmlFor="issue-target-search">
+                      Find an assignment target
+                    </label>
+                    <input
+                      id="issue-target-search"
+                      className="form-control"
+                      value={targetSearch}
+                      disabled={busy || !targetIssue}
+                      onChange={(e) => setTargetSearch(e.target.value)}
+                      maxLength={100}
+                    />
+                    <label htmlFor="issue-assignment">Default assignment</label>
+                    <select
+                      id="issue-assignment"
+                      className="form-select"
+                      value={draft.target}
+                      disabled={busy || targetsLoading || !targetIssue}
+                      onChange={(e) => set("target", e.target.value)}
+                      aria-describedby="issue-assignment-help"
+                    >
+                      <option value="">No default assignment</option>
+                      {edit.issue?.defaultAssignment &&
+                        !targets.some(
+                          (t) =>
+                            targetKey(t) ===
+                            targetKey(edit.issue.defaultAssignment),
+                        ) && (
+                          <option
+                            value={targetKey(edit.issue.defaultAssignment)}
+                          >
+                            {edit.issue.defaultAssignment.displayName} (current
+                            selection)
+                          </option>
+                        )}
+                      {targets.map((target) => (
+                        <option
+                          key={targetKey(target)}
+                          value={targetKey(target)}
+                        >
+                          {target.displayName} —{" "}
+                          {target.type === "staff"
+                            ? "Staff"
+                            : target.type === "role"
+                              ? "Role"
+                              : "Team"}
+                        </option>
+                      ))}
+                    </select>
+                    <p id="issue-assignment-help">
+                      New requests use this assignment by default. Existing
+                      assignments are not changed.
                     </p>
-                  )}
+                    {targetError && (
+                      <p role="alert">
+                        Assignment targets could not be loaded. Refresh before
+                        saving.
+                      </p>
+                    )}
+                  </div>
                 </>
               )}
-              {edit.issue && edit.kind !== "order" && (
-                <FollowUpQuestions
-                  questions={draft.questions}
-                  onChange={(value) => set("questions", value)}
-                  disabled={busy}
-                />
-              )}
+              {edit.issue &&
+                edit.kind !== "order" &&
+                draft.actionType !== "external_redirect" && (
+                  <FollowUpQuestions
+                    questions={draft.questions}
+                    onChange={(value) => set("questions", value)}
+                    disabled={busy}
+                  />
+                )}
               <label htmlFor="issue-order">Display order</label>
               <input
                 ref={edit.kind === "order" ? input : undefined}
@@ -708,7 +742,7 @@ export default function IssueConfiguration({ client, onDenied }) {
               />
               <p id="issue-validation">
                 {!valid
-                  ? "Enter a plain-text name, valid template and a whole-number order of zero or greater."
+                  ? "Complete the required fields above. Use a plain-text name and a whole-number order of zero or greater."
                   : dirty
                     ? "Unsaved changes."
                     : "No unsaved changes."}
@@ -770,6 +804,16 @@ export default function IssueConfiguration({ client, onDenied }) {
                   <dl className="issue-summary-metadata">
                     <dt>Requester</dt>
                     <dd>{policyLabel(issue.requesterPolicy)}</dd>
+                    <dt>Availability</dt>
+                    <dd>
+                      {availabilityLabels[issue.availability] || "Unavailable"}
+                    </dd>
+                    <dt>Handling</dt>
+                    <dd>
+                      {issue.actionType === "external_redirect"
+                        ? "External Redirect"
+                        : "Reqro Intake"}
+                    </dd>
                     <dt>Default assignment</dt>
                     <dd>{issue.assignmentLabel ?? "No default assignment"}</dd>
                   </dl>

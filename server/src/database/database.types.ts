@@ -38,7 +38,8 @@ interface CategoryTable extends DepartmentTable {
   aliases: string[];
   keywords: string[];
 }
-interface ServiceDefinitionTable {
+export interface ServiceDefinitionTable {
+  availability: Generated<string>;
   display_order: Generated<number>;
   core_revision: Generated<number>;
   current_display_name: Generated<string | null>;

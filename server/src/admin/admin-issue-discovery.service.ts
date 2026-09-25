@@ -5,8 +5,11 @@ import { DatabaseService } from '../database/database.service.js';
 import { safeStaffName } from '../service-request/ownership-targets.js';
 import { requestUuid } from '../service-request/staff-request-scope.js';
 import { assertConfigurationRead } from './admin-configuration.domain.js';
+import { issueAvailabilities } from '../catalog/issue-availability.js';
 
 export interface IssueDiscoveryInput {
+  availability?: string;
+  handling?: string;
   search?: string;
   status?: string;
   category?: string;
@@ -47,6 +50,15 @@ export function issueDiscoveryQuery(input: IssueDiscoveryInput) {
   if (![25, 50, 100, 250, 500].includes(pageSize)) throw invalid();
   if (input.category && !requestUuid.test(input.category)) throw invalid();
   return {
+    availability: choice(input.availability, 'all', [
+      'all',
+      ...issueAvailabilities,
+    ]),
+    handling: choice(input.handling, 'all', [
+      'all',
+      'internal_intake',
+      'external_redirect',
+    ]),
     search,
     category: input.category === '' ? null : (input.category ?? null),
     status: choice(input.status, 'all', ['all', 'active', 'inactive']),
@@ -84,6 +96,10 @@ export function issueDiscoverySql(org: string, input: IssueDiscoveryInput) {
     left join issue_requester_identity_policy p on p.organization_id=i.organization_id and p.service_definition_id=i.id
     left join issue_default_assignment a on a.organization_id=i.organization_id and a.service_definition_id=i.id`;
   const conditions = [sql`i.organization_id=${org}`];
+  if (query.availability !== 'all')
+    conditions.push(sql`i.availability=${query.availability}`);
+  if (query.handling !== 'all')
+    conditions.push(sql`i.action_type=${query.handling}`);
   if (query.search)
     conditions.push(
       sql`(strpos(lower(coalesce(v.name,'Unpublished Issue')),lower(${query.search}))>0 or strpos(lower(c.name),lower(${query.search}))>0)`,
@@ -116,7 +132,7 @@ export function issueDiscoverySql(org: string, input: IssueDiscoveryInput) {
     }>`select count(*)::int as total ${joins} ${where}`,
     page: (
       offset: number,
-    ) => sql`select i.id,coalesce(v.name,'Unpublished Issue') as name,
+    ) => sql`select i.id,i.availability,i.action_type as "actionType",coalesce(v.name,'Unpublished Issue') as name,
       c.id as "categoryId",c.name as category,(i.status='active') as active,
       i.display_order as "displayOrder",${policy} as "requesterPolicy",
       case when a.target_type is null then null else coalesce(${assignmentName},'Configured target unavailable') end as "assignmentLabel"

@@ -116,6 +116,9 @@ export default function ReportIssuePage({
   const [saveError, setSaveError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffStatus, setHandoffStatus] = useState("");
+  const handoffPending = useRef(false);
   const sequence = useRef(0);
   const submittingRef = useRef(false);
   const categories = useMemo(
@@ -147,7 +150,10 @@ export default function ReportIssuePage({
     if (data.mode === "legacy") return undefined;
     const controller = new AbortController();
     loadCategories(controller.signal);
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      sequence.current++;
+    };
   }, [data]);
   useEffect(() => {
     if (!categoryId || window.innerWidth > 768 || serviceItems.length === 0)
@@ -185,6 +191,7 @@ export default function ReportIssuePage({
     }
   };
   const selectService = async (id) => {
+    setHandoffStatus("");
     const request = ++sequence.current;
     setServiceId(id);
     setValues((old) => ({ ...old, location: "", locationPoint: null }));
@@ -214,6 +221,56 @@ export default function ReportIssuePage({
         });
     }
   };
+  async function continueHandoff() {
+    if (handoffPending.current) return;
+    handoffPending.current = true;
+    setHandoffBusy(true);
+    setHandoffStatus("");
+    const request = ++sequence.current;
+    try {
+      const item = await data.catalog.loadDefinition(service.id, categoryId);
+      if (request !== sequence.current) return;
+      const current = { ...item, ...normalizeIssueAction(item) };
+      setAnswers({});
+      if (current.actionType !== "external_redirect") {
+        setService(current);
+        setValues({
+          ...initialValues,
+          reportingMode:
+            current.anonymousPolicy === "not-allowed" ? "identified" : "",
+        });
+        move("details");
+        return;
+      }
+      if (
+        current.actionRevision !== service.actionRevision ||
+        JSON.stringify(current.redirect) !== JSON.stringify(service.redirect)
+      ) {
+        setService(current);
+        setHandoffStatus(
+          "This service link changed. Review the updated destination before continuing.",
+        );
+        document.querySelector("[data-step-heading]")?.focus();
+        return;
+      }
+      // A fresh server response is the only navigation source. The link never carries identity or tokens.
+      const link = document.createElement("a");
+      link.href = current.redirect.destination;
+      link.referrerPolicy = "no-referrer";
+      link.rel = "noreferrer";
+      document.body.append(link);
+      link.click();
+      link.remove();
+    } catch {
+      if (request === sequence.current)
+        setHandoffStatus(
+          "This service link is currently unavailable. Return to the service list and try again.",
+        );
+    } finally {
+      handoffPending.current = false;
+      setHandoffBusy(false);
+    }
+  }
   const retry = () =>
     catalog.phase === "categories"
       ? loadCategories()
@@ -652,13 +709,17 @@ export default function ReportIssuePage({
               </p>
               <p>
                 You will continue at:{" "}
-                <strong>{service.redirect.hostname}</strong>
+                <strong style={{ overflowWrap: "anywhere" }}>
+                  {service.redirect.hostname}
+                </strong>
               </p>
+              {handoffStatus && <p role="status">{handoffStatus}</p>}
               <div className="intake-actions action-footer">
                 <button
                   type="button"
                   className="btn btn-secondary"
                   onClick={() => {
+                    sequence.current++;
                     setService(null);
                     setServiceId("");
                     setAnswers({});
@@ -667,14 +728,15 @@ export default function ReportIssuePage({
                 >
                   Go Back
                 </button>
-                <a
+                <button
+                  type="button"
                   className="btn btn-primary"
-                  href={service.redirect.destination}
-                  referrerPolicy="no-referrer"
+                  onClick={continueHandoff}
+                  disabled={handoffBusy}
                 >
-                  {service.redirect.label}
+                  {handoffBusy ? "Checking service…" : service.redirect.label}
                   <span className="visually-hidden"> (external site)</span>
-                </a>
+                </button>
               </div>
             </div>
           )}

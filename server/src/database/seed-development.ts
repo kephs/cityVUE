@@ -516,6 +516,7 @@ async function seed(db: Kysely<DatabaseSchema>): Promise<void> {
           organization_id: organizationId,
           category_id: service.category,
           service_key: service.key,
+          availability: 'INTERNAL_AND_EXTERNAL',
           status: 'active',
           current_published_version_id: null,
         })

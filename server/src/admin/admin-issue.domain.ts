@@ -3,6 +3,11 @@ import type { StaffAccess } from '../auth/auth.types.js';
 import { assertConfigurationRead } from './admin-configuration.domain.js';
 import { requestUuid } from '../service-request/staff-request-scope.js';
 import {
+  issueAvailabilities,
+  type IssueAvailability,
+} from '../catalog/issue-availability.js';
+import type { ActionInput } from '../catalog/issue-action.command.js';
+import {
   requesterPolicies,
   type RequesterIdentityPolicy,
 } from '../service-request/requester-identity-policy.js';
@@ -19,9 +24,11 @@ export interface IssueFields {
   defaultAssignment: { type: TargetType; id: string } | null;
 }
 export interface IssueCreate extends IssueFields {
+  availability: IssueAvailability;
   templateId: string;
 }
 export interface IssueChange extends IssueFields {
+  handling?: Omit<ActionInput, 'expectedRevision'>;
   questions?: unknown;
   expectedCoreRevision: number;
   expectedActionRevision: number;
@@ -68,7 +75,7 @@ export function validateIssue(
     'requesterPolicy',
     'defaultAssignment',
     ...(create
-      ? ['templateId']
+      ? ['templateId', 'availability']
       : [
           'active',
           'expectedCoreRevision',
@@ -79,7 +86,9 @@ export function validateIssue(
   ];
   if (
     Object.keys(row).some(
-      (k) => !keys.includes(k) && !(k === 'questions' && !create),
+      (k) =>
+        !keys.includes(k) &&
+        !(['questions', 'handling'].includes(k) && !create),
     ) ||
     keys.some((k) => !(k in row))
   )
@@ -106,9 +115,21 @@ export function validateIssue(
     validateTarget(target.type, target.id);
   }
   if (create) {
+    if (!(issueAvailabilities as readonly unknown[]).includes(row.availability))
+      throw new BadRequestException('Choose where this Issue can be used.');
     if (typeof row.templateId !== 'string' || !requestUuid.test(row.templateId))
       throw new BadRequestException('Choose an available intake template');
   } else {
+    if (
+      row.handling !== undefined &&
+      (!row.handling ||
+        typeof row.handling !== 'object' ||
+        Array.isArray(row.handling) ||
+        Object.keys(row.handling).some(
+          (k) => !['actionType', 'destination', 'message', 'label'].includes(k),
+        ))
+    )
+      throw new BadRequestException('Invalid Issue handling fields');
     if (typeof row.active !== 'boolean')
       throw new BadRequestException('Invalid Issue state');
     for (const key of keys.filter((k) => k.startsWith('expected')))

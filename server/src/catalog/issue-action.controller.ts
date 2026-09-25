@@ -4,6 +4,7 @@ import {
   Get,
   Post,
   Param,
+  Req,
   HttpCode,
   Header,
   UseGuards,
@@ -72,7 +73,8 @@ export class IssueActionController {
     @Param('id') id: string,
     @Body() input: IssueActionDto,
     @CurrentStaff() access: StaffAccess,
+    @Req() req: { id?: string },
   ) {
-    return this.service.set(id, input, access);
+    return this.service.set(id, input, access, req.id);
   }
 }

@@ -90,6 +90,7 @@ export async function checkAdminIssueDiscovery(
           id,
           organization_id: org,
           category_id: present(categoryIds[n % 2]),
+          availability: 'INTERNAL_AND_EXTERNAL',
           service_key: `scale-${String(n)}`,
           status: n % 3 ? 'active' : 'inactive',
           current_published_version_id: null,
@@ -147,6 +148,8 @@ export async function checkAdminIssueDiscovery(
               'displayOrder',
               'requesterPolicy',
               'assignmentLabel',
+              'availability',
+              'actionType',
             ].sort(),
           );
       }
@@ -375,6 +378,12 @@ export async function checkAdminIssueDiscovery(
           },
         ],
         ['assignmentSort', { sort: 'assignment' }],
+        ['availability', { availability: 'INTERNAL_AND_EXTERNAL' }],
+        ['handling', { handling: 'internal_intake' }],
+        [
+          'availabilityHandling',
+          { availability: 'EXTERNAL_ONLY', handling: 'external_redirect' },
+        ],
       ];
       for (const [name, query] of cases) {
         const statements = issueDiscoverySql(org, query);

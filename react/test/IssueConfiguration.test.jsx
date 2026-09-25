@@ -106,6 +106,8 @@ test("F056 create requires explicit template, selected policy and deliberate Sav
     await screen.findByRole("option", { name: /Fictional Street Sign/ }),
   );
   await user.click(screen.getByLabelText("Anonymous requests allowed"));
+  expect(screen.getByRole("button", { name: "Create issue" })).toBeDisabled();
+  await user.click(screen.getByRole("radio", { name: "External only" }));
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Create issue" })).toBeEnabled(),
   );
@@ -121,6 +123,7 @@ test("F056 create requires explicit template, selected policy and deliberate Sav
       requesterPolicy: "ANONYMOUS_ALLOWED",
       defaultAssignment: null,
       templateId: sample.id,
+      availability: "EXTERNAL_ONLY",
     },
     expect.objectContaining({ authenticated: true }),
   );

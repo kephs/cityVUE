@@ -34,6 +34,11 @@ import { AdminIssueService } from './admin-issue.service.js';
 import { AdminIssueDiscoveryService } from './admin-issue-discovery.service.js';
 import { configurationPage } from './admin-configuration.domain.js';
 import type { IssueFields } from './admin-issue.domain.js';
+import {
+  issueAvailabilities,
+  type IssueAvailability,
+} from '../catalog/issue-availability.js';
+import type { ActionInput } from '../catalog/issue-action.command.js';
 
 export class IssueFieldsDto implements IssueFields {
   @IsString() name!: string;
@@ -46,9 +51,11 @@ export class IssueFieldsDto implements IssueFields {
   defaultAssignment!: IssueFields['defaultAssignment'];
 }
 export class IssueCreateDto extends IssueFieldsDto {
+  @IsIn(issueAvailabilities) availability!: IssueAvailability;
   @IsUUID('4') templateId!: string;
 }
 export class IssueChangeDto extends IssueFieldsDto {
+  @IsOptional() @IsObject() handling?: Omit<ActionInput, 'expectedRevision'>;
   @IsOptional() @IsArray() questions?: unknown[];
   @IsBoolean() active!: boolean;
   @IsInt() @Min(1) @Max(2147483646) expectedCoreRevision!: number;
@@ -63,6 +70,8 @@ export class IssueTargetQuery {
   @IsOptional() @IsString() search?: string;
 }
 export class IssueDiscoveryQuery {
+  @IsOptional() @IsString() availability?: string;
+  @IsOptional() @IsString() handling?: string;
   @IsOptional() @IsString() search?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() category?: string;

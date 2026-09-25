@@ -36,3 +36,5 @@ New decisions in this series use the next unused number and include title, statu
 - [ADR-016 — Participation Area name uniqueness](ADR-016-participation-area-name-uniqueness.md): approved Organization-scoped trimmed/case-insensitive namespace across active and inactive areas.
 
 - [ADR-017 — Atomic Issue configuration](ADR-017-atomic-issue-configuration.md): approved independent revisions, immutable history, template creation, ordering and name integrity.
+
+[F056.2B Issue availability and governed handoff](ADR-019-issue-availability-governed-handoff.md): accepted design; implementation validation in progress.

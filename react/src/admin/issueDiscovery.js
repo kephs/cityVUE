@@ -1,4 +1,6 @@
 export const issueQueryDefaults = {
+  availability: "all",
+  handling: "all",
   search: "",
   status: "all",
   category: "",
@@ -12,6 +14,13 @@ export const issueQueryDefaults = {
 export function readIssueQuery(params) {
   const result = { ...issueQueryDefaults };
   const allowed = {
+    availability: [
+      "all",
+      "INTERNAL_ONLY",
+      "EXTERNAL_ONLY",
+      "INTERNAL_AND_EXTERNAL",
+    ],
+    handling: ["all", "internal_intake", "external_redirect"],
     status: ["all", "active", "inactive"],
     requesterPolicy: ["all", "IDENTIFIED_REQUIRED", "ANONYMOUS_ALLOWED"],
     assignmentState: ["all", "assigned", "none"],

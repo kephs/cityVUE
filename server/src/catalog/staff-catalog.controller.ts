@@ -5,6 +5,8 @@ import {
   Param,
   ParseUUIDPipe,
   UseGuards,
+  Query,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
@@ -15,6 +17,10 @@ import {
 import type { StaffAccess } from '../auth/auth.types.js';
 import { StaffAccessGuard } from '../auth/staff-access.guard.js';
 import { CatalogService } from './catalog.service.js';
+import { IsIn, IsOptional } from 'class-validator';
+class StaffCatalogQuery {
+  @IsOptional() @IsIn(['public', 'internal']) audience?: 'public' | 'internal';
+}
 @ApiTags('staff catalog')
 @ApiBearerAuth()
 @RequireEntra()
@@ -28,7 +34,17 @@ export class StaffCatalogController {
   get(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @CurrentStaff() access: StaffAccess,
+    @Query() query: StaffCatalogQuery,
   ) {
-    return this.catalog.getIssueForOrganization(access.organizationId, id);
+    if (
+      query.audience === 'internal' &&
+      !access.permissions.includes('service_request.create_internal')
+    )
+      throw new ForbiddenException('Access denied');
+    return this.catalog.getIssueForOrganization(
+      access.organizationId,
+      id,
+      query.audience === 'internal' ? 'internal' : 'external',
+    );
   }
 }

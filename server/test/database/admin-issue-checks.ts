@@ -1,3 +1,4 @@
+import { up as availabilityUp } from '../../migrations/20261005000000-issue-availability-external-history.js';
 import { checkDynamicQuestions } from './dynamic-question-checks.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -72,6 +73,10 @@ export async function checkAdminIssues(
       );
     },
   );
+  await sql`alter table service_definition drop column availability`.execute(
+    db,
+  );
+  await db.transaction().execute(availabilityUp);
   const actor = randomUUID(),
     role = randomUUID();
   const identity = await db
@@ -137,6 +142,7 @@ export async function checkAdminIssues(
   const template = initial.items.find((i) => i.templateEligible);
   assert.ok(template, 'valid fixture template');
   const create = {
+    availability: 'INTERNAL_AND_EXTERNAL' as const,
     templateId: template.id,
     name: 'Fictional F056 source',
     description: 'Synthetic configuration only',
@@ -473,8 +479,8 @@ export async function checkAdminIssues(
         db.transaction().execute(async (trx) => {
           const id = randomUUID(),
             version = randomUUID();
-          await sql`insert into service_definition(id,organization_id,category_id,service_key,status)
-        select ${id},organization_id,category_id,${id},'inactive' from service_definition where id=${template.id} and organization_id=${org}`.execute(
+          await sql`insert into service_definition(id,organization_id,category_id,service_key,status,availability)
+        select ${id},organization_id,category_id,${id},'inactive','INTERNAL_AND_EXTERNAL' from service_definition where id=${template.id} and organization_id=${org}`.execute(
             trx,
           );
           await sql`insert into service_definition_version(id,organization_id,service_definition_id,version_number,name,resident_description,icon_key,default_priority,location_policy,geographic_eligibility_mode,anonymous_reporting_policy,status,published_at)

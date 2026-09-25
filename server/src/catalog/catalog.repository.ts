@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { effectiveRequesterPolicy } from '../service-request/requester-identity-policy.js';
 import { DatabaseService } from '../database/database.service.js';
+import type { IntakeContext } from './issue-availability.js';
 
 @Injectable()
 export class CatalogRepository {
@@ -32,6 +33,9 @@ export class CatalogRepository {
       ])
       .where('category.organization_id', '=', organizationId)
       .where('category.status', '=', 'active');
+    query = query.where(
+      sql<boolean>`exists(select 1 from service_definition i join service_definition_version v on v.organization_id=i.organization_id and v.id=i.current_published_version_id where i.organization_id=category.organization_id and i.category_id=category.id and i.status='active' and v.status='published' and i.availability in ('EXTERNAL_ONLY','INTERNAL_AND_EXTERNAL'))`,
+    );
     if (search) {
       const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
       query = query.where((eb) =>
@@ -78,6 +82,10 @@ export class CatalogRepository {
       .where('service.organization_id', '=', organizationId)
       .where('service.category_id', '=', categoryId)
       .where('service.status', '=', 'active')
+      .where('service.availability', 'in', [
+        'EXTERNAL_ONLY',
+        'INTERNAL_AND_EXTERNAL',
+      ])
       .where('category.status', '=', 'active')
       .where('version.status', '=', 'published');
     if (search) {
@@ -97,7 +105,11 @@ export class CatalogRepository {
       .execute();
   }
 
-  async getPublishedIssue(organizationId: string, serviceDefinitionId: string) {
+  async getPublishedIssue(
+    organizationId: string,
+    serviceDefinitionId: string,
+    context: IntakeContext = 'external',
+  ) {
     const issue = await this.database.client
       .selectFrom('service_definition as service')
       .innerJoin('category as category', (join) =>
@@ -113,6 +125,7 @@ export class CatalogRepository {
       .select([
         'service.id',
         'service.action_type',
+        'service.action_revision',
         'service.redirect_url',
         'service.redirect_message',
         'service.redirect_label',
@@ -133,6 +146,10 @@ export class CatalogRepository {
       .where('service.organization_id', '=', organizationId)
       .where('service.id', '=', serviceDefinitionId)
       .where('service.status', '=', 'active')
+      .where('service.availability', 'in', [
+        context === 'internal' ? 'INTERNAL_ONLY' : 'EXTERNAL_ONLY',
+        'INTERNAL_AND_EXTERNAL',
+      ])
       .where('category.status', '=', 'active')
       .where('version.status', '=', 'published')
       .executeTakeFirst();

@@ -1,3 +1,4 @@
+import { legacyAvailabilityFixture } from '../helpers/legacy-availability.js';
 import { up as identityPolicyUp } from '../../migrations/20260925000000-add-requester-identity-policy.js';
 import { up as issueConfigurationUp } from '../../migrations/20261003000000-add-admin-issue-configuration.js';
 import { up as requestUp } from '../../migrations/20260902010000-create-service-request-foundation.js';
@@ -47,6 +48,7 @@ test(
       await staffUp(db);
       await authUp(db);
       await actionUp(db);
+      await legacyAvailabilityFixture(db);
       await identityPolicyUp(db);
       await issueConfigurationUp(db);
       const org1 = randomUUID();

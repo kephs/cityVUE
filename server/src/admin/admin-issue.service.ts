@@ -1,5 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
 import {
+  actionScope,
+  configureIssueAction,
+} from '../catalog/issue-action.command.js';
+import { validateActiveIssue } from '../catalog/issue-activation.js';
+import {
   loadQuestions,
   validateQuestions,
   insertQuestions,
@@ -41,6 +46,8 @@ import { requestUuid } from '../service-request/staff-request-scope.js';
 
 type Tx = Transaction<DatabaseSchema>;
 export interface IssueProjection {
+  availability: string;
+  actionType: string;
   questions?: QuestionConfiguration[];
   catalogVersionId?: string | null;
   id: string;
@@ -67,7 +74,7 @@ export class AdminIssueService {
   constructor(private readonly database: DatabaseService) {}
   private projection(org: string) {
     return sql`
-    select i.id,coalesce(v.name,'Unpublished Issue') as name,coalesce(v.resident_description,'') as description,
+    select i.id,i.availability,i.action_type as "actionType",coalesce(v.name,'Unpublished Issue') as name,coalesce(v.resident_description,'') as description,
       (i.status='active') as active,c.name as category,c.display_order as category_order,c.id as category_id,
       i.display_order as "displayOrder",i.core_revision as "coreRevision",i.action_revision as "actionRevision",
       coalesce(p.revision,0) as "policyRevision",coalesce(a.revision,0) as "assignmentRevision",
@@ -97,7 +104,7 @@ export class AdminIssueService {
   }
   private async readOne(trx: Tx, org: string, id: string) {
     const row = (
-      await sql<IssueProjection>`select id,name,description,active,category,"displayOrder","coreRevision","actionRevision","policyRevision","assignmentRevision","requesterPolicy","templateEligible","defaultAssignment" from (${this.projection(org)}) x where id=${id}`.execute(
+      await sql<IssueProjection>`select id,availability,"actionType",name,description,active,category,"displayOrder","coreRevision","actionRevision","policyRevision","assignmentRevision","requesterPolicy","templateEligible","defaultAssignment" from (${this.projection(org)}) x where id=${id}`.execute(
         trx,
       )
     ).rows[0];
@@ -124,7 +131,42 @@ export class AdminIssueService {
       .setIsolationLevel('repeatable read')
       .execute(async (trx) => {
         await sql`set transaction read only`.execute(trx);
-        return { issue: await this.readOne(trx, access.organizationId, id) };
+        const issue = await this.readOne(trx, access.organizationId, id);
+        const action = access.permissions.includes(
+          'catalog.issue_action.manage',
+        )
+          ? await actionScope(trx, id, access)
+              .select([
+                'service.action_type',
+                'service.redirect_url',
+                'service.redirect_message',
+                'service.redirect_label',
+              ])
+              .executeTakeFirst()
+          : undefined;
+        return {
+          issue: {
+            ...issue,
+            ...(action
+              ? {
+                  handling: {
+                    actionType: action.action_type,
+                    ...(action.action_type === 'external_redirect'
+                      ? {
+                          redirect: {
+                            destination: action.redirect_url ?? '',
+                            message: action.redirect_message ?? '',
+                            label: action.redirect_label ?? '',
+                          },
+                        }
+                      : {}),
+                  },
+                }
+              : {}),
+            canManageHandling:
+              !!action && access.permissions.includes('admin.issues.write'),
+          },
+        };
       });
   }
   async list(access: StaffAccess | undefined, page = 1) {
@@ -264,8 +306,8 @@ export class AdminIssueService {
             next.questions?.reduce((n, q) => n + q.options.length, 0) ?? 0,
         }
       : null;
-    await sql`insert into issue_configuration_audit(organization_id,issue_id,staff_identity_id,action,changed_fields,prior_core_revision,core_revision,policy_revision,assignment_revision,correlation_id${schemaSummary ? sql`,schema_summary` : sql``})
-      values(${access.organizationId},${id},${access.staffIdentityId},${action},${fields},${old?.coreRevision ?? null},${next.coreRevision},${next.policyRevision},${next.assignmentRevision},${correlation && requestUuid.test(correlation) ? correlation : randomUUID()}${schemaSummary ? sql`,${JSON.stringify(schemaSummary)}::jsonb` : sql``})`.execute(
+    await sql`insert into issue_configuration_audit(organization_id,issue_id,staff_identity_id,action,changed_fields,prior_core_revision,core_revision,policy_revision,assignment_revision,correlation_id,availability${schemaSummary ? sql`,schema_summary` : sql``})
+      values(${access.organizationId},${id},${access.staffIdentityId},${action},${fields},${old?.coreRevision ?? null},${next.coreRevision},${next.policyRevision},${next.assignmentRevision},${correlation && requestUuid.test(correlation) ? correlation : randomUUID()},${old ? null : next.availability}${schemaSummary ? sql`,${JSON.stringify(schemaSummary)}::jsonb` : sql``})`.execute(
       trx,
     );
   }
@@ -315,6 +357,7 @@ export class AdminIssueService {
             organization_id: org,
             category_id: source.category_id,
             service_key: `issue-${id}`,
+            availability: input.availability,
             status: 'inactive',
             current_published_version_id: null,
             display_order: input.displayOrder,
@@ -402,6 +445,19 @@ export class AdminIssueService {
           old.assignmentRevision !== input.expectedAssignmentRevision
         )
           throw conflict();
+        const saveHandling = async () =>
+          input.handling === undefined
+            ? null
+            : await configureIssueAction(
+                trx,
+                id,
+                {
+                  ...input.handling,
+                  expectedRevision: input.expectedActionRevision,
+                },
+                access,
+                correlation,
+              );
         const name = issueText(input.name, true),
           description = issueText(input.description, false),
           fields: string[] = [];
@@ -442,7 +498,13 @@ export class AdminIssueService {
         );
         if (policy.changed) fields.push('requesterPolicy');
         if (assignment.changed) fields.push('defaultAssignment');
-        if (!fields.length) return { issue: old, changed: false };
+        if (!fields.length) {
+          const handling = await saveHandling();
+          return {
+            issue: handling?.changed ? await this.readOne(trx, org, id) : old,
+            changed: !!handling?.changed,
+          };
+        }
         let version = stable.current_published_version_id;
         if (
           name !== old.name ||
@@ -469,19 +531,9 @@ export class AdminIssueService {
           .where('organization_id', '=', org)
           .where('id', '=', id)
           .execute();
+        await saveHandling();
         const issue = await this.readOne(trx, org, id);
-        const eligible = await sql<{ eligible: boolean }>`select
-          (v.status='published' and c.status='active' and d.status='active'
-          and (c.division_id is null or dv.status='active')) is true as eligible
-          from service_definition i join service_definition_version v on v.organization_id=i.organization_id and v.id=i.current_published_version_id
-          join category c on c.organization_id=i.organization_id and c.id=i.category_id
-          join department d on d.organization_id=c.organization_id and d.id=c.department_id
-          left join division dv on dv.organization_id=c.organization_id and dv.id=c.division_id
-          where i.organization_id=${org} and i.id=${id}`.execute(trx);
-        if (input.active && !eligible.rows[0]?.eligible)
-          throw new BadRequestException(
-            'Issue configuration is unavailable for activation',
-          );
+        await validateActiveIssue(trx, org, id);
         await this.audit(trx, access, id, old, issue, fields, correlation);
         return { issue, changed: true };
       });
