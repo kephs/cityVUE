@@ -966,6 +966,30 @@ test.each(["public", "internal"])(
       ),
     ).toBeInTheDocument();
     expect(notice.contains(description)).toBe(false);
+    expect(
+      within(notice).getByText(
+        audience === "public"
+          ? "Some information may be limited based on your access."
+          : "This is an internal request. Requester contact requires separate permission.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(notice).queryByText(
+        /Staff operational information is protected\./,
+      ),
+    ).not.toBeInTheDocument();
+    if (audience === "public")
+      expect(
+        within(notice).queryByText(
+          /Requester contact requires separate permission\./,
+        ),
+      ).not.toBeInTheDocument();
+    else
+      expect(
+        within(notice).queryByText(
+          "Some information may be limited based on your access.",
+        ),
+      ).not.toBeInTheDocument();
     expect(description.parentElement).toHaveClass("request-detail");
     expect(description.querySelector("p").textContent).toBe(row.description);
     if (audience === "internal")

@@ -963,7 +963,7 @@ function RequestDetail({ repository, id, onSignIn }) {
                   </strong>
                   <p>
                     {row.audience === "public"
-                      ? "Staff operational information is protected. Requester contact requires separate permission."
+                      ? "Some information may be limited based on your access."
                       : "This is an internal request. Requester contact requires separate permission."}
                   </p>
                 </div>
