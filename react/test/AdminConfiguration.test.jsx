@@ -291,8 +291,13 @@ test("F052 empty states are truthful and configuration pagination is bounded", a
   view(client, "/admin/issues");
   await screen.findByText(/No Issues are configured/);
   expect(
-    screen.queryByRole("navigation", { name: "Issue pages" }),
-  ).not.toBeInTheDocument();
+    screen.getByRole("navigation", { name: "Issue pages" }),
+  ).toHaveTextContent("0–0 of 0");
+  expect(
+    screen.getByRole("button", { name: "Previous Issues" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Next Issues" })).toBeDisabled();
+  expect(screen.getByLabelText("Rows per page")).toHaveValue("25");
 });
 
 test("F054 authorized branding clears on denied refresh; preview content stays excluded", async () => {

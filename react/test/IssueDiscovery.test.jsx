@@ -64,9 +64,9 @@ function view(get, entry = "/admin/issues") {
 test("F056.1 filters, page size, sort and trimmed live search persist in URL; Back and Forward restore state", async () => {
   const { user, client } = view(async () => page());
   await screen.findByText(issue.name);
-  await user.selectOptions(screen.getByLabelText("Issues per page"), "500");
+  await user.selectOptions(screen.getByLabelText("Rows per page"), "500");
   await user.selectOptions(screen.getByLabelText("Status"), "inactive");
-  await user.selectOptions(screen.getByLabelText("Sort by"), "name");
+  await user.selectOptions(screen.getByLabelText("Sort By"), "name");
   await user.type(screen.getByLabelText("Search Issues"), "  café  ");
   await waitFor(() =>
     expect(screen.getByTestId("query")).toHaveTextContent("search=caf%C3%A9"),
@@ -81,7 +81,7 @@ test("F056.1 filters, page size, sort and trimmed live search persist in URL; Ba
     expect(screen.getByLabelText("Search Issues")).toHaveValue("café"),
   );
   await user.click(
-    screen.getByRole("button", { name: "Clear filters", exact: true }),
+    screen.getByRole("button", { name: "Clear Filters", exact: true }),
   );
   expect(screen.getByTestId("query")).toHaveTextContent(
     "?sort=name&pageSize=500",
@@ -100,6 +100,104 @@ test("F056.1 malformed URL normalizes safely before requests", async () => {
     "/admin/issues/summaries?",
     expect.anything(),
   );
+});
+
+test("F056.5 filters precede search; page size belongs to pagination; Clear Search retains filters", async () => {
+  const { user } = view(
+    async () => page(),
+    "/admin/issues?search=sign&status=inactive&pageSize=100&sort=name&direction=desc",
+  );
+  await screen.findByText(issue.name);
+  const filters = screen.getByRole("group", { name: "Find Issues" });
+  const search = screen.getByRole("group", { name: "Search Issues" });
+  expect(
+    filters.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    within(filters).queryByLabelText("Rows per page"),
+  ).not.toBeInTheDocument();
+  const sizes = within(
+    screen.getByRole("navigation", { name: "Issue pages" }),
+  ).getByLabelText("Rows per page");
+  expect(
+    within(sizes)
+      .getAllByRole("option")
+      .map((option) => option.value),
+  ).toEqual(["25", "50", "100", "250", "500"]);
+  await user.click(screen.getByRole("button", { name: "Clear Search" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("query")).not.toHaveTextContent("search="),
+  );
+  for (const value of [
+    "status=inactive",
+    "pageSize=100",
+    "sort=name",
+    "direction=desc",
+  ])
+    expect(screen.getByTestId("query")).toHaveTextContent(value);
+});
+
+test.each([401, 403])(
+  "F056.5 detail denial %s clears configuration without a mutation",
+  async (status) => {
+    const { user, onDenied, client } = view(async (url) => {
+      if (url.includes("summaries?")) return page();
+      throw { status };
+    });
+    await screen.findByText(issue.name);
+    await user.click(
+      screen.getByRole("button", { name: "Configure Fixture Issue" }),
+    );
+    await waitFor(() => expect(onDenied).toHaveBeenCalledOnce());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText(issue.name)).not.toBeInTheDocument();
+    expect(client.patch).not.toHaveBeenCalled();
+  },
+);
+
+test("F056.5 save supersedes a pending history-navigation list response", async () => {
+  let requests = 0,
+    late;
+  const { user, client } = view(async (url) => {
+    if (url.includes("summaries?")) {
+      requests++;
+      if (requests === 3)
+        return new Promise((resolve) => {
+          late = resolve;
+        });
+      return page();
+    }
+    if (url.includes("assignment-targets")) return { items: [] };
+    return {
+      issue: {
+        ...issue,
+        description: "",
+        questions: [],
+        coreRevision: 1,
+        actionRevision: 1,
+        policyRevision: 1,
+        assignmentRevision: 1,
+      },
+    };
+  });
+  client.patch.mockResolvedValue({ issue, changed: true });
+  await screen.findByText(issue.name);
+  await user.selectOptions(screen.getByLabelText("Status"), "active");
+  await screen.findByText(issue.name);
+  await user.click(
+    screen.getByRole("button", { name: "Configure Fixture Issue" }),
+  );
+  await user.type(screen.getByLabelText("Description"), "Updated description");
+  // Simulates browser history while native modal background interaction is inert.
+  fireEvent.click(screen.getByText("Browser Back"));
+  await waitFor(() => expect(requests).toBe(3));
+  await user.click(screen.getByRole("button", { name: "Save Changes" }));
+  await screen.findByText("Issue configuration updated.");
+  await waitFor(() => expect(requests).toBe(4));
+  expect(screen.queryByText("Loading Issues…")).not.toBeInTheDocument();
+  await act(() => late(page([{ ...issue, name: "Obsolete response" }])));
+  expect(screen.queryByText("Obsolete response")).not.toBeInTheDocument();
+  expect(client.patch).toHaveBeenCalledOnce();
 });
 test("F056.1 late filter response cannot overwrite newer query and loading hides old rows", async () => {
   const pending = [];
@@ -149,9 +247,18 @@ test("F056.1 500 summaries render without full configuration hydration or editor
       page(items, { total: 525, organizationTotal: 525, pageSize: 500 }),
     "/admin/issues?pageSize=500",
   );
-  await screen.findByText("Synthetic Issue 499");
-  expect(screen.getAllByRole("listitem")).toHaveLength(500);
-  expect(screen.queryByLabelText("Issue name")).not.toBeInTheDocument();
+  // Scope scale assertions to native table rows; avoid repeated full-page label scans.
+  await waitFor(() =>
+    expect(document.querySelector("tbody")?.rows).toHaveLength(500),
+  );
+  const table = document.querySelector("table.issue-workspace-table");
+  expect(table.rows).toHaveLength(501);
+  expect(
+    within(table.rows[500]).getByRole("button", {
+      name: "Configure Synthetic Issue 499",
+    }),
+  ).toBeVisible();
+  expect(document.querySelector("dialog, #issue-name")).toBeNull();
   expect(
     client.get.mock.calls.filter(([url]) =>
       url.startsWith("/admin/issues/summaries?"),
@@ -179,15 +286,17 @@ test("F056.1 detail must load fresh before editor and failure cannot mutate", as
     };
   });
   await screen.findByText(issue.name);
-  await user.click(screen.getByRole("button", { name: "Edit Fixture Issue" }));
+  await user.click(
+    screen.getByRole("button", { name: "Configure Fixture Issue" }),
+  );
   await screen.findByText(/latest Issue configuration could not be loaded/);
   expect(screen.queryByLabelText("Issue name")).not.toBeInTheDocument();
   detailFails = false;
-  await user.click(screen.getByRole("button", { name: "Edit Fixture Issue" }));
+  await user.click(screen.getByRole("button", { name: "Retry Configuration" }));
   expect(await screen.findByLabelText("Issue name")).toHaveValue(
     "Fresh authoritative name",
   );
-  await user.click(screen.getByRole("button", { name: "Cancel edit" }));
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
   expect(client.patch).not.toHaveBeenCalled();
 });
 test("F056.1 template combobox keyboard selection, Change and late response protection", async () => {

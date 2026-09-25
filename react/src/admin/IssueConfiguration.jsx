@@ -1,3 +1,6 @@
+import IssueDrawer from "./IssueDrawer.jsx";
+import IssueResults from "./IssueResults.jsx";
+import "./issueWorkspace.css";
 import FollowUpQuestions, {
   questionPayload,
   validQuestions,
@@ -89,6 +92,9 @@ export default function IssueConfiguration({ client, onDenied }) {
     [categoryAttempt, setCategoryAttempt] = useState(0),
     [detailLoading, setDetailLoading] = useState(false);
   const detailAbort = useRef(null);
+  const listAbort = useRef(null);
+  const editorFeedback = useRef(null);
+  const [detailError, setDetailError] = useState(null);
   const latestQuery = useRef(queryKey);
   latestQuery.current = queryKey;
   const updateQuery = (changes, replace = false) =>
@@ -170,8 +176,9 @@ export default function IssueConfiguration({ client, onDenied }) {
   }, []);
   useEffect(() => {
     const abort = new AbortController();
+    listAbort.current = abort;
     setLoading(true);
-    setError(null);
+    setError((previous) => (edit ? previous : null));
     client
       .get(`/admin/issues/summaries?${queryKey}`, {
         authenticated: true,
@@ -215,7 +222,7 @@ export default function IssueConfiguration({ client, onDenied }) {
     return () => abort.abort();
   }, [client, queryKey, attempt]);
   useEffect(() => {
-    if (edit) input.current?.focus();
+    if (edit && !edit.loading) input.current?.focus();
     else if (restoreFocus.current) {
       restoreFocus.current = false;
       (origin.current?.isConnected
@@ -225,7 +232,7 @@ export default function IssueConfiguration({ client, onDenied }) {
     }
   }, [edit]);
   useEffect(() => {
-    if (error) feedback.current?.focus();
+    if (error) (edit ? editorFeedback.current : feedback.current)?.focus();
   }, [error]);
   useEffect(() => {
     if (notice && !loading)
@@ -233,8 +240,16 @@ export default function IssueConfiguration({ client, onDenied }) {
   }, [notice, loading]);
   const targetIssue = edit?.issue?.id || draft.templateId;
   useEffect(() => {
-    if (!edit || !targetIssue) {
+    if (
+      !edit ||
+      edit.loading ||
+      edit.kind === "view" ||
+      edit.kind === "order" ||
+      !targetIssue
+    ) {
       setTargets([]);
+      setTargetsLoading(false);
+      setTargetError(false);
       return;
     }
     const abort = new AbortController();
@@ -263,7 +278,11 @@ export default function IssueConfiguration({ client, onDenied }) {
     return () => abort.abort();
   }, [client, edit, targetIssue, targetSearch]);
   const dirty =
-    !!edit && JSON.stringify(draft) !== JSON.stringify(fields(edit.issue));
+    !!edit &&
+    !edit.loading &&
+    !detailError &&
+    edit.kind !== "view" &&
+    JSON.stringify(draft) !== JSON.stringify(fields(edit.issue));
   useEffect(() => {
     if (!dirty) return;
     const warn = (e) => {
@@ -300,10 +319,15 @@ export default function IssueConfiguration({ client, onDenied }) {
     (edit?.issue || (draft.templateId && draft.availability)) &&
     (!edit?.issue?.canManageHandling || validHandoff(draft));
   async function open(issue, kind, event) {
-    origin.current = event.currentTarget;
+    if (event?.currentTarget) origin.current = event.currentTarget;
     setError(null);
     setNotice(null);
+    setDetailError(null);
     if (issue) {
+      if (kind !== "state") {
+        setEdit({ issue, kind, loading: true });
+        setDraft(fields());
+      }
       detailAbort.current?.abort();
       const abort = new AbortController();
       detailAbort.current = abort;
@@ -317,8 +341,18 @@ export default function IssueConfiguration({ client, onDenied }) {
         issue = result.issue;
       } catch (failure) {
         if (!abort.signal.aborted) {
-          if ([401, 403].includes(failure.status)) onDenied();
-          else
+          if ([401, 403].includes(failure.status)) {
+            setEdit(null);
+            setDraft(fields());
+            setData(null);
+            onDenied();
+          } else if (kind !== "state") {
+            setDetailError(
+              failure.status === 404
+                ? "This Issue is no longer available. Close configuration and refresh Issues."
+                : "The latest Issue configuration could not be loaded. Retry configuration.",
+            );
+          } else
             setError({
               message:
                 "The latest Issue configuration could not be loaded. Try the action again.",
@@ -349,10 +383,23 @@ export default function IssueConfiguration({ client, onDenied }) {
     setDraft(fields(issue));
     setTargetSearch("");
   }
-  function cancel() {
+  function closeEditor() {
+    detailAbort.current?.abort();
+    setDetailLoading(false);
     restoreFocus.current = true;
     setEdit(null);
+    setDraft(fields());
+    setDetailError(null);
     if (!error?.blocked) setError(null);
+  }
+  function cancel() {
+    if (busy || dirty)
+      setConfirmation({
+        kind: busy ? "pending" : "discard-close",
+        action: closeEditor,
+        returnFocus: document.activeElement,
+      });
+    else closeEditor();
   }
   function refresh(nextPage = page) {
     const action = () => {
@@ -400,6 +447,8 @@ export default function IssueConfiguration({ client, onDenied }) {
     if (mutation.current) return;
     const abort = new AbortController();
     mutation.current = abort;
+    listAbort.current?.abort();
+    setLoading(false);
     setBusy(true);
     setError(null);
     setConfirmation(null);
@@ -442,6 +491,8 @@ export default function IssueConfiguration({ client, onDenied }) {
       if (abort.signal.aborted) return;
       if ([401, 403].includes(failure.status)) {
         setEdit(null);
+        setDraft(fields());
+        setTargets([]);
         setData(null);
         onDenied();
         return;
@@ -486,7 +537,7 @@ export default function IssueConfiguration({ client, onDenied }) {
               }
               onClick={(event) => open(null, "create", event)}
             >
-              + Add issue
+              + Add Issue
             </button>
           )}
           <button
@@ -510,7 +561,7 @@ export default function IssueConfiguration({ client, onDenied }) {
         disabled={busy || !!edit || detailLoading}
       />
       <div ref={feedback} tabIndex="-1">
-        {error && <p role="alert">{error.message}</p>}
+        {error && !edit && <p role="alert">{error.message}</p>}
         {notice && (
           <p role="status">
             {notice.message}{" "}
@@ -532,15 +583,11 @@ export default function IssueConfiguration({ client, onDenied }) {
         )}
       </div>
       {loading && <p role="status">Loading Issues…</p>}
-      {detailLoading && (
+      {detailLoading && !edit && (
         <p role="status">Loading the latest Issue configuration…</p>
       )}
       {data && (
         <>
-          <p className="participation-order-help">
-            Within each Category, lower numbers appear first. Issues with the
-            same number are sorted by name.
-          </p>
           {!loading && !data.total && (
             <p>
               {data.organizationTotal === 0
@@ -554,367 +601,399 @@ export default function IssueConfiguration({ client, onDenied }) {
               {!data.canWrite && " This page is read-only."}
             </p>
           )}
-          {edit && !data.canWrite && (
-            <section>
-              <IssueHandling issue={edit.issue} draft={draft} readOnly />
-              <FollowUpQuestions questions={draft.questions} readOnly />
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={cancel}
-              >
-                Close questions
-              </button>
-            </section>
-          )}
-          {edit && data.canWrite && (
-            <form
-              className="configuration-area-form mb-4"
-              aria-labelledby="issue-editor-title"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (valid && dirty && !busy && !error?.blocked)
-                  save(edit.issue, payload(edit.issue, draft));
-              }}
-            >
-              <h2 id="issue-editor-title">
-                {edit.kind === "create"
-                  ? "Add issue"
+          {edit && (
+            <IssueDrawer
+              compact={edit.kind === "order"}
+              title={
+                edit.kind === "create"
+                  ? "Add Issue"
                   : edit.kind === "order"
-                    ? `Change order for ${edit.issue.name}`
-                    : `Edit ${edit.issue.name}`}
-              </h2>
-              {!edit.issue && (
-                <>
-                  <p>
-                    New Issues are created Inactive. You can review the Issue
-                    before making it available for new requests.
-                  </p>
-                  <IssueTemplatePicker
-                    client={client}
-                    disabled={busy}
-                    onDenied={onDenied}
-                    onChange={(id) => set("templateId", id)}
-                  />
-                </>
-              )}
-              {edit.kind !== "order" && (
-                <>
-                  <IssueHandling
-                    issue={edit.issue}
-                    draft={draft}
-                    set={set}
-                    disabled={busy}
-                  />
-                  <label htmlFor="issue-name">Issue name</label>
-                  <input
-                    ref={input}
-                    id="issue-name"
-                    className="form-control"
-                    value={draft.name}
-                    disabled={busy}
-                    onChange={(e) => set("name", e.target.value)}
-                    required
-                    maxLength={200}
-                    aria-describedby="issue-validation"
-                  />
-                  <label htmlFor="issue-description">Description</label>
-                  <textarea
-                    id="issue-description"
-                    className="form-control"
-                    value={draft.description}
-                    disabled={busy}
-                    onChange={(e) => set("description", e.target.value)}
-                    maxLength={1000}
-                    aria-describedby="issue-description-help issue-validation"
-                  />
-                  <p id="issue-description-help">
-                    Optional plain text, up to 1,000 characters.
-                  </p>
-                  <div hidden={draft.actionType === "external_redirect"}>
-                    <fieldset disabled={busy}>
-                      <legend className="h5">
-                        Who can submit this request?
-                      </legend>
-                      {["IDENTIFIED_REQUIRED", "ANONYMOUS_ALLOWED"].map(
-                        (policy) => (
-                          <label className="d-block" key={policy}>
-                            <input
-                              type="radio"
-                              name="issue-policy"
-                              value={policy}
-                              checked={draft.requesterPolicy === policy}
-                              onChange={() => set("requesterPolicy", policy)}
-                            />{" "}
-                            {policyLabel(policy)}
-                          </label>
-                        ),
-                      )}
-                      <p>
-                        {draft.requesterPolicy === "ANONYMOUS_ALLOWED"
-                          ? "Requesters may submit this request without identifying themselves."
-                          : "Requesters must provide the required identity information for this request."}
-                      </p>
-                    </fieldset>
-                    <label htmlFor="issue-target-search">
-                      Find an assignment target
-                    </label>
-                    <input
-                      id="issue-target-search"
-                      className="form-control"
-                      value={targetSearch}
-                      disabled={busy || !targetIssue}
-                      onChange={(e) => setTargetSearch(e.target.value)}
-                      maxLength={100}
-                    />
-                    <label htmlFor="issue-assignment">Default assignment</label>
-                    <select
-                      id="issue-assignment"
-                      className="form-select"
-                      value={draft.target}
-                      disabled={busy || targetsLoading || !targetIssue}
-                      onChange={(e) => set("target", e.target.value)}
-                      aria-describedby="issue-assignment-help"
-                    >
-                      <option value="">No default assignment</option>
-                      {edit.issue?.defaultAssignment &&
-                        !targets.some(
-                          (t) =>
-                            targetKey(t) ===
-                            targetKey(edit.issue.defaultAssignment),
-                        ) && (
-                          <option
-                            value={targetKey(edit.issue.defaultAssignment)}
-                          >
-                            {edit.issue.defaultAssignment.displayName} (current
-                            selection)
-                          </option>
-                        )}
-                      {targets.map((target) => (
-                        <option
-                          key={targetKey(target)}
-                          value={targetKey(target)}
-                        >
-                          {target.displayName} —{" "}
-                          {target.type === "staff"
-                            ? "Staff"
-                            : target.type === "role"
-                              ? "Role"
-                              : "Team"}
-                        </option>
-                      ))}
-                    </select>
-                    <p id="issue-assignment-help">
-                      New requests use this assignment by default. Existing
-                      assignments are not changed.
-                    </p>
-                    {targetError && (
-                      <p role="alert">
-                        Assignment targets could not be loaded. Refresh before
-                        saving.
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-              {edit.issue &&
-                edit.kind !== "order" &&
-                draft.actionType !== "external_redirect" && (
-                  <FollowUpQuestions
-                    questions={draft.questions}
-                    onChange={(value) => set("questions", value)}
-                    disabled={busy}
-                  />
+                    ? "Change Display Order"
+                    : edit.kind === "view"
+                      ? "View Configuration"
+                      : "Configure Issue"
+              }
+              subtitle={edit.issue?.name}
+              onClose={cancel}
+            >
+              <div ref={editorFeedback} tabIndex={-1}>
+                {error && <p role="alert">{error.message}</p>}
+                {error?.blocked && (
+                  <button
+                    className="btn btn-outline-primary"
+                    onClick={() =>
+                      setConfirmation({
+                        kind: "discard",
+                        returnFocus: document.activeElement,
+                        action: () => open(edit.issue, edit.kind),
+                      })
+                    }
+                  >
+                    Refresh Configuration
+                  </button>
                 )}
-              <label htmlFor="issue-order">Display order</label>
-              <input
-                ref={edit.kind === "order" ? input : undefined}
-                id="issue-order"
-                type="number"
-                className="form-control"
-                min="0"
-                max="2147483647"
-                step="1"
-                value={draft.displayOrder}
-                disabled={busy}
-                onChange={(e) => set("displayOrder", e.target.value)}
-                aria-describedby="issue-validation"
-              />
-              <p id="issue-validation">
-                {!valid
-                  ? "Complete the required fields above. Use a plain-text name and a whole-number order of zero or greater."
-                  : dirty
-                    ? "Unsaved changes."
-                    : "No unsaved changes."}
-              </p>
-              <div className="d-flex gap-2 flex-wrap">
-                <button
-                  className="btn btn-primary"
-                  disabled={
-                    !valid ||
-                    !dirty ||
-                    busy ||
-                    error?.blocked ||
-                    targetError ||
-                    targetsLoading
-                  }
-                >
-                  {busy
-                    ? "Saving…"
-                    : edit.issue
-                      ? "Save changes"
-                      : "Create issue"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={busy}
-                  onClick={cancel}
-                >
-                  Cancel edit
-                </button>
               </div>
-            </form>
-          )}
-          <p role="status">
-            {!loading &&
-              `${data.total} matching Issues · Page ${data.page} of ${Math.max(1, Math.ceil(data.total / data.pageSize))}`}
-          </p>
-          <ul className="issue-summary-list" aria-busy={loading}>
-            {!loading &&
-              data.items.map((issue) => (
-                <li
-                  key={issue.id}
-                  tabIndex="-1"
-                  aria-label={issue.name}
-                  ref={(node) => {
-                    if (node) cards.current.set(issue.id, node);
-                    else cards.current.delete(issue.id);
+              {edit.loading && !detailError && (
+                <p role="status">Loading the latest Issue configuration…</p>
+              )}
+              {detailError && (
+                <div>
+                  <p role="alert">{detailError}</p>
+                  <button
+                    className="btn btn-outline-primary"
+                    onClick={() => open(edit.issue, edit.kind)}
+                  >
+                    Retry Configuration
+                  </button>
+                </div>
+              )}
+              {!edit.loading && !detailError && !data.canWrite && (
+                <>
+                  <section>
+                    <h3>General</h3>
+                    <p>{edit.issue.description}</p>
+                    <p>Category: {edit.issue.category}</p>
+                    <p>Status: {edit.issue.active ? "Active" : "Inactive"}</p>
+                  </section>
+                  <section>
+                    <h3>Intake &amp; Access</h3>
+                    <IssueHandling issue={edit.issue} draft={draft} readOnly />
+                    <p>
+                      Requester Policy:{" "}
+                      {policyLabel(edit.issue.requesterPolicy)}
+                    </p>
+                  </section>
+                  <section>
+                    <h3>Assignment</h3>
+                    <p>
+                      {edit.issue.defaultAssignment?.displayName ||
+                        "No default assignment"}
+                    </p>
+                  </section>
+                  <FollowUpQuestions questions={draft.questions} readOnly />
+                  <button className="btn btn-secondary" onClick={cancel}>
+                    Close Configuration
+                  </button>
+                </>
+              )}
+              {!edit.loading && !detailError && data.canWrite && (
+                <form
+                  className="configuration-area-form issue-editor-form"
+                  aria-labelledby="issue-editor-title"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (
+                      valid &&
+                      dirty &&
+                      !busy &&
+                      !error?.blocked &&
+                      !targetError &&
+                      !targetsLoading
+                    )
+                      save(edit.issue, payload(edit.issue, draft));
                   }}
                 >
-                  <div className="participation-area-heading">
-                    <h2>{issue.name}</h2>
-                    <span
-                      className={`participation-state ${issue.active ? "is-active" : ""}`}
+                  <h3 id="issue-editor-title" className="visually-hidden">
+                    Issue Configuration Fields
+                  </h3>
+                  {!edit.issue && (
+                    <>
+                      <p>
+                        New Issues are created Inactive. You can review the
+                        Issue before making it available for new requests.
+                      </p>
+                      <IssueTemplatePicker
+                        client={client}
+                        disabled={busy}
+                        onDenied={onDenied}
+                        onChange={(id) => set("templateId", id)}
+                      />
+                    </>
+                  )}
+                  {edit.kind !== "order" && (
+                    <>
+                      <section className="issue-editor-section">
+                        <h3>General</h3>
+                        {edit.issue && <p>Category: {edit.issue.category}</p>}
+                        <label htmlFor="issue-name">Issue name</label>
+                        <input
+                          ref={input}
+                          id="issue-name"
+                          className="form-control"
+                          value={draft.name}
+                          disabled={busy}
+                          onChange={(e) => set("name", e.target.value)}
+                          required
+                          maxLength={200}
+                          aria-describedby="issue-validation"
+                        />
+                        <label htmlFor="issue-description">Description</label>
+                        <textarea
+                          id="issue-description"
+                          className="form-control"
+                          value={draft.description}
+                          disabled={busy}
+                          onChange={(e) => set("description", e.target.value)}
+                          maxLength={1000}
+                          aria-describedby="issue-description-help issue-validation"
+                        />
+                        <p id="issue-description-help">
+                          Optional plain text, up to 1,000 characters.
+                        </p>
+                      </section>
+                      <section className="issue-editor-section">
+                        <h3>Intake &amp; Access</h3>
+                        <IssueHandling
+                          issue={edit.issue}
+                          draft={draft}
+                          set={set}
+                          disabled={busy}
+                        />
+                        <div hidden={draft.actionType === "external_redirect"}>
+                          <fieldset disabled={busy}>
+                            <legend className="h5">
+                              Who can submit this request?
+                            </legend>
+                            {["IDENTIFIED_REQUIRED", "ANONYMOUS_ALLOWED"].map(
+                              (policy) => (
+                                <label className="d-block" key={policy}>
+                                  <input
+                                    type="radio"
+                                    name="issue-policy"
+                                    value={policy}
+                                    checked={draft.requesterPolicy === policy}
+                                    onChange={() =>
+                                      set("requesterPolicy", policy)
+                                    }
+                                  />{" "}
+                                  {policyLabel(policy)}
+                                </label>
+                              ),
+                            )}
+                            <p>
+                              {draft.requesterPolicy === "ANONYMOUS_ALLOWED"
+                                ? "Requesters may submit this request without identifying themselves."
+                                : "Requesters must provide the required identity information for this request."}
+                            </p>
+                          </fieldset>
+                        </div>
+                      </section>
+                      <section
+                        className="issue-editor-section"
+                        hidden={draft.actionType === "external_redirect"}
+                      >
+                        <h3>Assignment</h3>
+                        <div>
+                          <label htmlFor="issue-target-search">
+                            Find an assignment target
+                          </label>
+                          <input
+                            id="issue-target-search"
+                            className="form-control"
+                            value={targetSearch}
+                            disabled={busy || !targetIssue}
+                            onChange={(e) => setTargetSearch(e.target.value)}
+                            maxLength={100}
+                          />
+                          <label htmlFor="issue-assignment">
+                            Default assignment
+                          </label>
+                          <select
+                            id="issue-assignment"
+                            className="form-select"
+                            value={draft.target}
+                            disabled={busy || targetsLoading || !targetIssue}
+                            onChange={(e) => set("target", e.target.value)}
+                            aria-describedby="issue-assignment-help"
+                          >
+                            <option value="">No default assignment</option>
+                            {edit.issue?.defaultAssignment &&
+                              !targets.some(
+                                (t) =>
+                                  targetKey(t) ===
+                                  targetKey(edit.issue.defaultAssignment),
+                              ) && (
+                                <option
+                                  value={targetKey(
+                                    edit.issue.defaultAssignment,
+                                  )}
+                                >
+                                  {edit.issue.defaultAssignment.displayName}{" "}
+                                  (current selection)
+                                </option>
+                              )}
+                            {targets.map((target) => (
+                              <option
+                                key={targetKey(target)}
+                                value={targetKey(target)}
+                              >
+                                {target.displayName} —{" "}
+                                {target.type === "staff"
+                                  ? "Staff"
+                                  : target.type === "role"
+                                    ? "Role"
+                                    : "Team"}
+                              </option>
+                            ))}
+                          </select>
+                          <p id="issue-assignment-help">
+                            New requests use this assignment by default.
+                            Existing assignments are not changed.
+                          </p>
+                          {targetError && (
+                            <p role="alert">
+                              Assignment targets could not be loaded. Refresh
+                              before saving.
+                            </p>
+                          )}
+                        </div>
+                      </section>
+                    </>
+                  )}
+                  {edit.issue &&
+                    edit.kind !== "order" &&
+                    draft.actionType !== "external_redirect" && (
+                      <section className="issue-editor-section">
+                        <FollowUpQuestions
+                          questions={draft.questions}
+                          onChange={(value) => set("questions", value)}
+                          disabled={busy}
+                        />
+                      </section>
+                    )}
+                  {(edit.kind === "order" || !edit.issue) && (
+                    <>
+                      <label htmlFor="issue-order">Display Order</label>
+                      <input
+                        ref={edit.kind === "order" ? input : undefined}
+                        id="issue-order"
+                        type="number"
+                        className="form-control"
+                        min="0"
+                        max="2147483647"
+                        step="1"
+                        value={draft.displayOrder}
+                        disabled={busy}
+                        onChange={(e) => set("displayOrder", e.target.value)}
+                        aria-describedby="issue-validation"
+                      />
+                      <p>
+                        Lower numbers appear first within the Category. Ties are
+                        sorted by name.
+                      </p>
+                    </>
+                  )}
+                  <p id="issue-validation">
+                    {!valid
+                      ? "Complete the required fields above. Use a plain-text name and a whole-number order of zero or greater."
+                      : dirty
+                        ? "Unsaved changes."
+                        : "No unsaved changes."}
+                  </p>
+                  <div className="issue-editor-actions">
+                    <button
+                      className="btn btn-primary"
+                      disabled={
+                        !valid ||
+                        !dirty ||
+                        busy ||
+                        error?.blocked ||
+                        targetError ||
+                        targetsLoading
+                      }
                     >
-                      {issue.active ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-                  <p>{issue.category}</p>
-                  <dl className="issue-summary-metadata">
-                    <dt>Requester</dt>
-                    <dd>{policyLabel(issue.requesterPolicy)}</dd>
-                    <dt>Availability</dt>
-                    <dd>
-                      {availabilityLabels[issue.availability] || "Unavailable"}
-                    </dd>
-                    <dt>Handling</dt>
-                    <dd>
-                      {issue.actionType === "external_redirect"
-                        ? "External Redirect"
-                        : "Reqro Intake"}
-                    </dd>
-                    <dt>Default assignment</dt>
-                    <dd>{issue.assignmentLabel ?? "No default assignment"}</dd>
-                  </dl>
-                  <p>Order {issue.displayOrder}</p>
-                  {!data.canWrite && (
+                      {busy
+                        ? "Saving…"
+                        : edit.issue
+                          ? "Save Changes"
+                          : "Create Issue"}
+                    </button>
                     <button
                       type="button"
-                      className="btn btn-outline-primary"
-                      disabled={detailLoading || !!edit}
-                      onClick={(e) => open(issue, "view", e)}
+                      className="btn btn-secondary"
+                      onClick={cancel}
                     >
-                      View questions
+                      Cancel
                     </button>
-                  )}
-                  {data.canWrite && (
-                    <div className="d-flex gap-2 flex-wrap">
-                      <button
-                        className="btn btn-outline-primary"
-                        disabled={
-                          busy ||
-                          loading ||
-                          detailLoading ||
-                          !!edit ||
-                          error?.blocked
-                        }
-                        aria-label={`Edit ${issue.name}`}
-                        onClick={(e) => open(issue, "edit", e)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="btn btn-outline-primary"
-                        disabled={
-                          busy ||
-                          loading ||
-                          detailLoading ||
-                          !!edit ||
-                          error?.blocked
-                        }
-                        aria-label={`Change order for ${issue.name}`}
-                        onClick={(e) => open(issue, "order", e)}
-                      >
-                        Change order
-                      </button>
-                      <button
-                        className="btn btn-outline-primary"
-                        disabled={
-                          busy ||
-                          loading ||
-                          detailLoading ||
-                          !!edit ||
-                          error?.blocked
-                        }
-                        aria-label={`${issue.active ? "Deactivate" : "Activate"} ${issue.name}`}
-                        onClick={(event) => open(issue, "state", event)}
-                      >
-                        {issue.active ? "Deactivate" : "Activate"}
-                      </button>
-                    </div>
-                  )}
-                </li>
-              ))}
-          </ul>
-          {data.total > data.pageSize && (
-            <nav
-              aria-label="Issue pages"
-              className="d-flex flex-wrap gap-3 align-items-center mt-3"
-            >
-              <button
-                className="btn btn-outline-primary"
-                disabled={page === 1 || busy || loading}
-                onClick={() => refresh(page - 1)}
-              >
-                Previous Issues
-              </button>
-              <span>
-                Page {page} of {Math.ceil(data.total / data.pageSize)}
-              </span>
-              <button
-                className="btn btn-outline-primary"
-                disabled={page * data.pageSize >= data.total || busy || loading}
-                onClick={() => refresh(page + 1)}
-              >
-                Next Issues
-              </button>
-            </nav>
+                  </div>
+                </form>
+              )}
+            </IssueDrawer>
           )}
+          <p role="status" className="issue-result-count">
+            {!loading && `${data.total} Issues`}
+          </p>
+          <IssueResults
+            data={data}
+            loading={loading}
+            disabled={
+              busy || loading || detailLoading || !!edit || error?.blocked
+            }
+            onAction={open}
+            rows={cards}
+          />
+          <nav aria-label="Issue pages" className="issue-workspace-pagination">
+            <label htmlFor="issue-page-size">Rows per page</label>
+            <select
+              id="issue-page-size"
+              className="form-select"
+              value={query.pageSize}
+              disabled={busy || loading || !!edit}
+              onChange={(event) =>
+                updateQuery({ pageSize: event.target.value, page: "1" })
+              }
+            >
+              {[25, 50, 100, 250, 500].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <span>
+              {data.total ? (data.page - 1) * data.pageSize + 1 : 0}–
+              {Math.min(data.page * data.pageSize, data.total)} of {data.total}
+            </span>
+            <button
+              className="btn btn-outline-primary"
+              disabled={page === 1 || busy || loading || !!edit}
+              onClick={() => refresh(page - 1)}
+            >
+              Previous Issues
+            </button>
+            <span>
+              Page {data.page} of{" "}
+              {Math.max(1, Math.ceil(data.total / data.pageSize))}
+            </span>
+            <button
+              className="btn btn-outline-primary"
+              disabled={
+                page * data.pageSize >= data.total || busy || loading || !!edit
+              }
+              onClick={() => refresh(page + 1)}
+            >
+              Next Issues
+            </button>
+          </nav>
         </>
       )}
       {confirmation && (
         <Confirmation
           returnFocus={confirmation.returnFocus}
           title={
-            confirmation.kind === "discard"
+            confirmation.kind.startsWith("discard")
               ? "Discard unsaved changes?"
-              : "Deactivate this Issue?"
+              : confirmation.kind === "pending"
+                ? "Close while saving?"
+                : "Deactivate this Issue?"
           }
           confirmLabel={
-            confirmation.kind === "discard"
-              ? "Discard and refresh"
-              : "Deactivate issue"
+            confirmation.kind.startsWith("discard")
+              ? confirmation.kind === "discard-close"
+                ? "Discard and close"
+                : "Discard and refresh"
+              : confirmation.kind === "pending"
+                ? "Close configuration"
+                : "Deactivate issue"
           }
           onCancel={() => setConfirmation(null)}
           onConfirm={() => {
@@ -923,9 +1002,13 @@ export default function IssueConfiguration({ client, onDenied }) {
             action();
           }}
         >
-          {confirmation.kind === "discard"
-            ? "Refresh will replace your edits with the latest configuration."
-            : "It will no longer be available for new requests. Existing requests and history will be kept."}
+          {confirmation.kind.startsWith("discard")
+            ? confirmation.kind === "discard-close"
+              ? "Your unsaved configuration changes will be discarded."
+              : "Refresh will replace your edits with the latest configuration."
+            : confirmation.kind === "pending"
+              ? "Saving is still in progress. Closing does not cancel the submitted change. The result will appear in the Issue list."
+              : "It will no longer be available for new requests. Existing requests and history will be kept."}
         </Confirmation>
       )}
     </div>
