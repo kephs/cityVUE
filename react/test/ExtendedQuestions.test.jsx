@@ -360,7 +360,7 @@ test("F056.2C Information-only schema retains Additional information but creates
   const { requests } = setupFlow([information]);
   await reachQuestions(user);
   expect(
-    screen.getByRole("heading", { name: "Additional information" }),
+    screen.getByRole("heading", { name: "Additional Information" }),
   ).toBeInTheDocument();
   expect(screen.getByText(information.label)).toBeInTheDocument();
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
@@ -395,9 +395,9 @@ test("F056.2C protected staff shows historical label list/date only after delibe
   );
   expect(screen.queryByText("Historical choices")).not.toBeInTheDocument();
   await userEvent.click(
-    screen.getByRole("button", { name: "View submitted information" }),
+    screen.getByRole("button", { name: "View Submitted Information" }),
   );
-  const panel = screen.getByRole("region", { name: "Submitted information" });
+  const panel = screen.getByRole("region", { name: "Submitted Information" });
   expect(
     await within(panel).findByText("February 29, 2024"),
   ).toBeInTheDocument();

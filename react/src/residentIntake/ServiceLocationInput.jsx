@@ -38,6 +38,8 @@ export default function ServiceLocationInput({
     [results, setResults] = useState([]),
     [searchState, setSearchState] = useState("idle"),
     [searchAttempt, setSearchAttempt] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const selected = useRef(null);
   const [device, setDevice] = useState(""),
     [pending, setPending] = useState(false),
     [manual, setManual] = useState({ latitude: "", longitude: "" }),
@@ -117,6 +119,7 @@ export default function ServiceLocationInput({
     }
     setDevice("");
     onChange(label || "Selected Service Location", valid);
+    setEditing(false);
   };
   const locate = () => {
     if (devicePending.current) return;
@@ -175,15 +178,14 @@ export default function ServiceLocationInput({
   const inside = boundaryContains(point, config?.boundary);
   return (
     <fieldset className="service-location">
-      <legend>Where is the issue?</legend>
-      <p>
-        Service Location describes the problem, not your home. Choose a method
-        below; device location is optional.
-      </p>
+      <legend>
+        Find the Issue Location {required ? "(Required)" : "(Optional)"}
+      </legend>
+      <p>Choose where the issue is. Device location is optional.</p>
       {config?.synthetic && (
         <p className="prototype-notice">
-          Development only — fictional locations and service area, without
-          street tiles or authoritative addresses.
+          <strong>Development Notice</strong> Fictional locations and service
+          area, without street tiles or authoritative addresses.
         </p>
       )}
       <label htmlFor="location-search" className="form-label">
@@ -193,6 +195,7 @@ export default function ServiceLocationInput({
         id="location-search"
         className="form-control"
         type="search"
+        placeholder="Search for an address, intersection, or landmark"
         maxLength={200}
         value={query}
         disabled={!config?.search}
@@ -211,7 +214,7 @@ export default function ServiceLocationInput({
         {searchState === "loading"
           ? "Searching…"
           : searchState === "ready" && !results.length
-            ? "No locations found. Try another search or use manual entry."
+            ? "No matches found. Try another search or enter the location manually."
             : ""}
       </div>
       {searchState === "error" && (
@@ -236,7 +239,7 @@ export default function ServiceLocationInput({
                 className="btn btn-outline-primary"
                 onClick={() => {
                   choose(result, result.displayLabel);
-                  document.getElementById("location")?.focus();
+                  requestAnimationFrame(() => selected.current?.focus());
                 }}
               >
                 {result.displayLabel}
@@ -251,7 +254,7 @@ export default function ServiceLocationInput({
         disabled={pending}
         onClick={locate}
       >
-        {pending ? "Finding location…" : "Use my current location"}
+        {pending ? "Finding location…" : "Use My Current Location"}
       </button>
       <p role="status">{device}</p>
       {config?.boundary && (
@@ -268,45 +271,77 @@ export default function ServiceLocationInput({
           </MapFallback>
         </>
       )}
-      <div className="location-summary" role="status">
-        <strong>Selected Service Location</strong>
-        <p>{text || "No location selected."}</p>
-        {point && (
-          <p>
-            Latitude {point.latitude}, longitude {point.longitude}
-          </p>
-        )}
-        {point && (
-          <p>
-            {inside === true
-              ? "Inside the fictional service area."
-              : inside === false
-                ? `This location appears outside the service area.${geographicPolicy === "no_geographic_restriction" ? " This Issue has no geographic restriction." : " Eligibility will be checked before submission."}`
-                : "Service-area validation is unavailable. Eligibility will be checked before submission."}
-          </p>
-        )}
-      </div>
-      <label className="form-label" htmlFor="location">
-        Service Location {required ? "(required)" : "(optional)"}
-      </label>
-      <input
-        id="location"
-        className="form-control"
-        value={text}
-        maxLength={2000}
-        required={required}
-        onChange={(e) => {
-          generation.current++;
-          onChange(e.target.value, point);
-        }}
-        aria-invalid={Boolean(error)}
-        aria-describedby="location-help"
-      />
-      <p id="location-help" className="form-text">
-        Describe the address, intersection or landmark. You can complete this
-        without a map where the Issue permits.
-      </p>
-      {error && <p role="alert">{error}</p>}
+      {(text || point) && (
+        <div
+          className="location-summary"
+          role="status"
+          ref={selected}
+          tabIndex={-1}
+        >
+          <strong>Selected Location</strong>
+          <p>{text}</p>
+          {point && (
+            <p>
+              Latitude {point.latitude}, longitude {point.longitude}
+            </p>
+          )}
+          {point && (
+            <p>
+              {inside === true
+                ? "Inside the fictional service area."
+                : inside === false
+                  ? `This location appears outside the service area.${geographicPolicy === "no_geographic_restriction" ? " This Issue has no geographic restriction." : " Eligibility will be checked before submission."}`
+                  : "Service-area validation is unavailable. Eligibility will be checked before submission."}
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn btn-outline-secondary"
+            onClick={() => {
+              setQuery("");
+              document.getElementById("location-search")?.focus();
+              if (!config?.search) setEditing(true);
+            }}
+          >
+            Change Location
+          </button>
+        </div>
+      )}
+      <details
+        open={editing || Boolean(error)}
+        onToggle={(event) => setEditing(event.currentTarget.open)}
+      >
+        <summary>
+          {text
+            ? "Edit location description manually"
+            : "Can't find the location? Enter it manually"}
+        </summary>
+        <label className="form-label" htmlFor="location">
+          Service Location {required ? "(required)" : "(optional)"}
+        </label>
+        <input
+          id="location"
+          className="form-control"
+          value={text}
+          maxLength={2000}
+          required={required}
+          onChange={(e) => {
+            generation.current++;
+            onChange(e.target.value, point);
+          }}
+          aria-invalid={Boolean(error)}
+          aria-describedby={`location-help${error ? " location-error" : ""}`}
+        />
+        <p id="location-help" className="form-text">
+          Describe the address, intersection or landmark. You can complete this
+          without a map where the Issue permits.
+        </p>
+      </details>
+      {error && (
+        <p id="location-error" role="alert">
+          {error}
+        </p>
+      )}
       <details>
         <summary>Enter coordinates manually (optional)</summary>
         <div className="location-coordinate-fields">

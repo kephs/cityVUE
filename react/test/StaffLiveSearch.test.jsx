@@ -51,7 +51,7 @@ const settle = () =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(300);
   });
-const input = () => screen.getByRole("searchbox", { name: "Search requests" });
+const input = () => screen.getByRole("searchbox", { name: "Search Requests" });
 beforeEach(() => {
   vi.useFakeTimers();
   repository = {
@@ -70,7 +70,7 @@ test("results hierarchy follows filters, consolidated controls, summary and rows
   const filters = screen.getByRole("form", { name: "Request filters" });
   const toolbar = screen.getByRole("group", { name: "Request list controls" });
   const search = input().closest(".request-live-search");
-  const summary = screen.getByText("1 requests · Page 1");
+  const summary = screen.getByText("1–1 of 1 requests");
   const results = screen.getByRole("table");
   const ordered = [filters, toolbar, summary, results];
   for (let i = 1; i < ordered.length; i++)
@@ -87,9 +87,7 @@ test("results hierarchy follows filters, consolidated controls, summary and rows
     "request-live-search-help",
   );
   expect(
-    screen.getByText(
-      "Searches reference, Issue and displayed Service Location. Other filters still apply.",
-    ),
+    screen.getByText("Search by reference, Issue, or Service Location."),
   ).toBeInTheDocument();
   expect(search).toContainElement(
     screen.getByRole("button", { name: "Clear search" }),
@@ -99,7 +97,7 @@ test("results hierarchy follows filters, consolidated controls, summary and rows
     screen.getByRole("button", { name: "Reset", exact: true }),
     input(),
     screen.getByRole("button", { name: "Clear search" }),
-    screen.getByLabelText("Sort by"),
+    screen.getByLabelText("Sort By"),
     screen.getByLabelText("Direction"),
     screen.getByRole("button", { name: "Refresh", exact: true }),
   ];
@@ -124,7 +122,7 @@ test("results hierarchy follows filters, consolidated controls, summary and rows
 });
 
 test.each([
-  ["Sort by", "issue", { sort: "issue" }],
+  ["Sort By", "issue", { sort: "issue" }],
   ["Audience", "internal", { audience: "internal" }],
 ])(
   "%s changes cancel a pending searched response",
@@ -321,7 +319,7 @@ test("sort, filter and Refresh use current search immediately; browser back/forw
   fireEvent.click(screen.getByText("Forward"));
   await flush();
   expect(input()).toHaveValue("beta");
-  fireEvent.change(screen.getByLabelText("Sort by"), {
+  fireEvent.change(screen.getByLabelText("Sort By"), {
     target: { value: "issue" },
   });
   await flush();
@@ -365,7 +363,7 @@ test("empty matches and failed requests have distinct accessible states; retry p
   fireEvent.click(screen.getByText("Try again"));
   await flush();
   expect(repository.list.mock.lastCall[0]).toMatchObject({ q: "missing" });
-  expect(screen.getByText("1 requests · Page 1")).toHaveAttribute(
+  expect(screen.getByText("1–1 of 1 requests")).toHaveAttribute(
     "role",
     "status",
   );

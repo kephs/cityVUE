@@ -16,7 +16,7 @@ export default function SubmittedInformation({ id, repository, canRead }) {
       pending.current = null;
     };
   }, [id, repository, canRead, context, auth.isAuthenticated]);
-  if (!canRead || state?.denied) return null;
+  if (!canRead) return null;
   const load = async () => {
     pending.current?.abort();
     const controller = new AbortController();
@@ -42,10 +42,16 @@ export default function SubmittedInformation({ id, repository, canRead }) {
   const current = state?.id === id && state.context === context ? state : null;
   return (
     <section
-      className="request-details-panel"
-      aria-label="Submitted information"
+      className="ui-card submitted-information"
+      aria-label="Submitted Information"
     >
-      <h2>Submitted information</h2>
+      <h3 className="ui-section-heading">Submitted Information</h3>
+      {!current && (
+        <p>View the additional information submitted with this request.</p>
+      )}
+      {current?.denied && (
+        <p role="alert">Submitted information is unavailable.</p>
+      )}
       {current?.loading && <p role="status">Loading submitted information…</p>}
       {current?.error && (
         <p role="alert">
@@ -77,16 +83,18 @@ export default function SubmittedInformation({ id, repository, canRead }) {
         ) : (
           <p>No submitted information was provided.</p>
         ))}
-      <button
-        type="button"
-        className="btn btn-secondary"
-        disabled={current?.loading}
-        onClick={load}
-      >
-        {current?.data
-          ? "Refresh submitted information"
-          : "View submitted information"}
-      </button>
+      {!current?.denied && (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={current?.loading}
+          onClick={load}
+        >
+          {current?.data
+            ? "Refresh submitted information"
+            : "View Submitted Information"}
+        </button>
+      )}
     </section>
   );
 }

@@ -119,7 +119,7 @@ test("F056.2A withheld answers disclose no panel, count or metadata", () => {
   render(
     <SubmittedInformation id="one" repository={repository} canRead={false} />,
   );
-  expect(screen.queryByText("Submitted information")).not.toBeInTheDocument();
+  expect(screen.queryByText("Submitted Information")).not.toBeInTheDocument();
   expect(repository.readAnswers).not.toHaveBeenCalled();
 });
 test("F056.2A protected state clears on denial, request change and ignores stale response", async () => {
@@ -136,7 +136,7 @@ test("F056.2A protected state clears on denial, request change and ignores stale
     <SubmittedInformation id="one" repository={repository} canRead />,
   );
   await userEvent.click(
-    screen.getByRole("button", { name: "View submitted information" }),
+    screen.getByRole("button", { name: "View Submitted Information" }),
   );
   view.rerender(
     <SubmittedInformation id="two" repository={repository} canRead />,
@@ -151,9 +151,11 @@ test("F056.2A protected state clears on denial, request change and ignores stale
   );
   repository.readAnswers.mockRejectedValue({ status: 403 });
   await userEvent.click(
-    screen.getByRole("button", { name: "View submitted information" }),
+    screen.getByRole("button", { name: "View Submitted Information" }),
   );
   await waitFor(() =>
-    expect(screen.queryByText("Submitted information")).not.toBeInTheDocument(),
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Submitted information is unavailable.",
+    ),
   );
 });

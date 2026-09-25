@@ -102,9 +102,7 @@ test("F049 required Issue hides anonymous choice and requires the existing Conta
   await user.click(await screen.findByRole("radio", { name: /Roads/ }));
   await user.click(await screen.findByRole("radio", { name: /Pothole/ }));
   await user.click(screen.getByRole("button", { name: "Continue" }));
-  expect(
-    await screen.findByRole("radio", { name: "Provide my name" }),
-  ).toBeChecked();
+  expect(await screen.findByLabelText("Your name *")).toBeRequired();
   expect(
     screen.queryByRole("radio", { name: "Report anonymously" }),
   ).not.toBeInTheDocument();
@@ -371,9 +369,7 @@ test.each(["inactive", "reqro"])(
     expect(navigation).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
     if (state === "reqro")
-      expect(
-        screen.getByRole("radio", { name: "Provide my name" }),
-      ).toBeChecked();
+      expect(screen.getByLabelText("Your name *")).toBeRequired();
     navigation.mockRestore();
   },
 );

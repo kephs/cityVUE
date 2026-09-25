@@ -1,3 +1,5 @@
+import { categoryAccent } from "../../components/ui/categoryAccent.js";
+import "../../components/ui/categoryAccent.css";
 import { useAuth } from "../../auth/AuthContext.jsx";
 import DynamicQuestion, { displayAnswer } from "./DynamicQuestion.jsx";
 import AnswerValue from "../../components/ui/AnswerValue.jsx";
@@ -30,7 +32,7 @@ const initialValues = {
 const labels = {
   service: "Issue",
   details: "Details",
-  questions: "Additional information",
+  questions: "Additional Information",
   review: "Review",
 };
 
@@ -497,7 +499,9 @@ export default function ReportIssuePage({
               </div>
               <div className="prototype-notice">
                 <i className="bi bi-info-circle" />
-                <span>{data.catalog.notice}</span>
+                <span>
+                  <strong>Development Notice</strong> {data.catalog.notice}
+                </span>
               </div>
               {catalog.loading && (
                 <div className="catalog-message" role="status">
@@ -566,7 +570,7 @@ export default function ReportIssuePage({
                   {categories.map((item) => (
                     <label
                       key={item.id}
-                      className={`catalog-choice accent-${item.accent}${categoryId === item.id ? " selected" : ""}`}
+                      className={`catalog-choice${categoryId === item.id ? " selected" : ""}`}
                     >
                       <input
                         type="radio"
@@ -574,7 +578,9 @@ export default function ReportIssuePage({
                         checked={categoryId === item.id}
                         onChange={() => selectCategory(item.id)}
                       />
-                      <span className="choice-icon">
+                      <span
+                        className={`choice-icon category-accent-${categoryAccent(item.id)}`}
+                      >
                         <i className={`bi ${item.icon}`} />
                       </span>
                       <span className="choice-copy">
@@ -664,7 +670,9 @@ export default function ReportIssuePage({
                             checked={serviceId === item.id}
                             onChange={() => selectService(item.id)}
                           />
-                          <span className="choice-icon issue-choice-icon">
+                          <span
+                            className={`choice-icon issue-choice-icon category-accent-${categoryAccent(categoryId)}`}
+                          >
                             <i
                               className={`bi ${resolveIssueIcon({ service: item, category })}`}
                             />
@@ -746,7 +754,7 @@ export default function ReportIssuePage({
             </div>
           )}
           {step === "details" && service && (
-            <div className="step-panel">
+            <div className="step-panel details-surface">
               <div className="selected-service-banner">
                 <div>
                   <span>Selected issue</span>
@@ -772,7 +780,7 @@ export default function ReportIssuePage({
                 attachmentControls={
                   <AttachmentSelector
                     draft={evidence}
-                    label="Photos & Files"
+                    label="Photos & Files (Optional)"
                     camera
                   />
                 }
@@ -810,7 +818,7 @@ export default function ReportIssuePage({
           {step === "questions" && service && (
             <div className="step-panel">
               <h2 data-step-heading tabIndex="-1">
-                Additional information
+                Additional Information
               </h2>
               <form
                 noValidate
@@ -873,18 +881,20 @@ export default function ReportIssuePage({
                     <span>{category.name}</span>
                   </dd>
                 </div>
-                <div className="review-pair">
-                  <dt>Service Location</dt>
-                  <dd>
-                    {values.location}
-                    {values.locationPoint && (
-                      <span>
-                        Latitude {values.locationPoint.latitude}, longitude{" "}
-                        {values.locationPoint.longitude}
-                      </span>
-                    )}
-                  </dd>
-                </div>
+                {values.location.trim() && (
+                  <div className="review-pair">
+                    <dt>Service Location</dt>
+                    <dd>
+                      {values.location}
+                      {values.locationPoint && (
+                        <span>
+                          Latitude {values.locationPoint.latitude}, longitude{" "}
+                          {values.locationPoint.longitude}
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                )}
                 <div className="review-pair">
                   <dt>Reporting Information</dt>
                   <dd>

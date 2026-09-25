@@ -14,7 +14,7 @@ import ActivityPanel from "./ActivityPanel.jsx";
 import RequestManagement from "./RequestManagement.jsx";
 import CollaborationPanel from "./CollaborationPanel.jsx";
 import WorkflowNarrativeForm from "./WorkflowNarrativeForm.jsx";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { statusLabels, workspaceError } from "./requestRepository.js";
 import "./staffRequests.css";
@@ -117,6 +117,7 @@ function listParams(next) {
     "departmentId",
     "divisionId",
     "page",
+    "pageSize",
   ])
     if (next[field]) query.set(field, String(next[field]));
   return query;
@@ -136,7 +137,9 @@ function RequestList({ repository, onSignIn }) {
     departmentId: params.get("departmentId") || "",
     divisionId: params.get("divisionId") || "",
     page,
-    pageSize: 25,
+    pageSize: [25, 50, 100].includes(Number(params.get("pageSize")))
+      ? Number(params.get("pageSize"))
+      : 25,
   };
   const key = JSON.stringify(filters);
   const urlKey = params.toString();
@@ -176,6 +179,12 @@ function RequestList({ repository, onSignIn }) {
     ]).then(
       ([data, options]) => {
         if (!controller.signal.aborted) {
+          if (data.page > 1 && !data.items.length) {
+            setParams(listParams({ ...JSON.parse(key), page: 1 }), {
+              replace: true,
+            });
+            return;
+          }
           setOptions(options);
           setState({ key, data });
         }
@@ -185,7 +194,7 @@ function RequestList({ repository, onSignIn }) {
       },
     );
     return () => controller.abort();
-  }, [repository, key, retry, pendingSearch, invalidSearch]);
+  }, [repository, key, retry, pendingSearch, invalidSearch, setParams]);
   const current =
     !pendingSearch && !invalidSearch && state?.key === key ? state : null;
   const apply = (next) => {
@@ -236,7 +245,7 @@ function RequestList({ repository, onSignIn }) {
           </select>
         </div>
         <div>
-          <label htmlFor="request-view">Request view</label>
+          <label htmlFor="request-view">Request View</label>
           <select
             id="request-view"
             className="form-select"
@@ -329,7 +338,10 @@ function RequestList({ repository, onSignIn }) {
         aria-label="Request list controls"
       >
         <div className="request-live-search">
-          <label htmlFor="request-live-search">Search requests</label>
+          <label htmlFor="request-live-search">
+            <i className="bi bi-search me-2" aria-hidden="true" />
+            Search Requests
+          </label>
           <div className="request-live-search-controls">
             <input
               ref={searchField}
@@ -360,11 +372,11 @@ function RequestList({ repository, onSignIn }) {
               ? "Use 160 characters or fewer."
               : invalidSearch
                 ? "Enter at least 2 characters to search."
-                : "Searches reference, Issue and displayed Service Location. Other filters still apply."}
+                : "Search by reference, Issue, or Service Location."}
           </p>
         </div>
         <div>
-          <label htmlFor="request-sort">Sort by</label>
+          <label htmlFor="request-sort">Sort By</label>
           <select
             id="request-sort"
             className="form-select"
@@ -416,7 +428,15 @@ function RequestList({ repository, onSignIn }) {
       {current?.data && (
         <>
           <p role="status" className="request-count">
-            {current.data.total} requests · Page {current.data.page}
+            {current.data.total
+              ? (current.data.page - 1) * current.data.pageSize + 1
+              : 0}
+            –
+            {Math.min(
+              current.data.page * current.data.pageSize,
+              current.data.total,
+            )}{" "}
+            of {current.data.total} requests
           </p>
           {!current.data.items.length ? (
             <div className="workspace-feedback">
@@ -449,44 +469,47 @@ function RequestList({ repository, onSignIn }) {
                     #
                   </th>
                   {Object.entries(listSorts).map(([key, label]) => (
-                    <th
-                      scope="col"
-                      key={key}
-                      aria-sort={
-                        filters.sort === key
-                          ? filters.direction === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "none"
-                      }
-                    >
-                      <button
-                        type="button"
-                        className="request-sort-button"
-                        onClick={() =>
-                          apply({
-                            ...filters,
-                            sort: key,
-                            direction:
-                              filters.sort === key &&
-                              filters.direction === "asc"
-                                ? "desc"
-                                : "asc",
-                            page: 1,
-                          })
-                        }
-                        aria-label={`Sort by ${label}; ${filters.sort === key ? (filters.direction === "asc" ? "ascending" : "descending") : "not currently sorted"}`}
-                      >
-                        {label}{" "}
-                        <span aria-hidden="true">
-                          {filters.sort === key
+                    <Fragment key={key}>
+                      <th
+                        scope="col"
+                        key={key}
+                        aria-sort={
+                          filters.sort === key
                             ? filters.direction === "asc"
-                              ? "↑"
-                              : "↓"
-                            : "↕"}
-                        </span>
-                      </button>
-                    </th>
+                              ? "ascending"
+                              : "descending"
+                            : "none"
+                        }
+                      >
+                        <button
+                          type="button"
+                          className="request-sort-button"
+                          onClick={() =>
+                            apply({
+                              ...filters,
+                              sort: key,
+                              direction:
+                                filters.sort === key &&
+                                filters.direction === "asc"
+                                  ? "desc"
+                                  : "asc",
+                              page: 1,
+                            })
+                          }
+                          aria-label={`Sort by ${label}; ${filters.sort === key ? (filters.direction === "asc" ? "ascending" : "descending") : "not currently sorted"}`}
+                        >
+                          {label}{" "}
+                          <span aria-hidden="true">
+                            {filters.sort === key
+                              ? filters.direction === "asc"
+                                ? "↑"
+                                : "↓"
+                              : "↕"}
+                          </span>
+                        </button>
+                      </th>
+                      {key === "issue" && <th scope="col">Request Type</th>}
+                    </Fragment>
                   ))}
                 </tr>
               </thead>
@@ -507,15 +530,20 @@ function RequestList({ repository, onSignIn }) {
                         className="request-issue-link"
                         to={`/staff/requests/${encodeURIComponent(row.serviceRequestId)}?${params}`}
                       >
-                        <IssueIcon icon={row.issueIcon} />
+                        <IssueIcon
+                          icon={row.issueIcon}
+                          categoryId={row.categoryId}
+                        />
                         <span>{row.issueName}</span>
                       </Link>
                       <LocationDisplay value={row.serviceLocation} />
                       <div className="request-identity-meta">
-                        <AudienceBadge value={row.audience} />
-                        <ReferenceDisplay value={row.referenceNumber} />
+                        <ReferenceDisplay value={row.referenceNumber} compact />
                       </div>
                     </th>
+                    <td data-label="Request Type">
+                      <AudienceBadge value={row.audience} compact />
+                    </td>
                     <td data-label="Status">
                       <Status value={row.status} />
                     </td>
@@ -540,7 +568,32 @@ function RequestList({ repository, onSignIn }) {
               </tbody>
             </table>
           )}
-          <nav aria-label="Request pages" className="request-pagination">
+        </>
+      )}
+      <nav aria-label="Request pages" className="request-pagination">
+        <div className="request-page-size">
+          <label htmlFor="request-page-size">Rows per page</label>
+          <select
+            id="request-page-size"
+            className="form-select"
+            value={filters.pageSize}
+            onChange={(event) =>
+              apply({
+                ...filters,
+                pageSize: Number(event.target.value),
+                page: 1,
+              })
+            }
+          >
+            {[25, 50, 100].map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </div>
+        {current?.data && (
+          <>
             <button
               className="btn btn-secondary"
               disabled={!current.data.hasPreviousPage}
@@ -551,7 +604,13 @@ function RequestList({ repository, onSignIn }) {
             >
               Previous
             </button>
-            <span>Page {current.data.page}</span>
+            <span>
+              Page {current.data.page} of{" "}
+              {Math.max(
+                1,
+                Math.ceil(current.data.total / current.data.pageSize),
+              )}
+            </span>
             <button
               className="btn btn-secondary"
               disabled={!current.data.hasNextPage}
@@ -562,9 +621,9 @@ function RequestList({ repository, onSignIn }) {
             >
               Next
             </button>
-          </nav>
-        </>
-      )}
+          </>
+        )}
+      </nav>
     </>
   );
 }
@@ -823,7 +882,11 @@ function RequestDetail({ repository, id, onSignIn }) {
           <div className="request-primary-content">
             <ContentCard className="request-detail">
               <header className="request-identity">
-                <IssueIcon icon={row.issueIcon} size="large" />
+                <IssueIcon
+                  icon={row.issueIcon}
+                  size="large"
+                  categoryId={row.categoryId}
+                />
                 <div className="request-identity-copy">
                   {row.categoryName && (
                     <p className="request-eyebrow">{row.categoryName}</p>
@@ -850,7 +913,7 @@ function RequestDetail({ repository, id, onSignIn }) {
               <dl className="request-metadata">
                 {row.intakeChannel && (
                   <div>
-                    <dt>Intake channel</dt>
+                    <dt>Intake Channel</dt>
                     <dd>
                       {
                         {
@@ -959,7 +1022,7 @@ function RequestDetail({ repository, id, onSignIn }) {
                   </div>
                   {row.categoryName && (
                     <div>
-                      <dt>Service category</dt>
+                      <dt>Service Category</dt>
                       <dd>{row.categoryName}</dd>
                     </div>
                   )}

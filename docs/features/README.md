@@ -1,5 +1,7 @@
 # Reqro Feature Records
 
+[F056.3 — Service Request and Resident Intake UX Refinement](F056-3-service-request-resident-intake-ux.md): 25/50/100 pagination, staff presentation and resident location/copy refinement. COMPLETE LOCALLY — NOT SYNCHRONIZED; automated and user-confirmed manual validation passed. [Validation record](F056-3-implementation-report.md).
+
 [F056.2C — Extended Dynamic Question Types](F056-2C-extended-dynamic-question-types.md): Multiple choice, calendar Date and display-only Information; normalized immutable selections, protected historical display and preserved F056.2B handling. See [ADR-020](../architecture/decisions/ADR-020-extended-question-answer-storage.md), [validation record](F056-2C-implementation-report.md) and [security review](F056-2C-security-review.md). Implemented and validated locally with user-confirmed manual gates; not yet synchronized. No push/deployment or F057.
 
 [F056.2A — Dynamic Question Management & Protected Responses](F056-2A-dynamic-question-management-protected-responses.md): immutable question authoring and current-version validation; independent protected historical answer reads. See [ADR-018](../architecture/decisions/ADR-018-dynamic-questions-protected-answers.md) and the [implementation report](F056-2A-implementation-report.md) for compatibility, permission and validation evidence. No F056.2B/C or F057 authorization.

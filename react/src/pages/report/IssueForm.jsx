@@ -90,16 +90,14 @@ export default function IssueForm({
         )
       )}
       <fieldset
-        className="mb-4"
+        className="mb-4 intake-section"
         aria-describedby="requester-identity-help"
         aria-invalid={Boolean(errors.reportingMode)}
         aria-errormessage={
           errors.reportingMode ? "reportingMode-error" : undefined
         }
       >
-        <legend className="h5">
-          How would you like to report this concern?
-        </legend>
+        <legend className="h5">Contact Information</legend>
         {service.anonymousPolicy !== "not-allowed" && (
           <div className="form-check mb-2">
             <input
@@ -118,29 +116,28 @@ export default function IssueForm({
             </label>
           </div>
         )}
-        <div className="form-check">
-          <input
-            className="form-check-input"
-            id="report-identified"
-            type="radio"
-            name="reportingMode"
-            value="identified"
-            checked={identified}
-            onChange={(event) =>
-              onValueChange("reportingMode", event.target.value)
-            }
-          />
-          <label className="form-check-label" htmlFor="report-identified">
-            Provide my name
-          </label>
-        </div>
-        {service.anonymousPolicy === "not-allowed" && (
-          <p className="form-text">This issue requires a reporter name.</p>
+        {service.anonymousPolicy !== "not-allowed" && (
+          <div className="form-check">
+            <input
+              className="form-check-input"
+              id="report-identified"
+              type="radio"
+              name="reportingMode"
+              value="identified"
+              checked={identified}
+              onChange={(event) =>
+                onValueChange("reportingMode", event.target.value)
+              }
+            />
+            <label className="form-check-label" htmlFor="report-identified">
+              Provide my name
+            </label>
+          </div>
         )}
         <p id="requester-identity-help" className="form-text">
           {service.anonymousPolicy === "not-allowed"
-            ? "Contact information is required for this Issue. Your name is required; email is optional."
-            : "Choose whether to provide contact information. If you submit anonymously, requester Contact will not be collected. Avoid identifying yourself in the description or evidence if you want to remain anonymous."}
+            ? "Name is required. Email is optional."
+            : "Choose whether to provide your name. Anonymous reports do not collect contact information. Avoid identifying yourself in the description or photos if you want to remain anonymous."}
         </p>
         {errors.reportingMode && (
           <div role="alert">
@@ -150,16 +147,16 @@ export default function IssueForm({
             />
           </div>
         )}
+        {identified && (
+          <div className="mb-4">
+            <label className="form-label" htmlFor="reporterName">
+              Your name <span aria-hidden="true">*</span>
+            </label>
+            <input {...fieldProps("reporterName")} type="text" required />
+            <FieldError id="reporterName-error" message={errors.reporterName} />
+          </div>
+        )}
       </fieldset>
-      {identified && (
-        <div className="mb-4">
-          <label className="form-label" htmlFor="reporterName">
-            Your name <span aria-hidden="true">*</span>
-          </label>
-          <input {...fieldProps("reporterName")} type="text" required />
-          <FieldError id="reporterName-error" message={errors.reporterName} />
-        </div>
-      )}
       {participationControls}
       {attachmentControls}
       <p className="small text-body-secondary">

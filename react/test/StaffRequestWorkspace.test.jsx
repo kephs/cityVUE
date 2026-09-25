@@ -74,7 +74,7 @@ test.each([false, true])(
     if (allowed) {
       await userEvent.click(
         await screen.findByRole("button", {
-          name: "View submitted information",
+          name: "View Submitted Information",
         }),
       );
       await screen.findByText("Historical choice");
@@ -84,7 +84,7 @@ test.each([false, true])(
       );
     } else {
       expect(
-        screen.queryByText("Submitted information"),
+        screen.queryByText("Submitted Information"),
       ).not.toBeInTheDocument();
       expect(repository.readAnswers).not.toHaveBeenCalled();
     }
@@ -696,9 +696,10 @@ test.each(["public", "internal"])(
       ".staff-request-table .request-identity-meta",
     );
     expect(
-      within(metadata).getByText(
-        audience === "public" ? "Public request" : "Internal request",
-      ),
+      screen.getByRole("cell", {
+        name: audience === "public" ? "Public" : "Internal",
+        exact: true,
+      }),
     ).toBeInTheDocument();
     expect(within(metadata).getByText(row.referenceNumber)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Previous" }));
@@ -785,10 +786,10 @@ test("consolidated controls follow search, clear, sort, direction and Refresh ke
   await screen.findByLabelText("Row position 1");
   const toolbar = screen.getByRole("group", { name: "Request list controls" });
   const search = within(toolbar).getByRole("searchbox", {
-    name: "Search requests",
+    name: "Search Requests",
   });
   const clear = within(toolbar).getByRole("button", { name: "Clear search" });
-  const sort = within(toolbar).getByLabelText("Sort by");
+  const sort = within(toolbar).getByLabelText("Sort By");
   const direction = within(toolbar).getByLabelText("Direction");
   const refresh = within(toolbar).getByRole("button", { name: "Refresh" });
   expect([...toolbar.querySelectorAll("input,select,button")]).toEqual([
@@ -798,7 +799,7 @@ test("consolidated controls follow search, clear, sort, direction and Refresh ke
     direction,
     refresh,
   ]);
-  expect(screen.getByText("1 requests · Page 1")).toBeInTheDocument();
+  expect(screen.getByText("1–1 of 1 requests")).toBeInTheDocument();
   const user = userEvent.setup();
   search.focus();
   await user.tab();
@@ -2059,7 +2060,7 @@ test.each(["mine", "team", "watching"])(
     const user = userEvent.setup();
     show("/staff/requests?status=open&page=3&search=CASE-00000001");
     await screen.findByRole("link", { name: row.issueName });
-    await user.selectOptions(screen.getByLabelText("Request view"), view);
+    await user.selectOptions(screen.getByLabelText("Request View"), view);
     await waitFor(() =>
       expect(repository.list).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -2094,8 +2095,10 @@ test("F040 mixed list exposes readable audience labels, secondary references and
     pageSize: 25,
   });
   show();
-  await screen.findByText("Public request");
-  expect(screen.getByText("Internal request")).toBeInTheDocument();
+  await screen.findByRole("cell", { name: "Public", exact: true });
+  expect(
+    screen.getByRole("cell", { name: "Internal", exact: true }),
+  ).toBeInTheDocument();
   expect(
     screen.getByRole("link", { name: "Fictional street sign" }),
   ).toHaveAttribute(

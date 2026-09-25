@@ -64,7 +64,7 @@ test("F051 area selection stays independent of manual/device Service Location ch
   });
   expect(selector).toHaveValue(area);
   fireEvent.click(
-    screen.getByRole("button", { name: "Use my current location" }),
+    screen.getByRole("button", { name: "Use My Current Location" }),
   );
   act(() => success({ coords: { latitude: 0, longitude: 0, accuracy: 10 } }));
   expect(selector).toHaveValue(area);
@@ -146,12 +146,12 @@ test.each(["anonymous", "identified", "disabled", "incomplete"])(
     if (["disabled", "incomplete"].includes(mode)) {
       await waitFor(() =>
         expect(
-          screen.queryByText("Optional service participation"),
+          screen.queryByText("Service Participation (Optional)"),
         ).not.toBeInTheDocument(),
       );
       await user.click(screen.getByRole("button", { name: "Review request" }));
       expect(
-        screen.queryByText("Optional service participation"),
+        screen.queryByText("Service Participation (Optional)"),
       ).not.toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Submit Request" }));
       await waitFor(() => expect(create).toHaveBeenCalledOnce());
@@ -208,7 +208,7 @@ test.each([
     await waitFor(() => expect(changed).toHaveBeenCalledWith(undefined));
     expect(container).toBeEmptyDOMElement();
     expect(
-      screen.queryByText("Optional service participation"),
+      screen.queryByText("Service Participation (Optional)"),
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText(question)).not.toBeInTheDocument();
     expect(screen.queryByText("Prefer not to say")).not.toBeInTheDocument();

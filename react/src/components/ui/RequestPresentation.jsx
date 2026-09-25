@@ -3,6 +3,8 @@ import {
   statusPresentation,
   normalizedStatus,
 } from "./presentation.js";
+import { categoryAccent } from "./categoryAccent.js";
+import "./categoryAccent.css";
 
 export function StatusBadge({ value }) {
   const state = statusPresentation[normalizedStatus(value)];
@@ -18,18 +20,24 @@ export function StatusBadge({ value }) {
     </span>
   );
 }
-export function AudienceBadge({ value }) {
+export function AudienceBadge({ value, compact = false }) {
   if (!["public", "internal"].includes(value)) return null;
   return (
     <span className={`ui-audience ui-audience--${value}`}>
-      {value === "public" ? "Public request" : "Internal request"}
+      {value === "public"
+        ? compact
+          ? "Public"
+          : "Public request"
+        : compact
+          ? "Internal"
+          : "Internal request"}
     </span>
   );
 }
-export function IssueIcon({ icon, size = "compact" }) {
+export function IssueIcon({ icon, size = "compact", categoryId }) {
   return (
     <span
-      className={`ui-issue-icon ui-issue-icon--${["compact", "large"].includes(size) ? size : "compact"}`}
+      className={`ui-issue-icon ui-issue-icon--${["compact", "large"].includes(size) ? size : "compact"}${categoryId ? ` category-accent-${categoryAccent(categoryId)}` : ""}`}
       aria-hidden="true"
     >
       <i className={`bi ${safeIssueIcon(icon)}`} />
@@ -45,10 +53,13 @@ export function LocationDisplay({ value }) {
     </p>
   );
 }
-export function ReferenceDisplay({ value }) {
+export function ReferenceDisplay({ value, compact = false }) {
   return (
     <span className="ui-reference">
-      <span>Request #</span> <span className="ui-reference-value">{value}</span>
+      <span className={compact ? "visually-hidden" : undefined}>
+        {compact ? "Reference" : "Request #"}
+      </span>{" "}
+      <span className="ui-reference-value">{value}</span>
     </span>
   );
 }

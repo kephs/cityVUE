@@ -1,0 +1,38 @@
+.category-accent-blue {
+  --category-ink: #155fbc;
+  --category-fill: rgba(13, 110, 253, 0.11);
+}
+.category-accent-amber {
+  --category-ink: #795600;
+  --category-fill: rgba(255, 193, 7, 0.16);
+}
+.category-accent-cyan {
+  --category-ink: #086d7c;
+  --category-fill: rgba(13, 202, 240, 0.14);
+}
+.category-accent-green {
+  --category-ink: #146c43;
+  --category-fill: rgba(25, 135, 84, 0.13);
+}
+.category-accent-emerald {
+  --category-ink: #116b49;
+  --category-fill: rgba(32, 155, 107, 0.14);
+}
+[data-bs-theme="dark"] .category-accent-blue {
+  --category-ink: #79b5ff;
+}
+[data-bs-theme="dark"] .category-accent-amber {
+  --category-ink: #ffd76a;
+}
+[data-bs-theme="dark"] .category-accent-cyan {
+  --category-ink: #73e4f7;
+}
+[data-bs-theme="dark"] .category-accent-green,
+[data-bs-theme="dark"] .category-accent-emerald {
+  --category-ink: #75d9a9;
+}
+.ui-issue-icon[class*="category-accent-"],
+.choice-icon[class*="category-accent-"] {
+  color: var(--category-ink);
+  background: var(--category-fill);
+}

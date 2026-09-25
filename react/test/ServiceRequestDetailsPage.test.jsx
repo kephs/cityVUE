@@ -156,7 +156,7 @@ test("legacy details fetch answers only through protected read when authorized",
   await screen.findByRole("heading", { name: "Pothole" });
   expect(readAnswers).not.toHaveBeenCalled();
   await userEvent.click(
-    screen.getByRole("button", { name: "View submitted information" }),
+    screen.getByRole("button", { name: "View Submitted Information" }),
   );
   expect(await screen.findByText("Historical response")).toBeInTheDocument();
   expect(readAnswers).toHaveBeenCalledTimes(1);

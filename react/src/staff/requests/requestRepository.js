@@ -132,6 +132,7 @@ function project(row, detail = false) {
     status: row.status,
     issueName: row.issueName,
     issueIcon: typeof row.issueIcon === "string" ? row.issueIcon : null,
+    categoryId: typeof row.categoryId === "string" ? row.categoryId : null,
     categoryName:
       typeof row.categoryName === "string" ? row.categoryName : null,
     serviceLocation:

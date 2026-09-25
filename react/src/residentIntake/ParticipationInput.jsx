@@ -49,14 +49,15 @@ export default function ParticipationInput({
   }, [state, available, value, onChange]);
   if (!available) return null;
   return (
-    <section className="mb-4" aria-labelledby="participation-heading">
+    <section
+      className="mb-4 intake-section"
+      aria-labelledby="participation-heading"
+    >
       <h3 id="participation-heading" className="h5">
-        Optional service participation
+        Service Participation (Optional)
       </h3>
       <p id="participation-help">
-        Your answer is optional and helps us understand service participation.
-        It does not change or derive from Service Location. You can provide an
-        area when submitting anonymously.
+        Select the area you associate with this request.
       </p>
       <label className="form-label" htmlFor="participation-area">
         Which area do you associate with this service request? (Optional)

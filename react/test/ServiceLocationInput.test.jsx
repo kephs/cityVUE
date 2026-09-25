@@ -157,7 +157,7 @@ test.each([
     render(<Harness />);
     expect(getCurrentPosition).not.toHaveBeenCalled();
     fireEvent.click(
-      screen.getByRole("button", { name: "Use my current location" }),
+      screen.getByRole("button", { name: "Use My Current Location" }),
     );
     expect(getCurrentPosition).toHaveBeenCalledTimes(1);
     expect(
@@ -182,7 +182,7 @@ test("device success is transient and a late callback cannot overwrite manual co
   const onChange = vi.fn();
   render(<Harness onChange={onChange} />);
   fireEvent.click(
-    screen.getByRole("button", { name: "Use my current location" }),
+    screen.getByRole("button", { name: "Use My Current Location" }),
   );
   fireEvent.click(screen.getByRole("button", { name: "Finding location…" }));
   expect(getCurrentPosition).toHaveBeenCalledTimes(1);
@@ -194,7 +194,7 @@ test("device success is transient and a late callback cannot overwrite manual co
     longitude: -0.02,
   });
   fireEvent.click(
-    screen.getByRole("button", { name: "Use my current location" }),
+    screen.getByRole("button", { name: "Use My Current Location" }),
   );
   fireEvent.change(screen.getByLabelText("Service Location (optional)"), {
     target: { value: "Corrected landmark" },
@@ -289,7 +289,7 @@ test("malformed or unsupported device location never changes Service Location", 
   vi.stubGlobal("navigator", {});
   const view = render(<Harness onChange={onChange} />);
   fireEvent.click(
-    screen.getByRole("button", { name: "Use my current location" }),
+    screen.getByRole("button", { name: "Use My Current Location" }),
   );
   expect(onChange).not.toHaveBeenCalled();
   vi.stubGlobal("navigator", {
@@ -299,8 +299,38 @@ test("malformed or unsupported device location never changes Service Location", 
     },
   });
   fireEvent.click(
-    screen.getByRole("button", { name: "Use my current location" }),
+    screen.getByRole("button", { name: "Use My Current Location" }),
   );
   expect(onChange).not.toHaveBeenCalled();
   view.unmount();
+});
+
+test("F056.3 search text is not committed; selected location replaces duplicate input and manual editing retains coordinates", async () => {
+  const changed = vi.fn(),
+    user = userEvent.setup();
+  render(<Harness onChange={changed} />);
+  const search = screen.getByLabelText("Search address or location");
+  await waitFor(() => expect(search).toBeEnabled());
+  await user.type(search, "Fictional");
+  expect(changed).not.toHaveBeenCalled();
+  await user.click(
+    await screen.findByRole("button", { name: fixture.displayLabel }),
+  );
+  expect(screen.getByText("Selected Location")).toBeInTheDocument();
+  const description = screen.getByLabelText("Service Location (optional)");
+  expect(description).not.toBeVisible();
+  await user.click(screen.getByText("Edit location description manually"));
+  expect(description).toBeVisible();
+  await user.clear(description);
+  await user.type(description, "Fictional west entrance");
+  expect(changed).toHaveBeenLastCalledWith("Fictional west entrance", {
+    latitude: 0,
+    longitude: 0,
+  });
+  await user.click(screen.getByRole("button", { name: "Change Location" }));
+  expect(search).toHaveFocus();
+  expect(changed).toHaveBeenLastCalledWith("Fictional west entrance", {
+    latitude: 0,
+    longitude: 0,
+  });
 });

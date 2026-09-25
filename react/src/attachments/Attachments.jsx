@@ -298,12 +298,12 @@ export function AttachmentSelector({
         </p>
       )}
       <p id={`${id}-help`} className="text-body-secondary">
-        Optional JPEG, PNG or WebP images. Up to 5 files, 5 MiB each and 15 MiB
-        total. Photo metadata is removed during processing.
+        Add up to 5 images, 5 MiB each (15 MiB total). JPEG, PNG or WebP. Photo
+        metadata is removed during processing.
       </p>
-      <p className="small text-body-secondary">
-        Development attachments: use fictional images only. Malware detection is
-        not enabled.
+      <p className="small attachment-development-notice">
+        <strong>Development Notice</strong> Use fictional images only. Malware
+        detection is not enabled.
       </p>
       <div className="attachment-controls">
         {camera && (

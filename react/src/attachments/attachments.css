@@ -88,3 +88,6 @@
 .request-evidence > :last-child {
   margin-bottom: 0;
 }
+
+.attachment-development-notice { padding: .75rem; border-left: 3px solid var(--bs-warning); background: var(--bs-tertiary-bg); border-radius: .4rem; }
+.attachment-development-notice strong { display: block; }
