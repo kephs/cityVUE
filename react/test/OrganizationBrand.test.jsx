@@ -19,7 +19,14 @@ test("F054 canonical fallback uses supplied dark wordmark without trademark or c
     "src",
     "/branding/reqro/reqro-logo-dark.png",
   );
-  expect(screen.getByText(reqroBrand.tagline)).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      reqroBrand.tagline
+        .split("•")
+        .map((word) => word.trim())
+        .join(", "),
+    ),
+  ).toBeInTheDocument();
   expect(document.body).not.toHaveTextContent(/Rockville|Rise Together|™|®/);
   expect(screen.queryByText("Powered by Reqro")).not.toBeInTheDocument();
 });
@@ -70,7 +77,14 @@ test("F054 plain text escapes markup, long names remain text, and unapproved pat
 });
 test("F054 missing required name and failed product bytes still provide visible Reqro fallback", () => {
   view({ mode: "ORGANIZATION", displayName: " ", logoKey: "../../secret" });
-  expect(screen.getByText(reqroBrand.tagline)).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      reqroBrand.tagline
+        .split("•")
+        .map((word) => word.trim())
+        .join(", "),
+    ),
+  ).toBeInTheDocument();
   fireEvent.error(screen.getByRole("img", { name: "Reqro" }));
   expect(screen.getByText("Reqro")).toBeInTheDocument();
 });
@@ -83,4 +97,19 @@ test("F054 themed product mark follows the shared theme", () => {
   expect(
     screen.getByRole("img", { name: "Reqro" }).getAttribute("src"),
   ).toMatch(/^\/branding\/reqro\/reqro-mark-(light|dark)\.png$/);
+});
+
+test("F056.4 brand phrase has natural accessible text and decorative green separators", () => {
+  view(null);
+  const phrase = screen.getByText("People, Requests, Progress");
+  expect(phrase).toHaveClass("visually-hidden");
+  const separators = document.querySelectorAll(".reqro-tagline-separator");
+  expect(separators).toHaveLength(2);
+  for (const separator of separators) {
+    expect(separator).toHaveTextContent("●");
+    expect(separator.closest('[aria-hidden="true"]')).not.toBeNull();
+  }
+  expect(document.querySelector(".reqro-tagline")).toHaveTextContent(
+    "People ● Requests ● Progress",
+  );
 });

@@ -62,7 +62,24 @@ export function OrganizationBrand({ branding, dark = true }) {
       ) : (
         <>
           <ReqroBrand dark={dark} />
-          <p className="organization-tagline">{reqroBrand.tagline}</p>
+          <p className="organization-tagline reqro-tagline">
+            <span className="visually-hidden">
+              {reqroBrand.tagline
+                .split("•")
+                .map((word) => word.trim())
+                .join(", ")}
+            </span>
+            <span aria-hidden="true">
+              {reqroBrand.tagline.split("•").map((word, index) => (
+                <span key={word}>
+                  {index > 0 && (
+                    <span className="reqro-tagline-separator"> ● </span>
+                  )}
+                  {word.trim()}
+                </span>
+              ))}
+            </span>
+          </p>
         </>
       )}
     </div>

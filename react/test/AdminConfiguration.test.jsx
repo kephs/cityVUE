@@ -57,14 +57,16 @@ const snapshot = {
     },
   ],
 };
-function view(client, path = "/admin") {
+function view(client, path = "/admin", displayName) {
   return render(
     <ThemeProvider>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route
             path="/admin/:section?"
-            element={<AdminConfiguration client={client} />}
+            element={
+              <AdminConfiguration client={client} displayName={displayName} />
+            }
           />
         </Routes>
       </MemoryRouter>
@@ -316,7 +318,7 @@ test("F054 authorized branding clears on denied refresh; preview content stays e
   );
   await screen.findByRole("alert");
   expect(screen.queryByText("Example Organization")).not.toBeInTheDocument();
-  expect(screen.getByText("People • Requests • Progress")).toBeInTheDocument();
+  expect(screen.getByText("People, Requests, Progress")).toBeInTheDocument();
 });
 test("F054 navigation opens, Escape closes and restores focus without changing configuration", async () => {
   const client = { get: vi.fn().mockResolvedValue(snapshot) };
@@ -330,5 +332,114 @@ test("F054 navigation opens, Escape closes and restores focus without changing c
   await userEvent.keyboard("{Escape}");
   expect(toggle).toHaveAttribute("aria-expanded", "false");
   expect(toggle).toHaveFocus();
+  expect(client.get).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  ["/admin", "Overview"],
+  ["/admin/issues", "Issues"],
+  ["/admin/participation", "Participation Setup"],
+  ["/admin/privacy", "Analytics & Privacy"],
+  ["/admin/status", "Configuration Status"],
+])("F056.4 shared shell and identity on %s", async (path, title) => {
+  const client = {
+    get: vi.fn(async (url) =>
+      url.startsWith("/admin/configuration?")
+        ? snapshot
+        : {
+            items: [],
+            total: 0,
+            organizationTotal: 0,
+            active: 0,
+            inactive: 0,
+            page: 1,
+            pageSize: 25,
+            canWrite: false,
+          },
+    ),
+  };
+  view(client, path, "Morgan Example");
+  await waitFor(() =>
+    expect(
+      screen.queryByText("Loading authorized configuration…"),
+    ).not.toBeInTheDocument(),
+  );
+  expect(
+    screen.getByRole("heading", { level: 1, name: title }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Reqro Administration")).toBeInTheDocument();
+  expect(screen.getByText("Organization Configuration")).toBeInTheDocument();
+  expect(screen.getByText("Morgan Example")).toBeInTheDocument();
+  expect(screen.getByText("ME")).toHaveAttribute("aria-hidden", "true");
+  expect(document.querySelector(".configuration-product-mark")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  expect(
+    document.querySelector(".configuration-product-mark img"),
+  ).toHaveAttribute("src", "/branding/reqro/reqro-mark-dark.png");
+  expect(
+    screen.getByText("Built for Today. Ready for a Stronger Tomorrow.").tagName,
+  ).toBe("FOOTER");
+  expect(
+    screen
+      .getByRole("navigation", { name: "Administration sections" })
+      .querySelector('[aria-current="page"]'),
+  ).toHaveTextContent(title);
+  expect(
+    screen.getByRole("link", { name: "← Staff workspace" }),
+  ).toHaveAttribute("href", "/staff/requests");
+  expect(
+    screen.queryByRole("button", { name: /sign out|user menu/i }),
+  ).not.toBeInTheDocument();
+  expect(document.querySelector(".configuration-header")).not.toHaveTextContent(
+    /Administrator|permission|grant|@/i,
+  );
+  expect(
+    client.get.mock.calls.every(
+      ([url]) =>
+        url.startsWith("/admin/configuration?") ||
+        url.startsWith("/admin/issues/"),
+    ),
+  ).toBe(true);
+});
+
+test.each([
+  ["Morgan Example", "ME"],
+  ["  Morgan   Example  ", "ME"],
+  ["Morgan", "M"],
+  ["Élodie Example", "ÉE"],
+  ["", "SS"],
+  [undefined, "SS"],
+])(
+  "F056.4 initials remain decorative and deterministic: %s",
+  async (name, initials) => {
+    view({ get: vi.fn().mockResolvedValue(snapshot) }, "/admin", name);
+    await screen.findByText("Configuration at a glance");
+    expect(
+      document.querySelector(".configuration-staff-avatar"),
+    ).toHaveTextContent(initials);
+    expect(
+      document.querySelector(".configuration-staff-avatar"),
+    ).toHaveAttribute("aria-hidden", "true");
+    expect(
+      document.querySelector(".configuration-staff-identity [tabindex]"),
+    ).toBeNull();
+  },
+);
+
+test("F056.4 header keyboard actions preserve navigation and theme without extra fetching", async () => {
+  const client = { get: vi.fn().mockResolvedValue(snapshot) };
+  view(client, "/admin", "Morgan Example");
+  await screen.findByText("Configuration at a glance");
+  const user = userEvent.setup();
+  const link = screen.getByRole("link", { name: "← Staff workspace" });
+  link.focus();
+  await user.tab();
+  const theme = screen.getByRole("button", { name: /Switch to .* mode/ });
+  expect(theme).toHaveFocus();
+  const previous = theme.getAttribute("aria-pressed");
+  await user.keyboard("{Enter}");
+  expect(theme.getAttribute("aria-pressed")).not.toBe(previous);
   expect(client.get).toHaveBeenCalledTimes(1);
 });

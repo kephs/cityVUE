@@ -34,7 +34,19 @@ function Values({ items }) {
     </dl>
   );
 }
-export function AdminConfiguration({ client }) {
+export function AdminConfiguration({ client, displayName }) {
+  const staffName =
+    typeof displayName === "string" && displayName.trim()
+      ? displayName.trim()
+      : "Signed-in staff";
+  const nameParts = staffName.split(/\s+/u);
+  const initials = [
+    nameParts[0],
+    ...(nameParts.length > 1 ? [nameParts.at(-1)] : []),
+  ]
+    .map((part) => Array.from(part)[0])
+    .join("")
+    .toUpperCase();
   const { section = "" } = useParams();
   const title = sections.find(([key]) => key === section)?.[1];
   const [state, setState] = useState(null),
@@ -89,24 +101,33 @@ export function AdminConfiguration({ client }) {
       </a>
       <header className="configuration-header">
         <div className="configuration-product">
-          <ReqroBrand compact />
+          <span className="configuration-product-mark" aria-hidden="true">
+            <ReqroBrand compact dark />
+          </span>
           <div>
             <span className="configuration-portal-name">
               Reqro Administration
             </span>
             <span className="configuration-portal-subtitle">
-              Organization configuration
+              Organization Configuration
             </span>
           </div>
         </div>
         <div className="configuration-header-actions">
           <Link to="/staff/requests">← Staff workspace</Link>
           <ThemeToggle />
+          <div className="configuration-staff-identity">
+            <span className="configuration-staff-avatar" aria-hidden="true">
+              {initials}
+            </span>
+            <span className="configuration-staff-name">{staffName}</span>
+          </div>
         </div>
       </header>
       <div className="configuration-layout">
         <aside
           className="configuration-navigation"
+          data-bs-theme="dark"
           onKeyDown={(event) => {
             if (event.key === "Escape" && navigationOpen) {
               event.preventDefault();
@@ -323,9 +344,9 @@ export function AdminConfiguration({ client }) {
               )}
             </>
           )}
-          {section === "" && (
-            <p className="configuration-brand-message">{reqroBrand.message}</p>
-          )}
+          <footer className="configuration-brand-message">
+            {reqroBrand.message}
+          </footer>
         </main>
       </div>
     </div>
@@ -365,6 +386,7 @@ export default function AdminConfigurationPage() {
           <AdminConfiguration
             key={auth.account?.homeAccountId || "staff"}
             client={client}
+            displayName={auth.displayName}
           />
         )}
       </StaffRouteGuard>
