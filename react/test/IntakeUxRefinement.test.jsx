@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { expect, test, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import InternalRequestWorkspace from "../src/staff/requests/InternalRequestWorkspace.jsx";
 import SubmittedInformation from "../src/staff/requests/SubmittedInformation.jsx";
 import { categoryAccent } from "../src/components/ui/categoryAccent.js";
@@ -41,10 +42,14 @@ function Navigation() {
     </>
   );
 }
-function show(list, initial = "?page=3&pageSize=25&sort=issue&direction=asc") {
+function show(
+  list,
+  initial = "?page=3&pageSize=25&sort=issue&direction=asc",
+  options = { departments: [], divisions: [] },
+) {
   const repository = {
     list,
-    options: vi.fn().mockResolvedValue({ departments: [], divisions: [] }),
+    options: vi.fn().mockResolvedValue(options),
     detail: vi.fn(),
     readAnswers: vi.fn(),
   };
@@ -56,6 +61,87 @@ function show(list, initial = "?page=3&pageSize=25&sort=issue&direction=asc") {
   );
   return repository;
 }
+
+test("filter refinement keeps two semantic rows, action priority and keyboard order", async () => {
+  show(
+    vi.fn(async (q) => page(q)),
+    "?departmentId=dept",
+    {
+      departments: [{ id: "dept", name: "Fictional department" }],
+      divisions: [
+        { id: "div", departmentId: "dept", name: "Fictional division" },
+      ],
+    },
+  );
+  await screen.findByRole("link", { name: row.issueName });
+  const form = screen.getByRole("form", { name: "Request filters" });
+  const rows = form.querySelectorAll(".request-filter-row");
+  expect(rows).toHaveLength(2);
+  expect(
+    [...rows[0].querySelectorAll("label")].map((x) => x.textContent),
+  ).toEqual(["Audience", "Request View", "Assignment"]);
+  expect(
+    [...rows[1].querySelectorAll("label")].map((x) => x.textContent),
+  ).toEqual(["Status", "Department", "Division"]);
+  expect(within(form).queryByRole("searchbox")).toBeNull();
+  const reset = within(form).getByRole("button", { name: "Reset" });
+  const apply = within(form).getByRole("button", { name: "Apply Filters" });
+  expect(apply).toHaveClass("btn-primary");
+  expect(reset).toHaveClass("btn-secondary");
+  const controls = [...form.querySelectorAll("select,button")];
+  expect(controls.slice(-2)).toEqual([reset, apply]);
+  const user = userEvent.setup();
+  controls[0].focus();
+  for (const control of controls.slice(1)) {
+    await user.tab();
+    expect(control).toHaveFocus();
+  }
+  await user.tab();
+  expect(
+    screen.getByRole("searchbox", { name: "Search Requests" }),
+  ).toHaveFocus();
+  expect(
+    screen.queryByText("Search by reference, Issue, or Service Location."),
+  ).toBeNull();
+  expect(screen.getByText("Results update as you type.")).toBeInTheDocument();
+});
+
+test("filter refinement keeps live reference search independent and Reset clears legacy URL state", async () => {
+  const list = vi.fn(async (q) => page(q));
+  show(
+    list,
+    "?search=DEV-000021&audience=internal&view=mine&assignment=assigned&status=open&departmentId=dept&divisionId=div&page=2&pageSize=100",
+  );
+  await screen.findByRole("link", { name: row.issueName });
+  expect(list.mock.lastCall[0].search).toBe("DEV-000021");
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search Requests" }), {
+    target: { value: "DEV-000021" },
+  });
+  await waitFor(() =>
+    expect(list.mock.lastCall[0]).toMatchObject({
+      q: "DEV-000021",
+      search: "DEV-000021",
+      page: 1,
+    }),
+  );
+  expect(await screen.findByText(row.referenceNumber)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+  await waitFor(() =>
+    expect(list.mock.lastCall[0]).toMatchObject({
+      audience: "all",
+      view: "all",
+      assignment: "all",
+      status: "",
+      departmentId: "",
+      divisionId: "",
+      search: "",
+      q: "",
+      page: 1,
+      pageSize: 25,
+    }),
+  );
+  expect(screen.getByLabelText("URL")).toBeEmptyDOMElement();
+});
 test("F056.3 approved sizes use server query, reset page and restore URL through history", async () => {
   const list = vi.fn(async (query) => page(query));
   show(list);

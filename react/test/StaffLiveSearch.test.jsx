@@ -86,9 +86,7 @@ test("results hierarchy follows filters, consolidated controls, summary and rows
     "aria-describedby",
     "request-live-search-help",
   );
-  expect(
-    screen.getByText("Search by reference, Issue, or Service Location."),
-  ).toBeInTheDocument();
+  expect(screen.getByText("Results update as you type.")).toBeInTheDocument();
   expect(search).toContainElement(
     screen.getByRole("button", { name: "Clear search" }),
   );
@@ -331,7 +329,7 @@ test("sort, filter and Refresh use current search immediately; browser back/forw
   fireEvent.change(screen.getByLabelText("Status"), {
     target: { value: "open" },
   });
-  fireEvent.click(screen.getByText("Apply filters"));
+  fireEvent.click(screen.getByText("Apply Filters"));
   await flush();
   expect(repository.list.mock.lastCall[0]).toMatchObject({
     q: "beta",

@@ -1,5 +1,17 @@
 # F056.3 — Implementation and Validation Record
 
+## Post-synchronization filter-bar refinement
+
+Baseline: main, HEAD and origin/main both `f8e04f1b18d153227946a34f298cf1304c51b540`, clean working tree, nothing staged, 0 ahead/behind. The original F056.3 commit was synchronized with separate authorization. This refinement creates a new local commit only; no amend, push, deployment or F057.
+
+Removed the visible exact-reference textbox while preserving `search` URL/API compatibility. Search Requests remains the normal reference lookup. Reset clears legacy `search`, Live Search `q`, all six filters, page/sort/direction and page size according to its existing default-reset contract. Two desktop rows now place Reset then primary Apply Filters beside Division, right-aligned and bottom-aligned with controls. CSS grid reflows at 1100px and 480px without absolute positioning. Search helper duplication is replaced with “Results update as you type.”; labels, placeholder, explicit Clear search and validation messages remain.
+
+Browser evidence uses the actual component and styles with an isolated in-memory repository, not an authenticated API session. Measured 1440/1280/1024/768/390 in light/dark: no horizontal overflow; exactly two rows at 1440/1280; predictable two-column fallback at 1024/768 and stacked controls at 390. Reset/Apply remain together and at least 44px tall. Representative desktop/mobile screenshots were inspected without retaining capture files. Automated keyboard coverage traverses all six enabled filters, Reset, Apply Filters, then Search Requests; disabled Division retains normal keyboard skipping when no Department is chosen. Accessibility-oriented validation, not WCAG certification.
+
+Validation: backend unit **305**, API E2E **40**, PostgreSQL **382** (zero skips), shared **64**, React **632** across 46 files: **1,423 passed**. Affected tests are included in the full pass; the focused eight-test refinement file also passed separately. TypeScript, backend ESLint/formatting, changed JSX formatting, backend/frontend builds, whitespace, all three feature-document links and private-data review PASS. Commands follow the manifest-equivalent Node invocations recorded below. The first React run exposed a keyboard fixture with disabled Division and an existing 15-second 500-summary Admin test timeout while backend tests were concurrent. The fixture now supplies a Department and Division to exercise the full tab sequence; the isolated final full run passed with no timeout/configuration/assertion weakening. Existing module-type and build chunk advisories remain. F047, F056.3 and prior regression suites PASS. No backend, API, migration, permissions, grants, provisioning, projection, logging or domain changes. No development database access or mutation was required. PostgreSQL regression tests use the separately configured disposable test database. Temporary preview and test-output files are removed before commit. Changed scope: InternalRequestWorkspace.jsx, staffRequests.css, three affected React test files and the two F056.3 documents.
+
+The original feature record below retains its historical completion evidence.
+
 Status: COMPLETE LOCALLY — NOT SYNCHRONIZED. Automated validation and user-confirmed authenticated UAT/privacy gates passed. See the [feature specification](F056-3-service-request-resident-intake-ux.md) for all six design-stop resolutions and contracts. No push or deployment is authorized.
 
 ## Baseline and data reconciliation

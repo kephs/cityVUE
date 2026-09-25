@@ -754,7 +754,7 @@ test("list defaults, keyboard sort toggles, assignment composition and Reset", a
   });
   await user.selectOptions(screen.getByLabelText("Assignment"), "unassigned");
   await user.selectOptions(screen.getByLabelText("Status"), "open");
-  await user.click(screen.getByRole("button", { name: "Apply filters" }));
+  await user.click(screen.getByRole("button", { name: "Apply Filters" }));
   await waitFor(() =>
     expect(repository.list).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -1175,17 +1175,16 @@ test("long description is available through semantic disclosure", async () => {
     screen.getByText("Read full description").closest("details"),
   ).toBeInTheDocument();
 });
-test("search and status apply only on submit, reset and preserve link filter state", async () => {
-  show();
+test("legacy reference URL survives applied status and Reset clears both", async () => {
+  show("/staff/requests?search=CASE");
   await screen.findByRole("link", { name: row.issueName });
-  fireEvent.change(screen.getByLabelText("Reference"), {
-    target: { value: "CASE" },
-  });
+  expect(screen.queryByLabelText("Reference")).not.toBeInTheDocument();
+  expect(repository.list.mock.lastCall[0].search).toBe("CASE");
   fireEvent.change(screen.getByLabelText("Status"), {
     target: { value: "open" },
   });
   expect(repository.list).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply Filters" }));
   await waitFor(() =>
     expect(repository.list).toHaveBeenLastCalledWith(
       expect.objectContaining({ search: "CASE", status: "open", page: 1 }),

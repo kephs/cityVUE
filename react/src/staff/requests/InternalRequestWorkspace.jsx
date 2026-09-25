@@ -227,106 +227,100 @@ function RequestList({ repository, onSignIn }) {
           apply({ ...draft, page: 1 });
         }}
       >
-        <div>
-          <label htmlFor="request-audience">Audience</label>
-          <select
-            id="request-audience"
-            className="form-select"
-            value={draft.audience || "all"}
-            onChange={(e) => {
-              const next = { ...draft, audience: e.target.value, page: 1 };
-              setDraft(next);
-              apply(next);
-            }}
-          >
-            <option value="all">All</option>
-            <option value="public">Public</option>
-            <option value="internal">Internal</option>
-          </select>
+        <div className="request-filter-row request-filter-row-primary">
+          <div>
+            <label htmlFor="request-audience">Audience</label>
+            <select
+              id="request-audience"
+              className="form-select"
+              value={draft.audience || "all"}
+              onChange={(e) => {
+                const next = { ...draft, audience: e.target.value, page: 1 };
+                setDraft(next);
+                apply(next);
+              }}
+            >
+              <option value="all">All</option>
+              <option value="public">Public</option>
+              <option value="internal">Internal</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="request-view">Request View</label>
+            <select
+              id="request-view"
+              className="form-select"
+              value={draft.view || "all"}
+              onChange={(e) => {
+                const next = { ...draft, view: e.target.value, page: 1 };
+                setDraft(next);
+                apply(next);
+              }}
+            >
+              <option value="all">All Requests</option>
+              <option value="mine">My Requests</option>
+              <option value="team">My Team</option>
+              <option value="watching">Watching</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="request-assignment">Assignment</label>
+            <select
+              id="request-assignment"
+              className="form-select"
+              value={draft.assignment}
+              onChange={(e) =>
+                setDraft({ ...draft, assignment: e.target.value })
+              }
+            >
+              <option value="all">All assignments</option>
+              <option value="assigned">Assigned</option>
+              <option value="unassigned">Unassigned</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <label htmlFor="request-view">Request View</label>
-          <select
-            id="request-view"
-            className="form-select"
-            value={draft.view || "all"}
-            onChange={(e) => {
-              const next = { ...draft, view: e.target.value, page: 1 };
-              setDraft(next);
-              apply(next);
-            }}
-          >
-            <option value="all">All Requests</option>
-            <option value="mine">My Requests</option>
-            <option value="team">My Team</option>
-            <option value="watching">Watching</option>
-          </select>
-        </div>
-        <div>
-          <label htmlFor="request-assignment">Assignment</label>
-          <select
-            id="request-assignment"
-            className="form-select"
-            value={draft.assignment}
-            onChange={(e) => setDraft({ ...draft, assignment: e.target.value })}
-          >
-            <option value="all">All assignments</option>
-            <option value="assigned">Assigned</option>
-            <option value="unassigned">Unassigned</option>
-          </select>
-        </div>
-        <div className="request-search">
-          <label htmlFor="request-search">Reference</label>
-          <input
-            id="request-search"
-            type="search"
-            className="form-control"
-            maxLength={100}
-            value={draft.search}
-            onChange={(e) => setDraft({ ...draft, search: e.target.value })}
-            placeholder="Enter a complete reference"
+        <div className="request-filter-row request-filter-row-secondary">
+          <div>
+            <label htmlFor="request-status">Status</label>
+            <select
+              id="request-status"
+              className="form-select"
+              value={draft.status}
+              onChange={(e) => setDraft({ ...draft, status: e.target.value })}
+            >
+              <option value="">All statuses</option>
+              {Object.entries(statusLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <ScopeFields
+            options={options}
+            departmentId={draft.departmentId}
+            divisionId={draft.divisionId}
+            onDepartment={(value) =>
+              setDraft({ ...draft, departmentId: value, divisionId: "" })
+            }
+            onDivision={(value) => setDraft({ ...draft, divisionId: value })}
+            prefix="filter"
           />
-        </div>
-        <div>
-          <label htmlFor="request-status">Status</label>
-          <select
-            id="request-status"
-            className="form-select"
-            value={draft.status}
-            onChange={(e) => setDraft({ ...draft, status: e.target.value })}
-          >
-            <option value="">All statuses</option>
-            {Object.entries(statusLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <ScopeFields
-          options={options}
-          departmentId={draft.departmentId}
-          divisionId={draft.divisionId}
-          onDepartment={(value) =>
-            setDraft({ ...draft, departmentId: value, divisionId: "" })
-          }
-          onDivision={(value) => setDraft({ ...draft, divisionId: value })}
-          prefix="filter"
-        />
-        <div className="filter-actions">
-          <button className="btn btn-primary" type="submit">
-            Apply filters
-          </button>
-          <button
-            className="btn btn-secondary"
-            type="button"
-            onClick={() => {
-              setSearchDraft(null);
-              setParams(new URLSearchParams());
-            }}
-          >
-            Reset
-          </button>
+          <div className="filter-actions">
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => {
+                setSearchDraft(null);
+                setParams(new URLSearchParams());
+              }}
+            >
+              Reset
+            </button>
+            <button className="btn btn-primary" type="submit">
+              Apply Filters
+            </button>
+          </div>
         </div>
       </form>
       <h2 ref={heading} tabIndex="-1" className="visually-hidden">
@@ -372,7 +366,7 @@ function RequestList({ repository, onSignIn }) {
               ? "Use 160 characters or fewer."
               : invalidSearch
                 ? "Enter at least 2 characters to search."
-                : "Search by reference, Issue, or Service Location."}
+                : "Results update as you type."}
           </p>
         </div>
         <div>
