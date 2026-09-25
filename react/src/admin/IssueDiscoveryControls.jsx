@@ -133,7 +133,7 @@ export default function IssueDiscoveryControls({
           ))}
           <button
             type="button"
-            className="btn btn-link issue-clear-filters"
+            className="btn btn-outline-secondary issue-clear-filters"
             onClick={clear}
           >
             Clear Filters
@@ -167,7 +167,7 @@ export default function IssueDiscoveryControls({
           />
           <button
             type="button"
-            className="btn btn-link"
+            className="btn btn-outline-secondary"
             disabled={!search}
             onClick={() => setSearch("")}
           >

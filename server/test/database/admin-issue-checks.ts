@@ -1,3 +1,5 @@
+import { checkAtomicIssueCreation } from './atomic-issue-creation-checks.js';
+import { reviewedCreation } from './issue-creation-fixture.js';
 import { up as availabilityUp } from '../../migrations/20261005000000-issue-availability-external-history.js';
 import { checkDynamicQuestions } from './dynamic-question-checks.js';
 import { checkExtendedQuestions } from './extended-question-checks.js';
@@ -145,6 +147,7 @@ export async function checkAdminIssues(
   const create = {
     availability: 'INTERNAL_AND_EXTERNAL' as const,
     templateId: template.id,
+    ...(await reviewedCreation(db, org, template.id)),
     name: 'Fictional F056 source',
     description: 'Synthetic configuration only',
     displayOrder: 0,
@@ -767,4 +770,5 @@ export async function checkAdminIssues(
   );
   await checkDynamicQuestions(t, { db, app, org, actor, role });
   await checkExtendedQuestions(t, { db, app, org, actor, role, logs: c.logs });
+  await checkAtomicIssueCreation(t, { db, app, org, actor, role });
 }

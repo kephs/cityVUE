@@ -40,3 +40,5 @@ New decisions in this series use the next unused number and include title, statu
 - [ADR-017 — Atomic Issue configuration](ADR-017-atomic-issue-configuration.md): approved independent revisions, immutable history, template creation, ordering and name integrity.
 
 [F056.2B Issue availability and governed handoff](ADR-019-issue-availability-governed-handoff.md): accepted design; implementation validation in progress.
+
+[ADR-021 — Complete atomic Issue creation](ADR-021-complete-atomic-issue-creation.md) supersedes ADR-019 only for two-step creation and mandatory templates. Implemented and validated locally in F056.5.

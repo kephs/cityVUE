@@ -52,7 +52,14 @@ export class IssueFieldsDto implements IssueFields {
 }
 export class IssueCreateDto extends IssueFieldsDto {
   @IsIn(issueAvailabilities) availability!: IssueAvailability;
-  @IsUUID('4') templateId!: string;
+  @IsUUID('4') categoryId!: string;
+  @IsOptional() @IsUUID('4') templateId?: string;
+  @IsOptional() @IsUUID('4') expectedSourceVersion?: string;
+  @IsIn(['low', 'medium', 'high', 'urgent']) defaultPriority!: string;
+  @IsIn(['required', 'optional', 'not_applicable']) locationPolicy!: string;
+  @IsIn(['no_geographic_restriction']) geographicEligibilityMode!: string;
+  @IsObject() handling!: Omit<ActionInput, 'expectedRevision'>;
+  @IsArray() questions!: unknown[];
 }
 export class IssueChangeDto extends IssueFieldsDto {
   @IsOptional() @IsObject() handling?: Omit<ActionInput, 'expectedRevision'>;
@@ -81,6 +88,9 @@ export class IssueDiscoveryQuery {
   @IsOptional() @IsString() direction?: string;
   @IsOptional() @IsString() page?: string;
   @IsOptional() @IsString() pageSize?: string;
+}
+export class IssueCreationSearchQuery extends IssueTargetQuery {
+  @IsOptional() @IsUUID('4') categoryId?: string;
 }
 export class IssueEmptyQuery {}
 @RequireEntra()
@@ -116,6 +126,39 @@ export class AdminIssueController {
   ) {
     void query;
     return this.discovery.categories(access);
+  }
+  @Get('creation/categories')
+  @Header('Cache-Control', 'no-store')
+  creationCategories(
+    @CurrentStaff() access: StaffAccess,
+    @Query() query: IssueTargetQuery,
+  ) {
+    return this.service.creationCategories(access, query.search);
+  }
+  @Get('creation/sources')
+  @Header('Cache-Control', 'no-store')
+  creationSources(
+    @CurrentStaff() access: StaffAccess,
+    @Query() query: IssueCreationSearchQuery,
+  ) {
+    return this.service.creationSources(access, query.categoryId, query.search);
+  }
+  @Get('creation/sources/:id')
+  @Header('Cache-Control', 'no-store')
+  creationSource(
+    @CurrentStaff() access: StaffAccess,
+    @Param('id') id: string,
+    @Query() query: IssueCreationSearchQuery,
+  ) {
+    return this.service.creationSource(access, query.categoryId, id);
+  }
+  @Get('creation/assignment-targets')
+  @Header('Cache-Control', 'no-store')
+  creationTargets(
+    @CurrentStaff() access: StaffAccess,
+    @Query() query: IssueCreationSearchQuery,
+  ) {
+    return this.service.creationTargets(access, query.categoryId, query.search);
   }
   @Get(':id')
   @Header('Cache-Control', 'no-store')

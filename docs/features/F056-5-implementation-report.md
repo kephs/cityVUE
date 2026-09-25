@@ -1,6 +1,124 @@
 # F056.5 — Implementation and validation report
 
-Status: COMPLETE LOCALLY — NOT SYNCHRONIZED. Authenticated UAT, logging privacy and all pre-commit gates PASS. This report accompanies [the feature specification](F056-5-issue-management-workspace-ux.md). No push, deployment or F057 work is authorized.
+Status: Complete atomic Add Issue follow-up validated locally. Authenticated UAT and logging privacy PASS; all pre-commit gates passed. No synchronization authorized. This report accompanies [the feature specification](F056-5-issue-management-workspace-ux.md). No push, deployment or F057 work is authorized.
+
+## Complete atomic Add Issue follow-up — current checkpoint
+
+The user confirmed the additional Inactive UAT Issue must be preserved: development baseline is 9 Issues (8 Active, 1 Inactive), 13 Service Requests, 16 answers and 36 migrations. No development database writes were made by the agent. The user also resolved §§281/372: sources remain active Reqro Intake Issues only; redirect sources are rejected in both lookup and creation tests.
+
+Add now presents General (Category first, name, description, Priority), optional source copying, Intake & Access (Availability, Handling and any External Handoff, Service Location, Geographic Eligibility, requester policy), Assignment and the reused Follow-Up Questions editor. Category search is authorized, active-hierarchy scoped, parameterized and capped at 25 with a hasMore signal. Source lookup is similarly bounded and same-Category; full source configuration is loaded only for deliberate review. Aborted and superseded responses are ignored. A stale source catalog version returns a safe 409 and disables Create until explicit refresh/review. Category/source replacement protects copied draft edits; loading a source disables the controls it will replace.
+
+| Creation setting             | Initialization / controls                                                                                                                                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Category                     | Required searchable existing Category; no source-derived authority                                                                                                                                    |
+| Priority                     | Explicit low / medium / high / urgent; source prepopulation reviewable                                                                                                                                |
+| Service Location             | Explicit required / optional / not_applicable (Not Used); source reviewable                                                                                                                           |
+| Geography                    | Explicit no_geographic_restriction only; null reference. No authoritative restricted-policy registry exists, so synthetic F045 provider support does not expose restrictions or a free-text reference |
+| Availability                 | Explicit INTERNAL_ONLY / EXTERNAL_ONLY / INTERNAL_AND_EXTERNAL; immutable after creation                                                                                                              |
+| Handling                     | Existing matrix: internal-only/dual intake, external-only intake or authorized redirect. Required redirect destination/message/label validated before persistence                                     |
+| Icon                         | Blank file-earmark-text; eligible source retains existing icon-copy behavior; no arbitrary client icon                                                                                                |
+| Aliases / keywords / routing | Empty arrays / empty arrays / null, including copy                                                                                                                                                    |
+| Undetermined eligibility     | Existing block behavior; no new policy                                                                                                                                                                |
+| Requester policy             | Existing IDENTIFIED_REQUIRED default or deliberate ANONYMOUS_ALLOWED; not copied                                                                                                                      |
+| Assignment                   | None default, Category-based existing eligibility lookup; explicit eligible target only, not copied                                                                                                   |
+| Display Order                | Existing zero initialization; administrator may choose a nonnegative integer; not copied                                                                                                              |
+| Questions / options          | Empty unless authored/copied; existing eight types/editor, bounds and helpers; generated keys for new items, independent database rows, active initialization; no submitted answers copied            |
+| Conditions / validation      | New items null; reviewed inherited metadata retained through authoritative source helpers; no unsupported authoring                                                                                   |
+
+The former POST shape required templateId but omitted complete policy/handling/question decisions. The extended strict shape requires categoryId, availability, defaultPriority, locationPolicy, geographicEligibilityMode, handling and questions alongside existing core/requester/assignment fields. templateId and expectedSourceVersion are optional only as a valid pair. React and all repository test/service callers were migrated; the old incomplete wire shape is intentionally rejected. No external-client compatibility claim is made.
+
+One existing AdminIssueService transaction validates/locks Organization, Category hierarchy, source version and assignment eligibility, inserts an Inactive Issue and independent published catalog, initializes requester policy and optional assignment, invokes configureIssueAction on that same transaction for redirect, and appends required audit. No preliminary Issue or second browser save occurs. Core revision remains 2 after the existing publication-pointer sequence; policy starts 1; absent assignment stays 0; intake action stays 1. Redirect legitimately advances action 1→2 with one F032 history/audit entry; there is no fabricated revision-1 history. Existing Configure, lifecycle, published snapshots and operational references remain unchanged.
+
+Redirect retains Admin read + Issue write + catalog.issue_action.manage and Category Department/Division scope. Capability is advisory; the server reauthorizes the command. No new permission, schema, migration, grant or provisioning change. Audits preserve the existing minimal projections and destination hostname only; no new request-body logging, tracking, analytics or browser persistence. Source reads do not access protected submitted answers. [ADR-021](../architecture/decisions/ADR-021-complete-atomic-issue-creation.md) explicitly supersedes only the old creation workflow in ADR-019.
+
+Validation so far: backend unit 305 passed; API E2E 40 passed; PostgreSQL integration 403 passed with zero skips; shared 64 passed; full React 666 passed, then 30 affected tests passed with stale-source/manual-policy/prerequisite guidance coverage. After the user-requested Handling reorder, all 17 focused Handling/creation tests passed. The final full React run passed 669 tests across 47 files; the subsequent 17-test focused run covers the final placement change and one additional ordering regression. Total distinct validated tests: 1,482. TypeScript and backend build passed; configured server lint passed; server formatting passed. The read-only migration CLI reports 36 applied / zero pending; no migration ran. PostgreSQL failure injection covers inserts into stable Issue, catalog, questions/options, policy/audit, assignment/audit, F032 history/audit, creation audit, and the F032 action update itself. Every failure compares all participating artifact fingerprints. Matrix, missing explicit choices, unknown fields, unsafe URLs, unsupported geography, missing permission/scope, stale Category/source/assignment and redirect-source rejection are covered.
+
+Resolved live UAT finding: the user confirmed Trash & Recycling with External only Availability. A read-only aggregate confirms the development staff has action-management permission but does not have redirect Department/Division scope for Trash & Recycling. Other active Categories have scope. No grant changes are authorized. This explains the unavailable Handling selector without changing authorization. The user was asked to complete redirect UAT using an already-scoped Category. The user subsequently replied PASS to the complete UAT/privacy request.
+
+The historical sections below retain their original validation context and are not completion claims for this follow-up.
+
+## Earlier presentation-only polish evidence (superseded creation behavior)
+
+Accepted parent: `5c58d9edbb3fda2fbbccd84c3e54791e53451c60`, unchanged and not amended. Started on clean main, one ahead/zero behind origin/main `498d6fc88dfd34cddab9be2481d1fda971d6eb21`; direct remote verification during polish still matched. The later approved atomic-creation extension combines this polish into one intended follow-up commit: `feat(admin): complete atomic issue creation workflow`. No push or deployment; F057 remains unstarted.
+
+The polish changes five frontend files: IssueConfiguration, IssueDiscoveryControls, IssueHandling, IssueResults and issueWorkspace.css. Three existing test files cover read-only section semantics, clear-action styles, authoritative page/filter/sort numbering and the real Add/existing Handling distinction. Existing specification/report and governance checkpoint documents record the result. No backend or shared shell file changes.
+
+All eight requested presentation refinements are implemented as described in the specification's polish section. Synthetic browser review confirms no horizontal overflow at 1440, 1280, 1024, 768 and 390 pixels in both themes. Wide desktop pagination is right aligned; narrow layouts retain labeled cards and logical wrapping. At 1920px the Issue workspace measured 1558px wide; navigating to Overview retained the existing 92rem main maximum and shell padding. Configure surfaces, fixed Availability, explicit Add Availability and authorized Handling selection were reviewed in light/dark. At 1280×500 the drawer body scrolls while its header stays available; at 390px it fills the viewport without horizontal overflow. Native radio state and textual indicators identify Handling without reliance on color. Keyboard Tab from the final drawer action returns to Close inside the modal. These are accessibility-oriented checks, not a WCAG certification.
+
+Authenticated polish UAT is **not yet accepted**: the user reported that Handling stays Reqro Intake and External cannot be selected. Clarification is pending about Add versus Configure. The existing Add contract deliberately has no Handling selector; synthetic Configure for an authorized External only Issue does expose both choices. Do not treat the earlier base-feature PASS as acceptance of this follow-up.
+
+Read-only development integrity comparison currently finds identical counts and sorted row fingerprints for all 56 public tables: 8 Issues, 13 Service Requests, 16 answers and 36 applied migrations. The migration CLI lists 36 applied/zero pending. No implementation database writes, new fixtures, grants or provisioning changes. The final read-only comparison also found no changed tables. Temporary synthetic pages, browser tab, integrity script/baseline and test/build logs were removed. Commit remains pending the UAT gate.
+
+Completed automated checks: backend unit 305, API E2E 40, PostgreSQL integration 382 (zero skipped), shared 64, React 658 across 46 files: **1,449 passing tests**. TypeScript, configured server lint, server/changed-file formatting, backend build, frontend production build, relative documentation links, private-data/credential review and git diff --check pass. The initial React run found one incorrect new test assertion against an inner section; the enclosing-card assertion was corrected and the complete rerun passed. Frontend build retains the existing advisory about chunks above 500 kB; React retains the existing module-type warning. No dependency or module-system changes were introduced.
+
+### Polish security/domain review (§161)
+
+| #   | Question                                                                    | Verified answer                                                                   |
+| --- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 1   | Did this polish add a migration?                                            | NO                                                                                |
+| 2   | Did it change schema?                                                       | NO                                                                                |
+| 3   | Did it add an API?                                                          | NO                                                                                |
+| 4   | Did it add a permission?                                                    | NO                                                                                |
+| 5   | Did it change grants?                                                       | NO                                                                                |
+| 6   | Did it change provisioning?                                                 | NO                                                                                |
+| 7   | Did it change Admin authorization?                                          | NO                                                                                |
+| 8   | Did it change Organization scope?                                           | NO                                                                                |
+| 9   | Did widening affect unrelated Admin routes?                                 | NO                                                                                |
+| 10  | Are Clear Search and Clear Filters secondary actions?                       | YES                                                                               |
+| 11  | Did their behavior change?                                                  | NO                                                                                |
+| 12  | Is the row number presentation-only?                                        | YES                                                                               |
+| 13  | Is row number persisted?                                                    | NO                                                                                |
+| 14  | Is row number an Issue ID?                                                  | NO                                                                                |
+| 15  | Does row numbering account for pagination?                                  | YES                                                                               |
+| 16  | Can filtering/sorting change row number?                                    | YES                                                                               |
+| 17  | Are drawer sections visual grouping only?                                   | YES                                                                               |
+| 18  | Did section grouping change Save boundaries?                                | NO                                                                                |
+| 19  | Is existing Issue Availability still immutable after creation?              | YES                                                                               |
+| 20  | Does existing Availability look intentionally read-only rather than broken? | YES                                                                               |
+| 21  | Can Add Issue still explicitly choose Availability?                         | YES                                                                               |
+| 22  | Does Availability automatically determine Handling?                         | NO                                                                                |
+| 23  | Does External Only automatically mean External Redirect?                    | NO                                                                                |
+| 24  | Can External Only + Reqro Intake remain valid where F056.2B permits it?     | YES                                                                               |
+| 25  | Is Handling visually prominent?                                             | YES                                                                               |
+| 26  | Is Reqro Intake understandable without color?                               | YES                                                                               |
+| 27  | Is External Redirect understandable without color?                          | YES                                                                               |
+| 28  | Does Handling presentation match actual §37 architecture?                   | YES                                                                               |
+| 29  | Was a fake Handling selector introduced?                                    | NO                                                                                |
+| 30  | Was Handling persistence changed?                                           | NO                                                                                |
+| 31  | Was Availability persistence changed?                                       | NO                                                                                |
+| 32  | Was F032 persistence duplicated?                                            | NO                                                                                |
+| 33  | Is F032 specialized authorization unchanged?                                | YES                                                                               |
+| 34  | Is the Availability/Handling validation matrix unchanged?                   | YES                                                                               |
+| 35  | Is page-size behavior unchanged?                                            | YES                                                                               |
+| 36  | Is pagination still server-side?                                            | YES                                                                               |
+| 37  | Is pagination right-aligned on wide desktop?                                | YES                                                                               |
+| 38  | Does responsive pagination preserve logical reading/tab order?              | YES                                                                               |
+| 39  | Does the wider table still use safe summary projection?                     | YES                                                                               |
+| 40  | Did widening introduce full configuration hydration?                        | NO                                                                                |
+| 41  | Did numbering introduce a per-row query?                                    | NO                                                                                |
+| 42  | Did section styling introduce a new network request?                        | NO                                                                                |
+| 43  | Is atomic Save unchanged?                                                   | YES                                                                               |
+| 44  | Are independent revisions unchanged?                                        | YES                                                                               |
+| 45  | Is stale 409 behavior unchanged?                                            | YES                                                                               |
+| 46  | Is Add Issue template behavior unchanged?                                   | YES                                                                               |
+| 47  | Does new Issue still start Inactive?                                        | YES                                                                               |
+| 48  | Are lifecycle actions unchanged?                                            | YES                                                                               |
+| 49  | Is Change Order unchanged?                                                  | YES                                                                               |
+| 50  | Are Dynamic Questions unchanged?                                            | YES                                                                               |
+| 51  | Is Requester Policy unchanged?                                              | YES                                                                               |
+| 52  | Is Default Assignment unchanged?                                            | YES                                                                               |
+| 53  | Is F056.4 Admin shell preserved?                                            | YES                                                                               |
+| 54  | Did logging privacy pass?                                                   | PENDING authenticated polish acceptance; synthetic checks passed where applicable |
+| 55  | Did responsive UAT pass?                                                    | PENDING authenticated polish acceptance; synthetic checks passed where applicable |
+| 56  | Did light/dark UAT pass?                                                    | PENDING authenticated polish acceptance; synthetic checks passed where applicable |
+| 57  | Did keyboard/focus UAT pass?                                                | PENDING authenticated polish acceptance; synthetic checks passed where applicable |
+| 58  | Did accessibility-oriented UAT pass?                                        | PENDING authenticated polish acceptance; synthetic checks passed where applicable |
+| 59  | Were temporary artifacts removed?                                           | YES                                                                               |
+| 60  | Did private-data review pass?                                               | YES                                                                               |
+| 61  | Was anything deployed?                                                      | NO                                                                                |
+| 62  | Was F057 started?                                                           | NO                                                                                |
+
+The sections below preserve the accepted base F056.5 report and its original 1,445-test evidence.
 
 ## Implementation and files
 
@@ -233,3 +351,39 @@ No new configuration, dependency, environment variable, migration or manual setu
 No destructive Delete, bulk operations, drag/drop, custom columns, saved views, advanced query builder, request-volume analytics, per-Issue Service Request counts, Last Used, import/export, new Dynamic Question/redirect/assignment/requester-policy subsystem, availability redesign, access/role/user/grant management, or F057.
 
 All pre-commit gates are green. Temporary harnesses, integrity scripts/baselines and logs were removed. The single local commit records this accepted checkpoint; its full hash and final main/parent/clean/empty-staging/ahead verification are supplied in the completion response. Stop for review. GitHub synchronization requires separate explicit authorization; no deployment or post-commit database/UAT work.
+
+UAT refinement: the user selected Trash & Recycling with External only Availability. Read-only scope inspection confirms that Category is outside the current staff redirect-management scope; the unavailable choice preserves F032 authorization. Add now explains missing Availability/Category or insufficient access. Per the user, Handling is directly below Availability, followed by External Handoff when selected, then Service Location and Geographic Eligibility. No grant change. Authenticated UAT and logging privacy subsequently passed.
+
+Synthetic browser review of the current creation components with shared Admin styles confirmed final Availability → Handling order at 1440/1280/1024/768/390 in light and dark, no horizontal overflow, 1280×500 scroll access, Category keyboard selection and focus on the selected Change button, dirty-close confirmation, and final-action Tab returning to Close inside the modal. These are synthetic accessibility-oriented checks, not authenticated evidence or WCAG certification. The 56-table read-only development comparison remained identical to the confirmed nine-Issue baseline before the final manual UAT.
+
+## Final follow-up gates and limitations
+
+The user confirmed PASS after the scope explanation and Handling reorder. The post-UAT read-only comparison again found **zero changed tables out of 56**: 9 Issues (8 Active / 1 Inactive), 13 Service Requests, 16 answers, 36 applied migrations / zero pending. The user's existing Inactive UAT Issue is retained; no new development fixtures or operational artifacts were introduced by this work. Authorization/grants, tracking, participation, branding, attachments, answer snapshots, action history and protected-read audit data are unchanged. No migration command or provisioning mutation was executed.
+
+TypeScript checks and backend production build pass. Server lint and formatting pass. Frontend production build passes with the existing >500 kB chunk advisory; React retains the existing module-type warning. No frontend lint script is configured. Relative changed-document link checks and credential-pattern review pass; final git whitespace/staged review accompanies the commit. The migration status CLI needed execution outside the sandbox because its Windows user-profile lookup failed inside it; it was read-only and reported all 36 executed migrations. Direct read-only remote verification still returns `498d6fc88dfd34cddab9be2481d1fda971d6eb21`.
+
+Changed file groups: creation domain/DTO/routes/service and shared assignment validation; existing drawer/Handling/question editor plus two creation-picker/source components; retained discovery/result/CSS polish; strict creation and atomic-failure database fixtures/tests, React regressions and unit-call compatibility; feature/governance documents and creation-only superseding ADR-021. No dependencies, schema, environment variables, deployment configuration or permission catalogs changed.
+
+Limitations: restricted geography has no authoritative configured selection source and remains unavailable for creation; no new icon/routing/condition editor; source copying is active Reqro Intake only; redirect still requires existing Category scope. No production scale/readiness claim follows from disposable development timings. Existing F045 location semantics, protected-answer access and immutable historical schemas remain authoritative. No manual setup is required beyond existing staff authentication and permitted scope. Temporary harnesses, logs and integrity artifacts are removed before the one local commit; the final response records its actual hash and clean/ahead verification. Stop for review; do not push, deploy or begin F057.
+
+### Creation lookup contracts and retained state
+
+All four new GETs are authenticated, no-store, require existing Admin read and Issue write, and perform no writes/audits: `/api/v1/admin/issues/creation/categories?search=…`; `/creation/sources?categoryId=…&search=…`; `/creation/sources/:id?categoryId=…`; `/creation/assignment-targets?categoryId=…&search=…` under that same Admin Issues prefix. Category/source search uses a 100-character bound, deterministic ordering and 25 results plus hasMore. The selected source read returns only reviewable catalog configuration. Assignment reuses the fixed six type/audience eligibility queries, not per-result hydration. Existing lightweight Issue summaries and server pagination are unchanged; no N+1 list expansion. These are bounded-query checks, not production-scale performance certification.
+
+| Development artifact                          |      Before |       After |
+| --------------------------------------------- | ----------: | ----------: |
+| Issues / Active / Inactive                    |   9 / 8 / 1 |   9 / 8 / 1 |
+| Catalog versions                              |          14 |          14 |
+| Questions / options / condition definitions   | 32 / 30 / 5 | 32 / 30 / 5 |
+| Answers / selected-option rows                |      16 / 0 |      16 / 0 |
+| Service Requests                              |          13 |          13 |
+| Issue action states: intake / redirect        |       8 / 1 |       8 / 1 |
+| Redirect history / action audits              |       6 / 6 |       6 / 6 |
+| Issue configuration audits                    |          16 |          16 |
+| Requester policies / audits                   |       9 / 5 |       9 / 5 |
+| Default assignments / audits                  |       3 / 4 |       3 / 4 |
+| Protected-answer read audits                  |           4 |           4 |
+| Role-permission rows / staff-role assignments |      40 / 4 |      40 / 4 |
+| Applied / pending migrations                  |      36 / 0 |      36 / 0 |
+
+The post-UAT whole-table hashes prove the counts did not conceal edits. The single pre-existing Inactive UAT Issue is preserved. No credentials/private values appear in this report. No active Git hooks or GitHub workflow directory were present; no automation was changed or externally triggered. No Firebase, Azure, Entra, DNS, external-provider, production/client resource or deployment change occurred. F032, F045, F048, F049, F052–F056.5 regressions are covered by the established complete suites. F056.3/4 remain synchronized historical checkpoints; F056.5 is complete locally and not synchronized; F057 remains unstarted.

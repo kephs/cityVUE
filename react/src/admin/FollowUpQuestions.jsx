@@ -60,6 +60,7 @@ export default function FollowUpQuestions({
   onChange,
   disabled = false,
   readOnly = false,
+  saveLabel = "Save changes",
 }) {
   const [editing, setEditing] = useState(null),
     summary = useRef(null);
@@ -350,7 +351,7 @@ export default function FollowUpQuestions({
             role={validQuestions(questions) ? undefined : "alert"}
           >
             {validQuestions(questions)
-              ? "Question changes are saved only when you choose Save changes."
+              ? `Question changes are saved only when you choose ${saveLabel}.`
               : "Check question text, unique order numbers and options. Use 2–25 distinct options for each choice question. Prompts allow 200 characters, help 500 and option labels 100."}
           </p>
         </>

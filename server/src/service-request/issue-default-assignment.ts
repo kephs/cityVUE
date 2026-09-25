@@ -50,6 +50,45 @@ async function lockTarget(
     .executeTakeFirst();
 }
 
+/** Shared Category-based eligibility for Add preflight and authoritative assignment writes. */
+export async function validateIssueDefaultTarget(
+  db: Kysely<DatabaseSchema>,
+  org: string,
+  departmentId: string,
+  divisionId: string | null,
+  target: DefaultAssignmentInput['target'],
+  lock = true,
+) {
+  let selected: OwnershipTarget | undefined;
+  if (target) {
+    const { type, id } = target;
+    if (lock && !(await lockTarget(db, org, type, id)))
+      throw new BadRequestException(
+        'Selected assignment target is unavailable',
+      );
+    for (const audience of ['public', 'internal'] as const) {
+      selected = (
+        await eligibleTargets(
+          db,
+          org,
+          departmentId,
+          divisionId,
+          type,
+          '',
+          id,
+          audience,
+        )
+      )[0];
+      if (selected) break;
+    }
+    if (!selected)
+      throw new BadRequestException(
+        'Selected assignment target is unavailable',
+      );
+  }
+  return selected;
+}
+
 /** Internal transaction helper, not an HTTP configuration API. Caller establishes administrative authority. */
 export async function configureIssueDefault(
   db: Kysely<DatabaseSchema>,
@@ -91,33 +130,14 @@ export async function configureIssueDefault(
     throw new ConflictException(
       'Issue configuration changed; inspect before retrying',
     );
-  let selected: OwnershipTarget | undefined;
-  if (input.target) {
-    const { type, id } = input.target;
-    if (!dryRun && !(await lockTarget(db, org, type, id)))
-      throw new BadRequestException(
-        'Selected assignment target is unavailable',
-      );
-    for (const audience of ['public', 'internal'] as const) {
-      selected = (
-        await eligibleTargets(
-          db,
-          org,
-          issue.department_id,
-          issue.division_id,
-          type,
-          '',
-          id,
-          audience,
-        )
-      )[0];
-      if (selected) break;
-    }
-    if (!selected)
-      throw new BadRequestException(
-        'Selected assignment target is unavailable',
-      );
-  }
+  const selected = await validateIssueDefaultTarget(
+    db,
+    org,
+    issue.department_id,
+    issue.division_id,
+    input.target,
+    !dryRun,
+  );
   const priorId =
     old?.staff_identity_id ??
     old?.operational_role_id ??

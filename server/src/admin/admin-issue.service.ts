@@ -1,3 +1,8 @@
+import {
+  lockCreationCategory,
+  findCreationCategories,
+  categoryHandlingCapability,
+} from './admin-issue-creation.domain.js';
 import { isDeepStrictEqual } from 'node:util';
 import {
   actionScope,
@@ -34,7 +39,10 @@ import {
   configureRequesterPolicy,
   effectiveRequesterPolicy,
 } from '../service-request/requester-identity-policy.js';
-import { configureIssueDefault } from '../service-request/issue-default-assignment.js';
+import {
+  configureIssueDefault,
+  validateIssueDefaultTarget,
+} from '../service-request/issue-default-assignment.js';
 import {
   eligibleTargets,
   targetCatalog,
@@ -235,6 +243,140 @@ export class AdminIssueService {
       return { items: [...found.values()] };
     });
   }
+  async creationCategories(access: StaffAccess | undefined, search = '') {
+    assertIssueWrite(access);
+    return findCreationCategories(this.database.client, access, search);
+  }
+  async creationTargets(
+    access: StaffAccess | undefined,
+    categoryId: string | undefined,
+    search = '',
+  ) {
+    assertIssueWrite(access);
+    validateTargetSearch(search);
+    return this.database.client.transaction().execute(async (trx) => {
+      await this.org(trx, access.organizationId);
+      const category = await lockCreationCategory(
+        trx,
+        access.organizationId,
+        categoryId,
+      );
+      const found = new Map<string, OwnershipTarget>();
+      for (const type of targetTypes)
+        for (const audience of ['public', 'internal'] as const)
+          for (const target of await eligibleTargets(
+            trx,
+            access.organizationId,
+            category.department_id,
+            category.division_id,
+            type,
+            search,
+            undefined,
+            audience,
+          ))
+            found.set(`${type}:${target.id}`, target);
+      return { items: [...found.values()] };
+    });
+  }
+  private async creationSnapshot(
+    trx: Tx,
+    org: string,
+    categoryId: string,
+    id: string,
+  ) {
+    if (!requestUuid.test(id))
+      throw new BadRequestException({ code: 'ISSUE_SOURCE_UNAVAILABLE' });
+    const source = await trx
+      .selectFrom('service_definition')
+      .selectAll()
+      .where('organization_id', '=', org)
+      .where('category_id', '=', categoryId)
+      .where('id', '=', id)
+      .where('status', '=', 'active')
+      .where('action_type', '=', 'internal_intake')
+      .forShare()
+      .executeTakeFirst();
+    if (!source?.current_published_version_id)
+      throw new BadRequestException({ code: 'ISSUE_SOURCE_UNAVAILABLE' });
+    const version = await trx
+      .selectFrom('service_definition_version')
+      .selectAll()
+      .where('organization_id', '=', org)
+      .where('service_definition_id', '=', id)
+      .where('id', '=', source.current_published_version_id)
+      .where('status', '=', 'published')
+      .executeTakeFirst();
+    if (!version)
+      throw new BadRequestException({ code: 'ISSUE_SOURCE_UNAVAILABLE' });
+    const questions = await loadQuestions(trx, org, version.id);
+    return { source, version, questions };
+  }
+  async creationSources(
+    access: StaffAccess | undefined,
+    categoryId: string | undefined,
+    search = '',
+  ) {
+    assertIssueWrite(access);
+    const term = validateTargetSearch(search);
+    return this.database.client.transaction().execute(async (trx) => {
+      await this.org(trx, access.organizationId);
+      const category = await lockCreationCategory(
+        trx,
+        access.organizationId,
+        categoryId,
+      );
+      const { rows } = await sql<{
+        id: string;
+        name: string;
+        category: string;
+      }>`
+        select i.id,v.name,c.name as category from service_definition i
+        join category c on c.organization_id=i.organization_id and c.id=i.category_id
+        join service_definition_version v on v.organization_id=i.organization_id and v.id=i.current_published_version_id
+        where i.organization_id=${access.organizationId} and i.category_id=${category.id}
+        and i.status='active' and i.action_type='internal_intake' and v.status='published'
+        and (strpos(lower(v.name),lower(${term}))>0 or strpos(lower(c.name),lower(${term}))>0)
+        order by v.name,i.id limit 26`.execute(trx);
+      return { items: rows.slice(0, 25), hasMore: rows.length > 25 };
+    });
+  }
+  async creationSource(
+    access: StaffAccess | undefined,
+    categoryId: string | undefined,
+    id: string,
+  ) {
+    assertIssueWrite(access);
+    return this.database.client.transaction().execute(async (trx) => {
+      await this.org(trx, access.organizationId);
+      const category = await lockCreationCategory(
+        trx,
+        access.organizationId,
+        categoryId,
+      );
+      const { version, questions } = await this.creationSnapshot(
+        trx,
+        access.organizationId,
+        category.id,
+        id,
+      );
+      return {
+        source: {
+          id,
+          name: version.name,
+          category: category.name,
+          catalogVersionId: version.id,
+          defaultPriority: version.default_priority,
+          locationPolicy: version.location_policy,
+          geographicEligibilityMode: version.geographic_eligibility_mode,
+          questions,
+          supportedGeography:
+            version.geographic_eligibility_mode ===
+              'no_geographic_restriction' &&
+            version.geographic_eligibility_policy_reference === null,
+        },
+      };
+    });
+  }
   private async publish(
     trx: Tx,
     org: string,
@@ -337,25 +479,43 @@ export class AdminIssueService {
       return await this.database.client.transaction().execute(async (trx) => {
         const org = access.organizationId;
         await this.org(trx, org);
-        const source = await trx
-          .selectFrom('service_definition')
-          .selectAll()
-          .where('organization_id', '=', org)
-          .where('id', '=', input.templateId)
-          .forShare()
-          .executeTakeFirst();
+        const category = await lockCreationCategory(trx, org, input.categoryId);
+        const copied = input.templateId
+          ? await this.creationSnapshot(trx, org, category.id, input.templateId)
+          : null;
+        if (copied && copied.version.id !== input.expectedSourceVersion)
+          throw new ConflictException({ code: 'ISSUE_SOURCE_STALE' });
+        const questions = validateQuestions(
+          input.questions,
+          copied?.questions ?? [],
+        );
         if (
-          !source?.current_published_version_id ||
-          !(await this.readOne(trx, org, source.id)).templateEligible
+          input.handling.actionType === 'external_redirect' &&
+          !categoryHandlingCapability(access, category)
         )
-          throw new BadRequestException('Choose an available intake template');
+          throw new ForbiddenException('Access denied');
+        await validateIssueDefaultTarget(
+          trx,
+          org,
+          category.department_id,
+          category.division_id,
+          input.defaultAssignment,
+        );
+        const name = issueText(input.name, true),
+          description = issueText(input.description, false);
+        const duplicate =
+          await sql`select id from service_definition where organization_id=${org} and issue_name_key(current_display_name)=issue_name_key(${name}) limit 1`.execute(
+            trx,
+          );
+        if (duplicate.rows.length)
+          throw new BadRequestException({ code: 'ISSUE_DUPLICATE' });
         const id = randomUUID();
         await trx
           .insertInto('service_definition')
           .values({
             id,
             organization_id: org,
-            category_id: source.category_id,
+            category_id: category.id,
             service_key: `issue-${id}`,
             availability: input.availability,
             status: 'inactive',
@@ -363,15 +523,40 @@ export class AdminIssueService {
             display_order: input.displayOrder,
           })
           .execute();
-        const version = await this.publish(
-          trx,
-          org,
-          id,
-          source.current_published_version_id,
-          issueText(input.name, true),
-          issueText(input.description, false),
-          input.requesterPolicy,
-        );
+        const version = randomUUID();
+        await trx
+          .insertInto('service_definition_version')
+          .values({
+            id: version,
+            organization_id: org,
+            service_definition_id: id,
+            version_number: 1,
+            name,
+            resident_description: description,
+            icon_key: copied?.version.icon_key ?? 'file-earmark-text',
+            aliases: [],
+            keywords: [],
+            default_priority: input.defaultPriority,
+            location_policy: input.locationPolicy,
+            geographic_eligibility_mode: input.geographicEligibilityMode,
+            geographic_eligibility_policy_reference: null,
+            unable_to_determine_behavior: 'block',
+            anonymous_reporting_policy:
+              input.requesterPolicy === 'ANONYMOUS_ALLOWED'
+                ? 'allowed'
+                : 'not_allowed',
+            routing_metadata: null,
+            status: 'draft',
+            published_at: null,
+          })
+          .execute();
+        await insertQuestions(trx, org, version, questions);
+        await trx
+          .updateTable('service_definition_version')
+          .set({ status: 'published', published_at: new Date() })
+          .where('organization_id', '=', org)
+          .where('id', '=', version)
+          .execute();
         await trx
           .updateTable('service_definition')
           .set({ current_published_version_id: version })
@@ -396,6 +581,14 @@ export class AdminIssueService {
           false,
           true,
         );
+        if (input.handling.actionType === 'external_redirect')
+          await configureIssueAction(
+            trx,
+            id,
+            { ...input.handling, expectedRevision: 1 },
+            access,
+            correlation,
+          );
         const issue = await this.readOne(trx, org, id);
         await this.audit(
           trx,

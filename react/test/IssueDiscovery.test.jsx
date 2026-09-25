@@ -31,6 +31,75 @@ const page = (items = [issue], extra = {}) => ({
   canWrite: true,
   ...extra,
 });
+
+test("F056.5 polish numbers authoritative pages and renumbers sorted/filtered results without new API fields", async () => {
+  const second = { ...issue, id: "second", name: "Second fixture" };
+  const { user, client } = view(async (url) => {
+    const q = new URLSearchParams(url.split("?")[1]);
+    return page(
+      q.has("status")
+        ? [second]
+        : q.get("sort") === "name"
+          ? [second, issue]
+          : [issue, second],
+      {
+        page: Number(q.get("page") || 1),
+        total: 50,
+        organizationTotal: 50,
+      },
+    );
+  }, "/admin/issues?page=2");
+  await screen.findByText(issue.name);
+  expect(
+    screen.getByRole("columnheader", { name: "Result Number" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("row", { name: issue.name }).cells[0],
+  ).toHaveTextContent("26");
+  expect(
+    screen.getByRole("row", { name: second.name }).cells[0],
+  ).toHaveTextContent("27");
+  await user.selectOptions(screen.getByLabelText("Sort By"), "name");
+  await waitFor(() =>
+    expect(
+      screen.getByRole("row", { name: second.name }).cells[0],
+    ).toHaveTextContent(/^1$/),
+  );
+  expect(
+    screen.getByRole("row", { name: issue.name }).cells[0],
+  ).toHaveTextContent(/^2$/);
+  await user.selectOptions(screen.getByLabelText("Status"), "active");
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("row", { name: issue.name }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(
+    screen.getByRole("row", { name: second.name }).cells[0],
+  ).toHaveTextContent(/^1$/);
+  expect(
+    client.get.mock.calls.every(
+      ([url]) =>
+        url.startsWith("/admin/issues/summaries?") ||
+        url === "/admin/issues/categories",
+    ),
+  ).toBe(true);
+});
+
+test("F056.5 polish keeps clear actions secondary and empty search disabled", async () => {
+  view(async () => page());
+  await screen.findByText(issue.name);
+  for (const name of ["Clear Filters", "Clear Search"]) {
+    expect(screen.getByRole("button", { name, exact: true })).toHaveClass(
+      "btn-outline-secondary",
+    );
+    expect(screen.getByRole("button", { name, exact: true })).not.toHaveClass(
+      "btn-primary",
+      "btn-link",
+    );
+  }
+  expect(screen.getByRole("button", { name: "Clear Search" })).toBeDisabled();
+});
 function Location() {
   const location = useLocation(),
     navigate = useNavigate();

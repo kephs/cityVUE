@@ -11,6 +11,17 @@ export class CityVueApiError extends Error {
 }
 
 function publicMessage(status, path, code) {
+  if (path.startsWith("/admin/issues") && [400, 409].includes(status)) {
+    const messages = {
+      ISSUE_SOURCE_STALE:
+        "The source Issue changed since you reviewed it. Refresh the source configuration before creating this Issue.",
+      ISSUE_SOURCE_UNAVAILABLE:
+        "The source Issue is no longer available. Select and review an eligible source.",
+      ISSUE_CATEGORY_UNAVAILABLE:
+        "The Category is no longer available. Select an eligible Category.",
+    };
+    if (messages[code]) return [code, messages[code]];
+  }
   if (
     status === 400 &&
     path.startsWith("/admin/issues") &&

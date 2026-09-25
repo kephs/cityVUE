@@ -84,3 +84,48 @@ test("F056.2B safe hostname does not expose path/query in read-only presentation
   expect(screen.queryByText(/private\?static/)).not.toBeInTheDocument();
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 });
+
+test("F056.5 creation Availability remains explicit without redirect capability", async () => {
+  render(<Harness />);
+
+  for (const label of [
+    "External only",
+    "Internal and external",
+    "Internal only",
+  ]) {
+    await userEvent.click(screen.getByRole("radio", { name: label }));
+    expect(screen.getByRole("radio", { name: label })).toBeChecked();
+    expect(screen.getByText("Reqro Intake")).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    expect(
+      screen.getByText("Requests are created and managed in Reqro."),
+    ).toBeInTheDocument();
+  }
+});
+
+test("F056.5 polish explains fixed Availability and emphasizes selectable Handling", async () => {
+  render(
+    <Harness
+      issue={{ availability: "EXTERNAL_ONLY", canManageHandling: true }}
+    />,
+  );
+  expect(
+    screen.getByText("Availability is set when the Issue is created."),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("radio", { name: "External only" }),
+  ).not.toBeInTheDocument();
+  const redirect = screen.getByRole("radio", {
+    name: "Send the requester to another service",
+  });
+  await userEvent.click(redirect);
+  expect(redirect).toBeChecked();
+  expect(redirect.closest("label")).toHaveClass("is-selected");
+  expect(screen.getByText("External Redirect").closest("div")).toHaveClass(
+    "issue-handling-summary",
+  );
+  expect(
+    screen.getByText("Users continue in an external service."),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Destination URL")).toBeInTheDocument();
+});

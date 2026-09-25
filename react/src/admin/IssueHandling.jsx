@@ -40,6 +40,9 @@ export default function IssueHandling({
   set,
   disabled,
   readOnly = false,
+  creationCapability = false,
+  creationCategorySelected = false,
+  creationPolicies = null,
 }) {
   let hostname = "";
   try {
@@ -49,13 +52,18 @@ export default function IssueHandling({
   }
   const canManage =
     !readOnly &&
-    issue?.canManageHandling &&
-    issue.availability === "EXTERNAL_ONLY";
+    (issue ? issue.canManageHandling : creationCapability) &&
+    (issue ? issue.availability : draft.availability) === "EXTERNAL_ONLY";
   return (
     <section className="issue-handling">
-      <h3 className="h5">Availability</h3>
+      <h4 className="h5">Availability</h4>
       {issue ? (
-        <p>{availabilityLabels[issue.availability] || "Unavailable"}</p>
+        <div className="issue-availability-summary">
+          <strong>
+            {availabilityLabels[issue.availability] || "Unavailable"}
+          </strong>
+          <p>Availability is set when the Issue is created.</p>
+        </div>
       ) : (
         <fieldset disabled={disabled}>
           <legend className="h6">Where can this Issue be used?</legend>
@@ -74,7 +82,7 @@ export default function IssueHandling({
           <p>Choose once when creating the Issue.</p>
         </fieldset>
       )}
-      <h3 className="h5">Handling</h3>
+      <h4 className="h5">Handling</h4>
       {canManage ? (
         <fieldset disabled={disabled}>
           <legend className="h6">
@@ -84,7 +92,10 @@ export default function IssueHandling({
             ["internal_intake", "Collect the request in Reqro"],
             ["external_redirect", "Send the requester to another service"],
           ].map(([value, label]) => (
-            <label className="d-block" key={value}>
+            <label
+              className={`issue-handling-choice${draft.actionType === value ? " is-selected" : ""}`}
+              key={value}
+            >
               <input
                 type="radio"
                 name="issue-handling"
@@ -92,16 +103,40 @@ export default function IssueHandling({
                 onChange={() => set("actionType", value)}
               />{" "}
               {label}
+              {draft.actionType === value && (
+                <span className="issue-handling-selected" aria-hidden="true">
+                  ✓ Selected
+                </span>
+              )}
             </label>
           ))}
         </fieldset>
-      ) : (
+      ) : !issue && !readOnly ? (
         <p>
+          {!draft.availability
+            ? "Choose Availability above to see the available Handling options."
+            : draft.availability !== "EXTERNAL_ONLY"
+              ? "Internal only and Internal and external Issues use Reqro Intake. External Redirect is available only for External only Issues."
+              : !creationCategorySelected
+                ? "Select a Category under General to check available Handling options."
+                : "Your current access does not allow External Redirect configuration for this Category."}
+        </p>
+      ) : null}
+      <div className="issue-handling-summary">
+        <strong>
+          <span aria-hidden="true">
+            {draft.actionType === "external_redirect" ? "↗ " : "✓ "}
+          </span>
           {draft.actionType === "external_redirect"
             ? "External Redirect"
             : "Reqro Intake"}
+        </strong>
+        <p>
+          {draft.actionType === "external_redirect"
+            ? "Users continue in an external service."
+            : "Requests are created and managed in Reqro."}
         </p>
-      )}
+      </div>
       {draft.actionType === "external_redirect" && (
         <>
           <p>
@@ -164,6 +199,7 @@ export default function IssueHandling({
           )}
         </>
       )}
+      {creationPolicies}
     </section>
   );
 }

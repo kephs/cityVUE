@@ -1,3 +1,4 @@
+import { reviewedCreation } from './issue-creation-fixture.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { TestContext } from 'node:test';
@@ -110,6 +111,7 @@ export async function checkExtendedQuestions(
     .executeTakeFirstOrThrow();
   const create = {
     templateId: template.id,
+    ...(await reviewedCreation(db, org, template.id)),
     name: 'Fictional extended question test',
     description: 'Disposable synthetic question fixture',
     availability: 'INTERNAL_AND_EXTERNAL',
@@ -947,6 +949,7 @@ export async function checkExtendedQuestions(
         .send({
           ...create,
           templateId: issue.id,
+          ...(await reviewedCreation(db, org, issue.id)),
           name: 'Fictional extended copy',
         })
         .expect(201);
@@ -1001,6 +1004,7 @@ export async function checkExtendedQuestions(
             .send({
               ...create,
               templateId: issue.id,
+              ...(await reviewedCreation(db, org, issue.id)),
               availability,
               name: `Fictional ${availability} extended`,
             })

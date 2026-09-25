@@ -28,6 +28,13 @@ const create = {
   requesterPolicy: 'IDENTIFIED_REQUIRED',
   defaultAssignment: null,
   templateId: '10000000-0000-4000-8000-000000000003',
+  expectedSourceVersion: '10000000-0000-4000-8000-000000000004',
+  categoryId: '10000000-0000-4000-8000-000000000005',
+  defaultPriority: 'medium',
+  locationPolicy: 'required',
+  geographicEligibilityMode: 'no_geographic_restriction',
+  handling: { actionType: 'internal_intake' },
+  questions: [],
 };
 test('F056 requires independent trusted Admin read and Issue write without default bundles', () => {
   for (const p of permissions)
@@ -104,9 +111,13 @@ test('F056 create rejects authority, active forgery, unrelated fields and unsafe
     });
 });
 test('F056 edit requires each independent expected revision, no generalized revision', () => {
-  const { templateId, availability, ...fields } = create;
-  void templateId;
-  void availability;
+  const fields = {
+    name: create.name,
+    description: create.description,
+    displayOrder: create.displayOrder,
+    requesterPolicy: create.requesterPolicy,
+    defaultAssignment: create.defaultAssignment,
+  };
   const edit = {
     ...fields,
     active: false,

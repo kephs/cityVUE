@@ -1,6 +1,6 @@
 # ADR-019 — Issue availability and governed external handoff
 
-Status: Accepted and implemented in F056.2B; automated and live validation passed.
+Status: Accepted and implemented in F056.2B; automated and live validation passed. The two-step creation/mandatory-template workflow is superseded by [ADR-021](ADR-021-complete-atomic-issue-creation.md); all other boundaries below remain accepted.
 
 ## Decision
 

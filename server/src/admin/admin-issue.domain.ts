@@ -6,7 +6,11 @@ import {
   issueAvailabilities,
   type IssueAvailability,
 } from '../catalog/issue-availability.js';
-import type { ActionInput } from '../catalog/issue-action.command.js';
+import {
+  normalizeAction,
+  type ActionInput,
+} from '../catalog/issue-action.command.js';
+import { validateHandling } from '../catalog/issue-availability.js';
 import {
   requesterPolicies,
   type RequesterIdentityPolicy,
@@ -25,7 +29,14 @@ export interface IssueFields {
 }
 export interface IssueCreate extends IssueFields {
   availability: IssueAvailability;
-  templateId: string;
+  categoryId: string;
+  templateId?: string;
+  expectedSourceVersion?: string;
+  defaultPriority: string;
+  locationPolicy: string;
+  geographicEligibilityMode: string;
+  handling: Omit<ActionInput, 'expectedRevision'>;
+  questions: unknown[];
 }
 export interface IssueChange extends IssueFields {
   handling?: Omit<ActionInput, 'expectedRevision'>;
@@ -75,7 +86,15 @@ export function validateIssue(
     'requesterPolicy',
     'defaultAssignment',
     ...(create
-      ? ['templateId', 'availability']
+      ? [
+          'categoryId',
+          'availability',
+          'defaultPriority',
+          'locationPolicy',
+          'geographicEligibilityMode',
+          'handling',
+          'questions',
+        ]
       : [
           'active',
           'expectedCoreRevision',
@@ -88,7 +107,11 @@ export function validateIssue(
     Object.keys(row).some(
       (k) =>
         !keys.includes(k) &&
-        !(['questions', 'handling'].includes(k) && !create),
+        !(
+          create
+            ? ['templateId', 'expectedSourceVersion']
+            : ['questions', 'handling']
+        ).includes(k),
     ) ||
     keys.some((k) => !(k in row))
   )
@@ -117,8 +140,57 @@ export function validateIssue(
   if (create) {
     if (!(issueAvailabilities as readonly unknown[]).includes(row.availability))
       throw new BadRequestException('Choose where this Issue can be used.');
-    if (typeof row.templateId !== 'string' || !requestUuid.test(row.templateId))
-      throw new BadRequestException('Choose an available intake template');
+    if (typeof row.categoryId !== 'string' || !requestUuid.test(row.categoryId))
+      throw new BadRequestException('Choose an available Category');
+    if (row.templateId !== undefined) {
+      if (
+        typeof row.templateId !== 'string' ||
+        !requestUuid.test(row.templateId) ||
+        typeof row.expectedSourceVersion !== 'string' ||
+        !requestUuid.test(row.expectedSourceVersion)
+      )
+        throw new BadRequestException('Review an available source Issue');
+    } else if (row.expectedSourceVersion !== undefined) {
+      throw new BadRequestException('Source version requires a source Issue');
+    }
+    if (
+      !['low', 'medium', 'high', 'urgent'].includes(
+        row.defaultPriority as string,
+      ) ||
+      !['required', 'optional', 'not_applicable'].includes(
+        row.locationPolicy as string,
+      )
+    )
+      throw new BadRequestException(
+        'Choose Default Priority and Service Location',
+      );
+    // No authoritative restricted-policy registry exists in this environment.
+    if (row.geographicEligibilityMode !== 'no_geographic_restriction')
+      throw new BadRequestException(
+        'Choose a supported Geographic Eligibility policy',
+      );
+    if (
+      !row.handling ||
+      typeof row.handling !== 'object' ||
+      Array.isArray(row.handling) ||
+      Object.keys(row.handling).some(
+        (k) => !['actionType', 'destination', 'message', 'label'].includes(k),
+      )
+    )
+      throw new BadRequestException('Invalid Issue handling fields');
+    const handling = row.handling as Omit<ActionInput, 'expectedRevision'>;
+    if (
+      handling.actionType === 'external_redirect' &&
+      (typeof handling.message !== 'string' ||
+        typeof handling.label !== 'string')
+    )
+      throw new BadRequestException(
+        'Complete the External Handoff configuration',
+      );
+    const action = normalizeAction({ ...handling, expectedRevision: 1 });
+    validateHandling(row.availability as string, action.action_type);
+    if (!Array.isArray(row.questions))
+      throw new BadRequestException('Invalid Issue questions');
   } else {
     if (
       row.handling !== undefined &&

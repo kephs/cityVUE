@@ -148,6 +148,10 @@ export default function IssueResults({
       </caption>
       <thead>
         <tr>
+          <th scope="col" className="issue-result-number">
+            <span aria-hidden="true">#</span>
+            <span className="visually-hidden">Result Number</span>
+          </th>
           {[
             "Issue",
             "Category",
@@ -164,7 +168,7 @@ export default function IssueResults({
       </thead>
       <tbody>
         {!loading &&
-          data.items.map((issue) => (
+          data.items.map((issue, index) => (
             <tr
               key={issue.id}
               aria-label={issue.name}
@@ -174,6 +178,9 @@ export default function IssueResults({
               }}
               tabIndex={-1}
             >
+              <td className="issue-result-number">
+                {(data.page - 1) * data.pageSize + index + 1}
+              </td>
               <td>
                 <div className="issue-table-identity">
                   <IssueIcon categoryId={issue.categoryId} />

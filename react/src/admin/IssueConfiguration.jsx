@@ -13,7 +13,8 @@ import {
   readIssueQuery,
 } from "./issueDiscovery.js";
 import IssueDiscoveryControls from "./IssueDiscoveryControls.jsx";
-import IssueTemplatePicker from "./IssueTemplatePicker.jsx";
+import IssueCreationPicker from "./IssueCreationPicker.jsx";
+import IssueCreationSource from "./IssueCreationSource.jsx";
 import IssueHandling, {
   availabilityLabels,
   handlingPayload,
@@ -38,6 +39,14 @@ const fields = (issue) => ({
   requesterPolicy: issue?.requesterPolicy ?? "IDENTIFIED_REQUIRED",
   target: targetKey(issue?.defaultAssignment),
   templateId: "",
+  expectedSourceVersion: "",
+  source: null,
+  copyExisting: false,
+  sourcePending: false,
+  category: null,
+  defaultPriority: "",
+  locationPolicy: "",
+  geographicEligibilityMode: "",
 });
 function Confirmation({
   title,
@@ -238,7 +247,7 @@ export default function IssueConfiguration({ client, onDenied }) {
     if (notice && !loading)
       (cards.current.get(notice.id) || feedback.current)?.focus();
   }, [notice, loading]);
-  const targetIssue = edit?.issue?.id || draft.templateId;
+  const targetIssue = edit?.issue?.id || draft.category?.id;
   useEffect(() => {
     if (
       !edit ||
@@ -257,7 +266,9 @@ export default function IssueConfiguration({ client, onDenied }) {
     setTargetError(false);
     client
       .get(
-        `/admin/issues/${encodeURIComponent(targetIssue)}/assignment-targets?search=${encodeURIComponent(targetSearch)}`,
+        edit.issue
+          ? `/admin/issues/${encodeURIComponent(targetIssue)}/assignment-targets?search=${encodeURIComponent(targetSearch)}`
+          : `/admin/issues/creation/assignment-targets?categoryId=${encodeURIComponent(targetIssue)}&search=${encodeURIComponent(targetSearch)}`,
         { authenticated: true, signal: abort.signal },
       )
       .then(
@@ -316,8 +327,21 @@ export default function IssueConfiguration({ client, onDenied }) {
     !/[\r\n\t]/u.test(name) &&
     /^\d+$/.test(draft.displayOrder) &&
     Number(draft.displayOrder) <= 2147483647 &&
-    (edit?.issue || (draft.templateId && draft.availability)) &&
-    (!edit?.issue?.canManageHandling || validHandoff(draft));
+    (edit?.issue ||
+      (draft.category &&
+        draft.availability &&
+        draft.defaultPriority &&
+        draft.locationPolicy &&
+        draft.geographicEligibilityMode &&
+        !draft.sourcePending &&
+        (!draft.copyExisting ||
+          (draft.templateId && draft.expectedSourceVersion)))) &&
+    ((edit?.issue && !edit.issue.canManageHandling) || validHandoff(draft)) &&
+    (edit?.issue ||
+      draft.actionType !== "external_redirect" ||
+      (edit?.issue
+        ? edit.issue.canManageHandling
+        : draft.category?.canManageHandling));
   async function open(issue, kind, event) {
     if (event?.currentTarget) origin.current = event.currentTarget;
     setError(null);
@@ -435,7 +459,21 @@ export default function IssueConfiguration({ client, onDenied }) {
             expectedPolicyRevision: issue.policyRevision,
             expectedAssignmentRevision: issue.assignmentRevision,
           }
-        : { templateId: values.templateId, availability: values.availability }),
+        : {
+            categoryId: values.category.id,
+            availability: values.availability,
+            defaultPriority: values.defaultPriority,
+            locationPolicy: values.locationPolicy,
+            geographicEligibilityMode: values.geographicEligibilityMode,
+            questions: questionPayload(values.questions),
+            handling: handlingPayload(values),
+            ...(values.copyExisting
+              ? {
+                  templateId: values.templateId,
+                  expectedSourceVersion: values.expectedSourceVersion,
+                }
+              : {}),
+          }),
       ...(issue?.canManageHandling &&
       JSON.stringify(handlingPayload(values)) !==
         JSON.stringify(handlingPayload(fields(issue)))
@@ -497,10 +535,18 @@ export default function IssueConfiguration({ client, onDenied }) {
         onDenied();
         return;
       }
+      if (failure.code === "ISSUE_SOURCE_STALE")
+        setDraft((d) => ({ ...d, expectedSourceVersion: "" }));
       setError({
-        blocked: failure.status !== 400,
-        message:
-          failure.status === 409
+        blocked:
+          failure.status !== 400 && failure.code !== "ISSUE_SOURCE_STALE",
+        message: [
+          "ISSUE_SOURCE_STALE",
+          "ISSUE_CATEGORY_UNAVAILABLE",
+          "ISSUE_SOURCE_UNAVAILABLE",
+        ].includes(failure.code)
+          ? failure.message
+          : failure.status === 409
             ? "This Issue changed since you opened it. Refresh the latest configuration before making another change."
             : failure.status === 400
               ? failure.code === "ISSUE_DUPLICATE"
@@ -515,7 +561,14 @@ export default function IssueConfiguration({ client, onDenied }) {
       }
     }
   }
-  const set = (key, value) => setDraft((old) => ({ ...old, [key]: value }));
+  const set = (key, value) =>
+    setDraft((old) => ({
+      ...old,
+      [key]: value,
+      ...(key === "availability" && value !== "EXTERNAL_ONLY"
+        ? { actionType: "internal_intake", destination: "", message: "" }
+        : {}),
+    }));
   return (
     <div className="issue-configuration">
       <div className="participation-section-heading">
@@ -649,13 +702,13 @@ export default function IssueConfiguration({ client, onDenied }) {
               )}
               {!edit.loading && !detailError && !data.canWrite && (
                 <>
-                  <section>
+                  <section className="issue-editor-section">
                     <h3>General</h3>
                     <p>{edit.issue.description}</p>
                     <p>Category: {edit.issue.category}</p>
                     <p>Status: {edit.issue.active ? "Active" : "Inactive"}</p>
                   </section>
-                  <section>
+                  <section className="issue-editor-section">
                     <h3>Intake &amp; Access</h3>
                     <IssueHandling issue={edit.issue} draft={draft} readOnly />
                     <p>
@@ -663,14 +716,16 @@ export default function IssueConfiguration({ client, onDenied }) {
                       {policyLabel(edit.issue.requesterPolicy)}
                     </p>
                   </section>
-                  <section>
+                  <section className="issue-editor-section">
                     <h3>Assignment</h3>
                     <p>
                       {edit.issue.defaultAssignment?.displayName ||
                         "No default assignment"}
                     </p>
                   </section>
-                  <FollowUpQuestions questions={draft.questions} readOnly />
+                  <section className="issue-editor-section">
+                    <FollowUpQuestions questions={draft.questions} readOnly />
+                  </section>
                   <button className="btn btn-secondary" onClick={cancel}>
                     Close Configuration
                   </button>
@@ -697,27 +752,77 @@ export default function IssueConfiguration({ client, onDenied }) {
                     Issue Configuration Fields
                   </h3>
                   {!edit.issue && (
-                    <>
-                      <p>
-                        New Issues are created Inactive. You can review the
-                        Issue before making it available for new requests.
-                      </p>
-                      <IssueTemplatePicker
-                        client={client}
-                        disabled={busy}
-                        onDenied={onDenied}
-                        onChange={(id) => set("templateId", id)}
-                      />
-                    </>
+                    <p>
+                      New Issues are created Inactive with the complete
+                      configuration below.
+                    </p>
                   )}
                   {edit.kind !== "order" && (
                     <>
                       <section className="issue-editor-section">
                         <h3>General</h3>
-                        {edit.issue && <p>Category: {edit.issue.category}</p>}
+                        {edit.issue ? (
+                          <p>Category: {edit.issue.category}</p>
+                        ) : (
+                          <IssueCreationPicker
+                            client={client}
+                            endpoint="/admin/issues/creation/categories"
+                            label="Category"
+                            inputRef={input}
+                            selection={draft.category}
+                            disabled={busy || draft.sourcePending}
+                            onDenied={onDenied}
+                            onSelect={(category) => {
+                              setDraft((d) => ({
+                                ...d,
+                                category,
+                                target: "",
+                                templateId: "",
+                                expectedSourceVersion: "",
+                                source: null,
+                                questions: d.questions,
+                                actionType: "internal_intake",
+                                destination: "",
+                                message: "",
+                              }));
+                              setError(null);
+                            }}
+                            onClear={() => {
+                              if (
+                                draft.templateId &&
+                                !window.confirm(
+                                  "Changing Category discards copied configuration and clears assignment. Continue?",
+                                )
+                              )
+                                return;
+                              setDraft((d) => ({
+                                ...d,
+                                category: null,
+                                target: "",
+                                templateId: "",
+                                expectedSourceVersion: "",
+                                source: null,
+                                questions: d.templateId ? [] : d.questions,
+                                defaultPriority: d.templateId
+                                  ? ""
+                                  : d.defaultPriority,
+                                locationPolicy: d.templateId
+                                  ? ""
+                                  : d.locationPolicy,
+                                geographicEligibilityMode: d.templateId
+                                  ? ""
+                                  : d.geographicEligibilityMode,
+                                actionType: "internal_intake",
+                                destination: "",
+                                message: "",
+                              }));
+                              setError(null);
+                            }}
+                          />
+                        )}
                         <label htmlFor="issue-name">Issue name</label>
                         <input
-                          ref={input}
+                          ref={edit.issue ? input : undefined}
                           id="issue-name"
                           className="form-control"
                           value={draft.name}
@@ -740,7 +845,44 @@ export default function IssueConfiguration({ client, onDenied }) {
                         <p id="issue-description-help">
                           Optional plain text, up to 1,000 characters.
                         </p>
+                        {!edit.issue && (
+                          <>
+                            <label htmlFor="issue-priority">
+                              Default Priority
+                            </label>
+                            <select
+                              id="issue-priority"
+                              className="form-select"
+                              value={draft.defaultPriority}
+                              onChange={(e) =>
+                                set("defaultPriority", e.target.value)
+                              }
+                              disabled={busy || draft.sourcePending}
+                              required
+                            >
+                              <option value="">Choose Default Priority</option>
+                              {["low", "medium", "high", "urgent"].map(
+                                (value) => (
+                                  <option key={value} value={value}>
+                                    {value[0].toUpperCase() + value.slice(1)}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                          </>
+                        )}
                       </section>
+                      {!edit.issue && (
+                        <IssueCreationSource
+                          key={draft.category?.id || "no-category"}
+                          client={client}
+                          draft={draft}
+                          setDraft={setDraft}
+                          disabled={busy}
+                          onDenied={onDenied}
+                          onReviewed={() => setError(null)}
+                        />
+                      )}
                       <section className="issue-editor-section">
                         <h3>Intake &amp; Access</h3>
                         <IssueHandling
@@ -748,6 +890,75 @@ export default function IssueConfiguration({ client, onDenied }) {
                           draft={draft}
                           set={set}
                           disabled={busy}
+                          creationCapability={draft.category?.canManageHandling}
+                          creationCategorySelected={!!draft.category}
+                          creationPolicies={
+                            !edit.issue ? (
+                              <>
+                                <fieldset
+                                  disabled={busy || draft.sourcePending}
+                                >
+                                  <legend className="h5">
+                                    Service Location
+                                  </legend>
+                                  <p id="issue-location-help">
+                                    Does this Issue require a Service Location?
+                                    This is where the reported issue is; device
+                                    location is optional.
+                                  </p>
+                                  {[
+                                    ["required", "Required"],
+                                    ["optional", "Optional"],
+                                    ["not_applicable", "Not Used"],
+                                  ].map(([value, label]) => (
+                                    <label className="d-block" key={value}>
+                                      <input
+                                        type="radio"
+                                        name="issue-location-policy"
+                                        checked={draft.locationPolicy === value}
+                                        onChange={() =>
+                                          set("locationPolicy", value)
+                                        }
+                                        aria-describedby="issue-location-help"
+                                        required
+                                      />{" "}
+                                      {label}
+                                    </label>
+                                  ))}
+                                </fieldset>
+                                <fieldset
+                                  disabled={busy || draft.sourcePending}
+                                >
+                                  <legend className="h5">
+                                    Geographic Eligibility
+                                  </legend>
+                                  <label className="d-block">
+                                    <input
+                                      type="radio"
+                                      name="issue-geography"
+                                      checked={
+                                        draft.geographicEligibilityMode ===
+                                        "no_geographic_restriction"
+                                      }
+                                      onChange={() =>
+                                        set(
+                                          "geographicEligibilityMode",
+                                          "no_geographic_restriction",
+                                        )
+                                      }
+                                      required
+                                    />{" "}
+                                    No Geographic Restriction
+                                  </label>
+                                  <p>
+                                    No geographic eligibility check will be
+                                    applied. Restricted policies are not
+                                    configured for creation.
+                                  </p>
+                                </fieldset>
+                              </>
+                            ) : null
+                          }
                         />
                         <div hidden={draft.actionType === "external_redirect"}>
                           <fieldset disabled={busy}>
@@ -850,14 +1061,16 @@ export default function IssueConfiguration({ client, onDenied }) {
                       </section>
                     </>
                   )}
-                  {edit.issue &&
-                    edit.kind !== "order" &&
+                  {edit.kind !== "order" &&
                     draft.actionType !== "external_redirect" && (
                       <section className="issue-editor-section">
                         <FollowUpQuestions
+                          saveLabel={
+                            edit.issue ? "Save changes" : "Create Issue"
+                          }
                           questions={draft.questions}
                           onChange={(value) => set("questions", value)}
-                          disabled={busy}
+                          disabled={busy || draft.sourcePending}
                         />
                       </section>
                     )}

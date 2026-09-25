@@ -34,32 +34,37 @@ function setup(canWrite = true) {
   const onDenied = vi.fn();
   const client = {
     get: vi.fn(async (url) =>
-      url === "/admin/issues/categories"
-        ? { items: [] }
-        : url.includes("templates?")
-          ? { items, hasMore: false }
-          : !url.includes("?") && !url.includes("assignment-targets")
-            ? { issue: items.find((i) => url.endsWith(i.id)) }
-            : url.includes("assignment-targets")
-              ? {
-                  items: [
-                    {
-                      type: "role",
-                      id: "fictional-role",
-                      displayName: "Fictional Traffic Operations",
-                    },
-                  ],
-                }
-              : {
-                  items,
-                  total: items.length,
-                  organizationTotal: items.length,
-                  inactive: items.filter((i) => !i.active).length,
-                  active: items.filter((i) => i.active).length,
-                  page: 1,
-                  pageSize: 25,
-                  canWrite,
-                },
+      url.startsWith("/admin/issues/creation/categories")
+        ? {
+            items: [{ id: "category", name: "Roads", canManageHandling: true }],
+            hasMore: false,
+          }
+        : url === "/admin/issues/categories"
+          ? { items: [] }
+          : url.includes("templates?")
+            ? { items, hasMore: false }
+            : !url.includes("?") && !url.includes("assignment-targets")
+              ? { issue: items.find((i) => url.endsWith(i.id)) }
+              : url.includes("assignment-targets")
+                ? {
+                    items: [
+                      {
+                        type: "role",
+                        id: "fictional-role",
+                        displayName: "Fictional Traffic Operations",
+                      },
+                    ],
+                  }
+                : {
+                    items,
+                    total: items.length,
+                    organizationTotal: items.length,
+                    inactive: items.filter((i) => !i.active).length,
+                    active: items.filter((i) => i.active).length,
+                    page: 1,
+                    pageSize: 25,
+                    canWrite,
+                  },
     ),
     patch: vi.fn(async (id, body) => {
       const issue = {
@@ -104,6 +109,18 @@ test("F056 read-only shows human configuration and no mutation controls", async 
   );
   expect(screen.getAllByText("Identification required")[0]).toBeInTheDocument();
   expect(screen.getByText("No default assignment")).toBeInTheDocument();
+  for (const name of [
+    "General",
+    "Intake & Access",
+    "Assignment",
+    "Follow-up questions",
+  ]) {
+    expect(
+      screen
+        .getByRole("heading", { name, exact: true })
+        .closest("section.issue-editor-section"),
+    ).toBeInTheDocument();
+  }
   expect(
     screen.queryByRole("button", {
       name: /Add Issue|Edit configuration|Change order|Deactivate/,
@@ -111,15 +128,28 @@ test("F056 read-only shows human configuration and no mutation controls", async 
   ).not.toBeInTheDocument();
   expect(client.patch).not.toHaveBeenCalled();
 });
-test("F056 create requires explicit template, selected policy and deliberate Save; cancel writes nothing", async () => {
+test("F056.5 template-free create requires explicit Category, priority, location, geography and deliberate submission", async () => {
   const { user, client } = setup();
   await screen.findByText(sample.name);
   await user.click(screen.getByRole("button", { name: "+ Add Issue" }));
   expect(screen.getByRole("button", { name: "Create Issue" })).toBeDisabled();
   await user.type(screen.getByLabelText("Issue name"), " New Fictional Issue ");
-  await user.click(screen.getByRole("combobox", { name: "Intake template" }));
   await user.click(
-    await screen.findByRole("option", { name: /Fictional Street Sign/ }),
+    within(screen.getByRole("dialog")).getByRole("combobox", {
+      name: "Category",
+      exact: true,
+    }),
+  );
+  await user.click(await screen.findByRole("option", { name: "Roads" }));
+  await user.selectOptions(screen.getByLabelText("Default Priority"), "high");
+  await user.click(
+    screen.getByRole("radio", { name: "Required", exact: true }),
+  );
+  await user.click(
+    screen.getByRole("radio", {
+      name: "No Geographic Restriction",
+      exact: true,
+    }),
   );
   await user.click(screen.getByLabelText("Anonymous requests allowed"));
   expect(screen.getByRole("button", { name: "Create Issue" })).toBeDisabled();
@@ -138,7 +168,12 @@ test("F056 create requires explicit template, selected policy and deliberate Sav
       displayOrder: 0,
       requesterPolicy: "ANONYMOUS_ALLOWED",
       defaultAssignment: null,
-      templateId: sample.id,
+      categoryId: "category",
+      defaultPriority: "high",
+      locationPolicy: "required",
+      geographicEligibilityMode: "no_geographic_restriction",
+      handling: { actionType: "internal_intake" },
+      questions: [],
       availability: "EXTERNAL_ONLY",
     },
     expect.objectContaining({ authenticated: true }),
@@ -315,6 +350,7 @@ test("F056.5 summary and menu are lazy, keyboard operable, and restore focus", a
   expect(
     screen.getAllByRole("columnheader").map((node) => node.textContent),
   ).toEqual([
+    "#Result Number",
     "Issue",
     "Category",
     "Availability",

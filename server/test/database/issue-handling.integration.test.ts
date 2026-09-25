@@ -1,3 +1,4 @@
+import { reviewedCreation } from './issue-creation-fixture.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -267,6 +268,7 @@ test(
         legacy = app.get(IssueActionService);
       const create = {
         templateId: template,
+        ...(await reviewedCreation(db, org, template)),
         name: 'Fictional handoff',
         description: 'Synthetic',
         displayOrder: 0,
