@@ -175,6 +175,11 @@ export class AdminConfigurationService {
         return {
           branding,
           capabilities: {
+            canReadAccess:
+              !access.development &&
+              !!access.tenantId &&
+              !!access.objectId &&
+              access.permissions.includes('admin.access.read'),
             canWriteParticipationAreas: access.permissions.includes(
               'admin.participation_areas.write',
             ),

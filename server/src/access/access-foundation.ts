@@ -128,7 +128,11 @@ async function contributions(
     effective: recognizedPermissions(rows.map((r) => r.permission_key)),
   };
 }
-async function currentActor(db: Db, access: StaffAccess, manage: boolean) {
+export async function currentActor(
+  db: Db,
+  access: StaffAccess,
+  manage: boolean,
+) {
   // Context is supplied only by the authentication boundary, never a command body.
   assertAccessAuthority(access, manage);
   const actor = await db

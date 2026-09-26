@@ -345,7 +345,7 @@ interface RolePermissionTable {
   role_id: string;
   permission_key: string;
 }
-interface StaffRoleAssignmentTable {
+export interface StaffRoleAssignmentTable {
   organization_id: string;
   staff_identity_id: string;
   role_id: string;

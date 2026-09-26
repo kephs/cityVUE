@@ -1,0 +1,208 @@
+.access-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+.access-search,
+.access-pagination {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.access-search input {
+  flex: 1;
+  min-width: 8rem;
+}
+.access-pagination {
+  margin-block: 1rem;
+}
+@media (min-width: 992px) {
+  .access-discovery > .access-pagination {
+    justify-content: flex-end;
+  }
+}
+.access-summary {
+  background: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+.access-drawer-section {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  padding: clamp(0.85rem, 2vw, 1.25rem);
+  background: var(--bs-body-bg);
+}
+.access-drawer-section.access-summary {
+  background: var(--bs-tertiary-bg);
+}
+.access-drawer-section > h3 {
+  margin-bottom: 1rem;
+}
+.access-drawer-section > :last-child {
+  margin-bottom: 0;
+}
+.access-unit-status {
+  margin-inline-start: 0.5rem;
+}
+.access-summary dl {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 0;
+}
+.access-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.access-category {
+  border-bottom: 1px solid var(--bs-border-color);
+  padding-block: 0.75rem;
+}
+.access-category > summary {
+  cursor: pointer;
+  padding: 0.25rem;
+}
+.access-category > summary h4 {
+  display: inline;
+  font-size: 1rem;
+}
+.access-category-heading {
+  display: inline-flex;
+  width: calc(100% - 1.5rem);
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.access-category-heading h4 {
+  margin: 0;
+}
+.access-category-count {
+  font-size: 0.85rem;
+  color: var(--bs-secondary-color);
+}
+.access-category > summary:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 3px;
+}
+.access-pagination label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.access-table {
+  width: 100%;
+  margin-block: 1rem;
+}
+.access-table th,
+.access-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.access-table small {
+  display: block;
+  margin-top: 0.4rem;
+}
+.access-permissions {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+}
+.access-permissions > li {
+  padding: 0.75rem;
+  margin: 0;
+}
+.access-permissions > li + li {
+  border-top: 1px solid var(--bs-border-color);
+}
+.access-permission-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.access-permission-description {
+  color: var(--bs-secondary-color);
+  margin: 0.25rem 0 0.35rem;
+  font-size: 0.9rem;
+}
+.access-permission-details {
+  font-size: 0.85rem;
+}
+.access-permission-details > summary {
+  color: var(--bs-secondary-color);
+  cursor: pointer;
+  width: fit-content;
+}
+.access-permission-details > summary:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 3px;
+}
+.access-permission-details dl {
+  margin: 0.5rem 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.access-permission-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.access-permission-details code {
+  color: var(--bs-secondary-color);
+  font-size: 0.8rem;
+}
+.access-history li {
+  margin-block: 1rem;
+}
+.access-permissions .badge {
+  margin: 0.25rem;
+  white-space: normal;
+}
+.issue-drawer-body section {
+  margin-block: 1rem;
+}
+@media (max-width: 767px) {
+  .access-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .access-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .access-table,
+  .access-table tbody,
+  .access-table tr,
+  .access-table td,
+  .access-table th {
+    display: block;
+  }
+  .access-table tr {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    margin-block: 1rem;
+    padding: 0.5rem;
+  }
+  .access-table td,
+  .access-table th {
+    border: 0;
+    padding: 0.35rem;
+  }
+  .access-table td[data-label]::before {
+    content: attr(data-label) ": ";
+    font-weight: 600;
+  }
+}
+@media (max-width: 420px) {
+  .access-filters {
+    grid-template-columns: 1fr;
+  }
+}

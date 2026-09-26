@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AdminAccessController } from './admin-access.controller.js';
 import { AdminIssueController } from './admin-issue.controller.js';
 import { AdminIssueService } from './admin-issue.service.js';
 import { AdminIssueDiscoveryService } from './admin-issue-discovery.service.js';
@@ -10,6 +11,7 @@ import { AdminIntakeSettingsController } from './admin-intake-settings.controlle
 import { AdminIntakeSettingsService } from './admin-intake-settings.service.js';
 @Module({
   controllers: [
+    AdminAccessController,
     AdminIssueController,
     AdminConfigurationController,
     AdminIntakeSettingsController,

@@ -14,6 +14,7 @@ import {
 } from "../branding/ReqroBrand.jsx";
 import ParticipationSetup from "./ParticipationSetup.jsx";
 import IssueConfiguration from "./IssueConfiguration.jsx";
+import AccessDiscovery from "./AccessDiscovery.jsx";
 
 const sections = [
   ["", "Overview"],
@@ -21,6 +22,7 @@ const sections = [
   ["participation", "Participation Setup"],
   ["privacy", "Analytics & Privacy"],
   ["status", "Configuration Status"],
+  ["access", "Access & Permissions"],
 ];
 function Values({ items }) {
   return (
@@ -164,7 +166,7 @@ export function AdminConfiguration({ client, displayName }) {
               ].map(([group, items, icon]) => (
                 <section className="configuration-nav-group" key={group}>
                   <h2>{group}</h2>
-                  {items.map(([key, label]) => (
+                  {items.filter(([key]) => key !== "access" || data?.capabilities?.canReadAccess).map(([key, label]) => (
                     <NavLink
                       key={key}
                       to={key ? `/admin/${key}` : "/admin"}
@@ -192,7 +194,7 @@ export function AdminConfiguration({ client, displayName }) {
           <h1 tabIndex="-1" ref={heading}>
             {title || "Administration page not found"}
           </h1>
-          {section !== "issues" && (
+          {section !== "issues" && section !== "access" && (
             <p>
               {section === "participation"
                 ? "Configure optional service-participation information for new requests."
@@ -214,6 +216,8 @@ export function AdminConfiguration({ client, displayName }) {
                 Retry configuration
               </button>
             </div>
+          ) : section === "access" ? (
+            data.capabilities?.canReadAccess ? <AccessDiscovery client={client} onDenied={() => setState(previous => ({...previous, data:{...previous.data, capabilities:{...previous.data.capabilities,canReadAccess:false}}}))} /> : <p role="alert">Access & Permissions is not authorized.</p>
           ) : (
             <>
               {section !== "participation" && section !== "issues" && (
