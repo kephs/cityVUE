@@ -8,6 +8,7 @@
     "node": "^20.19.0 || >=22 <25"
   },
   "scripts": {
+    "dev:access:mixed-fixture": "tsx src/database/mixed-access-uat-cli.ts",
     "dev:access": "tsx src/database/access-administrator-cli.ts",
     "dev:branding": "tsx src/database/development-branding-cli.ts",
     "dev:participation": "tsx src/database/development-participation-cli.ts",
