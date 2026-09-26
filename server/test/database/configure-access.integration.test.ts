@@ -27,15 +27,17 @@ import { accessPrerequisites } from '../../src/access/access-policy.js';
 import {
   changeManagedAccess,
   provisionAccessAdministrator,
+  provisionAccessReader,
 } from '../../src/access/access-foundation.js';
 import {
   accessDetail,
   accessHistory,
 } from '../../src/access/access-discovery.js';
 import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
+import { assertPersonalAccessTarget } from '../../src/database/personal-access-uat.js';
 
 test(
-  'F057.3 atomic runtime',
+  'F057.3 atomic runtime and personal provisioning prerequisite',
   { skip: !process.env.TEST_DATABASE_URL },
   async (t) => {
     const schema = `configure_${randomUUID().replaceAll('-', '')}`;
@@ -652,6 +654,78 @@ test(
         },
       );
       await t.test(
+        'personal selected mapping is required and rechecked inside provisioning transaction',
+        async () => {
+          const id = await staff();
+          const env = {
+            F057_STAFF_ID: id,
+            F057_ORGANIZATION_ID: org,
+            ENTRA_TENANT_ID: tenant,
+          };
+          await assertPersonalAccessTarget(db, env);
+          await assert.rejects(
+            assertPersonalAccessTarget(db, {
+              ...env,
+              ENTRA_TENANT_ID: randomUUID(),
+            }),
+          );
+          const before = await fingerprint();
+          await assert.rejects(
+            provisionAccessAdministrator(db, {
+              organizationId: org,
+              staffId: id,
+              personalTenantId: randomUUID(),
+              expectedRevision: await revision(),
+              expectedBootstrap: true,
+              operation: 'add-manager',
+              dryRun: true,
+            }),
+          );
+          assert.deepEqual(await fingerprint(), before);
+        },
+      );
+      await t.test(
+        'personal-like Reader dry-run adds only manage, retains independent configuration and Reader; no writes',
+        async () => {
+          const id = await staff();
+          await outside(id, ['admin.configuration.read']);
+          await provisionAccessReader(db, {
+            organizationId: org,
+            staffId: id,
+            expectedRevision: await revision(),
+            expectedBootstrap: true,
+            operation: 'grant-reader',
+            dryRun: false,
+          });
+          const before = await fingerprint();
+          const rev = await revision();
+          const preview = await provisionAccessAdministrator(db, {
+            organizationId: org,
+            staffId: id,
+            personalTenantId: tenant,
+            expectedRevision: rev,
+            expectedBootstrap: true,
+            operation: 'add-manager',
+            dryRun: true,
+          });
+          assert.deepEqual(preview.added, ['admin.access.manage']);
+          assert.equal(
+            preview.proposedAuthorizationRevision,
+            (BigInt(rev) + 1n).toString(),
+          );
+          assert.equal(preview.reusesConfigurationRead, true);
+          assert.equal(preview.readerOwnershipRemainsSeparate, true);
+          assert.equal(preview.remainsAccessAdministrator, true);
+          assert.ok(preview.proposedAudit);
+          assert.equal(preview.proposedAudit.permissionDeltas, 1);
+          assert.deepEqual(await fingerprint(), before);
+          assert.equal(
+            (await accessDetail(db, actor, id)).accessAdministrator,
+            false,
+          );
+        },
+      );
+      await t.test(
         'HTTP PATCH commits through actual guard and database authorization and returns no-store projection',
         async () => {
           const id = await staff();
@@ -741,6 +815,104 @@ test(
           } finally {
             await app.close();
           }
+        },
+      );
+      await t.test(
+        'unbootstrapped personal-like Reader bootstrap preview is read-only and reports the permanent transition',
+        async () => {
+          const selectedOrg = randomUUID(),
+            id = randomUUID(),
+            role = randomUUID();
+          await db
+            .insertInto('organization')
+            .values({
+              id: selectedOrg,
+              name: 'Synthetic personal UAT',
+              short_name: 'Test',
+              slug: selectedOrg,
+              status: 'active',
+              default_business_timezone: 'UTC',
+            })
+            .execute();
+          await db
+            .insertInto('staff_identity')
+            .values({
+              id,
+              organization_id: selectedOrg,
+              display_name: 'Synthetic personal Reader',
+              email: null,
+              active: true,
+              entra_tenant_id: tenant,
+              entra_object_id: id,
+            })
+            .execute();
+          await db
+            .insertInto('role')
+            .values({
+              id: role,
+              organization_id: selectedOrg,
+              name: 'Synthetic configuration contribution',
+              active: true,
+            })
+            .execute();
+          await db
+            .insertInto('role_permission')
+            .values({
+              organization_id: selectedOrg,
+              role_id: role,
+              permission_key: 'admin.configuration.read',
+            })
+            .execute();
+          await db
+            .insertInto('staff_role_assignment')
+            .values({
+              organization_id: selectedOrg,
+              staff_identity_id: id,
+              role_id: role,
+              active: true,
+            })
+            .execute();
+          const current = async () =>
+            await db
+              .selectFrom('organization_access_state')
+              .selectAll()
+              .where('organization_id', '=', selectedOrg)
+              .executeTakeFirstOrThrow();
+          await provisionAccessReader(db, {
+            organizationId: selectedOrg,
+            staffId: id,
+            expectedRevision: (await current()).authorization_revision,
+            expectedBootstrap: false,
+            operation: 'grant-reader',
+            dryRun: false,
+          });
+          const before = await fingerprint(),
+            rev = (await current()).authorization_revision;
+          const preview = await provisionAccessAdministrator(db, {
+            organizationId: selectedOrg,
+            staffId: id,
+            personalTenantId: tenant,
+            expectedRevision: rev,
+            expectedBootstrap: false,
+            operation: 'bootstrap',
+            dryRun: true,
+          });
+          assert.deepEqual(preview.added, ['admin.access.manage']);
+          assert.equal(preview.bootstrapEstablished, false);
+          assert.equal(preview.proposedBootstrapEstablished, true);
+          assert.ok(preview.proposedAudit);
+          assert.equal(
+            preview.proposedAudit.operation,
+            'bootstrap_access_administration',
+          );
+          assert.ok(preview.proposedAudit);
+          assert.equal(preview.proposedAudit.changeSets, 1);
+          assert.ok(preview.proposedAudit);
+          assert.equal(preview.proposedAudit.permissionDeltas, 1);
+          assert.equal(preview.reusesConfigurationRead, true);
+          assert.equal(preview.readerOwnershipRemainsSeparate, true);
+          assert.deepEqual(await fingerprint(), before);
+          assert.equal((await current()).bootstrap_established, false);
         },
       );
     } finally {

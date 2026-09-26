@@ -437,6 +437,7 @@ export interface ProvisionInput {
   expectedBootstrap: boolean;
   operation: ProvisionOperation;
   dryRun: boolean;
+  personalTenantId?: string;
 }
 
 export type ReaderOperation = 'grant-reader' | 'remove-reader';
@@ -467,6 +468,19 @@ export async function provisionAccessReader(
       )
         throw new ConflictException('Access changed; preview again');
       await target(trx, input.organizationId, input.staffId, true);
+      if (input.personalTenantId) {
+        const mapped = await trx
+          .selectFrom('staff_identity')
+          .select('id')
+          .where('id', '=', input.staffId)
+          .where('organization_id', '=', input.organizationId)
+          .where('active', '=', true)
+          .where('entra_tenant_id', '=', input.personalTenantId)
+          .where('entra_object_id', 'is not', null)
+          .executeTakeFirst();
+        if (!mapped)
+          throw new ForbiddenException('Existing personal identity required');
+      }
       const ownership = await owner(
         trx,
         input.organizationId,
@@ -571,6 +585,19 @@ export async function provisionAccessAdministrator(
       )
         throw new ConflictException('Access changed; preview again');
       await target(trx, input.organizationId, input.staffId, true);
+      if (input.personalTenantId) {
+        const mapped = await trx
+          .selectFrom('staff_identity')
+          .select('id')
+          .where('id', '=', input.staffId)
+          .where('organization_id', '=', input.organizationId)
+          .where('active', '=', true)
+          .where('entra_tenant_id', '=', input.personalTenantId)
+          .where('entra_object_id', 'is not', null)
+          .executeTakeFirst();
+        if (!mapped)
+          throw new ForbiddenException('Existing personal identity required');
+      }
       const ownership = await owner(
         trx,
         input.organizationId,
@@ -651,6 +678,30 @@ export async function provisionAccessAdministrator(
         removed: grants.owned.filter((p) => !desired.includes(p)),
         createsProvisioningRole: changed && !ownership,
         remainsAccessAdministrator: remainsManager,
+        proposedAuthorizationRevision: changed
+          ? (BigInt(state.authorization_revision) + 1n).toString()
+          : state.authorization_revision,
+        proposedBootstrapEstablished: state.bootstrap_established || establish,
+        reusesConfigurationRead: grants.locked.includes(
+          'admin.configuration.read',
+        ),
+        readerOwnershipRemainsSeparate: Boolean(
+          await owner(trx, input.organizationId, input.staffId, 'reader'),
+        ),
+        proposedAudit: changed
+          ? {
+              source: 'controlled_provisioning',
+              operation: establish
+                ? 'bootstrap_access_administration'
+                : input.operation === 'remove-manager'
+                  ? 'revoke_access_administrator'
+                  : 'provision_access_administrator',
+              changeSets: 1,
+              permissionDeltas:
+                desired.filter((p) => !grants.owned.includes(p)).length +
+                grants.owned.filter((p) => !desired.includes(p)).length,
+            }
+          : null,
       };
       if (input.dryRun || !changed) return preview;
       const result = await writeChange(trx, {

@@ -34,11 +34,11 @@ Synthetic browser checks use a mocked client and full registry metadata, with no
 
 Final checks passed: backend typecheck and build; full backend ESLint and configured Prettier check; frontend production build; `git diff --check`. Synthetic Edge browser screenshots at 1440×1000 and 390×844 confirmed usable drawer/review layout, no horizontal overflow and no page errors. Temporary served fixtures were removed. No dependency or migration file changed.
 
-The personal manager prerequisite dry-run passed: proposed revision 1→2 and only `admin.access.manage` under separate Administrator ownership. All 60 development tables remained unchanged; actual revision 1/bootstrap false/Reader authority remain intact. Work stopped for explicit provisioning approval.
+The [personal manager prerequisite dry-run](F057-personal-manager-uat-prerequisite.md) passed: proposed revision 1→2 and only `admin.access.manage` under separate Administrator ownership. All 60 development tables remained unchanged; actual revision 1/bootstrap false/Reader authority remain intact. Work stopped for explicit provisioning approval.
 
 ## Subsequent provisioning approval and manual UAT handoff
 
-The user subsequently approved the exact personal bootstrap and minimal synthetic target preparation. Execution and all 16 postconditions passed; see the provisioning execution record. Current Organization revision is `2`, bootstrap true; only `admin.access.manage` was added through separate controlled ownership. The existing seed fixture Alex Example is the separate manual target, with no managed access and five outside permissions; no target writes were necessary. Local UI/API are responding. No runtime Configure Access mutation was performed; F057.3D awaits user-performed manual UAT. Source remains uncommitted.
+The user subsequently approved the exact personal bootstrap and minimal synthetic target preparation. Execution and all 16 postconditions passed; see the [provisioning execution record](F057-personal-manager-uat-prerequisite.md). Current Organization revision is `2`, bootstrap true; only `admin.access.manage` was added through separate controlled ownership. The existing seed fixture Alex Example is the separate manual target, with no managed access and five outside permissions; no target writes were necessary. Local UI/API are responding. No runtime Configure Access mutation was performed; F057.3D awaits user-performed manual UAT. Source remains uncommitted.
 
 ## Presentation-only polish before first mutation UAT — 2026-09-26
 

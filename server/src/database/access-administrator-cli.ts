@@ -1,3 +1,7 @@
+import {
+  personalAccessUatMode,
+  assertPersonalAccessTarget,
+} from './personal-access-uat.js';
 import 'reflect-metadata';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
@@ -12,7 +16,7 @@ async function run() {
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
     process.stdout.write(
-      'Controlled local access provisioning: bootstrap|add-manager|remove-manager|grant-reader|remove-reader --dry-run|--confirm. Requires NODE_ENV=development, CITYVUE_DEPLOYMENT_PROFILE=development; F057_ORGANIZATION_ID, F057_STAFF_ID, F057_EXPECTED_REVISION, F057_EXPECTED_BOOTSTRAP=true|false. Managers require F057_SYNTHETIC_ONLY=true. Readers require that flag OR F057_PERSONAL_READER_UAT=true plus existing personal Entra configuration and a mapped target in that tenant. Load private configuration into the process; never pass credentials in arguments.\n',
+      'Controlled local access provisioning: bootstrap|add-manager|remove-manager|grant-reader|remove-reader --dry-run|--confirm. Requires NODE_ENV=development, CITYVUE_DEPLOYMENT_PROFILE=development; F057_ORGANIZATION_ID, F057_STAFF_ID, F057_EXPECTED_REVISION, F057_EXPECTED_BOOTSTRAP=true|false. Managers require F057_SYNTHETIC_ONLY=true OR F057_PERSONAL_MANAGER_UAT=true with matching F036 internal target/Organization and personal tenant opt-in. Personal manager bootstrap requires separately reviewed approval; dry-run does not provision. Readers require that flag OR F057_PERSONAL_READER_UAT=true plus existing personal Entra configuration and a mapped target in that tenant. Load private configuration into the process; never pass credentials in arguments.\n',
     );
     return;
   }
@@ -30,16 +34,16 @@ async function run() {
   )
     throw new Error('Explicit operation and mode required');
   const reader = operation === 'grant-reader' || operation === 'remove-reader';
-  const personalReader =
-    reader && process.env.F057_PERSONAL_READER_UAT === 'true';
+  const personal = personalAccessUatMode(process.env, reader);
   if (
     process.env.NODE_ENV !== 'development' ||
     process.env.CITYVUE_DEPLOYMENT_PROFILE !== 'development' ||
-    (!personalReader && process.env.F057_SYNTHETIC_ONLY !== 'true')
+    (!personal && process.env.F057_SYNTHETIC_ONLY !== 'true')
   )
     throw new Error('Synthetic development profile required');
   const url = new URL(process.env.DATABASE_URL ?? '');
   if (
+    !['postgres:', 'postgresql:'].includes(url.protocol) ||
     url.hostname !== 'localhost' ||
     (url.port && url.port !== '5432') ||
     url.pathname !== '/reqro_dev' ||
@@ -56,31 +60,16 @@ async function run() {
     }),
   });
   try {
-    if (personalReader) {
-      if (
-        process.env.CITYVUE_ENABLE_EXTERNAL_IDENTITY !== 'true' ||
-        !process.env.ENTRA_TENANT_ID ||
-        process.env.F036_PERSONAL_ENTRA_TENANT_ID !==
-          process.env.ENTRA_TENANT_ID
-      )
-        throw new Error('Explicit personal tenant selection required');
-      const mapped = await db
-        .selectFrom('staff_identity')
-        .select('id')
-        .where('id', '=', process.env.F057_STAFF_ID ?? '')
-        .where('organization_id', '=', process.env.F057_ORGANIZATION_ID ?? '')
-        .where('entra_tenant_id', '=', process.env.ENTRA_TENANT_ID)
-        .where('entra_object_id', 'is not', null)
-        .where('active', '=', true)
-        .executeTakeFirst();
-      if (!mapped) throw new Error('Existing personal identity required');
-    }
+    if (personal) await assertPersonalAccessTarget(db, process.env);
     const selection = {
       organizationId: process.env.F057_ORGANIZATION_ID ?? '',
       staffId: process.env.F057_STAFF_ID ?? '',
       expectedRevision: process.env.F057_EXPECTED_REVISION ?? '',
       expectedBootstrap: process.env.F057_EXPECTED_BOOTSTRAP === 'true',
       dryRun: mode === '--dry-run',
+      ...(personal
+        ? { personalTenantId: process.env.ENTRA_TENANT_ID ?? '' }
+        : {}),
     };
     const result = reader
       ? await provisionAccessReader(db, {
