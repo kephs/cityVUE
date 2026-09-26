@@ -1,11 +1,8 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
 import type { EntraPrincipal } from './entra-token.service.js';
-import {
-  permissions,
-  type Permission,
-  type StaffAccess,
-} from './auth.types.js';
+import { effectivePermissions } from './effective-permissions.js';
+import { type Permission, type StaffAccess } from './auth.types.js';
 
 @Injectable()
 export class StaffAuthorizationService {
@@ -23,16 +20,11 @@ export class StaffAuthorizationService {
         'CityVUE staff access has not been provisioned',
       );
     const [permissionRows, departments, divisions] = await Promise.all([
-      this.database.client
-        .selectFrom('staff_role_assignment as assignment')
-        .innerJoin('role', 'role.id', 'assignment.role_id')
-        .innerJoin('role_permission', 'role_permission.role_id', 'role.id')
-        .select('role_permission.permission_key')
-        .where('assignment.organization_id', '=', staff.organization_id)
-        .where('assignment.staff_identity_id', '=', staff.id)
-        .where('assignment.active', '=', true)
-        .where('role.active', '=', true)
-        .execute(),
+      effectivePermissions(
+        this.database.client,
+        staff.organization_id,
+        staff.id,
+      ),
       this.database.client
         .selectFrom('staff_department_membership')
         .select('department_id')
@@ -48,14 +40,6 @@ export class StaffAuthorizationService {
         .where('active', '=', true)
         .execute(),
     ]);
-    const allowed = new Set<string>(permissions);
-    const effective = [
-      ...new Set(
-        permissionRows
-          .map((row) => row.permission_key)
-          .filter((key): key is Permission => allowed.has(key)),
-      ),
-    ];
     return {
       tenantId: principal.tenantId,
       objectId: principal.objectId,
@@ -66,7 +50,7 @@ export class StaffAuthorizationService {
         ? { preferredUsername: principal.preferredUsername }
         : {}),
       scopes: principal.scopes,
-      permissions: effective,
+      permissions: permissionRows,
       departmentIds: departments.map((row) => row.department_id),
       divisionIds: divisions.map((row) => row.division_id),
       development: false,

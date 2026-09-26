@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { lockAuthorizationWriter } from './authorization-writer-lock.js';
 import { sql, type Kysely } from 'kysely';
 import type { Permission } from '../auth/auth.types.js';
 import type { DatabaseSchema } from './database.types.js';
@@ -95,6 +96,8 @@ export async function changeDevelopmentStaffGrants(
       .where('id', '=', input.organizationId);
     if (!dryRun) organizationQuery = organizationQuery.forUpdate();
     const organization = await organizationQuery.executeTakeFirst();
+    if (!dryRun && organization)
+      await lockAuthorizationWriter(trx, input.organizationId);
     if (
       organization?.status !== 'active' ||
       organization.name !== developmentOrganization.name ||

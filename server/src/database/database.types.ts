@@ -331,6 +331,7 @@ interface PermissionTable {
   permission_key: string;
 }
 interface RoleTable {
+  access_creation_txid: Generated<string | null>;
   id: string;
   organization_id: string;
   name: string;
@@ -446,6 +447,45 @@ export interface RequestCommunicationTable {
 }
 
 export interface DatabaseSchema {
+  organization_access_state: {
+    organization_id: string;
+    authorization_revision: Generated<string>;
+    bootstrap_established: Generated<boolean>;
+    mutation_txid: Generated<string | null>;
+    created_at: Generated<Timestamp>;
+    updated_at: Generated<Timestamp>;
+  };
+  access_role_ownership: {
+    organization_id: string;
+    staff_identity_id: string;
+    role_id: string;
+    kind: 'operational' | 'administrator';
+    creation_txid: Generated<string>;
+    created_at: Generated<Timestamp>;
+  };
+  access_change_set: {
+    id: string;
+    organization_id: string;
+    target_staff_id: string;
+    role_id: string;
+    actor_staff_id: string | null;
+    source: 'runtime' | 'controlled_provisioning';
+    operation:
+      | 'bootstrap_access_administration'
+      | 'provision_access_administrator'
+      | 'revoke_access_administrator'
+      | 'update_managed_access';
+    correlation_id: string;
+    before_revision: string;
+    after_revision: string;
+    mutation_txid: Generated<string>;
+    created_at: Generated<Timestamp>;
+  };
+  access_permission_delta: {
+    change_set_id: string;
+    permission_key: string;
+    direction: 'added' | 'removed';
+  };
   participation_area_audit: {
     id: Generated<string>;
     organization_id: string;

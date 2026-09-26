@@ -1,6 +1,8 @@
 export const GEOSPATIAL_READ_PERMISSION = 'geospatial.read' as const;
 
 export const permissions = [
+  'admin.access.read',
+  'admin.access.manage',
   'service_request.answers.read',
   'admin.issues.write',
   'admin.intake_settings.write',

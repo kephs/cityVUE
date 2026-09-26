@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { lockAuthorizationWriter } from './authorization-writer-lock.js';
 import type { Kysely } from 'kysely';
 import { GEOSPATIAL_READ_PERMISSION } from '../auth/auth.types.js';
 import type { EnvironmentVariables } from '../config/environment.js';
@@ -43,6 +44,7 @@ export async function revokeDevelopmentGeospatialGrant(
     throw new Error('Invalid development revocation target');
   }
   await db.transaction().execute(async (trx) => {
+    await lockAuthorizationWriter(trx, input.organizationId);
     const organization = await trx
       .selectFrom('organization')
       .select('id')
@@ -143,6 +145,7 @@ export async function provisionDevelopmentGeospatialGrant(
   input: DevelopmentGeospatialGrant,
 ): Promise<void> {
   await db.transaction().execute(async (trx) => {
+    await lockAuthorizationWriter(trx, input.organizationId);
     const organization = await trx
       .selectFrom('organization')
       .select('id')

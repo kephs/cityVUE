@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { lockAuthorizationWriter } from './authorization-writer-lock.js';
 import process from 'node:process';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
@@ -296,6 +297,7 @@ async function seed(db: Kysely<DatabaseSchema>): Promise<void> {
       })
       .onConflict((oc) => oc.column('id').doNothing())
       .execute();
+    await lockAuthorizationWriter(trx, organizationId);
     await trx
       .insertInto('department')
       .values(

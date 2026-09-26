@@ -1,5 +1,7 @@
 # Reqro architecture decisions
 
+[ADR-023 — Administrative Access Management and Controlled Delegation](ADR-023-administrative-access-management-controlled-delegation.md): accepted F057.1 design; existing RBAC, explicit provisioning-only access authority, owned roles, atomic revision/audit, bootstrap and last-manager protection.
+
 [ADR-020 — Extended question answer storage](ADR-020-extended-question-answer-storage.md): F056.2C normalized immutable multi-select, calendar-only Date and display-only Information extension; implemented and validated locally.
 
 [ADR-018 — Immutable Dynamic Questions and protected submitted answers](ADR-018-dynamic-questions-protected-answers.md): approved F056.2A publication, history and independently audited disclosure, including the legacy compatibility migration.
