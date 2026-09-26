@@ -1,4 +1,7 @@
+import AccessActions from "./AccessActions.jsx";
+import { accessText, accessSource } from "./accessPresentation.js";
 import { useEffect, useRef, useState } from "react";
+import ConfigureAccess from "./ConfigureAccess.jsx";
 import IssueDrawer from "./IssueDrawer.jsx";
 import "./issueWorkspace.css";
 import "./accessDiscovery.css";
@@ -17,24 +20,20 @@ const sources = {
   managed: "Assigned in Access & Permissions",
   existing: "Assigned outside Access & Permissions",
   mixed: "Assigned from multiple sources",
-  none: "No effective permissions",
+  none: "No permissions assigned",
 };
 const operations = {
   update_managed_access: "Access & Permissions assignment updated",
   bootstrap_access_administration: "Access Administration established",
-  provision_access_administrator: "Access Administrator provisioned",
-  revoke_access_administrator: "Access Administrator contribution removed",
+  provision_access_administrator: "Access Administrator access added",
+  revoke_access_administrator: "Access Administrator assignment removed",
 };
 const membershipExplanation =
-  "Departments and divisions determine which areas of the organization this staff member can work with for certain requests. Some permissions apply across the entire organization.";
+  "These determine where this staff member can perform certain activities. They are managed separately from Access & Permissions.";
 // Drawer-only wording; server metadata and category/filter identities stay authoritative.
 const categoryLabels = {
   "Administrative Configuration": "Administration",
   "Specialized Capabilities": "Other Capabilities",
-};
-const descriptionLabels = {
-  "Inspect access configuration and history.":
-    "View staff access settings and access history.",
 };
 const countLabel = (count, singular) =>
   `${count} ${singular}${count === 1 ? "" : "s"}`;
@@ -47,7 +46,7 @@ const assignmentLabel = (contribution) =>
       ? sources.existing
       : "No assignment information";
 // Abort plus request identity protects even clients which finish after cancellation.
-export function useAccessRead(client, path, onDenied) {
+export function useAccessRead(client, path, onDenied, refresh = 0) {
   const [state, setState] = useState(null);
   const denied = useRef(onDenied);
   denied.current = onDenied;
@@ -71,46 +70,56 @@ export function useAccessRead(client, path, onDenied) {
         },
       );
     return () => controller.abort();
-  }, [client, path]);
+  }, [client, path, refresh]);
   return state?.path === path && state?.client === client ? state : null;
 }
-function Pager({ data, onPage, onSize, label }) {
+export function Pager({ data, onPage, onSize, label }) {
   return (
     <nav className="access-pagination" aria-label={label}>
-      <button
-        className="btn btn-outline-secondary"
-        disabled={data.page <= 1}
-        onClick={() => onPage(data.page - 1)}
-      >
-        Previous
-      </button>
-      <span>
-        Page {data.page} of {Math.max(1, Math.ceil(data.total / data.pageSize))}
+      <span className="access-result-range">
+        Showing {data.total ? (data.page - 1) * data.pageSize + 1 : 0}–
+        {Math.min(data.page * data.pageSize, data.total)} of {data.total}
       </span>
-      <button
-        className="btn btn-outline-secondary"
-        disabled={data.page * data.pageSize >= data.total}
-        onClick={() => onPage(data.page + 1)}
-      >
-        Next
-      </button>
-      {onSize && (
-        <label>
-          Rows per page{" "}
-          <select
-            className="form-select"
-            value={data.pageSize}
-            onChange={(e) => onSize(Number(e.target.value))}
+      <div className="access-page-controls">
+        {onSize && (
+          <label className="access-page-size">
+            Rows per page:
+            <select
+              className="form-select"
+              value={data.pageSize}
+              onChange={(e) => onSize(Number(e.target.value))}
+            >
+              {[25, 50, 100].map((n) => (
+                <option key={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <div className="access-page-navigation">
+          <button
+            className="btn btn-outline-secondary"
+            disabled={data.page <= 1}
+            onClick={() => onPage(data.page - 1)}
           >
-            {[25, 50, 100].map((n) => (
-              <option key={n}>{n}</option>
-            ))}
-          </select>
-        </label>
-      )}
+            Previous
+          </button>
+          <span>
+            Page {data.page} of{" "}
+            {Math.max(1, Math.ceil(data.total / data.pageSize))}
+          </span>
+          <button
+            className="btn btn-outline-secondary"
+            disabled={data.page * data.pageSize >= data.total}
+            onClick={() => onPage(data.page + 1)}
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </nav>
   );
 }
+
 function History({ client, id, onDenied }) {
   const [page, setPage] = useState(1);
   const state = useAccessRead(
@@ -152,8 +161,14 @@ function History({ client, id, onDenied }) {
                   <ul>
                     {item.deltas.map((d) => (
                       <li key={d.key}>
-                        {d.direction === "added" ? "Added" : "Removed"}:{" "}
-                        {d.label}
+                        {item.operation === "update_managed_access"
+                          ? d.direction === "added"
+                            ? "Added to Access & Permissions"
+                            : "Removed from Access & Permissions"
+                          : d.direction === "added"
+                            ? "Assignment added"
+                            : "Assignment removed"}
+                        : {accessText(d.label)}
                       </li>
                     ))}
                   </ul>
@@ -171,12 +186,13 @@ function History({ client, id, onDenied }) {
     </section>
   );
 }
-function Detail({ client, id, onDenied }) {
-  const state = useAccessRead(
+function Detail({ client, id, onDenied, authoritative, onConfigure }) {
+  const fetched = useAccessRead(
     client,
-    `/admin/access/principals/${encodeURIComponent(id)}`,
+    authoritative ? null : `/admin/access/principals/${encodeURIComponent(id)}`,
     onDenied,
   );
+  const state = authoritative ? { data: authoritative } : fetched;
   const [history, setHistory] = useState(false);
   if (!state) return <p role="status">Loading access details…</p>;
   if (state.error)
@@ -207,6 +223,22 @@ function Detail({ client, id, onDenied }) {
         {d.staff.displayName} · {d.staff.active ? "Active" : "Inactive"} in
         Reqro · Read-only
       </p>
+      {d.canConfigure && onConfigure && (
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => onConfigure(d)}
+        >
+          Configure Access
+        </button>
+      )}
+      {d.integrityWarning && (
+        <p role="alert">
+          Access configuration needs administrative attention before changes can
+          be saved.
+        </p>
+      )}
+      {!d.staff.active && <p>Inactive staff are view-only.</p>}
       <section
         className="access-drawer-section access-summary"
         aria-labelledby="access-summary-title"
@@ -228,15 +260,15 @@ function Detail({ client, id, onDenied }) {
         </dl>
         {d.accessAdministrator && (
           <p>
-            Access Administration authority is managed through controlled
-            provisioning.
+            Access Administrator status is managed outside Access &amp;
+            Permissions.
           </p>
         )}
       </section>
       <section className="access-drawer-section">
         <h3>What This Staff Member Can Do</h3>
         {!d.effective.length && (
-          <p>No Reqro permissions are currently effective.</p>
+          <p>No Reqro permissions are currently assigned.</p>
         )}
         {categories.map((category) => (
           <details className="access-category" key={category}>
@@ -281,7 +313,9 @@ function Detail({ client, id, onDenied }) {
                   return (
                     <li key={key}>
                       <div className="access-permission-heading">
-                        <strong>{p?.label || "Unrecognized capability"}</strong>
+                        <strong>
+                          {accessText(p?.label) || "Unrecognized capability"}
+                        </strong>
                         {p?.sensitive && (
                           <span className="badge text-bg-secondary">
                             Sensitive access
@@ -294,13 +328,30 @@ function Detail({ client, id, onDenied }) {
                         )}
                       </div>
                       <p className="access-permission-description">
-                        {descriptionLabels[p?.description] || p?.description}
+                        {accessText(p?.description)}
+                      </p>
+                      <p className="access-source-note">
+                        <strong>
+                          {
+                            accessSource(
+                              contribution?.managed,
+                              contribution?.existing,
+                            )[0]
+                          }
+                        </strong>
+                        <br />
+                        {
+                          accessSource(
+                            contribution?.managed,
+                            contribution?.existing,
+                          )[1]
+                        }
                       </p>
                       <details className="access-permission-details">
-                        <summary>Details</summary>
+                        <summary>Technical details</summary>
                         <dl>
                           <div>
-                            <dt>Permission key</dt>
+                            <dt>Permission</dt>
                             <dd>
                               <code>{key}</code>
                             </dd>
@@ -312,11 +363,11 @@ function Detail({ client, id, onDenied }) {
                                 ? p.requires
                                     .map(
                                       (k) =>
-                                        metadata.get(k)?.label ||
+                                        accessText(metadata.get(k)?.label) ||
                                         "Unrecognized capability",
                                     )
                                     .join(", ")
-                                : "No permission prerequisites listed"}
+                                : "None"}
                             </dd>
                           </div>
                           <div>
@@ -333,7 +384,7 @@ function Detail({ client, id, onDenied }) {
                             </div>
                           )}
                         </dl>
-                        {p?.contextual && <p>{p.contextual}</p>}
+                        {p?.contextual && <p>{accessText(p.contextual)}</p>}
                       </details>
                     </li>
                   );
@@ -363,17 +414,18 @@ function Detail({ client, id, onDenied }) {
             <summary>View assignment details</summary>
             <p>
               Permissions supplied by both sources count in both source
-              summaries, but only once in effective permissions.
+              summaries, but only once in the permission total.
             </p>
             <ul>
               {d.contributions.map((c) => (
                 <li key={c.key}>
                   <strong>
-                    {metadata.get(c.key)?.label || "Unrecognized capability"}
+                    {accessText(metadata.get(c.key)?.label) ||
+                      "Unrecognized capability"}
                   </strong>
                   : {assignmentLabel(c)}
                   {c.sourceCount > 1 &&
-                    ` · ${c.sourceCount} contributing roles`}
+                    ` · ${c.sourceCount} assignment sources`}
                 </li>
               ))}
             </ul>
@@ -419,14 +471,13 @@ function Detail({ client, id, onDenied }) {
         )}
         <p>Division access is listed separately from department access.</p>
         <details>
-          <summary>About departments and divisions</summary>
+          <summary>About access scope</summary>
           <p>
             Division membership does not itself imply Department membership.
           </p>
           <p>
-            Behavior involving inactive organizational units can vary by
-            operation. This view preserves those existing semantics. Inactive
-            membership rows are omitted.
+            Some actions may be unavailable for inactive Departments or
+            Divisions. Only current memberships are shown.
           </p>
         </details>
       </section>
@@ -446,12 +497,107 @@ function Detail({ client, id, onDenied }) {
     </>
   );
 }
-export default function AccessDiscovery({ client, onDenied }) {
+function AccessPanel({
+  client,
+  selected,
+  onDenied,
+  close,
+  onSaved,
+  closeHandler,
+  listed,
+}) {
+  const [editing, setEditing] = useState(null);
+  const [saved, setSaved] = useState(null);
+  const [notice, setNotice] = useState("");
+  const loaded = useAccessRead(
+    client,
+    selected.configure
+      ? `/admin/access/principals/${encodeURIComponent(selected.id)}`
+      : null,
+    onDenied,
+  );
+  useEffect(() => {
+    if (selected.configure && loaded?.data?.canConfigure)
+      setEditing(loaded.data);
+  }, [loaded]);
+  const configure = (data) => {
+    setEditing(data);
+    setNotice("");
+  };
+  const focusHeading = () =>
+    requestAnimationFrame(() =>
+      document.getElementById("issue-drawer-title")?.focus(),
+    );
+  const cancel = () => {
+    setEditing(null);
+    closeHandler.current = null;
+    focusHeading();
+  };
+  return (
+    <IssueDrawer
+      title={editing ? "Configure Access" : "View Access"}
+      subtitle={selected.displayName}
+      onClose={() => (closeHandler.current ? closeHandler.current() : close())}
+    >
+      {notice && <p role="status">{notice}</p>}
+      {saved && listed === false && (
+        <p>
+          This staff member no longer appears on the current filtered page.
+          Their updated access is shown here.
+        </p>
+      )}
+      {editing ? (
+        <ConfigureAccess
+          key={selected.id}
+          client={client}
+          detail={editing}
+          onDenied={onDenied}
+          registerClose={(handler) => {
+            closeHandler.current = handler;
+          }}
+          onCancel={cancel}
+          onClose={close}
+          onSaved={(result) => {
+            setSaved(result.detail);
+            setEditing(null);
+            closeHandler.current = null;
+            setNotice(
+              result.changed ? "Access updated." : "No changes were needed.",
+            );
+            onSaved();
+            focusHeading();
+          }}
+        />
+      ) : (
+        <Detail
+          key={`${selected.id}:${saved?.authorizationRevision || ""}`}
+          client={client}
+          id={selected.id}
+          onDenied={onDenied}
+          authoritative={saved}
+          onConfigure={configure}
+        />
+      )}
+    </IssueDrawer>
+  );
+}
+export default function AccessDiscovery({
+  client,
+  onDenied,
+  canManage = false,
+}) {
   const [query, setQuery] = useState(defaults),
     [search, setSearch] = useState(""),
     [selected, setSelected] = useState(null);
+  const [refresh, setRefresh] = useState(0);
+  const closeHandler = useRef(null);
+  const [openMenu, setOpenMenu] = useState(null);
   const trigger = useRef(null),
     searchRef = useRef(null);
+  useEffect(() => {
+    setSelected(null);
+    closeHandler.current = null;
+  }, [client]);
   const options = useAccessRead(client, "/admin/access/scopes", onDenied);
   const catalog = useAccessRead(client, "/admin/access/permissions", onDenied);
   const key = new URLSearchParams(query).toString();
@@ -459,7 +605,15 @@ export default function AccessDiscovery({ client, onDenied }) {
     client,
     `/admin/access/principals?${key}`,
     onDenied,
+    refresh,
   );
+  useEffect(() => {
+    if (state?.data && query.page > 1 && !state.data.items.length)
+      setQuery((q) => ({
+        ...q,
+        page: Math.max(1, Math.ceil(state.data.total / q.pageSize)),
+      }));
+  }, [state, query.page]);
   useEffect(() => {
     const timeout = setTimeout(
       () => setQuery((q) => ({ ...q, search: search.trim(), page: 1 })),
@@ -540,8 +694,9 @@ export default function AccessDiscovery({ client, onDenied }) {
     <div className="access-discovery">
       <p>Review staff access and administrative permissions.</p>
       <p>
-        Read-only view. Status reflects whether the staff member is active in
-        Reqro.
+        {canManage
+          ? "Status reflects whether the staff member is active in Reqro."
+          : "Read-only view. Status reflects whether the staff member is active in Reqro."}
       </p>
       <div className="access-filters">
         {filters.map(([key, label, values]) => (
@@ -574,8 +729,8 @@ export default function AccessDiscovery({ client, onDenied }) {
         </button>
       </div>
       <p className="small">
-        Department and Division filters match memberships, not
-        permission-specific scope.
+        Department and Division filters match memberships, not where each
+        permission allows them to work.
       </p>
       {(options?.error || catalog?.error) && (
         <p role="alert">Filter options could not be loaded.</p>
@@ -647,8 +802,10 @@ export default function AccessDiscovery({ client, onDenied }) {
                       {s.accessAdministrator && (
                         <strong>Access Administrator · </strong>
                       )}
-                      {s.categories.slice(0, 2).join(" · ") ||
-                        "No effective permissions"}
+                      {s.categories
+                        .slice(0, 2)
+                        .map((c) => categoryLabels[c] || c)
+                        .join(" · ") || "No permissions assigned"}
                       {s.categories.length > 2 &&
                         ` +${s.categories.length - 2} more`}
                       <small>{sources[s.source]}</small>
@@ -661,16 +818,18 @@ export default function AccessDiscovery({ client, onDenied }) {
                       {s.active ? "Active" : "Inactive"}
                     </td>
                     <td>
-                      <button
-                        className="btn btn-outline-primary"
-                        aria-label={`View Access for ${s.displayName}`}
-                        onClick={(e) => {
-                          trigger.current = e.currentTarget;
-                          setSelected(s);
+                      <AccessActions
+                        staff={s}
+                        open={openMenu === s.id}
+                        setOpen={setOpenMenu}
+                        onAction={(staff, kind, event) => {
+                          trigger.current = event.currentTarget;
+                          setSelected({
+                            ...staff,
+                            configure: kind === "configure",
+                          });
                         }}
-                      >
-                        View Access
-                      </button>
+                      />
                     </td>
                   </tr>
                 ))}
@@ -686,18 +845,20 @@ export default function AccessDiscovery({ client, onDenied }) {
         </>
       )}
       {selected && (
-        <IssueDrawer
-          title="View Access"
-          subtitle={selected.displayName}
-          onClose={close}
-        >
-          <Detail
-            key={selected.id}
-            client={client}
-            id={selected.id}
-            onDenied={onDenied}
-          />
-        </IssueDrawer>
+        <AccessPanel
+          key={selected.id}
+          client={client}
+          selected={selected}
+          listed={
+            state?.data
+              ? state.data.items.some((s) => s.id === selected.id)
+              : undefined
+          }
+          onDenied={onDenied}
+          close={close}
+          closeHandler={closeHandler}
+          onSaved={() => setRefresh((n) => n + 1)}
+        />
       )}
     </div>
   );

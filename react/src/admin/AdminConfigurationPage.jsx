@@ -217,7 +217,26 @@ export function AdminConfiguration({ client, displayName }) {
               </button>
             </div>
           ) : section === "access" ? (
-            data.capabilities?.canReadAccess ? <AccessDiscovery client={client} onDenied={() => setState(previous => ({...previous, data:{...previous.data, capabilities:{...previous.data.capabilities,canReadAccess:false}}}))} /> : <p role="alert">Access & Permissions is not authorized.</p>
+            data.capabilities?.canReadAccess ? (
+              <AccessDiscovery
+                canManage={data.capabilities?.canManageAccess}
+                client={client}
+                onDenied={() =>
+                  setState((previous) => ({
+                    ...previous,
+                    data: {
+                      ...previous.data,
+                      capabilities: {
+                        ...previous.data.capabilities,
+                        canReadAccess: false,
+                      },
+                    },
+                  }))
+                }
+              />
+            ) : (
+              <p role="alert">Access & Permissions is not authorized.</p>
+            )
           ) : (
             <>
               {section !== "participation" && section !== "issues" && (

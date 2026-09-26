@@ -1,16 +1,46 @@
 import { getStaffAccessToken } from "../auth/tokenProvider.js";
 
 export class CityVueApiError extends Error {
-  constructor(code, message, { status, requestId, cause } = {}) {
+  constructor(code, message, { status, requestId, cause, violations } = {}) {
     super(message, { cause });
     this.name = "CityVueApiError";
     this.code = code;
     this.status = status;
     this.requestId = requestId;
+    this.violations = violations;
   }
 }
 
+const accessMessages = {
+  ACCESS_COMMAND_INVALID: "Invalid access change. Review your selections.",
+  ACCESS_SELF_EDIT_FORBIDDEN: "You cannot configure your own access.",
+  ACCESS_STATE_STALE: "Access changed; refresh and review before saving.",
+  ACCESS_TARGET_UNAVAILABLE: "This staff member is unavailable.",
+  ACCESS_TARGET_INACTIVE:
+    "This staff member is no longer active. Changes were not saved.",
+  ACCESS_PERMISSION_NOT_MANAGEABLE:
+    "Some permissions are no longer manageable. Refresh access before saving.",
+  ACCESS_DEPENDENCY_INVALID:
+    "Required access is missing. Review the permission requirements.",
+  ACCESS_REDUNDANT_ASSIGNMENT:
+    "This access is already assigned outside Access & Permissions.",
+  ACCESS_ADMINISTRATOR_CHANGE_REQUIRES_PROVISIONING:
+    "Access Administrator authority must remain unchanged. Use controlled provisioning.",
+  ACCESS_CONFIGURATION_INTEGRITY:
+    "Access configuration needs administrative attention before changes can be saved.",
+};
 function publicMessage(status, path, code) {
+  if (
+    path.startsWith("/admin/access") &&
+    [400, 403, 404, 409].includes(status)
+  ) {
+    if (Object.hasOwn(accessMessages, code))
+      return [code, accessMessages[code]];
+    return [
+      "access-unavailable",
+      "Access could not be updated. Refresh and review before trying again.",
+    ];
+  }
   if (path.startsWith("/admin/issues") && [400, 409].includes(status)) {
     const messages = {
       ISSUE_SOURCE_STALE:
@@ -148,7 +178,13 @@ export function createApiClient({
             "Your staff session has expired. Please sign in again.",
             { status: 401, requestId },
           );
-        if (response.status === 403)
+        if (
+          response.status === 403 &&
+          !(
+            path.startsWith("/admin/access") &&
+            Object.hasOwn(accessMessages, payload?.code)
+          )
+        )
           throw new CityVueApiError(
             "access-denied",
             payload?.message === "CityVUE staff access has not been provisioned"
@@ -164,6 +200,18 @@ export function createApiClient({
         throw new CityVueApiError(code, message, {
           status: response.status,
           requestId,
+          violations:
+            path.startsWith("/admin/access") &&
+            Array.isArray(payload?.violations)
+              ? payload.violations
+                  .slice(0, 64)
+                  .filter(
+                    (v) =>
+                      typeof v?.key === "string" &&
+                      typeof v?.required === "string",
+                  )
+                  .map((v) => ({ key: v.key, required: v.required }))
+              : undefined,
         });
       }
       return response.status === 204

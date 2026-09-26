@@ -30,7 +30,7 @@ export default function IssueDrawer({
         if (event.key !== "Tab") return;
         const controls = [
           ...dialog.current.querySelectorAll(
-            "button, a[href], input, select, textarea, [tabindex]",
+            "button, a[href], input, select, textarea, summary, [tabindex]",
           ),
         ].filter(
           (node) =>

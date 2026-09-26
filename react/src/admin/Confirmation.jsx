@@ -62,7 +62,9 @@ export default function Confirmation({
       }}
     >
       <h2 id="issue-confirm-title">{title}</h2>
-      <p id="issue-confirm-description">{children}</p>
+      <div id="issue-confirm-description" className="mb-3">
+        {children}
+      </div>
       <div className="d-flex flex-wrap gap-2 justify-content-end">
         <button
           type="button"

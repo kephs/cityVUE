@@ -1,0 +1,233 @@
+.access-editor-fields {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.access-edit-category {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  padding: 0.8rem;
+  margin-block: 0.75rem;
+}
+.access-edit-category > summary {
+  font-weight: 600;
+}
+.access-edit-permission {
+  padding-block: 0.8rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+.access-edit-permission label {
+  font-weight: 600;
+  display: inline-flex;
+  align-items: start;
+  gap: 0.5rem;
+}
+.access-edit-permission input {
+  margin-top: 0.3rem;
+  flex-shrink: 0;
+}
+.access-edit-permission .badge {
+  margin-inline-start: 0.5rem;
+  white-space: normal;
+}
+.access-edit-permission p {
+  margin-block: 0.35rem;
+}
+.access-edit-permission code {
+  overflow-wrap: anywhere;
+}
+.access-editor-actions {
+  position: sticky;
+  bottom: -1.25rem;
+  background: var(--bs-body-bg);
+  border-top: 1px solid var(--bs-border-color);
+  padding: 1rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  z-index: 1;
+}
+.access-editor-actions > span {
+  flex: 1 1 100%;
+}
+.access-editor > details {
+  margin-block: 1rem;
+}
+.access-editor :focus-visible {
+  outline: 3px solid var(--bs-primary);
+  outline-offset: 3px;
+}
+@media (max-width: 480px) {
+  .access-editor-actions {
+    bottom: -1rem;
+  }
+  .access-editor-actions button {
+    flex: 1 1 100%;
+  }
+}
+
+.access-overview {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  background: var(--bs-tertiary-bg);
+}
+.access-overview h3,
+.access-scope h3 {
+  font-size: 1.15rem;
+}
+.access-overview dl,
+.access-scope dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 0;
+}
+.access-overview dt,
+.access-scope dt {
+  font-size: 0.875rem;
+  color: var(--bs-secondary-color);
+}
+.access-overview dd,
+.access-scope dd {
+  margin: 0.25rem 0 0;
+}
+.access-overview small,
+.access-assignment-label,
+.access-category-counts,
+.access-change-summary small {
+  display: block;
+  font-weight: 400;
+}
+.access-overview small,
+.access-assignment-label,
+.access-category-counts,
+.access-source-note,
+.access-change-summary small {
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+}
+.access-category-counts {
+  margin-top: 0.25rem;
+}
+.access-quick-setup-label {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.access-scope {
+  margin-block: 1.5rem;
+}
+.access-scope details {
+  margin-top: 1rem;
+}
+.access-editor-actions .btn:disabled {
+  opacity: 1;
+  color: var(--bs-secondary-color);
+  background: var(--bs-secondary-bg);
+  border-color: var(--bs-border-color);
+}
+@media (max-width: 380px) {
+  .access-overview dl,
+  .access-scope dl {
+    grid-template-columns: 1fr;
+  }
+}
+
+.access-dependency-feedback {
+  border: 1px solid var(--bs-border-color);
+  border-inline-start: 4px solid var(--bs-primary);
+  border-radius: 0.5rem;
+  background: var(--bs-tertiary-bg);
+  padding: 1rem;
+  margin-block: 1rem;
+  overflow-wrap: anywhere;
+}
+.access-dependency-feedback h4 {
+  font-size: 1rem;
+}
+.access-dependency-feedback > :last-child {
+  margin-bottom: 0;
+}
+
+.access-sensitive-list {
+  font-weight: 600;
+}
+
+.access-review {
+  display: grid;
+  gap: 1rem;
+}
+.access-review-card {
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-body-bg);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+.issue-drawer-body .access-review-card {
+  margin-block: 0;
+}
+.access-review-card h4 {
+  font-size: 1.15rem;
+  margin-bottom: 0.75rem;
+}
+.access-review-card > :last-child {
+  margin-bottom: 0;
+}
+.access-review-permissions {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.access-review-permissions li {
+  padding-block: 0.85rem;
+}
+.access-review-permissions li + li {
+  border-top: 1px solid var(--bs-border-color);
+}
+.access-review-permission-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.access-review-permission-name .badge {
+  white-space: normal;
+}
+.access-review-permissions p {
+  margin: 0.4rem 0 0;
+}
+.access-review-reason,
+.access-review-values small {
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+}
+.access-review-card details {
+  margin-block: 0.75rem;
+}
+.access-review-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-block: 1.25rem;
+}
+.access-review-values dd {
+  margin: 0.25rem 0 0;
+}
+.access-review-values small {
+  display: block;
+}
+@media (max-width: 480px) {
+  .access-review-values {
+    grid-template-columns: 1fr;
+  }
+  .access-review-card {
+    padding: 1rem;
+  }
+  .access-review-permission-name {
+    align-items: start;
+    flex-direction: column;
+  }
+}

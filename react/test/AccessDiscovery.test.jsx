@@ -89,8 +89,9 @@ test("Access table uses Operational Scope, exact read-only wording and singular/
 test("Drawer is summary-first, categories and sources collapsed, with mixed contributions explained", async () => {
   const { user, client } = view();
   await user.click(
-    await screen.findByRole("button", { name: "View Access for Staff 0" }),
+    await screen.findByRole("button", { name: "Manage Access for Staff 0" }),
   );
+  await user.click(screen.getByRole("menuitem", { name: "View Access" }));
   const dialog = screen.getByRole("dialog", { name: "View Access" });
   await within(dialog).findByRole("heading", { name: "Access Overview" });
   const summary = within(dialog).getByRole("region", {
@@ -154,13 +155,13 @@ test("Drawer is summary-first, categories and sources collapsed, with mixed cont
     within(category).queryByText("Set up by administrator"),
   ).not.toBeInTheDocument();
   expect(within(category).getByText("contact")).not.toBeVisible();
-  await user.click(within(category).getByText("Details"));
+  await user.click(within(category).getByText("Technical details"));
   expect(within(category).getByText("View configuration")).toBeVisible();
   await user.click(source);
   expect(
-    within(dialog).getByText(/only once in effective permissions/),
+    within(dialog).getByText(/only once in the permission total/),
   ).toBeVisible();
-  expect(within(dialog).getByText(/2 contributing roles/)).toBeVisible();
+  expect(within(dialog).getByText(/2 assignment sources/)).toBeVisible();
   expect(client.get.mock.calls.some(([url]) => url.includes("/history"))).toBe(
     false,
   );
@@ -179,9 +180,10 @@ test("Drawer is summary-first, categories and sources collapsed, with mixed cont
 test("Drawer focuses its heading and closing restores the invoking action", async () => {
   const { user } = view();
   const trigger = await screen.findByRole("button", {
-    name: "View Access for Staff 0",
+    name: "Manage Access for Staff 0",
   });
   await user.click(trigger);
+  await user.click(screen.getByRole("menuitem", { name: "View Access" }));
   const heading = await screen.findByRole("heading", { name: "View Access" });
   expect(heading).toHaveFocus();
   // Native summary keyboard activation requires browser UAT; jsdom does not implement it.
@@ -196,8 +198,9 @@ test("Uniform source stays in the overview and Details, without repeated badges 
     ],
   });
   await user.click(
-    await screen.findByRole("button", { name: "View Access for Staff 0" }),
+    await screen.findByRole("button", { name: "Manage Access for Staff 0" }),
   );
+  await user.click(screen.getByRole("menuitem", { name: "View Access" }));
   const dialog = screen.getByRole("dialog", { name: "View Access" });
   const category = (
     await within(dialog).findByText("Sensitive Information")
@@ -209,12 +212,12 @@ test("Uniform source stays in the overview and Details, without repeated badges 
   ).toHaveLength(1);
   expect(within(category).getByText("Sensitive access")).toBeVisible();
   expect(within(category).getByText("contact")).not.toBeVisible();
-  await user.click(within(category).getByText("Details"));
-  for (const label of ["Permission key", "Requires", "Access assigned"])
+  await user.click(within(category).getByText("Technical details"));
+  for (const label of ["Permission", "Requires", "Access assigned"])
     expect(within(category).getByText(label)).toBeVisible();
   expect(within(category).getByText("contact")).toBeVisible();
   expect(
-    within(category).getByText("Assigned outside Access & Permissions"),
+    within(category).getAllByText("Assigned outside Access & Permissions")[0],
   ).toBeVisible();
   expect(
     within(category).getByText(/not managed through Access & Permissions/),
