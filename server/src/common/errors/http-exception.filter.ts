@@ -1,3 +1,4 @@
+import { permissions } from '../../auth/auth.types.js';
 import {
   ArgumentsHost,
   Catch,
@@ -6,6 +7,10 @@ import {
   type ExceptionFilter,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import {
+  accessErrorMessages,
+  type AccessErrorCode,
+} from '../../access/access-errors.js';
 import type { RequestWithId } from '../logging/request-logging.middleware.js';
 import { PinoLoggerService } from '../logging/pino-logger.service.js';
 import {
@@ -19,6 +24,7 @@ export interface ErrorResponse {
   requestId: string;
   code?: string;
   message?: string;
+  violations?: { key: string; required: string }[];
 }
 
 export function buildErrorResponse(
@@ -44,6 +50,40 @@ export function buildErrorResponse(
       'LOCATION_ELIGIBILITY_UNDETERMINED',
       'LOCATION_ELIGIBILITY_UNAVAILABLE',
     ]);
+    if (
+      candidateCode &&
+      Object.hasOwn(accessErrorMessages, candidateCode) &&
+      [400, 403, 404, 409].includes(statusCode)
+    ) {
+      const raw =
+        typeof response === 'object' && 'violations' in response
+          ? response.violations
+          : undefined;
+      const violations: { key: string; required: string }[] = [];
+      if (candidateCode === 'ACCESS_DEPENDENCY_INVALID' && Array.isArray(raw)) {
+        for (const value of raw.slice(0, 64) as unknown[]) {
+          if (
+            value &&
+            typeof value === 'object' &&
+            'key' in value &&
+            'required' in value &&
+            typeof value.key === 'string' &&
+            typeof value.required === 'string' &&
+            permissions.some((p) => p === value.key) &&
+            permissions.some((p) => p === value.required)
+          )
+            violations.push({ key: value.key, required: value.required });
+        }
+      }
+      return {
+        statusCode,
+        error,
+        requestId,
+        code: candidateCode,
+        message: accessErrorMessages[candidateCode as AccessErrorCode],
+        ...(violations.length ? { violations } : {}),
+      };
+    }
     const code =
       candidateCode && allowedCodes.has(candidateCode)
         ? candidateCode

@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  Body,
+  Patch,
   Controller,
   Get,
   Header,
@@ -23,6 +25,9 @@ import {
   listAccess,
   permissionCatalog,
 } from '../access/access-discovery.js';
+import { changeManagedAccess } from '../access/access-foundation.js';
+import { accessError } from '../access/access-errors.js';
+import { assertAccessAuthority } from '../access/access-policy.js';
 function empty(query: Record<string, unknown>) {
   if (Object.keys(query).length)
     throw new BadRequestException('Invalid access discovery query');
@@ -33,6 +38,34 @@ function empty(query: Record<string, unknown>) {
 @Controller('admin/access')
 export class AdminAccessController {
   constructor(private readonly database: DatabaseService) {}
+  @Patch('principals/:staffId')
+  @Header('Cache-Control', 'no-store')
+  change(
+    @CurrentStaff() access: StaffAccess,
+    @Param('staffId') staffId: string,
+    @Body() body: unknown,
+    @Query() query: Record<string, unknown>,
+  ) {
+    assertAccessAuthority(access, true);
+    empty(query);
+    if (!body || typeof body !== 'object' || Array.isArray(body))
+      throw accessError('ACCESS_COMMAND_INVALID');
+    const input = body as Record<string, unknown>;
+    if (
+      Object.keys(input).some(
+        (key) =>
+          !['expectedAuthorizationRevision', 'managedPermissionKeys'].includes(
+            key,
+          ),
+      )
+    )
+      throw accessError('ACCESS_COMMAND_INVALID');
+    return changeManagedAccess(this.database.client, access, {
+      staffId,
+      expectedRevision: input.expectedAuthorizationRevision,
+      permissions: input.managedPermissionKeys,
+    });
+  }
   @Get('principals')
   @Header('Cache-Control', 'no-store')
   list(

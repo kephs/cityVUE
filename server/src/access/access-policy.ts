@@ -1,9 +1,10 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import {
   permissions,
   type Permission,
   type StaffAccess,
 } from '../auth/auth.types.js';
+import { accessError } from './access-errors.js';
 
 export const accessPrerequisites = [
   'admin.configuration.read',
@@ -295,7 +296,7 @@ export function validateManagedPermissions(value: unknown): Permission[] {
         !manageablePermissions.includes(key as Permission),
     )
   )
-    throw new BadRequestException('Select only manageable permissions');
+    throw accessError('ACCESS_PERMISSION_NOT_MANAGEABLE');
   return [...new Set(value as Permission[])].sort();
 }
 export function validateAccessDependencies(
@@ -309,7 +310,8 @@ export function validateAccessDependencies(
     .flatMap((p) =>
       accessPermissionMetadata[p].requires
         .filter((required) => !final.has(required))
-        .map((required) => `${p} requires ${required}`),
+        .map((required) => ({ key: p, required })),
     );
-  if (violations.length) throw new BadRequestException(violations.join('; '));
+  if (violations.length)
+    throw accessError('ACCESS_DEPENDENCY_INVALID', 400, violations);
 }

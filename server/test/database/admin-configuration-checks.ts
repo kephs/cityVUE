@@ -258,6 +258,7 @@ export async function checkAdminConfiguration(
       ]);
       assert.deepEqual(one.capabilities, {
         canReadAccess: false,
+        canManageAccess: false,
         canWriteIntakeSettings: false,
         canWriteParticipationAreas: false,
       });

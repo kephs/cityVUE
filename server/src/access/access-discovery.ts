@@ -1,3 +1,4 @@
+import { accessDetailProjection } from './access-projection.js';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { sql, type Kysely } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
@@ -200,6 +201,10 @@ export async function listAccess(
       pageSize: query.q.pageSize,
       items: rows.map(({ keys, managed, existing, ...staff }) => ({
         ...staff,
+        canConfigure:
+          staff.active &&
+          staff.id !== access.staffIdentityId &&
+          accessPrerequisites.every((k) => access.permissions.includes(k)),
         categories: [
           ...new Set(
             recognizedPermissions(keys).map(
@@ -238,61 +243,10 @@ export async function accessScopes(db: Db, access: StaffAccess) {
   }));
 }
 export async function accessDetail(db: Db, access: StaffAccess, id: string) {
-  return accessRead(db, access, async (trx, authorizationRevision) => {
-    const org = access.organizationId,
-      staff = await principal(trx, org, id);
-    const rows = await effectivePermissionContributions(trx, org)
-      .leftJoin('access_role_ownership as w', 'w.role_id', 'role.id')
-      .select('w.kind')
-      .where('assignment.staff_identity_id', '=', id)
-      .execute();
-    const effective = staff.active
-      ? recognizedPermissions(rows.map((r) => r.permission_key))
-      : [];
-    const contributions = effective.map((key) => ({
-      key,
-      managed: rows.some(
-        (r) => r.permission_key === key && r.kind === 'operational',
-      ),
-      existing: rows.some(
-        (r) => r.permission_key === key && r.kind !== 'operational',
-      ),
-      sourceCount: new Set(
-        rows.filter((r) => r.permission_key === key).map((r) => r.role_id),
-      ).size,
-    }));
-    const departments = await trx
-      .selectFrom('staff_department_membership as m')
-      .innerJoin('department as d', 'd.id', 'm.department_id')
-      .select(['d.id', 'd.name', 'd.status'])
-      .where('m.organization_id', '=', org)
-      .where('m.staff_identity_id', '=', id)
-      .where('m.active', '=', true)
-      .orderBy('d.name')
-      .execute();
-    const divisions = await trx
-      .selectFrom('staff_division_membership as m')
-      .innerJoin('division as d', 'd.id', 'm.division_id')
-      .select(['d.id', 'd.name', 'd.status', 'm.department_id as departmentId'])
-      .where('m.organization_id', '=', org)
-      .where('m.staff_identity_id', '=', id)
-      .where('m.active', '=', true)
-      .orderBy('d.name')
-      .execute();
-    return {
-      staff,
-      effective,
-      contributions,
-      departments,
-      divisions,
-      authorizationRevision,
-      readOnly: true,
-      accessAdministrator: accessPrerequisites.every((k) =>
-        effective.includes(k),
-      ),
-      permissions: permissionCatalog,
-    };
-  });
+  reference(id);
+  return accessRead(db, access, (trx, revision) =>
+    accessDetailProjection(trx, access, id, revision),
+  );
 }
 export async function accessHistory(
   db: Db,

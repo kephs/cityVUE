@@ -1,3 +1,4 @@
+import { accessPrerequisites } from '../access/access-policy.js';
 import { brandingProjection } from '../database/organization-branding.js';
 import { validateHandling } from '../catalog/issue-availability.js';
 import { issueActionProjection } from '../catalog/issue-action.domain.js';
@@ -175,6 +176,13 @@ export class AdminConfigurationService {
         return {
           branding,
           capabilities: {
+            canManageAccess:
+              !access.development &&
+              !!access.tenantId &&
+              !!access.objectId &&
+              accessPrerequisites.every((key) =>
+                access.permissions.includes(key),
+              ),
             canReadAccess:
               !access.development &&
               !!access.tenantId &&

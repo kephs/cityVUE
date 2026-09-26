@@ -274,6 +274,12 @@ test(
                   .where('organization_id', '=', org)
                   .executeTakeFirstOrThrow()
               ).authorization_revision;
+            // Establish managed access first; an outside source may subsequently overlap.
+            await db
+              .updateTable('role')
+              .set({ active: false })
+              .where('id', '=', role)
+              .execute();
             for (const i of [1, 3, 7])
               await changeManagedAccess(db, actor, {
                 staffId: staffAt(i).id,
@@ -285,6 +291,11 @@ test(
               expectedRevision: await revision(),
               permissions: [],
             });
+            await db
+              .updateTable('role')
+              .set({ active: true })
+              .where('id', '=', role)
+              .execute();
             // Additional category fixtures remain inside this disposable schema.
             const unknownRole = randomUUID();
             await db
@@ -360,6 +371,7 @@ test(
                   'id',
                   'displayName',
                   'active',
+                  'canConfigure',
                   'departments',
                   'divisions',
                   'categories',

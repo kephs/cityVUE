@@ -966,12 +966,23 @@ test('F057 PostgreSQL security foundation', { skip: !url }, async (t) => {
     await t.test(
       'database manageable restriction admits all 27 and rejects excluded keys even with matching audit',
       async () => {
-        await managed(third, [...manageablePermissions]);
+        const freshTarget = randomUUID();
+        await db
+          .insertInto('staff_identity')
+          .values({
+            id: freshTarget,
+            organization_id: org,
+            display_name: 'Synthetic allowlist target',
+            email: null,
+            active: true,
+          })
+          .execute();
+        await managed(freshTarget, [...manageablePermissions]);
         const roleId = required(
           (
             await sql<{
               role_id: string;
-            }>`select role_id from access_role_ownership where staff_identity_id=${third} and kind='operational'`.execute(
+            }>`select role_id from access_role_ownership where staff_identity_id=${freshTarget} and kind='operational'`.execute(
               db,
             )
           ).rows[0],
@@ -1000,7 +1011,7 @@ test('F057 PostgreSQL security foundation', { skip: !url }, async (t) => {
               const state = await lockAccessState(trx, org);
               const id = randomUUID();
               await sql`insert into access_change_set(id,organization_id,target_staff_id,role_id,actor_staff_id,source,operation,correlation_id,before_revision,after_revision,mutation_txid)
-            values(${id},${org},${third},${roleId},${staff},'runtime','update_managed_access',${randomUUID()},${state.authorization_revision}::bigint,${state.authorization_revision}::bigint+1,txid_current())`.execute(
+            values(${id},${org},${freshTarget},${roleId},${staff},'runtime','update_managed_access',${randomUUID()},${state.authorization_revision}::bigint,${state.authorization_revision}::bigint+1,txid_current())`.execute(
                 trx,
               );
               await sql`insert into access_permission_delta values(${id},${key},'added')`.execute(
@@ -1018,7 +1029,7 @@ test('F057 PostgreSQL security foundation', { skip: !url }, async (t) => {
             /not F057 manageable/,
           );
         }
-        await managed(third, []);
+        await managed(freshTarget, []);
       },
     );
     await t.test(

@@ -1,3 +1,5 @@
+import { accessError } from './access-errors.js';
+import { accessDetailProjection } from './access-projection.js';
 import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
@@ -310,7 +312,7 @@ export async function changeManagedAccess(
   value: unknown,
 ) {
   if (!value || typeof value !== 'object' || Array.isArray(value))
-    throw new BadRequestException('Invalid access command');
+    throw accessError('ACCESS_COMMAND_INVALID');
   const input = value as Record<string, unknown>;
   if (
     Object.keys(input).some(
@@ -319,18 +321,25 @@ export async function changeManagedAccess(
     !validId(input.staffId) ||
     !revision(input.expectedRevision)
   )
-    throw new BadRequestException('Invalid access command');
+    throw accessError('ACCESS_COMMAND_INVALID');
   const staffId = input.staffId,
     expected = input.expectedRevision,
     desired = validateManagedPermissions(input.permissions);
   if (staffId === access.staffIdentityId)
-    throw new ForbiddenException('Self-edit is unavailable');
+    throw accessError('ACCESS_SELF_EDIT_FORBIDDEN', 403);
   return db.transaction().execute(async (trx) => {
     const state = await lockAccessState(trx, access.organizationId);
     await currentActor(trx, access, true);
     if (state.authorization_revision !== expected)
-      throw new ConflictException('Access changed; refresh and review');
-    await target(trx, access.organizationId, staffId, true);
+      throw accessError('ACCESS_STATE_STALE', 409);
+    const selectedTarget = await target(
+      trx,
+      access.organizationId,
+      staffId,
+      false,
+    );
+    if (!selectedTarget.active)
+      throw accessError('ACCESS_TARGET_INACTIVE', 409);
     const ownership = await owner(
       trx,
       access.organizationId,
@@ -343,9 +352,57 @@ export async function changeManagedAccess(
       staffId,
       ownership?.role_id,
     );
-    if (JSON.stringify(desired) === JSON.stringify(grants.owned))
-      return { changed: false, authorizationRevision: expected };
+    const beforeDetail = await accessDetailProjection(
+      trx,
+      access,
+      staffId,
+      expected,
+    );
+    if (beforeDetail.integrityWarning)
+      throw accessError('ACCESS_CONFIGURATION_INTEGRITY', 409);
     validateAccessDependencies(desired, grants.locked);
+    if (
+      desired.some(
+        (p) => !grants.owned.includes(p) && grants.locked.includes(p),
+      )
+    )
+      throw accessError('ACCESS_REDUNDANT_ASSIGNMENT');
+    const finalEffective = recognizedPermissions([
+      ...grants.locked,
+      ...desired,
+    ]);
+    if (
+      accessPrerequisites.every((p) => grants.effective.includes(p)) !==
+      accessPrerequisites.every((p) => finalEffective.includes(p))
+    )
+      throw accessError(
+        'ACCESS_ADMINISTRATOR_CHANGE_REQUIRES_PROVISIONING',
+        409,
+      );
+    const changes = {
+      addedManagedPermissionKeys: desired.filter(
+        (p) => !grants.owned.includes(p),
+      ),
+      removedManagedPermissionKeys: grants.owned.filter(
+        (p) => !desired.includes(p),
+      ),
+      addedEffectivePermissionKeys: finalEffective.filter(
+        (p) => !grants.effective.includes(p),
+      ),
+      removedEffectivePermissionKeys: grants.effective.filter(
+        (p) => !finalEffective.includes(p),
+      ),
+      removedManagedStillEffectivePermissionKeys: grants.owned.filter(
+        (p) => !desired.includes(p) && grants.locked.includes(p),
+      ),
+    };
+    if (JSON.stringify(desired) === JSON.stringify(grants.owned))
+      return {
+        changed: false,
+        authorizationRevision: expected,
+        detail: beforeDetail,
+        changes,
+      };
     const result = await writeChange(trx, {
       organizationId: access.organizationId,
       staffId,
@@ -361,7 +418,14 @@ export async function changeManagedAccess(
     return {
       changed: true,
       ...result,
-      effective: recognizedPermissions([...grants.locked, ...desired]),
+      effective: finalEffective,
+      changes,
+      detail: await accessDetailProjection(
+        trx,
+        access,
+        staffId,
+        result.authorizationRevision,
+      ),
     };
   });
 }
