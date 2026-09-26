@@ -67,7 +67,7 @@ export class CreateRequestCommunicationQueryDto {}
 @ApiTags('service requests')
 @ApiBearerAuth()
 @RequireEntra()
-@RequireAnyPermission('service_request.view')
+@RequireAnyPermission('service_request.view', 'service_request.internal.read')
 @UseGuards(StaffAccessGuard)
 @Controller('staff/service-requests/:serviceRequestId/communications')
 export class RequestCommunicationController {

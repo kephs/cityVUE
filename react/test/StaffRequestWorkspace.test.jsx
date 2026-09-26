@@ -111,12 +111,15 @@ test.each([
       },
     });
     show(`/staff/requests/${id}`);
-    await selectCommunication();
+    await screen.findByRole("heading", { name: row.issueName });
+    if (communicationRead) await selectCommunication();
     if (communicationRead)
       await screen.findByText("F042 fictional correspondence");
     else expect(repository.communications).not.toHaveBeenCalled();
-    if (noteRead) await screen.findByText("F041 fictional collaboration");
-    else expect(repository.notes).not.toHaveBeenCalled();
+    if (noteRead) {
+      fireEvent.click(screen.getByRole("tab", { name: "Internal Notes" }));
+      await screen.findByText("F041 fictional collaboration");
+    } else expect(repository.notes).not.toHaveBeenCalled();
     expect(Boolean(screen.queryByText("F042 fictional correspondence"))).toBe(
       communicationRead,
     );
@@ -135,7 +138,7 @@ test.each([
   },
 );
 
-test("F042 INTERNAL detail never fetches history or offers a composer even with inconsistent client hints", async () => {
+test("F058.2 INTERNAL communication capability exposes the lazily selected stream", async () => {
   repository.detail.mockResolvedValue({
     ...row,
     capabilities: {
@@ -146,13 +149,10 @@ test("F042 INTERNAL detail never fetches history or offers a composer even with 
   });
   show(`/staff/requests/${id}`);
   await screen.findByText("Internal request");
+  await screen.findByText("F042 fictional correspondence");
   expect(
-    screen.queryByRole("heading", { name: "Requester Communication" }),
-  ).not.toBeInTheDocument();
-  expect(repository.communications).not.toHaveBeenCalled();
-  expect(
-    screen.queryByRole("button", { name: "Add Message" }),
-  ).not.toBeInTheDocument();
+    screen.getByRole("button", { name: "Add Message" }),
+  ).toBeInTheDocument();
 });
 
 test("F042 PUBLIC to INTERNAL navigation immediately clears correspondence and aborts its stream", async () => {
@@ -221,10 +221,16 @@ test("F042 communication read revocation refreshes capabilities without hiding i
   show(`/staff/requests/${id}`);
   await selectCommunication();
   await screen.findByText("F042 fictional correspondence");
+  fireEvent.click(screen.getByRole("tab", { name: "Internal Notes" }));
   await screen.findByText("F041 fictional collaboration");
+  await selectCommunication();
   repository.communications.mockRejectedValue({ status: 403 });
   fireEvent.click(screen.getByRole("button", { name: "Refresh messages" }));
-  await screen.findByText("You don't have permission to view messages.");
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("tab", { name: "Requester Communication" }),
+    ).not.toBeInTheDocument(),
+  );
   expect(
     screen.queryByText("F042 fictional correspondence"),
   ).not.toBeInTheDocument();
@@ -405,7 +411,11 @@ test("F041 Notes permission denial refreshes capabilities while preserving paren
     },
   });
   fireEvent.click(screen.getByRole("button", { name: "Refresh notes" }));
-  await screen.findByText("You don't have permission to view internal notes.");
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("tab", { name: "Internal Notes" }),
+    ).not.toBeInTheDocument(),
+  );
   expect(
     screen.getByRole("heading", { name: row.issueName }),
   ).toBeInTheDocument();
@@ -458,6 +468,7 @@ test("F041 sign-out removes Notes and in-memory draft from the real workspace", 
     },
   });
   const view = show(`/staff/requests/${id}`, true);
+  fireEvent.click(await screen.findByRole("tab", { name: "Internal Notes" }));
   await screen.findByText("F041 fictional collaboration");
   fireEvent.change(screen.getByLabelText("Internal Note"), {
     target: { value: "Fictional draft removed on sign-out" },
@@ -914,7 +925,11 @@ function show(path = "/staff/requests", secured = false) {
 test.each(["public", "internal"])(
   "F046 %s evidence follows Description and precedes Collaboration",
   async (audience) => {
-    repository.detail.mockResolvedValue({ ...row, audience });
+    repository.detail.mockResolvedValue({
+      ...row,
+      audience,
+      capabilities: { ...row.capabilities, canReadNotes: true },
+    });
     repository.attachments = {
       policy: vi.fn().mockResolvedValue({ enabled: true }),
       evidence: vi.fn().mockResolvedValue([]),
@@ -1000,6 +1015,10 @@ test.each(["public", "internal"])(
 );
 
 test("final F046 DOM groups preserve primary flow and management-before-Activity without extra reads", async () => {
+  repository.detail.mockResolvedValue({
+    ...row,
+    capabilities: { ...row.capabilities, canReadNotes: true },
+  });
   repository.attachments = {
     policy: vi.fn().mockResolvedValue({ enabled: true }),
     evidence: vi.fn().mockResolvedValue([]),
@@ -1129,6 +1148,7 @@ test("F046 counted Note and Communication attachments remain inside their collab
     nextCursor: null,
   });
   show("/staff/requests/" + id);
+  fireEvent.click(await screen.findByRole("tab", { name: "Internal Notes" }));
   const note = (
     await screen.findByText("Fictional note with evidence")
   ).closest("li");
@@ -1146,9 +1166,7 @@ test("F046 counted Note and Communication attachments remain inside their collab
   ).toBeInTheDocument();
   expect(within(message).getByText("2.")).toBeInTheDocument();
   expect(message.closest(".request-collaboration")).not.toBeNull();
-  expect(
-    within(message).getByText("Outbound · Portal · Recorded"),
-  ).toBeInTheDocument();
+  expect(within(message).getByText("Recorded in Reqro")).toBeInTheDocument();
   expect(
     screen.getAllByRole("heading", { name: "Request Evidence" }),
   ).toHaveLength(1);
@@ -2294,6 +2312,8 @@ const f043Row = () => ({
 async function f043Show() {
   repository.detail.mockResolvedValue(f043Row());
   const view = show(`/staff/requests/${id}`);
+  await screen.findByRole("tab", { name: "Internal Notes" });
+  fireEvent.click(screen.getByRole("tab", { name: "Internal Notes" }));
   await screen.findByText("F041 fictional collaboration");
   return view;
 }
@@ -2307,7 +2327,7 @@ test("F043 initial detail reads authorized watcher count; management actions and
     expect.any(AbortSignal),
     5,
   );
-  for (const key of ["contact", "communications", "targets"])
+  for (const key of ["contact", "targets"])
     expect(repository[key]).not.toHaveBeenCalled();
   await manage("Assignment");
   expect(repository.targets).not.toHaveBeenCalled();
@@ -2448,7 +2468,7 @@ test("F043 tabs use keyboard selection and retain separate drafts without refetc
   fireEvent.change(screen.getByLabelText("Message"), {
     target: { value: "Fictional unsent message\nline two" },
   });
-  fireEvent.keyDown(messages, { key: "Home" });
+  fireEvent.keyDown(messages, { key: "End" });
   expect(notes).toHaveFocus();
   expect(screen.getByLabelText("Internal Note")).toHaveValue(
     "Fictional unsent note\nline two",
@@ -2456,7 +2476,7 @@ test("F043 tabs use keyboard selection and retain separate drafts without refetc
   expect(
     screen.queryByRole("button", { name: "Add Message" }),
   ).not.toBeInTheDocument();
-  fireEvent.keyDown(notes, { key: "End" });
+  fireEvent.keyDown(notes, { key: "Home" });
   expect(screen.getByLabelText("Message")).toHaveValue(
     "Fictional unsent message\nline two",
   );
@@ -2545,6 +2565,7 @@ test("F043 request navigation immediately clears both visited streams and drafts
 test("F043 sign-out removes selected and hidden collaboration streams and drafts", async () => {
   repository.detail.mockResolvedValue(f043Row());
   const view = show(`/staff/requests/${id}`, true);
+  fireEvent.click(await screen.findByRole("tab", { name: "Internal Notes" }));
   await screen.findByText("F041 fictional collaboration");
   fireEvent.change(screen.getByLabelText("Internal Note"), {
     target: { value: "Unsent hidden note" },
@@ -2594,7 +2615,11 @@ test("F043 authoritative revocation clears hidden Notes without refetching an in
   });
   repository.communications.mockRejectedValue({ status: 403 });
   fireEvent.click(screen.getByRole("button", { name: "Refresh messages" }));
-  await screen.findByText("You don't have permission to view messages.");
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("tab", { name: "Requester Communication" }),
+    ).not.toBeInTheDocument(),
+  );
   await waitFor(() =>
     expect(
       screen.queryByText("F041 fictional collaboration"),
@@ -2604,10 +2629,9 @@ test("F043 authoritative revocation clears hidden Notes without refetching an in
     screen.queryByDisplayValue("Unsent protected draft"),
   ).not.toBeInTheDocument();
   expect(repository.notes).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole("tab", { name: "Internal Notes" }));
   expect(
-    screen.getByText("You don't have permission to view internal notes."),
-  ).toBeVisible();
+    screen.queryByRole("tab", { name: "Internal Notes" }),
+  ).not.toBeInTheDocument();
   expect(repository.notes).toHaveBeenCalledTimes(1);
 });
 

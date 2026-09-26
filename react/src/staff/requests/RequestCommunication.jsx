@@ -41,6 +41,7 @@ function CommunicationStream({
   onAccessFailure,
   embedded = false,
   active = true,
+  unavailableReason,
 }) {
   const attachmentDraft = useAttachmentDraft(
     canRead && canCreate ? repository.attachments : undefined,
@@ -141,7 +142,7 @@ function CommunicationStream({
     }
   }, [items]);
   useEffect(() => {
-    if (!pending && notice === "Message added.")
+    if (!pending && notice === "Message added to Reqro.")
       if (visible.current) textarea.current?.focus();
   }, [pending, notice]);
   async function add(event) {
@@ -192,7 +193,7 @@ function CommunicationStream({
       setDraft("");
       attachmentDraft.clear();
       submission.current = null;
-      setNotice("Message added.");
+      setNotice("Message added to Reqro.");
       if (visible.current) textarea.current?.focus();
     } catch (problem) {
       await failure(problem, signal, true);
@@ -218,11 +219,30 @@ function CommunicationStream({
         </>
       ) : (
         <>
-          <p className="text-body-secondary">
-            Messages are intended for the requester. They are recorded in Reqro;
-            requester delivery is not enabled. Do not include staff-only
-            information.
-          </p>
+          <aside
+            className="request-communication-information"
+            aria-label="About Requester Communication"
+          >
+            <strong>Requester Communication</strong>
+            <p>Messages added here are intended for the requester.</p>
+            <p>
+              Reqro records these messages, but does not currently send them to
+              the requester.
+            </p>
+            <p>Do not include staff-only or sensitive information.</p>
+          </aside>
+          {!canCreate && unavailableReason === "requester_inactive" && (
+            <p>
+              New messages can't be added because the requester is no longer
+              active.
+            </p>
+          )}
+          {!canCreate && unavailableReason === "anonymous" && (
+            <p>
+              New messages can't be added to anonymous requests. Existing
+              messages remain available.
+            </p>
+          )}
           {loading && <p role="status">Loading messages…</p>}
           {error && (
             <p role="alert" id="requester-message-error">
@@ -238,16 +258,19 @@ function CommunicationStream({
             aria-label="Messages, newest first"
           >
             {items.map((message) => (
-              <li key={message.id} id={`message-${message.id}`} tabIndex="-1">
+              <li
+                className="collaboration-entry"
+                key={message.id}
+                id={`message-${message.id}`}
+                tabIndex="-1"
+              >
                 <div className="request-message-attribution">
                   <strong>{message.author.displayName}</strong>
                   <time dateTime={message.createdAt}>
                     {new Date(message.createdAt).toLocaleString()}
                   </time>
                 </div>
-                <p className="text-body-secondary">
-                  Outbound · Portal · Recorded
-                </p>
+                <p className="collaboration-entry-context">Recorded in Reqro</p>
                 <p className="request-message-body">{message.body}</p>
                 <AttachmentList
                   items={message.attachments}
@@ -273,7 +296,7 @@ function CommunicationStream({
             )}
             <button
               type="button"
-              className="btn btn-secondary"
+              className="btn btn-outline-secondary"
               disabled={loading || pending}
               onClick={() => readPage(null, lifecycle.current.signal)}
             >
@@ -282,7 +305,7 @@ function CommunicationStream({
           </div>
           {canCreate && !createDenied && (
             <form onSubmit={add} className="request-message-composer">
-              <h4>Add Message</h4>
+              <h4>Message to Requester</h4>
               <label htmlFor="requester-message-body" className="form-label">
                 Message
               </label>
@@ -308,6 +331,7 @@ function CommunicationStream({
                 {draft.length.toLocaleString()} / 4,000 characters
               </p>
               <AttachmentSelector
+                collaboration
                 draft={attachmentDraft}
                 disabled={pending}
                 requesterDirected={true}

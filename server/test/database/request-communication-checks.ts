@@ -216,26 +216,6 @@ export async function checkRequestCommunications(
       .orderBy('id')
       .execute();
   for (const { id, audience, permission } of fixtures) {
-    if (audience === 'internal') {
-      await t.test(
-        'F042 INTERNAL parent remains ineligible even with both parent reads and all communication permissions',
-        async () => {
-          await get(`${root}/${id}/communications`, full.id)
-            .expect(404)
-            .expect('Cache-Control', 'no-store');
-          await post(id, full.id)
-            .expect(404)
-            .expect('Cache-Control', 'no-store');
-          const detail = await get(`${root}/${id}`, full.id).expect(200);
-          const caps = (
-            detail.body as { capabilities: Record<string, boolean> }
-          ).capabilities;
-          assert.equal(caps.canReadCommunications, false);
-          assert.equal(caps.canCreateCommunication, false);
-        },
-      );
-      continue;
-    }
     await t.test(
       `F042 ${audience} parent/read/create authorization matrix and capability independence`,
       async () => {
@@ -281,8 +261,8 @@ export async function checkRequestCommunications(
           readKey,
           createKey,
         ]);
-        await get(`${root}/${id}/communications`, opposite.id).expect(403);
-        await post(id, opposite.id).expect(403);
+        await get(`${root}/${id}/communications`, opposite.id).expect(404);
+        await post(id, opposite.id).expect(404);
       },
     );
   }
@@ -291,6 +271,75 @@ export async function checkRequestCommunications(
   assert.ok(publicFixture);
   assert.ok(internalFixture);
   const id = publicFixture.id;
+  await t.test(
+    'F058.2 INTERNAL requester inactivity preserves history, denies writes and reactivation restores eligibility without disclosure',
+    async () => {
+      const target = internalFixture.id;
+      const before = await snapshot();
+      const history: unknown = (
+        await get(`${root}/${target}/communications`, full.id).expect(200)
+      ).body;
+      await db
+        .updateTable('staff_identity')
+        .set({ active: false })
+        .where('id', '=', c.creator)
+        .execute();
+      try {
+        const caps = (
+          (await get(`${root}/${target}`, full.id).expect(200)).body as {
+            capabilities: {
+              canReadCommunications: boolean;
+              canCreateCommunication: boolean;
+              communicationCreationUnavailableReason?: string;
+            };
+          }
+        ).capabilities;
+        assert.equal(caps.canReadCommunications, true);
+        assert.equal(caps.canCreateCommunication, false);
+        assert.equal(
+          caps.communicationCreationUnavailableReason,
+          'requester_inactive',
+        );
+        assert.ok(!JSON.stringify(caps).includes(c.creator));
+        const records = await communications(),
+          audit = await audits();
+        await post(target, full.id).expect(403);
+        assert.deepEqual(
+          (await get(`${root}/${target}/communications`, full.id).expect(200))
+            .body,
+          history,
+        );
+        assert.deepEqual(await communications(), records);
+        assert.deepEqual(await audits(), audit);
+        assert.deepEqual(await snapshot(), before);
+      } finally {
+        await db
+          .updateTable('staff_identity')
+          .set({ active: true })
+          .where('id', '=', c.creator)
+          .execute();
+      }
+      assert.equal(
+        (
+          (await get(`${root}/${target}`, full.id).expect(200)).body as {
+            capabilities: { canCreateCommunication: boolean };
+          }
+        ).capabilities.canCreateCommunication,
+        true,
+      );
+    },
+  );
+  await t.test(
+    'F058.2 INTERNAL requester relationship alone grants no communication or Notes access',
+    async () => {
+      await get(
+        `${root}/${internalFixture.id}/communications`,
+        c.creator,
+      ).expect(403);
+      await post(internalFixture.id, c.creator).expect(403);
+    },
+  );
+
   await t.test(
     'F042 current division, Organization activity and Communications-read revocation remain authoritative',
     async () => {
@@ -508,8 +557,8 @@ export async function checkRequestCommunications(
         .where('permission_key', '=', 'service_request.view')
         .execute();
       await get(`${root}/${id}`, both.id).expect(404);
-      await get(`${root}/${id}/communications`, both.id).expect(403);
-      await post(id, both.id).expect(403);
+      await get(`${root}/${id}/communications`, both.id).expect(404);
+      await post(id, both.id).expect(404);
     },
   );
   let first: Communication;

@@ -57,6 +57,19 @@ test("F041 authorized stream renders plain multiline Unicode, safe author and se
     note.body,
   );
   expect(screen.getByLabelText("Internal Note")).toBeInTheDocument();
+  const information = screen.getByRole("complementary", {
+    name: "About Internal Notes",
+  });
+  expect(information).toHaveTextContent(
+    "Internal notes are visible only to authorized staff.",
+  );
+  expect(information).toHaveTextContent(
+    "Use them for internal updates, troubleshooting, and coordination.",
+  );
+  expect(information).toHaveTextContent(
+    "Avoid entering sensitive information.",
+  );
+  expect(information).not.toHaveAttribute("role", "alert");
   expect(container.querySelector("textarea")).toHaveAttribute(
     "maxlength",
     "4000",

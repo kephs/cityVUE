@@ -112,6 +112,7 @@ test("F040 mixed results retain audience, allowlist audience filters and derive 
   expect(detail.audience).toBe("public");
   expect(detail.intakeChannel).toBe("phone");
   expect(detail.capabilities).toEqual({
+    communicationCreationUnavailableReason: null,
     canManageRequesterTracking: false,
     workflowActions: ["hold"],
     canAssign: false,
@@ -128,6 +129,37 @@ test("F040 mixed results retain audience, allowlist audience filters and derive 
   expect(detail).not.toHaveProperty("permissions");
   expect(detail).not.toHaveProperty("contact");
 });
+
+test.each([
+  ["anonymous", true, false, "anonymous"],
+  ["requester_inactive", true, false, "requester_inactive"],
+  ["unavailable", true, false, "unavailable"],
+  [undefined, true, false, null],
+  ["Fictional private marker", true, false, null],
+  [{ requesterId: "fictional-private-id" }, true, false, null],
+  ["requester_inactive", false, false, null],
+  ["requester_inactive", true, true, null],
+])(
+  "F058.2 allowlists unavailable reason %j with read=%s create=%s",
+  async (reason, read, create, expected) => {
+    const client = {
+      get: vi.fn().mockResolvedValue({
+        ...row,
+        capabilities: {
+          canReadCommunications: read,
+          canCreateCommunication: create,
+          communicationCreationUnavailableReason: reason,
+        },
+      }),
+    };
+    const detail = await createStaffRequestRepository({ client }).detail(id);
+    expect(detail.capabilities.communicationCreationUnavailableReason).toBe(
+      expected,
+    );
+    expect(JSON.stringify(detail)).not.toContain("fictional-private-id");
+    expect(JSON.stringify(detail)).not.toContain("Fictional private marker");
+  },
+);
 
 test("F040 PUBLIC protected contact keeps its separate authenticated endpoint and never accepts an arbitrary audience path", async () => {
   const client = {

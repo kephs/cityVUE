@@ -18,6 +18,12 @@ export const displayFilename = (name) =>
     .replace(/^[ .]+|[ .]+$/g, "")
     .slice(-120) || "image";
 export const fileSize = (bytes) => `${(bytes / 1048576).toFixed(2)} MiB`;
+const compactFileSize = (bytes) =>
+  bytes < 1024
+    ? `${bytes} B`
+    : bytes < 1048576
+      ? `${(bytes / 1024).toFixed(1)} KiB`
+      : fileSize(bytes);
 function validation(files) {
   const total = files.reduce((n, x) => n + x.file.size, 0);
   return files.map((entry) => ({
@@ -275,6 +281,7 @@ export function AttachmentSelector({
   camera = false,
   label = "Attachments",
   requesterDirected = false,
+  collaboration = false,
 }) {
   const id = useId(),
     picker = useRef(null),
@@ -286,24 +293,64 @@ export function AttachmentSelector({
   };
   return (
     <fieldset
-      className="attachment-selector"
+      className={`attachment-selector${collaboration ? " collaboration-attachments" : ""}`}
       disabled={disabled || draft.pending}
       aria-describedby={`${id}-help`}
     >
-      <legend className="h5">{label}</legend>
-      {requesterDirected && (
+      <legend className="h5">
+        {label}
+        {collaboration && <span className="attachment-optional">Optional</span>}
+      </legend>
+      {collaboration && (
+        <aside
+          className="collaboration-attachment-privacy"
+          aria-label={
+            requesterDirected
+              ? "Requester-visible attachments"
+              : "Staff-only attachments"
+          }
+        >
+          <strong>
+            {requesterDirected
+              ? "Requester-visible attachments"
+              : "Staff-only attachments"}
+          </strong>
+          <p>
+            {requesterDirected
+              ? "Attachments added here are intended for the requester."
+              : "Attachments added here are visible only to authorized staff."}
+          </p>
+          {requesterDirected && (
+            <p>
+              <strong>
+                Do not include staff-only or sensitive information.
+              </strong>
+            </p>
+          )}
+        </aside>
+      )}
+      {requesterDirected && !collaboration && (
         <p>
           Attachments added here are intended for the requester. Do not include
-          staff-only information. Delivery is not enabled.
+          staff-only or sensitive information.
         </p>
       )}
       <p id={`${id}-help`} className="text-body-secondary">
-        Add up to 5 images, 5 MiB each (15 MiB total). JPEG, PNG or WebP. Photo
-        metadata is removed during processing.
+        {collaboration
+          ? "JPEG, PNG or WebP · Up to 5 images · 5 MiB each"
+          : "Add up to 5 images, 5 MiB each (15 MiB total). JPEG, PNG or WebP. Photo metadata is removed during processing."}
       </p>
+      {collaboration && (
+        <details className="attachment-details">
+          <summary>Attachment details</summary>
+          <p>15 MiB total. Photo metadata is removed during processing.</p>
+        </details>
+      )}
       <p className="small attachment-development-notice">
-        <strong>Development Notice</strong> Use fictional images only. Malware
-        detection is not enabled.
+        <strong>
+          {collaboration ? "Development environment" : "Development Notice"}
+        </strong>{" "}
+        Use fictional images only. Malware detection is not enabled.
       </p>
       <div className="attachment-controls">
         {camera && (
@@ -332,7 +379,11 @@ export function AttachmentSelector({
           className="btn btn-secondary"
           onClick={() => picker.current.click()}
         >
-          {camera ? "Choose Files" : "Add files"}
+          {collaboration
+            ? "Choose files"
+            : camera
+              ? "Choose Files"
+              : "Add files"}
         </button>
         <input
           ref={picker}
@@ -346,14 +397,22 @@ export function AttachmentSelector({
         />
       </div>
       <p role="status">
-        {draft.files.length} selected ·{" "}
-        {fileSize(draft.files.reduce((n, x) => n + x.file.size, 0))}
+        {draft.files.length}
+        {collaboration ? " of 5" : " selected"} ·{" "}
+        {(collaboration ? compactFileSize : fileSize)(
+          draft.files.reduce((n, x) => n + x.file.size, 0),
+        )}
         {draft.pending ? " · Uploading / processing files…" : ""}
       </p>
       {draft.error && <p role="alert">{draft.error}</p>}
       <ul className="attachment-list">
         {draft.files.map((file) => (
-          <AttachmentDraftItem key={file.id} file={file} draft={draft} />
+          <AttachmentDraftItem
+            key={file.id}
+            file={file}
+            draft={draft}
+            compact={collaboration}
+          />
         ))}
       </ul>
       {draft.files.length > 0 && !draft.ready && (
@@ -377,12 +436,13 @@ export function AttachmentSelector({
   );
 }
 
-function AttachmentDraftItem({ file, draft }) {
+function AttachmentDraftItem({ file, draft, compact = false }) {
   const details = (
     <div className="attachment-copy">
       <strong>{file.filename}</strong>
       <span>
-        {fileSize(file.file.size)} · {file.error ? "Rejected" : file.state}
+        {(compact ? compactFileSize : fileSize)(file.file.size)} ·{" "}
+        {file.error ? "Rejected" : file.state}
       </span>
       {file.error && <span role="alert">{file.error}</span>}
     </div>

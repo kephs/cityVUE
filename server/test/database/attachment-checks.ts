@@ -1,3 +1,4 @@
+import { up as internalAttachmentsUp } from '../../migrations/20261010000000-extend-internal-communication-attachments.js';
 import { configureIssueDefault } from '../../src/service-request/issue-default-assignment.js';
 import { lockAuthorizationWriter } from '../../src/database/authorization-writer-lock.js';
 import {
@@ -211,6 +212,7 @@ export async function checkAttachments(
         );
       },
     );
+    await db.transaction().execute(internalAttachmentsUp);
     Object.defineProperty(service, 'enabled', {
       value: true,
       configurable: true,
@@ -229,6 +231,102 @@ export async function checkAttachments(
         .send(c.internalPayload)
         .expect(201)
     ).body as { id: string };
+
+    await t.test(
+      'F058.2 INTERNAL message attachment stays isolated and requester deactivation rejects finalization atomically',
+      async () => {
+        const claim = await start(internal.id, 'REQUESTER_COMMUNICATION');
+        const fileId = randomUUID();
+        await upload(claim, fileId).expect(201);
+        const snapshot = async () => ({
+          parent: await db
+            .selectFrom('service_request')
+            .selectAll()
+            .where('id', '=', internal.id)
+            .execute(),
+          batch: await db
+            .selectFrom('attachment_batch')
+            .selectAll()
+            .where('id', '=', claim.batchId)
+            .execute(),
+          messages: await db
+            .selectFrom('request_communication')
+            .selectAll()
+            .where('service_request_id', '=', internal.id)
+            .execute(),
+          audit: await db
+            .selectFrom('activity')
+            .selectAll()
+            .where('service_request_id', '=', internal.id)
+            .execute(),
+        });
+        const before = await snapshot();
+        await db
+          .updateTable('staff_identity')
+          .set({ active: false })
+          .where('id', '=', c.creator)
+          .execute();
+        try {
+          await save(internal.id, 'communications', claim).expect(403);
+          assert.deepEqual(await snapshot(), before);
+          await request(api)
+            .post(`${uploads}/requests/${internal.id}/batches`)
+            .set('Authorization', `Bearer ${full.id}`)
+            .send({ context: 'REQUESTER_COMMUNICATION' })
+            .expect(403);
+        } finally {
+          await db
+            .updateTable('staff_identity')
+            .set({ active: true })
+            .where('id', '=', c.creator)
+            .execute();
+        }
+        await save(internal.id, 'notes', claim).expect(404);
+        const key = randomUUID();
+        const message = (
+          await save(internal.id, 'communications', claim, key).expect(201)
+        ).body as { id: string; attachments: { id: string }[] };
+        assert.equal(message.attachments[0]?.id, fileId);
+        assert.equal(
+          (
+            (await save(internal.id, 'communications', claim, key).expect(201))
+              .body as { id: string }
+          ).id,
+          message.id,
+        );
+        await staffGet(
+          `${uploads}/requests/${internal.id}/REQUESTER_COMMUNICATION/${message.id}/files/${fileId}`,
+        ).expect(200);
+        await staffGet(
+          `${uploads}/requests/${internal.id}/INTERNAL_NOTE/${message.id}/files/${fileId}`,
+        ).expect(404);
+        await db.transaction().execute(async (trx) => {
+          await lockAuthorizationWriter(trx, org);
+          await trx
+            .updateTable('staff_identity')
+            .set({ active: false })
+            .where('id', '=', c.creator)
+            .execute();
+        });
+        try {
+          await staffGet(`${root}/${internal.id}/communications`).expect(200);
+          await staffGet(
+            `${uploads}/requests/${internal.id}/REQUESTER_COMMUNICATION/${message.id}/files/${fileId}`,
+          ).expect(200);
+          await save(internal.id, 'communications', undefined).expect(403);
+        } finally {
+          await db.transaction().execute(async (trx) => {
+            await lockAuthorizationWriter(trx, org);
+            await trx
+              .updateTable('staff_identity')
+              .set({ active: true })
+              .where('id', '=', c.creator)
+              .execute();
+          });
+        }
+        assert.deepEqual((await snapshot()).parent, before.parent);
+      },
+    );
     const trackingParents = [parent.id];
     const parentSnapshot = JSON.stringify(
       await db
@@ -565,13 +663,13 @@ export async function checkAttachments(
       );
     }
     await t.test(
-      'F046 PUBLIC-only Communications and independent staff evidence permissions',
+      'F058.2 INTERNAL communication attachment admission and independent staff evidence permissions',
       async () => {
         await request(api)
           .post(`${uploads}/requests/${internal.id}/batches`)
           .set('Authorization', `Bearer ${full.id}`)
           .send({ context: 'REQUESTER_COMMUNICATION' })
-          .expect(404);
+          .expect(201);
         await request(api)
           .post(`${uploads}/requests/${parent.id}/batches`)
           .set('Authorization', `Bearer ${full.id}`)

@@ -829,3 +829,123 @@
 .submitted-information dd { margin: .35rem 0 0; }
 .submitted-information p { max-width: 70ch; }
 @media (max-width: 575.98px) { .request-page-size { flex-basis: 100%; } }
+.request-communication-information,
+.collaboration-attachment-privacy {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--bs-info-border-subtle);
+  border-inline-start: 0.25rem solid var(--bs-info);
+  border-radius: 0.5rem;
+  background: var(--bs-info-bg-subtle);
+  color: var(--bs-body-color);
+  overflow-wrap: anywhere;
+}
+.request-communication-information p,
+.collaboration-attachment-privacy p {
+  margin: 0.5rem 0 0;
+}
+/* Collaboration presentation: keep shared intake attachment surfaces unchanged. */
+.collaboration-attachment-privacy {
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+.request-notes-list,
+.request-communications-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+.request-notes-list > .collaboration-entry,
+.request-communications-list > .collaboration-entry {
+  min-width: 0;
+  padding: 1rem;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface-subtle);
+  overflow-wrap: anywhere;
+}
+.collaboration-entry .request-note-attribution,
+.collaboration-entry .request-message-attribution {
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+}
+.collaboration-entry strong,
+.collaboration-entry time {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.collaboration-entry time {
+  font-size: 0.875rem;
+}
+.collaboration-entry-context {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  margin: 0.25rem 0 0.75rem;
+}
+.collaboration-entry .request-note-body,
+.collaboration-entry .request-message-body {
+  line-height: 1.65;
+  margin-bottom: 0;
+}
+.collaboration-entry .attachment-list {
+  margin-top: 1rem;
+}
+.collaboration-attachments {
+  min-width: 0;
+  margin: 1rem 0;
+}
+.collaboration-attachments legend {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.attachment-optional {
+  font-size: 0.8125rem;
+  font-weight: normal;
+  color: var(--text-secondary);
+}
+.collaboration-attachments > p,
+.collaboration-attachments .attachment-details {
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+.attachment-details summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.attachment-details p {
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+}
+.collaboration-attachments .attachment-development-notice {
+  padding: 0.5rem 0.75rem;
+  border-inline-start-width: 2px;
+  color: var(--text-secondary);
+}
+.collaboration-attachments .attachment-list > li {
+  padding: 0.5rem 0;
+}
+.collaboration-attachments .attachment-body {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.collaboration-attachments .attachment-controls .btn {
+  min-height: 44px;
+}
+@media (max-width: 575.98px) {
+  .collaboration-entry time {
+    flex-basis: 100%;
+  }
+  .request-notes-list > .collaboration-entry,
+  .request-communications-list > .collaboration-entry {
+    padding: 0.75rem;
+  }
+}
+.request-notes-controls .btn-outline-secondary,
+.request-communications-controls .btn-outline-secondary {
+  --bs-btn-color: var(--text-secondary);
+  --bs-btn-border-color: var(--border-default);
+}

@@ -87,12 +87,15 @@ test('F042 both audience capabilities require separate Communications keys and c
         ...(read ? (['service_request.communication.read'] as const) : []),
         ...(create ? (['service_request.communication.create'] as const) : []),
       ]);
-      const caps = requestCapabilities(actor, audience, 'closed');
-      assert.equal(caps.canReadCommunications, audience === 'public' && read);
-      assert.equal(
-        caps.canCreateCommunication,
-        audience === 'public' && read && create,
+      const caps = requestCapabilities(
+        actor,
+        audience,
+        'closed',
+        'identified',
+        'eligible',
       );
+      assert.equal(caps.canReadCommunications, read);
+      assert.equal(caps.canCreateCommunication, read && create);
       assert.equal(caps.canReadContact, false);
     }
     assert.throws(() =>

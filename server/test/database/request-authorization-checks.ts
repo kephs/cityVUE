@@ -1,3 +1,8 @@
+import { RequestNoteService } from '../../src/service-request/request-note.service.js';
+import { RequestNoteRepository } from '../../src/service-request/request-note.repository.js';
+import { RequestCommunicationService } from '../../src/service-request/request-communication.service.js';
+import { RequestCommunicationRepository } from '../../src/service-request/request-communication.repository.js';
+import { communicationEligibility } from '../../src/service-request/request-communication-policy.js';
 import assert from 'node:assert/strict';
 import type { TestContext } from 'node:test';
 import { randomUUID } from 'node:crypto';
@@ -341,6 +346,343 @@ export async function checkRequestAuthorization(
           .execute(),
     ],
   ];
+
+  const requester = randomUUID();
+  await db
+    .insertInto('staff_identity')
+    .values({
+      id: requester,
+      organization_id: c.org,
+      display_name: 'Fictional internal requester',
+      entra_tenant_id: tenant,
+      entra_object_id: requester,
+      active: true,
+    })
+    .execute();
+  const communication = (client = db) =>
+    new RequestCommunicationService(
+      { client } as DatabaseService,
+      new RequestCommunicationRepository(),
+    );
+  const makeInternal = async () => {
+    const id = randomUUID();
+    await db
+      .insertInto('service_request')
+      .values({
+        ...requestRow(id),
+        audience: 'internal',
+        reporting_identity: 'identified',
+        requester_staff_identity_id: requester,
+        submitted_by_staff_identity_id: requester,
+      })
+      .execute();
+    return id;
+  };
+  const communicationSnapshot = async (id: string) => ({
+    parent: await db
+      .selectFrom('service_request')
+      .selectAll()
+      .where('id', '=', id)
+      .execute(),
+    messages: await db
+      .selectFrom('request_communication')
+      .selectAll()
+      .where('service_request_id', '=', id)
+      .execute(),
+    audit: await db
+      .selectFrom('activity')
+      .selectAll()
+      .where('service_request_id', '=', id)
+      .execute(),
+    operational: await db
+      .selectFrom('request_operational_activity')
+      .selectAll()
+      .where('service_request_id', '=', id)
+      .execute(),
+  });
+  await t.test(
+    'F058.2 defensive eligibility rejects missing, mismatched and cross-Organization requester without weakening database constraints',
+    async () => {
+      for (const [requesterId, submitterId, organizationId, identity] of [
+        [null, null, c.org, 'identified'],
+        [requester, actorId, c.org, 'identified'],
+        [requester, requester, c.otherOrg, 'identified'],
+        [randomUUID(), requester, c.org, 'identified'],
+        [requester, requester, c.org, 'anonymous'],
+      ]) {
+        const result = await sql<{
+          state: string;
+        }>`select ${communicationEligibility()} as state from
+        (select 'internal'::text as audience, ${identity}::text as reporting_identity,
+        ${requesterId}::uuid as requester_staff_identity_id, ${submitterId}::uuid as submitted_by_staff_identity_id,
+        ${organizationId}::uuid as organization_id) request`.execute(db);
+        assert.equal(result.rows[0]?.state, 'unavailable');
+      }
+    },
+  );
+
+  for (const stream of [
+    'public communication',
+    'internal communication',
+    'internal notes',
+  ] as const) {
+    await t.test(
+      'F058.2 bounded query count for ' +
+        stream +
+        ' at 0/1/25/26 records and older page',
+      async () => {
+        const id = await makeInternal();
+        if (stream === 'public communication') {
+          // Separate synthetic PUBLIC fixture, leaving the INTERNAL immutable attribution contract intact.
+          const publicId = await make();
+          await measure(publicId);
+        } else await measure(id);
+        async function measure(target: string) {
+          const counts: number[] = [];
+          let count = 0;
+          const client = db.withPlugin({
+            transformQuery(args) {
+              count++;
+              return args.node;
+            },
+            async transformResult(args) {
+              return args.result;
+            },
+          });
+          const service =
+            stream === 'internal notes'
+              ? new RequestNoteService(
+                  { client } as DatabaseService,
+                  new RequestNoteRepository(),
+                )
+              : communication(client);
+          let prior = 0;
+          for (const size of [0, 1, 25, 26]) {
+            for (let n = prior; n < size; n++) {
+              const values = {
+                organization_id: c.org,
+                service_request_id: target,
+                author_staff_identity_id: actorId,
+                author_display_name: 'Fictional author',
+                body: `Fictional bounded history ${String(n)}`,
+                submission_key: randomUUID(),
+              };
+              if (stream === 'internal notes')
+                await db
+                  .insertInto('request_internal_note')
+                  .values(values)
+                  .execute();
+              else
+                await db
+                  .insertInto('request_communication')
+                  .values(values)
+                  .execute();
+            }
+            prior = size;
+            count = 0;
+            const page = await service.list(target, actor, 25);
+            counts.push(count);
+            assert.equal(page.items.length, Math.min(size, 25));
+            if (size === 26) {
+              assert.ok(page.nextCursor);
+              count = 0;
+              const older = await service.list(
+                target,
+                actor,
+                25,
+                page.nextCursor,
+              );
+              assert.equal(older.items.length, 1);
+              counts.push(count);
+            }
+          }
+          assert.equal(new Set(counts).size, 1);
+          assert.ok(counts.length > 0 && counts.every((value) => value <= 12));
+          t.diagnostic(
+            'F058.2 ' +
+              stream +
+              ' queries at 0/1/25/26/older: ' +
+              counts.join('/'),
+          );
+        }
+      },
+    );
+  }
+
+  for (const table of ['request_communication', 'activity']) {
+    await t.test(
+      'F058.2 INTERNAL ' + table + ' failure rolls back the entire append',
+      async () => {
+        const id = await makeInternal(),
+          before = await communicationSnapshot(id);
+        const client = db.withPlugin({
+          transformQuery(args) {
+            if (
+              args.node.kind === 'InsertQueryNode' &&
+              JSON.stringify(args.node).includes('"name":"' + table + '"')
+            )
+              throw new Error('Synthetic failure');
+            return args.node;
+          },
+          async transformResult(args) {
+            return args.result;
+          },
+        });
+        await assert.rejects(
+          communication(client).create(
+            id,
+            actor,
+            'Fictional rollback body',
+            randomUUID(),
+          ),
+        );
+        assert.deepEqual(await communicationSnapshot(id), before);
+      },
+    );
+  }
+  await t.test(
+    'F058.2 INTERNAL scoped submission replay is immutable and conflicting text cannot append',
+    async () => {
+      const id = await makeInternal(),
+        key = randomUUID(),
+        before = await communicationSnapshot(id);
+      const first = await communication().create(
+        id,
+        actor,
+        'Fictional replay body',
+        key,
+      );
+      const after = await communicationSnapshot(id);
+      assert.equal(
+        (await communication().create(id, actor, 'Fictional replay body', key))
+          .id,
+        first.id,
+      );
+      await assert.rejects(
+        communication().create(id, actor, 'Fictional conflicting body', key),
+      );
+      assert.deepEqual(await communicationSnapshot(id), after);
+      assert.deepEqual(after.parent, before.parent);
+      assert.deepEqual(after.operational, before.operational);
+      assert.equal(after.messages.length, 1);
+      assert.equal(after.audit.length, 1);
+    },
+  );
+  const communicationWriters: [string, Writer][] = [
+    [
+      'communication permission',
+      revoke('service_request.communication.create'),
+    ],
+    ...writers.slice(1),
+    [
+      'requester',
+      (trx) =>
+        trx
+          .updateTable('staff_identity')
+          .set({ active: false })
+          .where('id', '=', requester)
+          .execute(),
+    ],
+  ];
+  for (const [name, change] of communicationWriters) {
+    await t.test(
+      'F058.2 communication waits for preceding ' +
+        name +
+        ' revocation and leaves no partial state',
+      async () => {
+        const id = await makeInternal(),
+          before = await communicationSnapshot(id),
+          ready = latch(),
+          release = latch();
+        let pid = 0;
+        const writer = db.transaction().execute(async (trx) => {
+          await lockAuthorizationWriter(trx, c.org);
+          pid = required(
+            (
+              await sql<{
+                pid: number;
+              }>`select pg_backend_pid() as pid`.execute(trx)
+            ).rows[0],
+          ).pid;
+          await change(trx);
+          ready.release();
+          await release.promise;
+        });
+        await ready.promise;
+        const result = communication()
+          .create(id, actor, 'Fictional record', randomUUID())
+          .then(
+            () => false,
+            () => true,
+          );
+        try {
+          await waitBlocked(db, pid, true);
+        } finally {
+          release.release();
+        }
+        await writer;
+        assert.equal(await result, true);
+        assert.deepEqual(await communicationSnapshot(id), before);
+        await restore();
+        await db
+          .updateTable('staff_identity')
+          .set({ active: true })
+          .where('id', '=', requester)
+          .execute();
+      },
+    );
+    await t.test(
+      'F058.2 communication barrier completes before ' +
+        name +
+        ' revocation with one immutable record',
+      async () => {
+        const id = await makeInternal(),
+          pause = pauseAfter('organization_access_state');
+        const before = await communicationSnapshot(id);
+        const operation = communication(db.withPlugin(pause.plugin)).create(
+          id,
+          actor,
+          'Fictional record',
+          randomUUID(),
+        );
+        await bounded(pause.arrived.promise);
+        const ready = latch();
+        let pid = 0;
+        const writer = db.transaction().execute(async (trx) => {
+          pid = required(
+            (
+              await sql<{
+                pid: number;
+              }>`select pg_backend_pid() as pid`.execute(trx)
+            ).rows[0],
+          ).pid;
+          ready.release();
+          await lockAuthorizationWriter(trx, c.org);
+          await change(trx);
+        });
+        await ready.promise;
+        try {
+          await waitBlocked(db, pid, false);
+        } finally {
+          pause.resume.release();
+        }
+        await operation;
+        await writer;
+        const after = await communicationSnapshot(id);
+        assert.equal(after.messages.length, 1);
+        assert.equal(after.audit.length, 1);
+        assert.deepEqual(after.parent, before.parent);
+        assert.deepEqual(after.operational, before.operational);
+        await restore();
+        assert.equal((await communication().list(id, actor)).items.length, 1);
+        await db
+          .updateTable('staff_identity')
+          .set({ active: true })
+          .where('id', '=', requester)
+          .execute();
+      },
+    );
+  }
   for (const [name, change] of writers) {
     await t.test(
       'F058 ' + name + ' revocation wins before the request barrier',

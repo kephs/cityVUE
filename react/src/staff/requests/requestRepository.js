@@ -163,6 +163,14 @@ function project(row, detail = false) {
             row.audience === "public" &&
             row.requesterIdentity === "identified",
           capabilities: {
+            communicationCreationUnavailableReason:
+              row.capabilities?.canReadCommunications === true &&
+              row.capabilities?.canCreateCommunication !== true &&
+              ["anonymous", "requester_inactive", "unavailable"].includes(
+                row.capabilities?.communicationCreationUnavailableReason,
+              )
+                ? row.capabilities.communicationCreationUnavailableReason
+                : null,
             workflowActions: Array.isArray(row.capabilities?.workflowActions)
               ? row.capabilities.workflowActions.filter((action) =>
                   ["start_work", "hold", "resume", "close", "reopen"].includes(

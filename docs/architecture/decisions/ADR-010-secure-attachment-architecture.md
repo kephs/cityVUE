@@ -2,6 +2,8 @@
 
 Status: accepted for the locally validated F046 development foundation. Production storage, scanning and operations remain separately governed prerequisites.
 
+**Dated amendment, 2026-09-26:** The original PUBLIC-only Requester Communication attachment scope below is superseded by the [F058.2 amendment to ADR-008](ADR-008-requester-communication.md) and Migration 40. This narrowly extends structural finalization to supported INTERNAL communication parents; other attachment safeguards remain unchanged. Requester activity remains application policy, and historical attachments survive requester inactivity.
+
 ## Context
 
 Request evidence, staff-only Notes and requester-directed recorded correspondence

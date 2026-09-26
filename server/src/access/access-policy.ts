@@ -196,18 +196,20 @@ export const accessPermissionMetadata = {
   ),
   'service_request.communication.read': definition(
     'Read requester communication',
-    'Read PUBLIC requester correspondence.',
+    'Read requester communication.',
     'Sensitive Information',
-    ['service_request.view'],
+    [],
     true,
+    parent,
   ),
   'service_request.communication.create': definition(
     'Create requester communication',
-    'Append eligible PUBLIC requester correspondence.',
+    'Add requester communication to eligible requests.',
     'Sensitive Information',
-    ['service_request.view', 'service_request.communication.read'],
+    ['service_request.communication.read'],
     true,
-    'Anonymous requests are ineligible; no delivery authority is implied.',
+    parent +
+      ' New messages require an eligible requester; no delivery authority is implied.',
   ),
   'service_request.tracking.manage': definition(
     'Manage requester tracking',

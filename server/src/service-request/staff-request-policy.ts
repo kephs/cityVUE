@@ -1,3 +1,4 @@
+import type { CommunicationEligibility } from './request-communication-policy.js';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { Permission, StaffAccess } from '../auth/auth.types.js';
 import type { WorkflowActionDto } from './service-request.dto.js';
@@ -54,6 +55,11 @@ export function requestCapabilities(
   audience: StaffRequestAudience,
   status: string,
   requesterIdentity = 'identified',
+  communicationState: CommunicationEligibility = audience === 'public'
+    ? requesterIdentity === 'anonymous'
+      ? 'anonymous'
+      : 'eligible'
+    : 'unavailable',
 ) {
   assertStaffRequestRead(access, audience);
   const permitted = (operation: StaffRequestOperation) => {
@@ -84,13 +90,17 @@ export function requestCapabilities(
       requesterIdentity !== 'anonymous' &&
       access.permissions.includes('service_request.contact.read'),
     canReadCommunications:
-      audience === 'public' &&
+      communicationState !== 'unavailable' &&
       access.permissions.includes('service_request.communication.read'),
     canCreateCommunication:
-      requesterIdentity !== 'anonymous' &&
-      audience === 'public' &&
+      communicationState === 'eligible' &&
       access.permissions.includes('service_request.communication.read') &&
       access.permissions.includes('service_request.communication.create'),
+    communicationCreationUnavailableReason:
+      communicationState !== 'eligible' &&
+      access.permissions.includes('service_request.communication.read')
+        ? communicationState
+        : null,
     canReadAnswers: access.permissions.includes('service_request.answers.read'),
     canReadNotes: access.permissions.includes('service_request.note.read'),
     canCreateNotes:

@@ -57,9 +57,7 @@ test("F042 authorized stream renders plain multiline Unicode, safe author and se
   expect(
     screen.queryByRole("heading", { name: "Resident Communication" }),
   ).not.toBeInTheDocument();
-  expect(
-    screen.getByText(/requester delivery is not enabled/),
-  ).toBeInTheDocument();
+  expect(screen.getByText(/does not currently send/)).toBeInTheDocument();
   expect(
     screen.getByRole("list", { name: "Messages, newest first" }),
   ).toBeInTheDocument();
@@ -167,7 +165,7 @@ test("F042 Add Message is single-flight, returns authoritative state, clears dra
   expect(screen.getByText("Authoritative normalized body")).toBeInTheDocument();
   expect(input).toHaveValue("");
   expect(input).toHaveFocus();
-  expect(screen.getByText("Message added.")).toBeInTheDocument();
+  expect(screen.getByText("Message added to Reqro.")).toBeInTheDocument();
   expect(screen.getAllByRole("listitem")).toHaveLength(2);
 });
 test("F042 uncertain submission retains draft and retry key; changing the draft uses a new key", async () => {
@@ -193,7 +191,7 @@ test("F042 uncertain submission retains draft and retry key; changing the draft 
   await waitFor(() => expect(input).not.toBeDisabled());
   fireEvent.change(input, { target: { value: "Changed fictional retry" } });
   fireEvent.click(screen.getByRole("button", { name: "Add Message" }));
-  await screen.findByText("Message added.");
+  await screen.findByText("Message added to Reqro.");
   expect(repo.createCommunication.mock.calls[2][2]).not.toBe(
     repo.createCommunication.mock.calls[0][2],
   );
@@ -228,7 +226,7 @@ test("F042 multiline Enter adds a line, maximum Unicode text is accepted, and co
     expect.stringContaining("requester-message-count"),
   );
   fireEvent.click(screen.getByRole("button", { name: "Add Message" }));
-  await screen.findByText("Message added.");
+  await screen.findByText("Message added to Reqro.");
 });
 test.each(["{Enter}", " "])(
   "F042 clearing a multiline draft before keyboard Add Message never submits the old draft (%s)",

@@ -1,3 +1,4 @@
+import { communicationEligibility } from './request-communication-policy.js';
 import { resolveRequestAuthority } from './request-authorization.js';
 import {
   validateStaffListControls,
@@ -385,6 +386,7 @@ export class InternalRequestRepository {
         'request.revision',
         'request.intake_channel as intakeChannel',
         'request.reporting_identity as requesterIdentity',
+        communicationEligibility().as('communicationEligibility'),
         sql<boolean>`request.audience = 'public' and request.reporting_identity = 'identified' and request.requester_id is not null`.as(
           'canReadRequesterHistory',
         ),
@@ -392,7 +394,12 @@ export class InternalRequestRepository {
       .where('request.id', '=', id)
       .executeTakeFirst();
     if (!row) return undefined;
-    const { intakeChannel, canReadRequesterHistory, ...safeRow } = row;
+    const {
+      intakeChannel,
+      canReadRequesterHistory,
+      communicationEligibility: communicationState,
+      ...safeRow
+    } = row;
     return {
       ...safeRow,
       ...(audience === 'all' && access
@@ -404,6 +411,7 @@ export class InternalRequestRepository {
               persistedRequestAudience(row.audience),
               row.status,
               row.requesterIdentity,
+              communicationState,
             ),
           }
         : {}),

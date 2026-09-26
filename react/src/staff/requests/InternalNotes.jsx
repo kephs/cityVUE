@@ -218,10 +218,17 @@ function NotesStream({
         </>
       ) : (
         <>
-          <p className="text-body-secondary">
-            Internal notes are visible only to authorized staff. Avoid entering
-            unnecessary sensitive information.
-          </p>
+          <aside
+            className="request-communication-information request-notes-information"
+            aria-label="About Internal Notes"
+          >
+            <strong>Internal Notes</strong>
+            <p>Internal notes are visible only to authorized staff.</p>
+            <p>
+              Use them for internal updates, troubleshooting, and coordination.
+            </p>
+            <p>Avoid entering sensitive information.</p>
+          </aside>
           {loading && <p role="status">Loading internal notes…</p>}
           {error && (
             <p role="alert" id="internal-note-error">
@@ -237,13 +244,19 @@ function NotesStream({
             aria-label="Internal notes, newest first"
           >
             {items.map((note) => (
-              <li key={note.id} id={`note-${note.id}`} tabIndex="-1">
+              <li
+                className="collaboration-entry"
+                key={note.id}
+                id={`note-${note.id}`}
+                tabIndex="-1"
+              >
                 <div className="request-note-attribution">
                   <strong>{note.author.displayName}</strong>
                   <time dateTime={note.createdAt}>
                     {new Date(note.createdAt).toLocaleString()}
                   </time>
                 </div>
+                <p className="collaboration-entry-context">Internal Note</p>
                 <p className="request-note-body">{note.body}</p>
                 <AttachmentList
                   items={note.attachments}
@@ -269,7 +282,7 @@ function NotesStream({
             )}
             <button
               type="button"
-              className="btn btn-secondary"
+              className="btn btn-outline-secondary"
               disabled={loading || pending}
               onClick={() => readPage(null, lifecycle.current.signal)}
             >
@@ -304,6 +317,7 @@ function NotesStream({
                 {draft.length.toLocaleString()} / 4,000 characters
               </p>
               <AttachmentSelector
+                collaboration
                 draft={attachmentDraft}
                 disabled={pending}
                 requesterDirected={false}

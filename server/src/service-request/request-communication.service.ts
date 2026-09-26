@@ -1,3 +1,7 @@
+import {
+  communicationEligibility,
+  assertCommunicationEligibility,
+} from './request-communication-policy.js';
 import { requestTransaction, lockRequestRow } from './request-authorization.js';
 import { Optional } from '@nestjs/common';
 import {
@@ -43,14 +47,16 @@ export class RequestCommunicationService {
     if (!requestUuid.test(id)) throw new NotFoundException();
     await lockRequestRow(trx, access.organizationId, id, false);
     // The persisted audience determines access; shared locks prevent routing during this operation.
-    const row = await staffRequestReadScope(trx, access, 'public')
-      .select(['request.id', 'request.reporting_identity as requesterIdentity'])
+    const row = await staffRequestReadScope(trx, access)
+      .select([
+        'request.id',
+        communicationEligibility().as('communicationEligibility'),
+      ])
       .where('request.id', '=', id)
       .forShare(['request', 'category', 'organization'])
       .executeTakeFirst();
     if (!row) throw new NotFoundException();
-    if (create && row.requesterIdentity === 'anonymous')
-      throw new ForbiddenException('Requester communication is unavailable');
+    assertCommunicationEligibility(row.communicationEligibility, create);
   }
 
   async list(
@@ -59,7 +65,7 @@ export class RequestCommunicationService {
     pageSize = 25,
     cursor?: string,
   ) {
-    assertStaffRequestRead(access, 'public');
+    assertStaffRequestRead(access);
     assertStaffRequestPermission(access, 'service_request.communication.read');
     return requestTransaction(
       this.database.client,
@@ -95,7 +101,7 @@ export class RequestCommunicationService {
     correlationId?: string,
     attachmentClaim?: AttachmentClaim,
   ) {
-    assertStaffRequestRead(access, 'public');
+    assertStaffRequestRead(access);
     assertStaffRequestPermission(access, 'service_request.communication.read');
     assertStaffRequestPermission(
       access,

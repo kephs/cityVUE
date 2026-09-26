@@ -55,11 +55,17 @@ function Harness({
   repo,
   binding = { issueId: id, versionId: other },
   onAccessFailure,
+  collaboration = false,
 }) {
   const draft = useAttachmentDraft(repo, binding, onAccessFailure);
   return (
     <>
-      <AttachmentSelector draft={draft} camera label="Photos & Files" />
+      <AttachmentSelector
+        draft={draft}
+        camera={!collaboration}
+        collaboration={collaboration}
+        label={collaboration ? "Attachments" : "Photos & Files"}
+      />
       <button disabled={!draft.ready} onClick={draft.clear}>
         Submit parent
       </button>
@@ -73,6 +79,58 @@ const select = (files) =>
 beforeEach(() => {
   URL.createObjectURL = vi.fn().mockReturnValue("blob:synthetic");
   URL.revokeObjectURL = vi.fn();
+});
+
+test("F058.2 compact collaboration attachments preserve details, warning, selected files and named removal", async () => {
+  const user = userEvent.setup();
+  render(
+    <Harness
+      repo={repository()}
+      collaboration
+      binding={{ requestId: id, context: "INTERNAL_NOTE" }}
+    />,
+  );
+  await screen.findByRole("button", { name: "Choose files" });
+  expect(screen.getByText("Optional")).toBeInTheDocument();
+  const privacy = screen.getByRole("complementary", {
+    name: "Staff-only attachments",
+  });
+  expect(privacy).toHaveClass("collaboration-attachment-privacy");
+  expect(privacy.querySelector("strong")).toHaveTextContent(
+    "Staff-only attachments",
+  );
+  expect(privacy).toHaveTextContent(
+    "Attachments added here are visible only to authorized staff.",
+  );
+  expect(
+    screen.getByText("JPEG, PNG or WebP · Up to 5 images · 5 MiB each"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Attachments added here are visible only to authorized staff.",
+    ),
+  ).toBeInTheDocument();
+  const details = screen.getByText("Attachment details").closest("details");
+  expect(details).not.toHaveAttribute("open");
+  await user.click(screen.getByText("Attachment details"));
+  expect(details).toHaveAttribute("open");
+  expect(details).toHaveTextContent(
+    "15 MiB total. Photo metadata is removed during processing.",
+  );
+  expect(
+    screen.getByText("Development environment").parentElement,
+  ).toHaveTextContent(
+    "Use fictional images only. Malware detection is not enabled.",
+  );
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  const filename = "fictional-" + "long-name-".repeat(9) + ".png";
+  select([fixture(filename)]);
+  expect(screen.getByText(filename)).toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("1 of 5");
+  expect(screen.getByText(/B · Selected/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: `Remove ${filename}` }));
+  expect(screen.queryByText(filename)).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("0 of 5");
 });
 
 test.each([0, 1, 3])(
@@ -552,15 +610,29 @@ test("F046 tab switches preserve separate Note and Communication files; successf
       }}
     />,
   );
-  await screen.findByRole("button", { name: "Add files" });
-  select([fixture("note.png")]);
+  await user.click(screen.getByRole("tab", { name: "Internal Notes" }));
+  await screen.findByRole("button", { name: "Choose files" });
+  fireEvent.change(
+    within(screen.getByRole("tabpanel")).getByLabelText(
+      "Choose attachment files",
+    ),
+    { target: { files: [fixture("note.png")] } },
+  );
   await user.type(screen.getByLabelText("Internal Note"), "Fictional note");
   await user.click(
     screen.getByRole("tab", { name: "Requester Communication" }),
   );
-  await screen.findByRole("button", { name: "Add files" });
+  await screen.findByRole("button", { name: "Choose files" });
   expect(screen.queryByText("note.png")).not.toBeVisible();
   const panel = screen.getByRole("tabpanel");
+  const privacy = within(panel).getByRole("complementary", {
+    name: "Requester-visible attachments",
+  });
+  expect(privacy).toHaveClass("collaboration-attachment-privacy");
+  expect(privacy.querySelectorAll("strong")[1]).toHaveTextContent(
+    "Do not include staff-only or sensitive information.",
+  );
+  expect(privacy.querySelector('[role="alert"]')).toBeNull();
   fireEvent.change(within(panel).getByLabelText("Choose attachment files"), {
     target: { files: [fixture("message.png")] },
   });
@@ -575,7 +647,7 @@ test("F046 tab switches preserve separate Note and Communication files; successf
   await user.click(
     within(notes).getByRole("button", { name: "Prepare files" }),
   );
-  await within(notes).findByText(/MiB · Ready/);
+  await within(notes).findByText(/B · Ready/);
   await user.click(within(notes).getByRole("button", { name: "Add Note" }));
   await within(notes).findByText("Fictional note");
   expect(
