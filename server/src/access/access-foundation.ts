@@ -27,7 +27,7 @@ interface State {
 }
 interface Owner {
   role_id: string;
-  kind: 'operational' | 'administrator';
+  kind: 'operational' | 'administrator' | 'reader';
 }
 export type ProvisionOperation = 'bootstrap' | 'add-manager' | 'remove-manager';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -223,6 +223,8 @@ async function writeChange(
       | 'update_managed_access'
       | 'bootstrap_access_administration'
       | 'provision_access_administrator'
+      | 'provision_access_reader'
+      | 'revoke_access_reader'
       | 'revoke_access_administrator';
     correlationId: string;
   },
@@ -367,6 +369,111 @@ export interface ProvisionInput {
   expectedBootstrap: boolean;
   operation: ProvisionOperation;
   dryRun: boolean;
+}
+
+export type ReaderOperation = 'grant-reader' | 'remove-reader';
+export async function provisionAccessReader(
+  db: Db,
+  input: Omit<ProvisionInput, 'operation'> & { operation: ReaderOperation },
+) {
+  if (
+    !validId(input.organizationId) ||
+    !validId(input.staffId) ||
+    !revision(input.expectedRevision) ||
+    typeof input.expectedBootstrap !== 'boolean' ||
+    typeof input.dryRun !== 'boolean' ||
+    !['grant-reader', 'remove-reader'].includes(input.operation)
+  )
+    throw new BadRequestException('Invalid explicit Reader selection');
+  return db
+    .transaction()
+    .setIsolationLevel(input.dryRun ? 'repeatable read' : 'read committed')
+    .execute(async (trx) => {
+      if (input.dryRun) await sql`set transaction read only`.execute(trx);
+      const state = input.dryRun
+        ? await stateRead(trx, input.organizationId)
+        : await lockAccessState(trx, input.organizationId);
+      if (
+        state.authorization_revision !== input.expectedRevision ||
+        state.bootstrap_established !== input.expectedBootstrap
+      )
+        throw new ConflictException('Access changed; preview again');
+      await target(trx, input.organizationId, input.staffId, true);
+      const ownership = await owner(
+        trx,
+        input.organizationId,
+        input.staffId,
+        'reader',
+      );
+      const grants = await contributions(
+        trx,
+        input.organizationId,
+        input.staffId,
+        ownership?.role_id,
+      );
+      const desired: Permission[] =
+        input.operation === 'grant-reader' ? ['admin.access.read'] : [];
+      const changed = JSON.stringify(desired) !== JSON.stringify(grants.owned);
+      const finalEffective = recognizedPermissions([
+        ...grants.locked,
+        ...desired,
+      ]);
+      const preview = {
+        dryRun: input.dryRun,
+        changed,
+        operation: input.operation,
+        targetReference: `staff-…${input.staffId.slice(-6)}`,
+        bootstrapEstablished: state.bootstrap_established,
+        authorizationRevision: state.authorization_revision,
+        added: desired.filter((p) => !grants.owned.includes(p)),
+        removed: grants.owned.filter((p) => !desired.includes(p)),
+        createsProvisioningRole: changed && !ownership,
+        effectiveAccessRead: finalEffective.includes('admin.access.read'),
+        effectiveConfigurationRead: finalEffective.includes(
+          'admin.configuration.read',
+        ),
+        remainsAccessAdministrator: accessPrerequisites.every((p) =>
+          finalEffective.includes(p),
+        ),
+      };
+      // A reader contribution can complete independently provisioned manager authority.
+      // Preserve the same effective last-manager rule for previews and execution.
+      if (
+        changed &&
+        state.bootstrap_established &&
+        !preview.remainsAccessAdministrator &&
+        accessPrerequisites.every((p) => grants.effective.includes(p))
+      ) {
+        const result = await sql<{
+          n: string;
+        }>`select effective_access_managers(${input.organizationId})::text n`.execute(
+          trx,
+        );
+        if (!result.rows[0] || BigInt(result.rows[0].n) <= 1n)
+          throw new ConflictException(
+            'Retain at least one Access Administrator',
+          );
+      }
+      if (input.dryRun || !changed) return preview;
+      return {
+        ...preview,
+        ...(await writeChange(trx, {
+          organizationId: input.organizationId,
+          staffId: input.staffId,
+          kind: 'reader',
+          ...(ownership ? { roleId: ownership.role_id } : {}),
+          before: state.authorization_revision,
+          desired,
+          current: grants.owned,
+          actorId: null,
+          operation:
+            input.operation === 'grant-reader'
+              ? 'provision_access_reader'
+              : 'revoke_access_reader',
+          correlationId: randomUUID(),
+        })),
+      };
+    });
 }
 /** Operator-only; the CLI validates local environment. Never imported by an HTTP module. */
 export async function provisionAccessAdministrator(

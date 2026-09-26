@@ -1,5 +1,7 @@
 # F057.1 — Administrative Access Security Foundation
 
+Subsequent approved prerequisite amendment: [Controlled Access Reader provisioning](F057-access-reader-prerequisite.md), discovered during F057.2 authenticated UAT preparation, adds Migration 39 and dedicated read-only provisioning authority. Reader authority is not Access Administrator authority. The original completion evidence below retains its Migration 38 historical scope.
+
 Status: **COMPLETE LOCALLY — NOT SYNCHRONIZED**. Implementation, migration and validation gates passed. One local feature commit is authorized; no push or deployment. F057 architecture approved; F057.2 unstarted.
 
 Starting checkpoint: main `54319416bb3d4af4ff7900baf55acc3b1f887ccf`, matching origin/main and live GitHub main, clean and 0 ahead/behind. Development database 37 applied/0 pending, 56 tables. F056.5 is complete and synchronized. Earlier documentation checkpoint statements retain their historical scope.

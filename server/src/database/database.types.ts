@@ -459,7 +459,7 @@ export interface DatabaseSchema {
     organization_id: string;
     staff_identity_id: string;
     role_id: string;
-    kind: 'operational' | 'administrator';
+    kind: 'operational' | 'administrator' | 'reader';
     creation_txid: Generated<string>;
     created_at: Generated<Timestamp>;
   };
@@ -473,6 +473,8 @@ export interface DatabaseSchema {
     operation:
       | 'bootstrap_access_administration'
       | 'provision_access_administrator'
+      | 'provision_access_reader'
+      | 'revoke_access_reader'
       | 'revoke_access_administrator'
       | 'update_managed_access';
     correlation_id: string;
