@@ -1,3 +1,4 @@
+import { up as accessFoundationUp } from '../../migrations/20261008000000-add-administrative-access-foundation.js';
 import { governedAvailabilityChecks } from './governed-availability-checks.js';
 import { reviewedCreation } from './issue-creation-fixture.js';
 import 'reflect-metadata';
@@ -565,6 +566,7 @@ test(
           await service.change(access, id, { ...(await body()), active: true });
         },
       );
+      await db.transaction().execute(accessFoundationUp);
       await t.test(
         'resident and authorized staff contexts enforce availability independently of API channel',
         async () => {
@@ -594,6 +596,7 @@ test(
               'service_request.create_internal',
             ] as Permission[],
           };
+          await grants(creatorAccess.permissions);
           for (const availability of [
             'INTERNAL_ONLY',
             'EXTERNAL_ONLY',
@@ -680,7 +683,7 @@ test(
         },
       );
       await t.test(
-        'creation admitted under the shared Issue lock completes before redirect; subsequent creation is rejected',
+        'creation preparation permits concurrent redirect and final admission rejects changed Issue',
         async () => {
           const item = (
             await service.create(access, {
@@ -757,14 +760,13 @@ test(
               throw new Error('Creation bypassed gate');
             }),
           ]);
-          const changing = legacy.set(
+          const changed = await legacy.set(
             item.id,
             { ...input, expectedRevision: 1 },
             access,
           );
           resume();
-          const [receipt, changed] = await Promise.all([creating, changing]);
-          assert.ok(receipt.id);
+          await assert.rejects(creating);
           assert.equal(changed.revision, 2);
           await assert.rejects(creator.execute(requestInput));
         },

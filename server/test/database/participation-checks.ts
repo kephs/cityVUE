@@ -186,11 +186,16 @@ export async function checkParticipation(
     .execute();
   input.serviceDefinitionVersionId = locationVersion;
   input.answers = [];
+  const mapped = await db
+    .selectFrom('staff_identity')
+    .select(['entra_tenant_id', 'entra_object_id'])
+    .where('id', '=', c.creator)
+    .executeTakeFirstOrThrow();
   const access: StaffAccess = {
     organizationId: org,
     staffIdentityId: c.creator,
-    tenantId: randomUUID(),
-    objectId: randomUUID(),
+    tenantId: mapped.entra_tenant_id,
+    objectId: mapped.entra_object_id,
     permissions: [
       'service_request.view',
       'analytics.service_participation.read',

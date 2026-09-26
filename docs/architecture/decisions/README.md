@@ -46,3 +46,5 @@ New decisions in this series use the next unused number and include title, statu
 [ADR-021 — Complete atomic Issue creation](ADR-021-complete-atomic-issue-creation.md) supersedes ADR-019 only for two-step creation and mandatory templates. Implemented and validated locally in F056.5.
 
 [ADR-022 — Governed Issue Availability](ADR-022-governed-issue-availability.md): approved transaction-bound audit enforcement; supersedes only post-creation Availability immutability.
+
+[ADR-024 — Transaction-Time Authorization Coordination for Request Operations](ADR-024-transaction-time-request-authorization.md): Proposed; F058.1 implementation and validation under review.

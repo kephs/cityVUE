@@ -1,4 +1,8 @@
 import {
+  authorizeRequestTransaction,
+  lockRequestOrganization,
+} from './request-authorization.js';
+import {
   validateParticipation,
   validateParticipationArea,
 } from './participation.domain.js';
@@ -167,6 +171,7 @@ export class CreateServiceRequestService {
         audience: input.audience,
         intakeChannel: input.intakeChannel,
         staffId: access.staffIdentityId,
+        actor: access,
       },
       now,
     );
@@ -180,6 +185,7 @@ export class CreateServiceRequestService {
       intakeChannel: string;
       staffId: string | null;
       trusted?: TrustedRequesterContext;
+      actor?: StaffAccess;
     },
     now: Date,
   ): Promise<CreateServiceRequestResponseDto> {
@@ -187,7 +193,66 @@ export class CreateServiceRequestService {
     validateParticipation(input.participation, context.audience);
     if (input.attachments && !attachments)
       throw new BadRequestException('Attachments unavailable');
+    const prepared =
+      input.attachments && attachments
+        ? await attachments.prepareFiles(input.attachments)
+        : undefined;
+    const preparedDefinition = prepared?.finalized
+      ? undefined
+      : await this.repository.loadSubmissionDefinition(
+          this.database.client,
+          context.organizationId,
+          input.serviceDefinitionId,
+          input.serviceDefinitionVersionId,
+        );
+    const initialAction = prepared?.finalized
+      ? undefined
+      : await this.database.client
+          .selectFrom('service_definition')
+          .select([
+            'status',
+            'availability',
+            'action_type',
+            'current_published_version_id',
+          ])
+          .where('organization_id', '=', context.organizationId)
+          .where('id', '=', input.serviceDefinitionId)
+          .executeTakeFirst();
+    const preparedEligibility =
+      input.location &&
+      preparedDefinition &&
+      initialAction?.status === 'active' &&
+      initialAction.action_type === 'internal_intake' &&
+      initialAction.current_published_version_id ===
+        input.serviceDefinitionVersionId &&
+      allowsIntake(
+        initialAction.availability,
+        context.audience === 'internal' ? 'internal' : 'external',
+      )
+        ? await this.eligibility.execute({
+            organizationId: context.organizationId,
+            policyType: preparedDefinition.geographicEligibilityMode,
+            policyReference:
+              preparedDefinition.geographicEligibilityPolicyReference,
+            unableToDetermineBehavior:
+              preparedDefinition.unableToDetermineBehavior,
+            enteredAddress: input.location.enteredAddress.trim(),
+            locationType: input.location.locationType ?? 'entered_address',
+            latitude: input.location.latitude,
+            longitude: input.location.longitude,
+          })
+        : null;
+
     return this.database.client.transaction().execute(async (trx) => {
+      if (context.actor)
+        await authorizeRequestTransaction(
+          trx,
+          context.actor,
+          context.audience === 'internal'
+            ? ['service_request.create', 'service_request.create_internal']
+            : ['service_request.create'],
+        );
+      else await lockRequestOrganization(trx, context.organizationId);
       const attachmentDigest = checksum(
         JSON.stringify({
           serviceDefinitionId: input.serviceDefinitionId,
@@ -210,7 +275,7 @@ export class CreateServiceRequestService {
             : {}),
         }),
       );
-      const batch =
+      const prepareBatch = async () =>
         input.attachments && attachments
           ? await attachments.prepare(
               trx,
@@ -222,8 +287,11 @@ export class CreateServiceRequestService {
                 versionId: input.serviceDefinitionVersionId,
               },
               attachmentDigest,
+              undefined,
+              prepared,
             )
           : undefined;
+      let batch = prepared?.finalized ? await prepareBatch() : undefined;
       if (batch?.state === 'FINALIZED') {
         if (!batch.service_request_id) throw new NotFoundException();
         const prior = await trx
@@ -244,6 +312,7 @@ export class CreateServiceRequestService {
       const action = await trx
         .selectFrom('service_definition')
         .select([
+          'category_id',
           'action_type',
           'availability',
           'status',
@@ -254,6 +323,13 @@ export class CreateServiceRequestService {
         .forShare()
         .executeTakeFirst();
       if (!action) throw new NotFoundException();
+      await trx
+        .selectFrom('category')
+        .select('id')
+        .where('organization_id', '=', context.organizationId)
+        .where('id', '=', action.category_id)
+        .forShare()
+        .executeTakeFirstOrThrow();
       if (action.status !== 'active')
         throw new ConflictException(
           'This Issue is no longer available for new requests',
@@ -270,6 +346,16 @@ export class CreateServiceRequestService {
         );
       if (
         action.current_published_version_id !== input.serviceDefinitionVersionId
+      )
+        throw new ConflictException(
+          'The Issue form has changed. Review the current form.',
+        );
+      if (
+        initialAction?.status !== action.status ||
+        initialAction.availability !== action.availability ||
+        initialAction.action_type !== action.action_type ||
+        initialAction.current_published_version_id !==
+          action.current_published_version_id
       )
         throw new ConflictException(
           'The Issue form has changed. Review the current form.',
@@ -447,18 +533,11 @@ export class CreateServiceRequestService {
         });
       }
 
-      const eligibilityResult = input.location
-        ? await this.eligibility.execute({
-            organizationId: context.organizationId,
-            policyType: definition.geographicEligibilityMode,
-            policyReference: definition.geographicEligibilityPolicyReference,
-            unableToDetermineBehavior: definition.unableToDetermineBehavior,
-            enteredAddress: input.location.enteredAddress.trim(),
-            locationType: input.location.locationType ?? 'entered_address',
-            latitude: input.location.latitude,
-            longitude: input.location.longitude,
-          })
-        : null;
+      if (JSON.stringify(definition) !== JSON.stringify(preparedDefinition))
+        throw new ConflictException(
+          'The Issue form has changed. Review the current form.',
+        );
+      const eligibilityResult = preparedEligibility;
       const identityPolicy = await inspectRequesterPolicy(
         trx,
         context.organizationId,
@@ -484,6 +563,23 @@ export class CreateServiceRequestService {
         definition.categoryId,
         context.audience,
       );
+      batch = await prepareBatch();
+      if (batch?.state === 'FINALIZED') {
+        if (!batch.service_request_id) throw new NotFoundException();
+        const prior = await trx
+          .selectFrom('service_request')
+          .select(['id', 'reference_number', 'created_at'])
+          .where('organization_id', '=', context.organizationId)
+          .where('id', '=', batch.service_request_id)
+          .executeTakeFirstOrThrow();
+        return {
+          id: prior.id,
+          referenceNumber: prior.reference_number,
+          // A retry returns the original creation receipt, never current workflow state.
+          status: 'open',
+          createdAt: new Date(prior.created_at as unknown as string),
+        };
+      }
       const referenceNumber = await this.repository.allocateReference(
         trx,
         context.organizationId,

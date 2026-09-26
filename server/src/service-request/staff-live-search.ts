@@ -13,6 +13,13 @@ export function normalizeStaffSearch(value: unknown): string {
   if (value === undefined) return '';
   if (typeof value !== 'string' || value.length > staffSearchMaxLength)
     throw new BadRequestException('Invalid request search');
+  if (
+    Array.from(value).some((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 31 || (code >= 127 && code <= 159);
+    })
+  )
+    throw new BadRequestException('Invalid request search');
   const query = value.trim();
   if (query.length === 1)
     throw new BadRequestException(

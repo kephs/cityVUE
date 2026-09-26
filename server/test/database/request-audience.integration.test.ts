@@ -1,3 +1,5 @@
+import { checkRequestAuthorization } from './request-authorization-checks.js';
+import { up as accessFoundationUp } from '../../migrations/20261008000000-add-administrative-access-foundation.js';
 import { legacyAvailabilityFixture } from '../helpers/legacy-availability.js';
 import { checkOrganizationBranding } from './organization-branding-checks.js';
 import { checkAdminIntakeSettings } from './admin-intake-settings-checks.js';
@@ -550,6 +552,7 @@ test(
           await db.transaction().execute(trustedHistoryUp);
         },
       );
+      await db.transaction().execute(accessFoundationUp);
       const module = await Test.createTestingModule({ imports: [AppModule] })
         .overrideProvider(PinoLoggerService)
         .useValue(safeLogger)
@@ -2552,6 +2555,13 @@ test(
               .execute();
           },
         );
+        await checkRequestAuthorization(t, db, {
+          org,
+          otherOrg,
+          category,
+          service,
+          version,
+        });
       } finally {
         await app.close();
       }

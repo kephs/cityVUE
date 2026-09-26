@@ -1,3 +1,4 @@
+import { requestTransaction, lockRequestRow } from './request-authorization.js';
 import {
   ConflictException,
   ForbiddenException,
@@ -37,6 +38,7 @@ export class RequestTrackingService {
     write: boolean,
   ) {
     if (!requestUuid.test(id)) throw new NotFoundException();
+    await lockRequestRow(trx, access.organizationId, id, write);
     let query = staffRequestReadScope(trx, access, 'public')
       .select('request.id')
       .where('request.id', '=', id);
@@ -59,10 +61,15 @@ export class RequestTrackingService {
   async state(id: string, access: StaffAccess | undefined) {
     assertStaffRequestRead(access, 'public');
     assertStaffRequestPermission(access, TRACKING_MANAGE);
-    return this.database.client.transaction().execute(async (trx) => {
-      await this.parent(trx, access, id, false);
-      return this.repository.state(trx, access.organizationId, id);
-    });
+    return requestTransaction(
+      this.database.client,
+      access,
+      [TRACKING_MANAGE],
+      async (trx, access) => {
+        await this.parent(trx, access, id, false);
+        return this.repository.state(trx, access.organizationId, id);
+      },
+    );
   }
   async change(
     id: string,
@@ -73,75 +80,85 @@ export class RequestTrackingService {
   ) {
     assertStaffRequestRead(access, 'public');
     assertStaffRequestPermission(access, TRACKING_MANAGE);
-    return this.database.client.transaction().execute(async (trx) => {
-      await this.parent(trx, access, id, true);
-      const current = await this.repository.state(
-        trx,
-        access.organizationId,
-        id,
-      );
-      if (
-        current.version !== expectedVersion ||
-        (operation === 'issue'
-          ? current.status === 'active'
-          : current.status !== 'active')
-      )
-        throw new ConflictException();
-      if (current.status === 'active')
+    return requestTransaction(
+      this.database.client,
+      access,
+      [TRACKING_MANAGE],
+      async (trx, access) => {
+        await this.parent(trx, access, id, true);
+        const current = await this.repository.state(
+          trx,
+          access.organizationId,
+          id,
+        );
+        if (
+          current.version !== expectedVersion ||
+          (operation === 'issue'
+            ? current.status === 'active'
+            : current.status !== 'active')
+        )
+          throw new ConflictException();
+        if (current.status === 'active')
+          await trx
+            .updateTable('request_tracking_credential')
+            .set({
+              status: 'revoked',
+              revoked_at: sql<Date>`clock_timestamp()`,
+            })
+            .where('organization_id', '=', access.organizationId)
+            .where('id', '=', current.version ?? '')
+            .execute();
+        let credential: string | undefined;
+        let version = current.version;
+        if (operation !== 'revoke') {
+          const generated = generateTrackingCredential();
+          const row = await trx
+            .insertInto('request_tracking_credential')
+            .values({
+              organization_id: access.organizationId,
+              service_request_id: id,
+              credential_digest: generated.digest,
+              status: 'active',
+              created_by_staff_identity_id: access.staffIdentityId,
+              revoked_at: null,
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          version = row.id;
+          credential = generated.credential;
+        }
+        const action = {
+          issue: 'issued',
+          rotate: 'rotated',
+          revoke: 'revoked',
+        }[operation];
         await trx
-          .updateTable('request_tracking_credential')
-          .set({ status: 'revoked', revoked_at: sql<Date>`clock_timestamp()` })
-          .where('organization_id', '=', access.organizationId)
-          .where('id', '=', current.version ?? '')
-          .execute();
-      let credential: string | undefined;
-      let version = current.version;
-      if (operation !== 'revoke') {
-        const generated = generateTrackingCredential();
-        const row = await trx
-          .insertInto('request_tracking_credential')
+          .insertInto('activity')
           .values({
+            id: randomUUID(),
             organization_id: access.organizationId,
             service_request_id: id,
-            credential_digest: generated.digest,
-            status: 'active',
-            created_by_staff_identity_id: access.staffIdentityId,
-            revoked_at: null,
+            activity_type: `requester_tracking_${action}`,
+            actor_type: 'staff',
+            actor_reference: null,
+            staff_identity_id: access.staffIdentityId,
+            metadata: {
+              policy: 'F044',
+              action: `tracking_${action}`,
+              correlationId:
+                correlationId && requestUuid.test(correlationId)
+                  ? correlationId
+                  : randomUUID(),
+            },
           })
-          .returning('id')
-          .executeTakeFirstOrThrow();
-        version = row.id;
-        credential = generated.credential;
-      }
-      const action = { issue: 'issued', rotate: 'rotated', revoke: 'revoked' }[
-        operation
-      ];
-      await trx
-        .insertInto('activity')
-        .values({
-          id: randomUUID(),
-          organization_id: access.organizationId,
-          service_request_id: id,
-          activity_type: `requester_tracking_${action}`,
-          actor_type: 'staff',
-          actor_reference: null,
-          staff_identity_id: access.staffIdentityId,
-          metadata: {
-            policy: 'F044',
-            action: `tracking_${action}`,
-            correlationId:
-              correlationId && requestUuid.test(correlationId)
-                ? correlationId
-                : randomUUID(),
-          },
-        })
-        .execute();
-      return {
-        status: operation === 'revoke' ? 'revoked' : 'active',
-        version,
-        ...(credential ? { credential } : {}),
-      };
-    });
+          .execute();
+        return {
+          status: operation === 'revoke' ? 'revoked' : 'active',
+          version,
+          ...(credential ? { credential } : {}),
+        };
+      },
+    );
   }
   async track(credential: unknown) {
     if (!validTrackingCredential(credential)) throw new NotFoundException();

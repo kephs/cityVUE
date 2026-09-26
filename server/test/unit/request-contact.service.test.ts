@@ -86,7 +86,46 @@ test('F039/F049 contact cannot query or audit an unresolved, mismatched or anony
   const database = {
     client: {
       transaction: () => ({
-        execute: (fn: (trx: object) => unknown) => fn({}),
+        setIsolationLevel() {
+          return this;
+        },
+        execute: (fn: (trx: object) => unknown) =>
+          fn({
+            selectFrom: (table: string) => {
+              assert.ok(
+                [
+                  'organization',
+                  'organization_access_state',
+                  'staff_identity as s',
+                  'staff_role_assignment as assignment',
+                  'staff_department_membership',
+                  'staff_division_membership',
+                  'service_request',
+                ].includes(table),
+                'Protected data must not be queried',
+              );
+              const rows =
+                table === 'staff_role_assignment as assignment'
+                  ? access.permissions.map((permission_key) => ({
+                      permission_key,
+                    }))
+                  : table.includes('membership')
+                    ? []
+                    : [
+                        {
+                          id: access.staffIdentityId,
+                          display_name: access.displayName,
+                          organization_id: access.organizationId,
+                        },
+                      ];
+              const query: Record<string, unknown> = {};
+              for (const method of ['select', 'where', 'innerJoin', 'forShare'])
+                query[method] = () => query;
+              query.execute = async () => rows;
+              query.executeTakeFirst = async () => rows[0];
+              return query;
+            },
+          }),
       }),
     },
   } as unknown as DatabaseService;

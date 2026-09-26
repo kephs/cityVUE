@@ -75,7 +75,7 @@ export async function checkTrustedRequesterHistory(
     `/api/v1/staff/service-requests/${id}/requester-history`;
   const access: StaffAccess = {
     organizationId: org,
-    staffIdentityId: c.creator,
+    staffIdentityId: randomUUID(),
     tenantId: randomUUID(),
     objectId: randomUUID(),
     permissions: ['service_request.view'],
@@ -85,6 +85,53 @@ export async function checkTrustedRequesterHistory(
     displayName: 'Fictional staff',
     scopes: ['access_as_user'],
   };
+  const historyRole = randomUUID();
+  await db
+    .insertInto('staff_identity')
+    .values({
+      id: access.staffIdentityId,
+      organization_id: org,
+      display_name: 'Synthetic history reader',
+      entra_tenant_id: access.tenantId,
+      entra_object_id: access.objectId,
+      active: true,
+    })
+    .execute();
+  await db
+    .insertInto('role')
+    .values({
+      id: historyRole,
+      organization_id: org,
+      name: historyRole,
+      active: true,
+    })
+    .execute();
+  await db
+    .insertInto('role_permission')
+    .values({
+      organization_id: org,
+      role_id: historyRole,
+      permission_key: 'service_request.view',
+    })
+    .execute();
+  await db
+    .insertInto('staff_role_assignment')
+    .values({
+      organization_id: org,
+      role_id: historyRole,
+      staff_identity_id: access.staffIdentityId,
+      active: true,
+    })
+    .execute();
+  await db
+    .insertInto('staff_department_membership')
+    .values({
+      organization_id: org,
+      staff_identity_id: access.staffIdentityId,
+      department_id: c.department,
+      active: true,
+    })
+    .execute();
   const original = await db
     .selectFrom('service_request')
     .selectAll()
@@ -407,15 +454,42 @@ export async function checkTrustedRequesterHistory(
         ...access,
         departmentIds: [c.department, c.targetDepartment],
       };
+      await db
+        .insertInto('staff_department_membership')
+        .values({
+          organization_id: org,
+          staff_identity_id: access.staffIdentityId,
+          department_id: c.targetDepartment,
+          active: true,
+        })
+        .execute();
       assert.equal((await history.read(required(ids[0]), expanded)).total, 5);
+      await db
+        .deleteFrom('staff_department_membership')
+        .where('staff_identity_id', '=', access.staffIdentityId)
+        .where('department_id', '=', c.targetDepartment)
+        .execute();
       assert.equal((await history.read(required(ids[0]), access)).total, 3);
       await assert.rejects(history.read(required(ids[3]), access));
       await assert.rejects(
         history.read(required(ids[0]), { ...access, permissions: [] }),
       );
-      await assert.rejects(
-        history.read(required(ids[0]), { ...access, departmentIds: [] }),
+      assert.equal(
+        (await history.read(required(ids[0]), { ...access, departmentIds: [] }))
+          .total,
+        3,
       );
+      await db
+        .updateTable('staff_department_membership')
+        .set({ active: false })
+        .where('staff_identity_id', '=', access.staffIdentityId)
+        .execute();
+      await assert.rejects(history.read(required(ids[0]), access));
+      await db
+        .updateTable('staff_department_membership')
+        .set({ active: true })
+        .where('staff_identity_id', '=', access.staffIdentityId)
+        .execute();
       await sql`update service_request set created_at='2026-01-01T00:00:00Z' where id in (${sql.join(ids.slice(0, 3))})`.execute(
         db,
       );

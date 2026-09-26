@@ -544,7 +544,7 @@ export async function checkAdminIssues(
     },
   );
   await t.test(
-    'F056.2A schema validation holds the Issue lock and later deactivation rejects stale creation',
+    'F058 preparation releases Issue configuration and final transaction rejects concurrent deactivation',
     async () => {
       const repo = app.get(ServiceRequestRepository),
         catalog = app.get(CatalogRepository);
@@ -587,19 +587,13 @@ export async function checkAdminIssues(
         .then((r) => r);
       try {
         await loaded;
-        let changed = false;
         const deactivation = patch(issue.id, {
           ...body(issue),
           active: false,
-        }).then((r) => {
-          changed = true;
-          return r;
-        });
-        await new Promise((resolve) => setTimeout(resolve, 30));
-        assert.equal(changed, false);
-        release();
-        assert.equal((await pending).status, 400);
+        }).then((r) => r);
         const deactivated = await deactivation;
+        release();
+        assert.equal((await pending).status, 409);
         assert.equal(deactivated.status, 200);
         issue = (deactivated.body as { issue: IssueProjection }).issue;
         await request(api)

@@ -56,7 +56,7 @@ test('live search trims only edges and accepts bounded literal Unicode phrases',
   for (const [input, expected] of [
     [undefined, ''],
     ['', ''],
-    [' \t\n ', ''],
+    ['   ', ''],
     ['  Tree  debris  ', 'Tree  debris'],
     ['café 東京', 'café 東京'],
     ["O'Neil %_\\", "O'Neil %_\\"],
@@ -82,4 +82,14 @@ test('live search DTO rejects arrays, objects and oversized strings', () => {
       validateSync(plainToInstance(StaffRequestListQueryDto, { q })).length,
       0,
     );
+});
+
+test('search rejects C0, DEL and C1 controls before trimming', () => {
+  for (const code of [
+    ...Array.from({ length: 32 }, (_, i) => i),
+    ...Array.from({ length: 33 }, (_, i) => 127 + i),
+  ]) {
+    assert.throws(() => normalizeStaffSearch('ab' + String.fromCharCode(code)));
+    assert.throws(() => normalizeStaffSearch(String.fromCharCode(code) + 'ab'));
+  }
 });

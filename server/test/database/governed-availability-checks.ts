@@ -432,8 +432,11 @@ export async function governedAvailabilityChecks(
         });
       repository.loadSubmissionDefinition = async (...args) => {
         const result = await load(...args);
-        admit();
-        await gate;
+        // Preparation is outside admission; pause only after the final transaction locks.
+        if (args[0].isTransaction) {
+          admit();
+          await gate;
+        }
         return result;
       };
       const creating = creator(repository).execute(requestInput);

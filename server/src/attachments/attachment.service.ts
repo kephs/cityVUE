@@ -16,6 +16,11 @@ import type { DatabaseSchema } from '../database/database.types.js';
 import { DatabaseService } from '../database/database.service.js';
 import { ServiceRequestRepository } from '../service-request/service-request.repository.js';
 import {
+  authorizeRequestTransaction,
+  lockRequestRow,
+  lockRequestOrganization,
+} from '../service-request/request-authorization.js';
+import {
   assertStaffRequestRead,
   assertStaffRequestPermission,
   requestUuid,
@@ -119,6 +124,8 @@ export class AttachmentService {
   ) {
     if (!requestUuid.test(requestId) || !attachmentContexts.includes(context))
       throw new NotFoundException();
+    access = await authorizeRequestTransaction(trx, access);
+    await lockRequestRow(trx, access.organizationId, requestId, false);
     // staffRequestReadScope asserts trusted workforce identity and independent parent permissions.
     assertStaffRequestRead(access);
     const parent = staffRequestReadScope(
@@ -217,6 +224,7 @@ export class AttachmentService {
   }
   private async start(owner: AttachmentOwner, existing?: Trx) {
     const run = async (trx: Trx) => {
+      await lockRequestOrganization(trx, owner.organizationId);
       // Serialize per-Organization admission; active stage and hourly caps bound anonymous storage/processing.
       await sql`select pg_advisory_xact_lock(hashtextextended(${owner.organizationId},46))`.execute(
         trx,
@@ -278,6 +286,32 @@ export class AttachmentService {
       !/^[\w-]{43}$/.test(claim.token)
     )
       throw new NotFoundException();
+    // This lookup only locates the parent. The locked row is checked again below.
+    const candidate = await trx
+      .selectFrom('attachment_batch')
+      .selectAll()
+      .where('id', '=', claim.batchId)
+      .executeTakeFirst();
+    if (!candidate) throw new NotFoundException();
+    if (candidate.context === 'REQUEST_EVIDENCE') {
+      if (candidate.organization_id !== this.organizationId || access)
+        throw new NotFoundException();
+      await lockRequestOrganization(trx, candidate.organization_id);
+    } else {
+      if (
+        !candidate.service_request_id ||
+        candidate.organization_id !== access?.organizationId ||
+        candidate.staff_identity_id !== access.staffIdentityId
+      )
+        throw new NotFoundException();
+      await this.authorizeParent(
+        trx,
+        candidate.service_request_id,
+        candidate.context as AttachmentContext,
+        access,
+        true,
+      );
+    }
     const batch = await trx
       .selectFrom('attachment_batch')
       .selectAll()
@@ -285,7 +319,11 @@ export class AttachmentService {
       .forUpdate()
       .executeTakeFirst();
     if (
-      !batch ||
+      batch?.organization_id !== candidate.organization_id ||
+      (candidate.context !== 'REQUEST_EVIDENCE' &&
+        batch.service_request_id !== candidate.service_request_id) ||
+      batch.staff_identity_id !== candidate.staff_identity_id ||
+      batch.context !== candidate.context ||
       !timingSafeEqual(
         Buffer.from(batch.token_digest, 'hex'),
         Buffer.from(checksum(claim.token), 'hex'),
@@ -304,13 +342,6 @@ export class AttachmentService {
       )
         throw new NotFoundException();
       if (!batch.service_request_id) throw new NotFoundException();
-      await this.authorizeParent(
-        trx,
-        batch.service_request_id,
-        batch.context as AttachmentContext,
-        access,
-        true,
-      );
     }
     return batch;
   }
@@ -336,68 +367,79 @@ export class AttachmentService {
     this.processing++;
     let written: { org: string; key: string } | undefined;
     try {
-      return await this.database.client.transaction().execute(async (trx) => {
-        const batch = await this.batch(trx, claim, access);
-        const processed = await processImage(
-          file.buffer,
-          file.originalname,
-          file.mimetype,
-        );
-        const prior = await trx
-          .selectFrom('attachment')
-          .selectAll()
-          .where('id', '=', fileId)
-          .executeTakeFirst();
-        if (prior) {
-          if (
-            prior.batch_id !== batch.id ||
-            prior.content_checksum !== processed.checksum ||
-            prior.filename !== processed.filename ||
-            prior.scan_state !== 'CLEAN'
-          )
-            throw new ConflictException();
-          return project(prior);
-        }
-        const rows = await trx
-          .selectFrom('attachment')
-          .select(['byte_size', 'source_byte_size'])
-          .where('batch_id', '=', batch.id)
-          .execute();
-        assertAttachmentCount([
-          ...rows.map((x) => Math.max(x.byte_size, x.source_byte_size)),
-          Math.max(file.buffer.length, processed.byteSize),
-        ]);
-        const key = newStorageKey();
-        await trx
-          .insertInto('attachment')
-          .values({
-            id: fileId,
-            organization_id: batch.organization_id,
-            batch_id: batch.id,
-            context: batch.context,
-            storage_key: key,
-            filename: processed.filename,
-            media_type: processed.mediaType,
-            byte_size: processed.byteSize,
-            source_byte_size: file.buffer.length,
-            content_checksum: processed.checksum,
-            scan_state: 'PENDING_SCAN',
-          })
-          .execute();
-        if ((await this.scanner.scan(processed.bytes)) !== 'CLEAN')
-          throw new BadRequestException('File was rejected.');
-        // Provider cleans partial writes; never delete an existing immutable key after an exclusive-create collision.
-        await this.storage.write(batch.organization_id, key, processed.bytes);
-        written = { org: batch.organization_id, key };
-        const clean = await trx
-          .updateTable('attachment')
-          .set({ scan_state: 'CLEAN' })
-          .where('id', '=', fileId)
-          .returningAll()
-          .executeTakeFirstOrThrow();
-        await this.audit(trx, batch, 'staged', fileId);
-        return project(clean);
-      });
+      const admitted = await this.database.client
+        .transaction()
+        .execute((trx) => this.batch(trx, claim, access));
+      const processed = await processImage(
+        file.buffer,
+        file.originalname,
+        file.mimetype,
+      );
+      if ((await this.scanner.scan(processed.bytes)) !== 'CLEAN')
+        throw new BadRequestException('File was rejected.');
+      const key = newStorageKey();
+      await this.storage.write(admitted.organization_id, key, processed.bytes);
+      written = { org: admitted.organization_id, key };
+      const disposition = { retained: false };
+      const result = await this.database.client
+        .transaction()
+        .execute(async (trx) => {
+          const batch = await this.batch(trx, claim, access);
+          const prior = await trx
+            .selectFrom('attachment')
+            .selectAll()
+            .where('id', '=', fileId)
+            .executeTakeFirst();
+          if (prior) {
+            if (
+              prior.batch_id !== batch.id ||
+              prior.content_checksum !== processed.checksum ||
+              prior.filename !== processed.filename ||
+              prior.scan_state !== 'CLEAN'
+            )
+              throw new ConflictException();
+            return project(prior);
+          }
+          const rows = await trx
+            .selectFrom('attachment')
+            .select(['byte_size', 'source_byte_size'])
+            .where('batch_id', '=', batch.id)
+            .execute();
+          assertAttachmentCount([
+            ...rows.map((x) => Math.max(x.byte_size, x.source_byte_size)),
+            Math.max(file.buffer.length, processed.byteSize),
+          ]);
+          await trx
+            .insertInto('attachment')
+            .values({
+              id: fileId,
+              organization_id: batch.organization_id,
+              batch_id: batch.id,
+              context: batch.context,
+              storage_key: key,
+              filename: processed.filename,
+              media_type: processed.mediaType,
+              byte_size: processed.byteSize,
+              source_byte_size: file.buffer.length,
+              content_checksum: processed.checksum,
+              scan_state: 'PENDING_SCAN',
+            })
+            .execute();
+          const clean = await trx
+            .updateTable('attachment')
+            .set({ scan_state: 'CLEAN' })
+            .where('id', '=', fileId)
+            .returningAll()
+            .executeTakeFirstOrThrow();
+          await this.audit(trx, batch, 'staged', fileId);
+          disposition.retained = true;
+          return project(clean);
+        });
+      if (!disposition.retained)
+        await this.storage
+          .remove(written.org, written.key)
+          .catch(() => undefined);
+      return result;
     } catch (error) {
       if (written)
         await this.storage
@@ -408,10 +450,26 @@ export class AttachmentService {
       this.processing--;
     }
   }
+  private async checkedBytes(file: Selectable<DatabaseSchema['attachment']>) {
+    try {
+      const bytes = await this.storage.read(
+        file.organization_id,
+        file.storage_key,
+      );
+      if (
+        bytes.length !== file.byte_size ||
+        checksum(bytes) !== file.content_checksum
+      )
+        throw new Error();
+      return bytes;
+    } catch {
+      throw new NotFoundException();
+    }
+  }
   async preview(claim: AttachmentClaim, fileId: string, access?: StaffAccess) {
     this.assertEnabled();
     if (!requestUuid.test(fileId)) throw new NotFoundException();
-    return this.database.client.transaction().execute(async (trx) => {
+    const locate = async (trx: Trx) => {
       const batch = await this.batch(trx, claim, access);
       const file = await trx
         .selectFrom('attachment')
@@ -421,19 +479,16 @@ export class AttachmentService {
         .where('scan_state', '=', 'CLEAN')
         .executeTakeFirst();
       if (!file) throw new NotFoundException();
-      let bytes: Buffer;
-      try {
-        bytes = await this.storage.read(file.organization_id, file.storage_key);
-        if (
-          bytes.length !== file.byte_size ||
-          checksum(bytes) !== file.content_checksum
-        )
-          throw new Error();
-      } catch {
+      return { batch, file };
+    };
+    const prepared = await this.database.client.transaction().execute(locate);
+    const bytes = await this.checkedBytes(prepared.file);
+    return this.database.client.transaction().execute(async (trx) => {
+      const current = await locate(trx);
+      if (JSON.stringify(current.file) !== JSON.stringify(prepared.file))
         throw new NotFoundException();
-      }
-      await this.audit(trx, batch, 'downloaded', fileId);
-      return { metadata: project(file), bytes };
+      await this.audit(trx, current.batch, 'downloaded', fileId);
+      return { metadata: project(current.file), bytes };
     });
   }
   async remove(
@@ -473,6 +528,7 @@ export class AttachmentService {
     owner: AttachmentOwner,
     digest: string,
     access?: StaffAccess,
+    prepared?: { manifest: string; finalized: boolean },
   ) {
     this.assertEnabled();
     const batch = await this.batch(trx, claim, access, true);
@@ -497,18 +553,53 @@ export class AttachmentService {
       .execute();
     if (!files.length || files.some((x) => x.scan_state !== 'CLEAN'))
       throw new ConflictException('Attachments are not ready.');
-    for (const file of files) {
-      const bytes = await this.storage.read(
-        file.organization_id,
-        file.storage_key,
+    if (prepared?.manifest !== this.manifest(files))
+      throw new ConflictException(
+        'Attachments changed; review before retrying.',
       );
-      if (
-        bytes.length !== file.byte_size ||
-        checksum(bytes) !== file.content_checksum
-      )
-        throw new ServiceUnavailableException('Attachment unavailable.');
-    }
     return batch;
+  }
+
+  private manifest(files: Selectable<DatabaseSchema['attachment']>[]) {
+    return checksum(
+      JSON.stringify([...files].sort((a, b) => a.id.localeCompare(b.id))),
+    );
+  }
+
+  /** Immutable object reads happen before the final parent/child transaction. */
+  async prepareFiles(claim: AttachmentClaim, access?: StaffAccess) {
+    const prepared = await this.database.client
+      .transaction()
+      .execute(async (trx) => {
+        const batch = await this.batch(trx, claim, access, true);
+        return {
+          finalized: batch.state === 'FINALIZED',
+          files: await trx
+            .selectFrom('attachment')
+            .selectAll()
+            .where('batch_id', '=', batch.id)
+            .execute(),
+        };
+      });
+    const { files, finalized } = prepared;
+    if (
+      !finalized &&
+      (!files.length || files.some((file) => file.scan_state !== 'CLEAN'))
+    )
+      throw new ConflictException('Attachments are not ready.');
+    if (!finalized)
+      for (const file of files) {
+        const bytes = await this.storage.read(
+          file.organization_id,
+          file.storage_key,
+        );
+        if (
+          bytes.length !== file.byte_size ||
+          checksum(bytes) !== file.content_checksum
+        )
+          throw new ServiceUnavailableException('Attachment unavailable.');
+      }
+    return { manifest: this.manifest(files), finalized };
   }
   async finalize(
     trx: Trx,
@@ -617,7 +708,7 @@ export class AttachmentService {
     this.assertEnabled();
     if (!requestUuid.test(parentId) || !requestUuid.test(fileId))
       throw new NotFoundException();
-    return this.database.client.transaction().execute(async (trx) => {
+    const locate = async (trx: Trx) => {
       await this.authorizeParent(trx, requestId, context, access);
       const column =
         context === 'INTERNAL_NOTE'
@@ -625,7 +716,7 @@ export class AttachmentService {
           : context === 'REQUESTER_COMMUNICATION'
             ? 'b.communication_id'
             : 'b.service_request_id';
-      const row = await trx
+      const file = await trx
         .selectFrom('attachment as a')
         .innerJoin('attachment_batch as b', 'b.id', 'a.batch_id')
         .selectAll('a')
@@ -637,32 +728,28 @@ export class AttachmentService {
         .where('a.scan_state', '=', 'CLEAN')
         .where('b.state', '=', 'FINALIZED')
         .executeTakeFirst();
-      if (!row) throw new NotFoundException();
+      if (!file) throw new NotFoundException();
       const batch = await trx
         .selectFrom('attachment_batch')
         .selectAll()
-        .where('id', '=', row.batch_id)
+        .where('id', '=', file.batch_id)
         .executeTakeFirstOrThrow();
-      // Capped file bytes are integrity checked before required audit commits and disclosure.
-      let bytes: Buffer;
-      try {
-        bytes = await this.storage.read(row.organization_id, row.storage_key);
-        if (
-          bytes.length !== row.byte_size ||
-          checksum(bytes) !== row.content_checksum
-        )
-          throw new Error();
-      } catch {
+      return { file, batch };
+    };
+    const prepared = await this.database.client.transaction().execute(locate);
+    const bytes = await this.checkedBytes(prepared.file);
+    return this.database.client.transaction().execute(async (trx) => {
+      const current = await locate(trx);
+      if (JSON.stringify(current.file) !== JSON.stringify(prepared.file))
         throw new NotFoundException();
-      }
       await this.audit(
         trx,
-        batch,
+        current.batch,
         'downloaded',
         fileId,
         access.staffIdentityId,
       );
-      return { metadata: project(row), bytes };
+      return { metadata: project(current.file), bytes };
     });
   }
   async cleanup(now = new Date()) {

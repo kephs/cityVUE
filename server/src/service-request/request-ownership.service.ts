@@ -1,3 +1,4 @@
+import { requestTransaction, lockRequestRow } from './request-authorization.js';
 import { insertCurrentAssignment } from './assignment-write.js';
 import {
   BadRequestException,
@@ -239,203 +240,218 @@ export class RequestOwnershipService {
     const targetId = self ? access.staffIdentityId : (input.targetId ?? '');
     if (operation !== 'unassign')
       validateTarget(self ? type : input.targetType, targetId);
-    return this.database.client.transaction().execute(async (db) => {
-      const parent = await this.parent(db, access, id, true, audience);
-      const persistedAudience = persistedRequestAudience(parent.audience);
-      if (audience !== 'internal')
-        assertRequestOperation(
-          access,
-          persistedAudience,
-          self ? 'self_watch' : assignment ? 'assign' : 'watchers',
-        );
-      if (parent.revision !== input.expectedRevision)
-        throw new ConflictException('Request changed; refresh before retrying');
-      const previous = await currentAssignment(db, access.organizationId, id);
-      let target: OwnershipTarget | undefined;
-      if (operation !== 'unassign') {
-        // Lock the selected principal/team/role before rechecking its current eligibility.
-        const table =
-          type === 'staff'
-            ? 'staff_identity'
-            : type === 'role'
-              ? 'operational_role'
-              : 'work_group';
-        const found = await db
-          .selectFrom(table)
-          .select('id')
-          .where('organization_id', '=', access.organizationId)
-          .where('id', '=', targetId)
-          .forShare()
-          .executeTakeFirst();
-        if (!found) throw new NotFoundException();
-        if (removing) {
-          target = (
-            await sql<OwnershipTarget>`select t.type,t.id,t.name as "displayName",t.active from ${targetCatalog(access.organizationId)} t where t.type=${type} and t.id=${targetId}`.execute(
-              db,
-            )
-          ).rows[0];
-        } else
-          target = (
-            await eligibleTargets(
-              db,
-              access.organizationId,
-              parent.departmentId,
-              parent.divisionId,
-              type,
-              '',
-              targetId,
-              persistedAudience,
-            )
-          ).at(0);
-        if (!target) throw new NotFoundException();
-      }
-      let activity:
-        | 'request_assigned'
-        | 'request_reassigned'
-        | 'request_unassigned'
-        | 'watcher_added'
-        | 'watcher_removed';
-      let from: OwnershipTarget | null = null,
-        to: OwnershipTarget | null = null;
-      if (assignment) {
-        if (
-          (!previous && !target) ||
-          (target &&
-            previous?.type === target.type &&
-            previous.id === target.id)
-        )
-          throw new ConflictException('Assignment is already current');
-        await db
-          .updateTable('service_request_assignment')
-          .set({ ended_at: sql`clock_timestamp()` })
-          .where('organization_id', '=', access.organizationId)
-          .where('service_request_id', '=', id)
-          .where('ended_at', 'is', null)
-          .execute();
-        if (target)
-          await insertCurrentAssignment(
-            db,
-            access.organizationId,
-            id,
-            target,
-            access.staffIdentityId,
+    return requestTransaction(
+      this.database.client,
+      access,
+      [],
+      async (db, access) => {
+        await lockRequestRow(db, access.organizationId, id, true);
+        if (audience === 'internal')
+          assertInternalAccess(
+            access,
+            self
+              ? 'service_request.internal.read'
+              : 'service_request.internal.update',
           );
-        activity = target
-          ? previous
-            ? 'request_reassigned'
-            : 'request_assigned'
-          : 'request_unassigned';
-        from = previous;
-        to = target ?? null;
-      } else {
-        if (!target) throw new NotFoundException();
-        const column =
-          type === 'staff'
-            ? 'staff_identity_id'
-            : type === 'role'
-              ? 'operational_role_id'
-              : 'work_group_id';
-        const existing = await db
-          .selectFrom('service_request_watcher')
-          .select('id')
-          .where('organization_id', '=', access.organizationId)
-          .where('service_request_id', '=', id)
-          .where('target_type', '=', type)
-          .where(column, '=', targetId)
-          .executeTakeFirst();
-        if (removing) {
-          if (!existing)
-            throw new ConflictException('Watcher is already removed');
-          await db
-            .deleteFrom('service_request_watcher')
+        const parent = await this.parent(db, access, id, true, audience);
+        const persistedAudience = persistedRequestAudience(parent.audience);
+        if (audience !== 'internal')
+          assertRequestOperation(
+            access,
+            persistedAudience,
+            self ? 'self_watch' : assignment ? 'assign' : 'watchers',
+          );
+        if (parent.revision !== input.expectedRevision)
+          throw new ConflictException(
+            'Request changed; refresh before retrying',
+          );
+        const previous = await currentAssignment(db, access.organizationId, id);
+        let target: OwnershipTarget | undefined;
+        if (operation !== 'unassign') {
+          // Lock the selected principal/team/role before rechecking its current eligibility.
+          const table =
+            type === 'staff'
+              ? 'staff_identity'
+              : type === 'role'
+                ? 'operational_role'
+                : 'work_group';
+          const found = await db
+            .selectFrom(table)
+            .select('id')
             .where('organization_id', '=', access.organizationId)
-            .where('id', '=', existing.id)
-            .execute();
-          activity = 'watcher_removed';
-          from = target;
-        } else {
-          if (existing)
-            throw new ConflictException('Target is already watching');
-          const count = await db
-            .selectFrom('service_request_watcher')
-            .select(sql<number>`count(*)::integer`.as('total'))
+            .where('id', '=', targetId)
+            .forShare()
+            .executeTakeFirst();
+          if (!found) throw new NotFoundException();
+          if (removing) {
+            target = (
+              await sql<OwnershipTarget>`select t.type,t.id,t.name as "displayName",t.active from ${targetCatalog(access.organizationId)} t where t.type=${type} and t.id=${targetId}`.execute(
+                db,
+              )
+            ).rows[0];
+          } else
+            target = (
+              await eligibleTargets(
+                db,
+                access.organizationId,
+                parent.departmentId,
+                parent.divisionId,
+                type,
+                '',
+                targetId,
+                persistedAudience,
+              )
+            ).at(0);
+          if (!target) throw new NotFoundException();
+        }
+        let activity:
+          | 'request_assigned'
+          | 'request_reassigned'
+          | 'request_unassigned'
+          | 'watcher_added'
+          | 'watcher_removed';
+        let from: OwnershipTarget | null = null,
+          to: OwnershipTarget | null = null;
+        if (assignment) {
+          if (
+            (!previous && !target) ||
+            (target &&
+              previous?.type === target.type &&
+              previous.id === target.id)
+          )
+            throw new ConflictException('Assignment is already current');
+          await db
+            .updateTable('service_request_assignment')
+            .set({ ended_at: sql`clock_timestamp()` })
             .where('organization_id', '=', access.organizationId)
             .where('service_request_id', '=', id)
-            .executeTakeFirstOrThrow();
-          if (count.total >= 100)
-            throw new ConflictException('Watcher limit reached');
-          await db
-            .insertInto('service_request_watcher')
-            .values({
-              organization_id: access.organizationId,
-              service_request_id: id,
-              target_type: type,
-              staff_identity_id: type === 'staff' ? targetId : null,
-              operational_role_id: type === 'role' ? targetId : null,
-              work_group_id: type === 'group' ? targetId : null,
-              created_by_staff_identity_id: access.staffIdentityId,
-            })
+            .where('ended_at', 'is', null)
             .execute();
-          activity = 'watcher_added';
-          to = target;
+          if (target)
+            await insertCurrentAssignment(
+              db,
+              access.organizationId,
+              id,
+              target,
+              access.staffIdentityId,
+            );
+          activity = target
+            ? previous
+              ? 'request_reassigned'
+              : 'request_assigned'
+            : 'request_unassigned';
+          from = previous;
+          to = target ?? null;
+        } else {
+          if (!target) throw new NotFoundException();
+          const column =
+            type === 'staff'
+              ? 'staff_identity_id'
+              : type === 'role'
+                ? 'operational_role_id'
+                : 'work_group_id';
+          const existing = await db
+            .selectFrom('service_request_watcher')
+            .select('id')
+            .where('organization_id', '=', access.organizationId)
+            .where('service_request_id', '=', id)
+            .where('target_type', '=', type)
+            .where(column, '=', targetId)
+            .executeTakeFirst();
+          if (removing) {
+            if (!existing)
+              throw new ConflictException('Watcher is already removed');
+            await db
+              .deleteFrom('service_request_watcher')
+              .where('organization_id', '=', access.organizationId)
+              .where('id', '=', existing.id)
+              .execute();
+            activity = 'watcher_removed';
+            from = target;
+          } else {
+            if (existing)
+              throw new ConflictException('Target is already watching');
+            const count = await db
+              .selectFrom('service_request_watcher')
+              .select(sql<number>`count(*)::integer`.as('total'))
+              .where('organization_id', '=', access.organizationId)
+              .where('service_request_id', '=', id)
+              .executeTakeFirstOrThrow();
+            if (count.total >= 100)
+              throw new ConflictException('Watcher limit reached');
+            await db
+              .insertInto('service_request_watcher')
+              .values({
+                organization_id: access.organizationId,
+                service_request_id: id,
+                target_type: type,
+                staff_identity_id: type === 'staff' ? targetId : null,
+                operational_role_id: type === 'role' ? targetId : null,
+                work_group_id: type === 'group' ? targetId : null,
+                created_by_staff_identity_id: access.staffIdentityId,
+              })
+              .execute();
+            activity = 'watcher_added';
+            to = target;
+          }
         }
-      }
-      const row = await db
-        .updateTable('service_request')
-        .set({
-          revision: parent.revision + 1,
-          updated_at: sql`clock_timestamp()`,
-        })
-        .where('organization_id', '=', access.organizationId)
-        .where('id', '=', id)
-        .where('revision', '=', parent.revision)
-        .returning(['revision', 'updated_at'])
-        .executeTakeFirstOrThrow();
-      await db
-        .insertInto('request_operational_activity')
-        .values({
-          organization_id: access.organizationId,
-          service_request_id: id,
-          activity_type: activity,
-          actor_type: 'staff',
-          staff_identity_id: access.staffIdentityId,
-          request_revision: row.revision,
-          from_target_type: from?.type ?? null,
-          from_target_name: from?.displayName ?? null,
-          to_target_type: to?.type ?? null,
-          to_target_name: to?.displayName ?? null,
-        })
-        .execute();
-      // Existing audit taxonomy is retained; safe command metadata contains no target names or narratives.
-      await db
-        .insertInto('activity')
-        .values({
-          id: randomUUID(),
-          organization_id: access.organizationId,
-          service_request_id: id,
-          activity_type: assignment
-            ? activity === 'request_unassigned'
-              ? 'service_request_unassigned'
-              : activity === 'request_assigned'
-                ? 'service_request_assigned'
-                : 'service_request_reassigned'
-            : activity,
-          actor_type: 'staff',
-          staff_identity_id: access.staffIdentityId,
-          actor_reference: null,
-          metadata: {
-            policy: persistedAudience === 'public' ? 'F040' : 'F037',
-            action: operation,
-            changedField: assignment ? 'assignment' : 'watchers',
-            revision: row.revision,
-          },
-        })
-        .execute();
-      return {
-        serviceRequestId: id,
-        revision: row.revision,
-        updatedAt: row.updated_at,
-      };
-    });
+        const row = await db
+          .updateTable('service_request')
+          .set({
+            revision: parent.revision + 1,
+            updated_at: sql`clock_timestamp()`,
+          })
+          .where('organization_id', '=', access.organizationId)
+          .where('id', '=', id)
+          .where('revision', '=', parent.revision)
+          .returning(['revision', 'updated_at'])
+          .executeTakeFirstOrThrow();
+        await db
+          .insertInto('request_operational_activity')
+          .values({
+            organization_id: access.organizationId,
+            service_request_id: id,
+            activity_type: activity,
+            actor_type: 'staff',
+            staff_identity_id: access.staffIdentityId,
+            request_revision: row.revision,
+            from_target_type: from?.type ?? null,
+            from_target_name: from?.displayName ?? null,
+            to_target_type: to?.type ?? null,
+            to_target_name: to?.displayName ?? null,
+          })
+          .execute();
+        // Existing audit taxonomy is retained; safe command metadata contains no target names or narratives.
+        await db
+          .insertInto('activity')
+          .values({
+            id: randomUUID(),
+            organization_id: access.organizationId,
+            service_request_id: id,
+            activity_type: assignment
+              ? activity === 'request_unassigned'
+                ? 'service_request_unassigned'
+                : activity === 'request_assigned'
+                  ? 'service_request_assigned'
+                  : 'service_request_reassigned'
+              : activity,
+            actor_type: 'staff',
+            staff_identity_id: access.staffIdentityId,
+            actor_reference: null,
+            metadata: {
+              policy: persistedAudience === 'public' ? 'F040' : 'F037',
+              action: operation,
+              changedField: assignment ? 'assignment' : 'watchers',
+              revision: row.revision,
+            },
+          })
+          .execute();
+        return {
+          serviceRequestId: id,
+          revision: row.revision,
+          updatedAt: row.updated_at,
+        };
+      },
+    );
   }
 }

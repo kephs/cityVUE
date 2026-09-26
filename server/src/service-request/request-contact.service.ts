@@ -1,3 +1,4 @@
+import { requestTransaction, lockRequestRow } from './request-authorization.js';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Permission, StaffAccess } from '../auth/auth.types.js';
@@ -49,40 +50,46 @@ export class RequestContactService {
     assertInternalAccess(access, policy.permission);
     assertInternalAccess(access, 'service_request.contact.read');
     if (!internalRequestUuid.test(id)) throw new NotFoundException();
-    return this.database.client.transaction().execute(async (trx) => {
-      // Shared request/classification locks prevent routing across the checked scope before disclosure commits.
-      const parent = await policy.resolve(trx, access, id);
-      if (parent?.id !== id) throw new NotFoundException();
-      if (parent.reportingIdentity === 'anonymous')
-        throw new NotFoundException();
-      const contact = await trx
-        .selectFrom('requester_contact')
-        .select(['name', 'email'])
-        .where('organization_id', '=', access.organizationId)
-        .where('service_request_id', '=', id)
-        .executeTakeFirst();
-      // Await the transaction commit before returning anything, including the no-contact state.
-      await trx
-        .insertInto('activity')
-        .values({
-          id: randomUUID(),
-          organization_id: access.organizationId,
-          service_request_id: id,
-          activity_type: 'service_request_contact_viewed',
-          actor_type: 'staff',
-          actor_reference: null,
-          staff_identity_id: access.staffIdentityId,
-          metadata: {
-            policy: 'F039',
-            action: 'contact_viewed',
-            correlationId:
-              correlationId && internalRequestUuid.test(correlationId)
-                ? correlationId
-                : randomUUID(),
-          },
-        })
-        .execute();
-      return { name: contact?.name ?? null, email: contact?.email ?? null };
-    });
+    return requestTransaction(
+      this.database.client,
+      access,
+      [policy.permission, 'service_request.contact.read'],
+      async (trx, access) => {
+        await lockRequestRow(trx, access.organizationId, id, false);
+        // Shared request/classification locks prevent routing across the checked scope before disclosure commits.
+        const parent = await policy.resolve(trx, access, id);
+        if (parent?.id !== id) throw new NotFoundException();
+        if (parent.reportingIdentity === 'anonymous')
+          throw new NotFoundException();
+        const contact = await trx
+          .selectFrom('requester_contact')
+          .select(['name', 'email'])
+          .where('organization_id', '=', access.organizationId)
+          .where('service_request_id', '=', id)
+          .executeTakeFirst();
+        // Await the transaction commit before returning anything, including the no-contact state.
+        await trx
+          .insertInto('activity')
+          .values({
+            id: randomUUID(),
+            organization_id: access.organizationId,
+            service_request_id: id,
+            activity_type: 'service_request_contact_viewed',
+            actor_type: 'staff',
+            actor_reference: null,
+            staff_identity_id: access.staffIdentityId,
+            metadata: {
+              policy: 'F039',
+              action: 'contact_viewed',
+              correlationId:
+                correlationId && internalRequestUuid.test(correlationId)
+                  ? correlationId
+                  : randomUUID(),
+            },
+          })
+          .execute();
+        return { name: contact?.name ?? null, email: contact?.email ?? null };
+      },
+    );
   }
 }

@@ -1,4 +1,5 @@
 import { configureIssueDefault } from '../../src/service-request/issue-default-assignment.js';
+import { lockAuthorizationWriter } from '../../src/database/authorization-writer-lock.js';
 import {
   configureRequesterPolicy,
   inspectRequesterPolicy,
@@ -235,6 +236,174 @@ export async function checkAttachments(
         .selectAll()
         .where('id', '=', parent.id)
         .execute(),
+    );
+    await t.test(
+      'F058 attachment byte preparation releases authority locks and finalization rejects revocation',
+      async () => {
+        const claim = await start(parent.id, 'INTERNAL_NOTE'),
+          fileId = randomUUID(),
+          scanner = service.scanner;
+        let reached!: () => void, resume!: () => void;
+        const ready = new Promise<void>((resolve) => {
+            reached = resolve;
+          }),
+          release = new Promise<void>((resolve) => {
+            resume = resolve;
+          });
+        Object.defineProperty(service, 'scanner', {
+          configurable: true,
+          value: {
+            scan: async () => {
+              reached();
+              await release;
+              return 'CLEAN';
+            },
+          },
+        });
+        const pending = upload(claim, fileId).then(
+          (response) => response.status,
+        );
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            ready,
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => {
+                reject(new Error('Scanner barrier deadline'));
+              }, 5000);
+            }),
+          ]);
+          if (timer) clearTimeout(timer);
+          const writer = db.transaction().execute(async (trx) => {
+            await lockAuthorizationWriter(trx, org);
+            await trx
+              .updateTable('staff_identity')
+              .set({ active: false })
+              .where('id', '=', full.id)
+              .execute();
+          });
+          await Promise.race([
+            writer,
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => {
+                reject(new Error('Authority lock held during byte work'));
+              }, 5000);
+            }),
+          ]);
+          resume();
+          assert.equal(await pending, 403);
+          assert.equal(
+            (
+              await db
+                .selectFrom('attachment')
+                .select('id')
+                .where('id', '=', fileId)
+                .execute()
+            ).length,
+            0,
+          );
+        } finally {
+          if (timer) clearTimeout(timer);
+          resume();
+          await pending;
+          Object.defineProperty(service, 'scanner', {
+            configurable: true,
+            value: scanner,
+          });
+          await db.transaction().execute(async (trx) => {
+            await lockAuthorizationWriter(trx, org);
+            await trx
+              .updateTable('staff_identity')
+              .set({ active: true })
+              .where('id', '=', full.id)
+              .execute();
+          });
+        }
+      },
+    );
+    await t.test(
+      'F058 attachment waits for parent before taking its batch lock',
+      async () => {
+        const claim = await start(parent.id, 'INTERNAL_NOTE');
+        let reached!: () => void, resume!: () => void;
+        const ready = new Promise<void>((resolve) => {
+          reached = resolve;
+        });
+        const release = new Promise<void>((resolve) => {
+          resume = resolve;
+        });
+        let pid = 0;
+        const blocker = db.transaction().execute(async (trx) => {
+          await sql`set local statement_timeout='5s'`.execute(trx);
+          await trx
+            .selectFrom('organization')
+            .select('id')
+            .where('id', '=', org)
+            .forShare()
+            .execute();
+          await trx
+            .selectFrom('organization_access_state')
+            .select('organization_id')
+            .where('organization_id', '=', org)
+            .forShare()
+            .execute();
+          await trx
+            .selectFrom('service_request')
+            .select('id')
+            .where('id', '=', parent.id)
+            .forUpdate()
+            .execute();
+          const connection = (
+            await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(
+              trx,
+            )
+          ).rows[0];
+          assert.ok(connection);
+          pid = connection.pid;
+          reached();
+          await release;
+        });
+        await Promise.race([
+          ready,
+          blocker.then(() => {
+            throw new Error('Parent barrier was not reached');
+          }),
+        ]);
+        const pending = upload(claim, randomUUID()).then(
+          (response) => response.status,
+        );
+        try {
+          const deadline = Date.now() + 5000;
+          let waiting = false;
+          while (Date.now() < deadline) {
+            const result = await sql<{
+              waiting: boolean;
+            }>`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as waiting`.execute(
+              db,
+            );
+            if (result.rows[0]?.waiting) {
+              waiting = true;
+              break;
+            }
+          }
+          assert.equal(waiting, true, 'Attachment must wait for the parent');
+          // NOWAIT proves the blocked attachment has not already taken B.
+          await db.transaction().execute(async (trx) => {
+            const batch = await trx
+              .selectFrom('attachment_batch')
+              .select('id')
+              .where('id', '=', claim.batchId)
+              .forUpdate()
+              .noWait()
+              .executeTakeFirst();
+            assert.ok(batch);
+          });
+        } finally {
+          resume();
+          await blocker;
+        }
+        assert.equal(await pending, 201);
+      },
     );
     for (const [context, domain, read, create] of [
       [

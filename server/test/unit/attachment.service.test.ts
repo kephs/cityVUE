@@ -96,6 +96,12 @@ test('F046 finalized retries obey capability expiry while valid retries remain a
     submission_digest: digest,
   };
   const query = {
+    select() {
+      return this;
+    },
+    forShare() {
+      return this;
+    },
     selectAll() {
       return this;
     },

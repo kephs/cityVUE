@@ -1,3 +1,7 @@
+import {
+  lockRequestOrganization,
+  lockRequestRow,
+} from './request-authorization.js';
 import { Injectable } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
@@ -38,6 +42,13 @@ export class RequestTrackingRepository {
       .where('organization.status', '=', 'active')
       .executeTakeFirst();
     if (!token) return null;
+    await lockRequestOrganization(trx, token.organization_id);
+    await lockRequestRow(
+      trx,
+      token.organization_id,
+      token.service_request_id,
+      false,
+    );
     // Match management lock order: parent first, credential second. Recheck after locking.
     const parent = await trx
       .selectFrom('service_request as r')

@@ -1,4 +1,9 @@
 import {
+  authorizeRequestTransaction,
+  lockRequestOrganization,
+  lockRequestRow,
+} from './request-authorization.js';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -154,7 +159,13 @@ export class StaffActionsService {
         'Assignment target does not match assignment type',
       );
     return this.database.client.transaction().execute(async (trx) => {
+      if (access && !access.development)
+        access = await authorizeRequestTransaction(trx, access, [
+          'service_request.assign',
+        ]);
+      else await lockRequestOrganization(trx, organizationId);
       await this.assertActor(trx, organizationId, actorId);
+      await lockRequestRow(trx, organizationId, id, true);
       await this.assertScope(trx, id, access);
       const targetId = input.targetId ?? '';
       let summary: AssignmentSummary = { type: input.assignmentType };
@@ -296,7 +307,10 @@ export class StaffActionsService {
     const actorId = access?.staffIdentityId ?? this.actorId;
     validateWorkflowInput(input.action, input.reason, input.resolutionSummary);
     return this.database.client.transaction().execute(async (trx) => {
+      // Authenticated workforce mutations return through the aligned service above.
+      await lockRequestOrganization(trx, organizationId);
       await this.assertActor(trx, organizationId, actorId);
+      await lockRequestRow(trx, organizationId, id, true);
       await this.assertScope(trx, id, access);
       const request = await trx
         .selectFrom('service_request')
