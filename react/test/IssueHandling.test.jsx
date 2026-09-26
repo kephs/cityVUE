@@ -23,7 +23,7 @@ function Harness({ issue }) {
     />
   );
 }
-test("F056.2B explicit mutually exclusive creation choice and fixed existing availability", async () => {
+test("F056.2B explicit mutually exclusive creation choice and editable existing availability", async () => {
   const set = vi.fn(),
     view = render(<IssueHandling draft={fields} set={set} />);
   expect(screen.getAllByRole("radio")).toHaveLength(3);
@@ -37,7 +37,7 @@ test("F056.2B explicit mutually exclusive creation choice and fixed existing ava
       set={set}
     />,
   );
-  expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("radio")).toHaveLength(3);
   expect(screen.getByText("Internal and external")).toBeInTheDocument();
   expect(screen.getByText("Reqro Intake")).toBeInTheDocument();
 });
@@ -47,7 +47,7 @@ test("F056.2B scoped action capability controls fields and radio group", async (
       issue={{ availability: "EXTERNAL_ONLY", canManageHandling: false }}
     />,
   );
-  expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("radio")).toHaveLength(3);
   view.rerender(
     <Harness
       issue={{ availability: "EXTERNAL_ONLY", canManageHandling: true }}
@@ -103,18 +103,18 @@ test("F056.5 creation Availability remains explicit without redirect capability"
   }
 });
 
-test("F056.5 polish explains fixed Availability and emphasizes selectable Handling", async () => {
+test("F056.5 polish explains governed Availability and emphasizes selectable Handling", async () => {
   render(
     <Harness
       issue={{ availability: "EXTERNAL_ONLY", canManageHandling: true }}
     />,
   );
   expect(
-    screen.getByText("Availability is set when the Issue is created."),
+    screen.getByText(
+      "Changes apply to future intake. Historical requests are unchanged.",
+    ),
   ).toBeInTheDocument();
-  expect(
-    screen.queryByRole("radio", { name: "External only" }),
-  ).not.toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "External only" })).toBeChecked();
   const redirect = screen.getByRole("radio", {
     name: "Send the requester to another service",
   });
@@ -128,4 +128,32 @@ test("F056.5 polish explains fixed Availability and emphasizes selectable Handli
     screen.getByText("Users continue in an external service."),
   ).toBeInTheDocument();
   expect(screen.getByLabelText("Destination URL")).toBeInTheDocument();
+});
+
+test("Availability conflict retains redirect until deliberate Handling resolution", async () => {
+  render(
+    <Harness
+      issue={{ availability: "EXTERNAL_ONLY", canManageHandling: true }}
+    />,
+  );
+  await userEvent.click(
+    screen.getByRole("radio", {
+      name: "Send the requester to another service",
+    }),
+  );
+  await userEvent.click(
+    screen.getByRole("radio", { name: "Internal only", exact: true }),
+  );
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Handling needs attention",
+  );
+  expect(
+    screen.getByRole("radio", {
+      name: "Send the requester to another service",
+    }),
+  ).toBeChecked();
+  await userEvent.click(
+    screen.getByRole("radio", { name: "Collect the request in Reqro" }),
+  );
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });

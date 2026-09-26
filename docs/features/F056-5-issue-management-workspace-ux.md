@@ -1,5 +1,7 @@
 # F056.5 — Issue Management Workspace UX
 
+Current follow-up: [post-UAT refinement](F056-5-post-uat-refinement-report.md) is implemented and validated locally with an explicitly approved governed-Availability migration. Earlier completion/no-migration statements below retain their original checkpoint scope.
+
 Status: COMPLETE LOCALLY — NOT SYNCHRONIZED. All pre-commit gates and authenticated UAT passed. No push or deployment authorized.
 
 ## Scope and baseline

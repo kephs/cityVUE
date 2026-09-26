@@ -53,16 +53,17 @@ export default function IssueHandling({
   const canManage =
     !readOnly &&
     (issue ? issue.canManageHandling : creationCapability) &&
-    (issue ? issue.availability : draft.availability) === "EXTERNAL_ONLY";
+    (draft.availability === "EXTERNAL_ONLY" ||
+      draft.actionType === "external_redirect");
   return (
     <section className="issue-handling">
       <h4 className="h5">Availability</h4>
-      {issue ? (
+      {readOnly ? (
         <div className="issue-availability-summary">
           <strong>
             {availabilityLabels[issue.availability] || "Unavailable"}
           </strong>
-          <p>Availability is set when the Issue is created.</p>
+          <p>Changes apply to future intake.</p>
         </div>
       ) : (
         <fieldset disabled={disabled}>
@@ -79,10 +80,20 @@ export default function IssueHandling({
               {label}
             </label>
           ))}
-          <p>Choose once when creating the Issue.</p>
+          <p>
+            Changes apply to future intake. Historical requests are unchanged.
+          </p>
         </fieldset>
       )}
       <h4 className="h5">Handling</h4>
+      {draft.actionType === "external_redirect" &&
+        draft.availability !== "EXTERNAL_ONLY" && (
+          <p role="alert" id="availability-handling-conflict">
+            Handling needs attention. External Redirect is available only for
+            External only Issues. Choose Reqro Intake before saving this
+            Availability.
+          </p>
+        )}
       {canManage ? (
         <fieldset disabled={disabled}>
           <legend className="h6">
@@ -99,6 +110,16 @@ export default function IssueHandling({
               <input
                 type="radio"
                 name="issue-handling"
+                aria-describedby={
+                  draft.actionType === "external_redirect" &&
+                  draft.availability !== "EXTERNAL_ONLY"
+                    ? "availability-handling-conflict"
+                    : undefined
+                }
+                disabled={
+                  value === "external_redirect" &&
+                  draft.availability !== "EXTERNAL_ONLY"
+                }
                 checked={draft.actionType === value}
                 onChange={() => set("actionType", value)}
               />{" "}

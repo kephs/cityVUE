@@ -1,3 +1,4 @@
+import { validateHandling } from '../catalog/issue-availability.js';
 import {
   lockCreationCategory,
   findCreationCategories,
@@ -7,6 +8,8 @@ import { isDeepStrictEqual } from 'node:util';
 import {
   actionScope,
   configureIssueAction,
+  prepareIssueAction,
+  recordIssueAction,
 } from '../catalog/issue-action.command.js';
 import { validateActiveIssue } from '../catalog/issue-activation.js';
 import {
@@ -55,6 +58,7 @@ import { requestUuid } from '../service-request/staff-request-scope.js';
 type Tx = Transaction<DatabaseSchema>;
 export interface IssueProjection {
   availability: string;
+  defaultPriority?: string;
   actionType: string;
   questions?: QuestionConfiguration[];
   catalogVersionId?: string | null;
@@ -82,7 +86,7 @@ export class AdminIssueService {
   constructor(private readonly database: DatabaseService) {}
   private projection(org: string) {
     return sql`
-    select i.id,i.availability,i.action_type as "actionType",coalesce(v.name,'Unpublished Issue') as name,coalesce(v.resident_description,'') as description,
+    select i.id,i.availability,v.default_priority as "defaultPriority",i.action_type as "actionType",coalesce(v.name,'Unpublished Issue') as name,coalesce(v.resident_description,'') as description,
       (i.status='active') as active,c.name as category,c.display_order as category_order,c.id as category_id,
       i.display_order as "displayOrder",i.core_revision as "coreRevision",i.action_revision as "actionRevision",
       coalesce(p.revision,0) as "policyRevision",coalesce(a.revision,0) as "assignmentRevision",
@@ -112,7 +116,7 @@ export class AdminIssueService {
   }
   private async readOne(trx: Tx, org: string, id: string) {
     const row = (
-      await sql<IssueProjection>`select id,availability,"actionType",name,description,active,category,"displayOrder","coreRevision","actionRevision","policyRevision","assignmentRevision","requesterPolicy","templateEligible","defaultAssignment" from (${this.projection(org)}) x where id=${id}`.execute(
+      await sql<IssueProjection>`select id,availability,"defaultPriority","actionType",name,description,active,category,"displayOrder","coreRevision","actionRevision","policyRevision","assignmentRevision","requesterPolicy","templateEligible","defaultAssignment" from (${this.projection(org)}) x where id=${id}`.execute(
         trx,
       )
     ).rows[0];
@@ -448,8 +452,9 @@ export class AdminIssueService {
             next.questions?.reduce((n, q) => n + q.options.length, 0) ?? 0,
         }
       : null;
-    await sql`insert into issue_configuration_audit(organization_id,issue_id,staff_identity_id,action,changed_fields,prior_core_revision,core_revision,policy_revision,assignment_revision,correlation_id,availability${schemaSummary ? sql`,schema_summary` : sql``})
-      values(${access.organizationId},${id},${access.staffIdentityId},${action},${fields},${old?.coreRevision ?? null},${next.coreRevision},${next.policyRevision},${next.assignmentRevision},${correlation && requestUuid.test(correlation) ? correlation : randomUUID()},${old ? null : next.availability}${schemaSummary ? sql`,${JSON.stringify(schemaSummary)}::jsonb` : sql``})`.execute(
+    const transition = old && old.availability !== next.availability;
+    await sql`insert into issue_configuration_audit(organization_id,issue_id,staff_identity_id,action,changed_fields,prior_core_revision,core_revision,policy_revision,assignment_revision,correlation_id,availability${schemaSummary ? sql`,schema_summary` : sql``}${transition ? sql`,prior_availability,prior_handling,handling,prior_action_revision,action_revision` : sql``})
+      values(${access.organizationId},${id},${access.staffIdentityId},${action},${fields},${old?.coreRevision ?? null},${next.coreRevision},${next.policyRevision},${next.assignmentRevision},${correlation && requestUuid.test(correlation) ? correlation : randomUUID()},${!old || transition ? next.availability : null}${schemaSummary ? sql`,${JSON.stringify(schemaSummary)}::jsonb` : sql``}${transition ? sql`,${old.availability},${old.actionType},${next.actionType},${old.actionRevision},${next.actionRevision}` : sql``})`.execute(
       trx,
     );
   }
@@ -638,10 +643,15 @@ export class AdminIssueService {
           old.assignmentRevision !== input.expectedAssignmentRevision
         )
           throw conflict();
-        const saveHandling = async () =>
+        const availability = input.availability ?? old.availability;
+        const correlationId =
+          correlation && requestUuid.test(correlation)
+            ? correlation
+            : randomUUID();
+        const handling =
           input.handling === undefined
             ? null
-            : await configureIssueAction(
+            : await prepareIssueAction(
                 trx,
                 id,
                 {
@@ -649,8 +659,12 @@ export class AdminIssueService {
                   expectedRevision: input.expectedActionRevision,
                 },
                 access,
-                correlation,
+                availability,
               );
+        validateHandling(
+          availability,
+          handling?.next.action_type ?? old.actionType,
+        );
         const name = issueText(input.name, true),
           description = issueText(input.description, false),
           fields: string[] = [];
@@ -658,6 +672,7 @@ export class AdminIssueService {
           input.questions === undefined
             ? old.questions
             : validateQuestions(input.questions, old.questions);
+        if (availability !== old.availability) fields.push('availability');
         if (!isDeepStrictEqual(questions, old.questions))
           fields.push('questions');
         if (name !== old.name) fields.push('name');
@@ -691,13 +706,8 @@ export class AdminIssueService {
         );
         if (policy.changed) fields.push('requesterPolicy');
         if (assignment.changed) fields.push('defaultAssignment');
-        if (!fields.length) {
-          const handling = await saveHandling();
-          return {
-            issue: handling?.changed ? await this.readOne(trx, org, id) : old,
-            changed: !!handling?.changed,
-          };
-        }
+        if (!fields.length && !handling?.changed)
+          return { issue: old, changed: false };
         let version = stable.current_published_version_id;
         if (
           name !== old.name ||
@@ -714,20 +724,55 @@ export class AdminIssueService {
             null,
             questions,
           );
+        const transition = availability !== old.availability;
+        if (transition) {
+          const participating = await this.readOne(trx, org, id);
+          await this.audit(
+            trx,
+            access,
+            id,
+            old,
+            {
+              ...participating,
+              name,
+              description,
+              questions,
+              catalogVersionId: version,
+              active: input.active,
+              displayOrder: input.displayOrder,
+              availability,
+              actionType: handling?.next.action_type ?? old.actionType,
+              coreRevision: old.coreRevision + 1,
+              actionRevision: handling?.revision ?? old.actionRevision,
+            },
+            fields,
+            correlationId,
+          );
+        }
         await trx
           .updateTable('service_definition')
           .set({
             current_published_version_id: version,
             status: input.active ? 'active' : 'inactive',
             display_order: input.displayOrder,
+            availability,
+            ...(handling?.changed
+              ? {
+                  ...handling.next,
+                  action_revision: handling.revision,
+                  updated_at: sql`now()`,
+                }
+              : {}),
           })
           .where('organization_id', '=', org)
           .where('id', '=', id)
           .execute();
-        await saveHandling();
+        if (handling)
+          await recordIssueAction(trx, id, handling, access, correlationId);
         const issue = await this.readOne(trx, org, id);
         await validateActiveIssue(trx, org, id);
-        await this.audit(trx, access, id, old, issue, fields, correlation);
+        if (!transition && fields.length)
+          await this.audit(trx, access, id, old, issue, fields, correlationId);
         return { issue, changed: true };
       });
     } catch (error) {

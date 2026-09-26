@@ -1,5 +1,7 @@
 # ADR-021 — Complete atomic Issue creation
 
+> 2026-09-25 amendment: unconditional post-creation Availability immutability is superseded by [ADR-022](ADR-022-governed-issue-availability.md), explicitly approved by the user. Other decisions remain accepted. The original decision text below is retained as history.
+
 Status: Accepted and validated for F056.5. Supersedes only ADR-019's two-step creation workflow and mandatory-template creation rule. Its Availability matrix, immutable Availability, F032 authorization and handoff governance remain accepted.
 
 ## Decision

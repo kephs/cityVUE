@@ -26,7 +26,11 @@ const source = {
   supportedGeography: true,
   questions: [],
 };
-async function setup({ capability = true, post } = {}) {
+async function setup({
+  capability = true,
+  post,
+  sourceOverride = source,
+} = {}) {
   const client = {
     get: vi.fn(async (url) => {
       if (url.startsWith("/admin/issues/summaries?")) return summary;
@@ -37,7 +41,7 @@ async function setup({ capability = true, post } = {}) {
           hasMore: false,
         };
       if (url.startsWith("/admin/issues/creation/sources/source-a?"))
-        return { source };
+        return { source: sourceOverride };
       if (url.startsWith("/admin/issues/creation/sources?"))
         return { items: [source], hasMore: false };
       if (url.includes("assignment-targets")) return { items: [] };
@@ -74,7 +78,7 @@ async function complete(ctx) {
   );
   await ctx.user.selectOptions(
     ctx.dialog.getByLabelText("Default Priority"),
-    "urgent",
+    "high",
   );
   for (const name of ["External only", "Required", "No Geographic Restriction"])
     await ctx.user.click(ctx.dialog.getByRole("radio", { name, exact: true }));
@@ -104,7 +108,7 @@ test("F056.5 Add starts with Category, no priority/location/geographic assumptio
     expect(
       c.dialog.getByRole("radio", { name, exact: true }),
     ).not.toBeChecked();
-  expect(c.dialog.getByRole("button", { name: "Create Issue" })).toBeDisabled();
+  expect(c.dialog.getByRole("button", { name: "Create Issue" })).toBeEnabled();
   expect(
     c.dialog.getByRole("heading", { name: "Follow-up questions" }),
   ).toBeInTheDocument();
@@ -139,7 +143,7 @@ test("F056.5 External Redirect is configured before one complete Create request"
       .compareDocumentPosition(c.dialog.getByText("External Redirect")) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
-  expect(c.dialog.getByRole("button", { name: "Create Issue" })).toBeDisabled();
+  expect(c.dialog.getByRole("button", { name: "Create Issue" })).toBeEnabled();
   await c.user.type(
     c.dialog.getByLabelText("Destination URL"),
     "https://example.org/service",
@@ -156,7 +160,7 @@ test("F056.5 External Redirect is configured before one complete Create request"
   expect(c.client.patch).not.toHaveBeenCalled();
   expect(c.client.post.mock.calls[0][1]).toMatchObject({
     categoryId: "category-a",
-    defaultPriority: "urgent",
+    defaultPriority: "high",
     locationPolicy: "required",
     geographicEligibilityMode: "no_geographic_restriction",
     availability: "EXTERNAL_ONLY",
@@ -168,7 +172,7 @@ test("F056.5 External Redirect is configured before one complete Create request"
     questions: [],
   });
 });
-test("F056.5 changing Availability removes an invalid redirect draft; capability never grants authority", async () => {
+test("F056.5 changing Availability retains an invalid redirect draft until explicitly resolved; capability never grants authority", async () => {
   const c = await setup();
   await complete(c);
   await c.user.click(
@@ -183,7 +187,13 @@ test("F056.5 changing Availability removes an invalid redirect draft; capability
     c.dialog.queryByRole("radio", {
       name: "Send the requester to another service",
     }),
-  ).not.toBeInTheDocument();
+  ).toBeChecked();
+  expect(c.dialog.getByRole("alert")).toHaveTextContent(
+    "Handling needs attention",
+  );
+  await c.user.click(
+    c.dialog.getByRole("radio", { name: "Collect the request in Reqro" }),
+  );
   expect(c.dialog.queryByLabelText("Destination URL")).not.toBeInTheDocument();
   expect(c.dialog.getByText("Reqro Intake")).toBeInTheDocument();
 });
@@ -233,7 +243,10 @@ test("F056.5 source is Category-scoped, reviewed once and guarded against discar
   await c.user.click(
     c.dialog.getByRole("button", { name: "Change Search existing Issues" }),
   );
-  expect(confirm).toHaveBeenCalled();
+  expect(confirm).not.toHaveBeenCalled();
+  await c.user.click(
+    screen.getByRole("button", { name: "Keep Current Configuration" }),
+  );
   expect(c.dialog.getByLabelText("Default Priority")).toHaveValue("high");
   confirm.mockReturnValue(true);
   await c.user.click(c.dialog.getByRole("button", { name: "Change Category" }));
@@ -327,7 +340,7 @@ test("F056.5 stale source blocks retry until deliberate refresh and review", asy
   await c.dialog.findByText(/Starting From/);
   await c.user.click(c.dialog.getByRole("button", { name: "Create Issue" }));
   await c.dialog.findByRole("alert");
-  expect(c.dialog.getByRole("button", { name: "Create Issue" })).toBeDisabled();
+  expect(c.dialog.getByRole("button", { name: "Create Issue" })).toBeEnabled();
   expect(c.dialog.getByLabelText("Issue name")).toHaveValue("Reviewed copy");
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
   await c.user.click(
@@ -349,14 +362,14 @@ test("F056.5 selecting Category preserves manually chosen blank-creation policie
   ).toHaveFocus();
   await c.user.selectOptions(
     c.dialog.getByLabelText("Default Priority"),
-    "urgent",
+    "high",
   );
   await c.user.click(
     c.dialog.getByRole("radio", { name: "Required", exact: true }),
   );
   await chooseCategory(c);
   await c.user.click(c.dialog.getByRole("button", { name: "Change Category" }));
-  expect(c.dialog.getByLabelText("Default Priority")).toHaveValue("urgent");
+  expect(c.dialog.getByLabelText("Default Priority")).toHaveValue("high");
   expect(
     c.dialog.getByRole("radio", { name: "Required", exact: true }),
   ).toBeChecked();
@@ -414,4 +427,118 @@ test("F056.5 Handling follows Availability before Service Location and Geographi
         c.dialog.getByRole("group", { name: "Service Location", exact: true }),
       ) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
+});
+
+test("Incomplete Create lists actual failures and focuses the first invalid control", async () => {
+  const c = await setup();
+  await c.user.click(c.dialog.getByRole("button", { name: "Create Issue" }));
+  expect(c.client.post).not.toHaveBeenCalled();
+  expect(c.dialog.getByRole("alert")).toHaveTextContent(
+    "Select a Default Priority",
+  );
+  expect(c.dialog.getByRole("alert")).toHaveTextContent(
+    "Select Geographic Eligibility",
+  );
+  await waitFor(() =>
+    expect(
+      c.dialog.getByRole("combobox", { name: "Category", exact: true }),
+    ).toHaveFocus(),
+  );
+  expect(c.dialog.getByLabelText("Default Priority")).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  expect(c.dialog.getByRole("alert")).not.toHaveTextContent("destination");
+  expect(c.dialog.getByRole("alert")).not.toHaveTextContent("source Issue");
+});
+test("A nearly complete draft identifies Geographic Eligibility instead of silently disabling Create", async () => {
+  const c = await setup();
+  await chooseCategory(c);
+  await c.user.type(
+    c.dialog.getByLabelText("Issue name"),
+    "Fictional validation",
+  );
+  await c.user.selectOptions(
+    c.dialog.getByLabelText("Default Priority"),
+    "low",
+  );
+  await c.user.click(
+    c.dialog.getByRole("radio", { name: "Internal only", exact: true }),
+  );
+  await c.user.click(
+    c.dialog.getByRole("radio", { name: "Optional", exact: true }),
+  );
+  await c.user.click(c.dialog.getByRole("button", { name: "Create Issue" }));
+  expect(c.client.post).not.toHaveBeenCalled();
+  expect(c.dialog.getByRole("alert")).toHaveTextContent(
+    "Select Geographic Eligibility",
+  );
+  await waitFor(() =>
+    expect(
+      c.dialog.getByRole("radio", { name: "No Geographic Restriction" }),
+    ).toHaveFocus(),
+  );
+});
+test("Urgent is absent from new priority choices", async () => {
+  const c = await setup();
+  expect(
+    within(c.dialog.getByLabelText("Default Priority")).queryByRole("option", {
+      name: "Urgent",
+    }),
+  ).not.toBeInTheDocument();
+});
+
+test("Copied Urgent requires deliberate replacement priority without changing the source", async () => {
+  const c = await setup({
+    sourceOverride: { ...source, defaultPriority: "urgent" },
+  });
+  await chooseCategory(c);
+  await c.user.click(
+    c.dialog.getByRole("radio", { name: "Yes, copy an existing Issue" }),
+  );
+  await c.user.click(
+    c.dialog.getByRole("combobox", { name: "Search existing Issues" }),
+  );
+  await c.user.click(await c.dialog.findByRole("option", { name: /Source A/ }));
+  await c.dialog.findByText(/This source uses Urgent/);
+  expect(c.dialog.getByLabelText("Default Priority")).toHaveValue("");
+  expect(c.client.post).not.toHaveBeenCalled();
+});
+test("Source replacement Keep preserves edits; Replace applies reviewed source without window.confirm", async () => {
+  const c = await setup();
+  await chooseCategory(c);
+  await c.user.click(
+    c.dialog.getByRole("radio", { name: "Yes, copy an existing Issue" }),
+  );
+  await c.user.click(
+    c.dialog.getByRole("combobox", { name: "Search existing Issues" }),
+  );
+  await c.user.click(await c.dialog.findByRole("option", { name: /Source A/ }));
+  await c.dialog.findByText(/Starting From/);
+  await c.user.selectOptions(
+    c.dialog.getByLabelText("Default Priority"),
+    "high",
+  );
+  const native = vi.spyOn(window, "confirm");
+  const refresh = c.dialog.getByRole("button", {
+    name: "Refresh source configuration",
+  });
+  await c.user.click(refresh);
+  expect(
+    screen.getByRole("button", { name: "Keep Current Configuration" }),
+  ).toHaveFocus();
+  await c.user.click(
+    screen.getByRole("button", { name: "Keep Current Configuration" }),
+  );
+  expect(c.dialog.getByLabelText("Default Priority")).toHaveValue("high");
+  expect(refresh).toHaveFocus();
+  await c.user.click(refresh);
+  await c.user.click(
+    screen.getByRole("button", { name: "Replace Configuration" }),
+  );
+  await waitFor(() =>
+    expect(c.dialog.getByLabelText("Default Priority")).toHaveValue("low"),
+  );
+  expect(native).not.toHaveBeenCalled();
+  native.mockRestore();
 });

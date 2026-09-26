@@ -62,6 +62,7 @@ export class IssueCreateDto extends IssueFieldsDto {
   @IsArray() questions!: unknown[];
 }
 export class IssueChangeDto extends IssueFieldsDto {
+  @IsOptional() @IsIn(issueAvailabilities) availability?: IssueAvailability;
   @IsOptional() @IsObject() handling?: Omit<ActionInput, 'expectedRevision'>;
   @IsOptional() @IsArray() questions?: unknown[];
   @IsBoolean() active!: boolean;

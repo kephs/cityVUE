@@ -406,3 +406,32 @@
     font-size: 1.2rem;
   }
 }
+
+.issue-field-error {
+  color: var(--bs-danger-text-emphasis);
+  margin-block: 0.5rem;
+}
+.issue-validation-summary {
+  border: 1px solid var(--bs-danger);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-block: 1rem;
+}
+.issue-validation-summary .btn-link {
+  text-align: left;
+  padding: 0.25rem 0;
+  white-space: normal;
+}
+.issue-editor-form input,
+.issue-editor-form select,
+.issue-editor-form textarea {
+  scroll-margin-block: 6rem;
+}
+.configuration-dialog {
+  max-width: min(36rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+.configuration-dialog button {
+  white-space: normal;
+}

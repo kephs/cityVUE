@@ -88,7 +88,7 @@ export default function FollowUpQuestions({
   };
   return (
     <section
-      className="my-4"
+      className="my-4 follow-up-questions"
       aria-labelledby="follow-up-heading"
       style={{ minWidth: 0, overflowWrap: "anywhere" }}
     >

@@ -42,3 +42,5 @@ New decisions in this series use the next unused number and include title, statu
 [F056.2B Issue availability and governed handoff](ADR-019-issue-availability-governed-handoff.md): accepted design; implementation validation in progress.
 
 [ADR-021 — Complete atomic Issue creation](ADR-021-complete-atomic-issue-creation.md) supersedes ADR-019 only for two-step creation and mandatory templates. Implemented and validated locally in F056.5.
+
+[ADR-022 — Governed Issue Availability](ADR-022-governed-issue-availability.md): approved transaction-bound audit enforcement; supersedes only post-creation Availability immutability.

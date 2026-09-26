@@ -39,6 +39,7 @@ export interface IssueCreate extends IssueFields {
   questions: unknown[];
 }
 export interface IssueChange extends IssueFields {
+  availability?: IssueAvailability;
   handling?: Omit<ActionInput, 'expectedRevision'>;
   questions?: unknown;
   expectedCoreRevision: number;
@@ -79,6 +80,12 @@ export function validateIssue(
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new BadRequestException('Invalid Issue configuration');
   const row = input as Record<string, unknown>;
+  if (
+    !create &&
+    row.availability !== undefined &&
+    !(issueAvailabilities as readonly unknown[]).includes(row.availability)
+  )
+    throw new BadRequestException('Invalid Issue availability');
   const keys = [
     'name',
     'description',
@@ -110,7 +117,7 @@ export function validateIssue(
         !(
           create
             ? ['templateId', 'expectedSourceVersion']
-            : ['questions', 'handling']
+            : ['questions', 'handling', 'availability']
         ).includes(k),
     ) ||
     keys.some((k) => !(k in row))

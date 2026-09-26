@@ -1,3 +1,6 @@
+import IssueValidation from "./IssueValidation.jsx";
+import { creationErrors, focusInvalid } from "./issueValidation.js";
+import Confirmation from "./Confirmation.jsx";
 import IssueDrawer from "./IssueDrawer.jsx";
 import IssueResults from "./IssueResults.jsx";
 import "./issueWorkspace.css";
@@ -44,54 +47,14 @@ const fields = (issue) => ({
   copyExisting: false,
   sourcePending: false,
   category: null,
-  defaultPriority: "",
+  defaultPriority: issue?.defaultPriority ?? "",
   locationPolicy: "",
   geographicEligibilityMode: "",
 });
-function Confirmation({
-  title,
-  children,
-  confirmLabel,
-  onCancel,
-  onConfirm,
-  returnFocus,
-}) {
-  const dialog = useRef(null);
-  useEffect(() => {
-    const previous = returnFocus;
-    const node = dialog.current;
-    node.showModal();
-    return () => {
-      node.close();
-      if (previous?.isConnected) previous.focus();
-    };
-  }, []);
-  return (
-    <dialog
-      ref={dialog}
-      className="configuration-dialog"
-      aria-labelledby="issue-confirm-title"
-      aria-describedby="issue-confirm-description"
-      onCancel={(e) => {
-        e.preventDefault();
-        onCancel();
-      }}
-    >
-      <h2 id="issue-confirm-title">{title}</h2>
-      <p id="issue-confirm-description">{children}</p>
-      <div className="d-flex flex-wrap gap-2 justify-content-end">
-        <button autoFocus className="btn btn-secondary" onClick={onCancel}>
-          Cancel
-        </button>
-        <button className="btn btn-primary" onClick={onConfirm}>
-          {confirmLabel}
-        </button>
-      </div>
-    </dialog>
-  );
-}
 export default function IssueConfiguration({ client, onDenied }) {
   const [params, setParams] = useSearchParams();
+  const form = useRef(null);
+  const [validationAttempted, setValidationAttempted] = useState(false);
   const query = readIssueQuery(params),
     queryKey = issueQueryParams(query).toString();
   const page = Number(query.page);
@@ -317,6 +280,8 @@ export default function IssueConfiguration({ client, onDenied }) {
   const name = draft.name.trim(),
     description = draft.description.trim();
   const valid =
+    (draft.actionType !== "external_redirect" ||
+      draft.availability === "EXTERNAL_ONLY") &&
     validQuestions(draft.questions) &&
     name.length > 0 &&
     Array.from(name).length <= 200 &&
@@ -342,7 +307,9 @@ export default function IssueConfiguration({ client, onDenied }) {
       (edit?.issue
         ? edit.issue.canManageHandling
         : draft.category?.canManageHandling));
+  const draftErrors = edit?.issue ? [] : creationErrors(draft);
   async function open(issue, kind, event) {
+    setValidationAttempted(false);
     if (event?.currentTarget) origin.current = event.currentTarget;
     setError(null);
     setNotice(null);
@@ -452,6 +419,7 @@ export default function IssueConfiguration({ client, onDenied }) {
       defaultAssignment: values.target ? { type, id } : null,
       ...(issue
         ? {
+            availability: values.availability,
             questions: questionPayload(values.questions),
             active: issue.active,
             expectedCoreRevision: issue.coreRevision,
@@ -537,7 +505,9 @@ export default function IssueConfiguration({ client, onDenied }) {
       }
       if (failure.code === "ISSUE_SOURCE_STALE")
         setDraft((d) => ({ ...d, expectedSourceVersion: "" }));
+      setValidationAttempted(false);
       setError({
+        sourceConflict: failure.code === "ISSUE_SOURCE_STALE",
         blocked:
           failure.status !== 400 && failure.code !== "ISSUE_SOURCE_STALE",
         message: [
@@ -565,9 +535,6 @@ export default function IssueConfiguration({ client, onDenied }) {
     setDraft((old) => ({
       ...old,
       [key]: value,
-      ...(key === "availability" && value !== "EXTERNAL_ONLY"
-        ? { actionType: "internal_intake", destination: "", message: "" }
-        : {}),
     }));
   return (
     <div className="issue-configuration">
@@ -733,12 +700,31 @@ export default function IssueConfiguration({ client, onDenied }) {
               )}
               {!edit.loading && !detailError && data.canWrite && (
                 <form
+                  ref={form}
+                  noValidate={!edit.issue}
                   className="configuration-area-form issue-editor-form"
                   aria-labelledby="issue-editor-title"
                   onSubmit={(e) => {
                     e.preventDefault();
+                    if (!edit.issue) {
+                      if (error?.sourceConflict) {
+                        editorFeedback.current?.focus();
+                        return;
+                      }
+                      setValidationAttempted(true);
+                      if (draftErrors.length) {
+                        requestAnimationFrame(() =>
+                          focusInvalid(form.current, draftErrors[0]),
+                        );
+                        return;
+                      }
+                      if (error?.blocked || targetError) {
+                        editorFeedback.current?.focus();
+                        return;
+                      }
+                    }
                     if (
-                      valid &&
+                      (edit.issue ? valid : !draftErrors.length) &&
                       dirty &&
                       !busy &&
                       !error?.blocked &&
@@ -845,6 +831,18 @@ export default function IssueConfiguration({ client, onDenied }) {
                         <p id="issue-description-help">
                           Optional plain text, up to 1,000 characters.
                         </p>
+                        {edit.issue && (
+                          <p>
+                            Default Priority:{" "}
+                            <strong>
+                              {draft.defaultPriority
+                                ? draft.defaultPriority[0].toUpperCase() +
+                                  draft.defaultPriority.slice(1)
+                                : "Unavailable"}
+                            </strong>{" "}
+                            (current configuration)
+                          </p>
+                        )}
                         {!edit.issue && (
                           <>
                             <label htmlFor="issue-priority">
@@ -861,13 +859,11 @@ export default function IssueConfiguration({ client, onDenied }) {
                               required
                             >
                               <option value="">Choose Default Priority</option>
-                              {["low", "medium", "high", "urgent"].map(
-                                (value) => (
-                                  <option key={value} value={value}>
-                                    {value[0].toUpperCase() + value.slice(1)}
-                                  </option>
-                                ),
-                              )}
+                              {["low", "medium", "high"].map((value) => (
+                                <option key={value} value={value}>
+                                  {value[0].toUpperCase() + value.slice(1)}
+                                </option>
+                              ))}
                             </select>
                           </>
                         )}
@@ -1062,7 +1058,8 @@ export default function IssueConfiguration({ client, onDenied }) {
                     </>
                   )}
                   {edit.kind !== "order" &&
-                    draft.actionType !== "external_redirect" && (
+                    (draft.actionType !== "external_redirect" ||
+                      !validQuestions(draft.questions)) && (
                       <section className="issue-editor-section">
                         <FollowUpQuestions
                           saveLabel={
@@ -1096,6 +1093,15 @@ export default function IssueConfiguration({ client, onDenied }) {
                       </p>
                     </>
                   )}
+                  {!edit.issue && validationAttempted && (
+                    <IssueValidation errors={draftErrors} form={form} />
+                  )}
+                  {!edit.issue && (targetsLoading || draft.sourcePending) && (
+                    <p role="status">
+                      Loading required configuration. Create Issue will be
+                      available when loading finishes.
+                    </p>
+                  )}
                   <p id="issue-validation">
                     {!valid
                       ? "Complete the required fields above. Use a plain-text name and a whole-number order of zero or greater."
@@ -1107,12 +1113,11 @@ export default function IssueConfiguration({ client, onDenied }) {
                     <button
                       className="btn btn-primary"
                       disabled={
-                        !valid ||
-                        !dirty ||
                         busy ||
-                        error?.blocked ||
-                        targetError ||
-                        targetsLoading
+                        targetsLoading ||
+                        draft.sourcePending ||
+                        (edit.issue &&
+                          (!valid || !dirty || error?.blocked || targetError))
                       }
                     >
                       {busy

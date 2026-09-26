@@ -15,6 +15,8 @@ const sample = {
   name: "Fictional Street Sign",
   description: "A synthetic example.",
   active: true,
+  availability: "INTERNAL_AND_EXTERNAL",
+  defaultPriority: "urgent",
   category: "Roads",
   displayOrder: 0,
   coreRevision: 4,
@@ -132,7 +134,7 @@ test("F056.5 template-free create requires explicit Category, priority, location
   const { user, client } = setup();
   await screen.findByText(sample.name);
   await user.click(screen.getByRole("button", { name: "+ Add Issue" }));
-  expect(screen.getByRole("button", { name: "Create Issue" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Create Issue" })).toBeEnabled();
   await user.type(screen.getByLabelText("Issue name"), " New Fictional Issue ");
   await user.click(
     within(screen.getByRole("dialog")).getByRole("combobox", {
@@ -152,7 +154,7 @@ test("F056.5 template-free create requires explicit Category, priority, location
     }),
   );
   await user.click(screen.getByLabelText("Anonymous requests allowed"));
-  expect(screen.getByRole("button", { name: "Create Issue" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Create Issue" })).toBeEnabled();
   await user.click(screen.getByRole("radio", { name: "External only" }));
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Create Issue" })).toBeEnabled(),
@@ -496,4 +498,27 @@ test("F056.5 drawer loops Tab boundaries and Escape restores the initiating acti
   } finally {
     rectangles.mockRestore();
   }
+});
+
+test("Configure changes Availability only on Save and preserves current Urgent without a replacement catalog priority", async () => {
+  const { client, user } = setup();
+  await screen.findByText(sample.name);
+  await action(user, "Configure");
+  expect(
+    screen.getByRole("radio", { name: "Internal and external" }),
+  ).toBeChecked();
+  expect(screen.getByText("Urgent")).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("radio", { name: "Internal only", exact: true }),
+  );
+  expect(client.patch).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Save Changes" }));
+  await screen.findByText("Issue configuration updated.");
+  expect(client.patch.mock.calls[0][1]).toMatchObject({
+    availability: "INTERNAL_ONLY",
+    expectedCoreRevision: 4,
+    expectedActionRevision: 2,
+  });
+  expect(client.patch.mock.calls[0][1]).not.toHaveProperty("handling");
+  expect(client.patch.mock.calls[0][1]).not.toHaveProperty("defaultPriority");
 });

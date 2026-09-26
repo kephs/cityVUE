@@ -1,5 +1,7 @@
 # F056.5 — Implementation and validation report
 
+Current follow-up: [post-UAT refinement](F056-5-post-uat-refinement-report.md) is implemented and validated locally with an explicitly approved governed-Availability migration. Earlier completion/no-migration statements below retain their original checkpoint scope.
+
 Status: Complete atomic Add Issue follow-up validated locally. Authenticated UAT and logging privacy PASS; all pre-commit gates passed. No synchronization authorized. This report accompanies [the feature specification](F056-5-issue-management-workspace-ux.md). No push, deployment or F057 work is authorized.
 
 ## Complete atomic Add Issue follow-up — current checkpoint

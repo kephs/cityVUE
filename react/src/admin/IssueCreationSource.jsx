@@ -1,3 +1,4 @@
+import Confirmation from "./Confirmation.jsx";
 import { useEffect, useRef, useState } from "react";
 import IssueCreationPicker from "./IssueCreationPicker.jsx";
 
@@ -10,18 +11,24 @@ export default function IssueCreationSource({
   onReviewed,
 }) {
   const pending = useRef(null),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [confirmation, setConfirmation] = useState(null);
   useEffect(() => () => pending.current?.abort(), []);
-  async function select(item) {
+  function select(item) {
     if (
-      (draft.templateId ||
-        draft.questions.length > 0 ||
-        draft.defaultPriority ||
-        draft.locationPolicy ||
-        draft.geographicEligibilityMode) &&
-      !window.confirm("Replace the copied configuration and any edits to it?")
-    )
-      return;
+      draft.templateId ||
+      draft.questions.length ||
+      draft.defaultPriority ||
+      draft.locationPolicy ||
+      draft.geographicEligibilityMode
+    ) {
+      setConfirmation({
+        action: () => applySource(item),
+        returnFocus: document.activeElement,
+      });
+    } else applySource(item);
+  }
+  async function applySource(item) {
     pending.current?.abort();
     const abort = new AbortController();
     pending.current = abort;
@@ -38,7 +45,8 @@ export default function IssueCreationSource({
         templateId: source.id,
         expectedSourceVersion: source.catalogVersionId,
         source,
-        defaultPriority: source.defaultPriority,
+        defaultPriority:
+          source.defaultPriority === "urgent" ? "" : source.defaultPriority,
         locationPolicy: source.locationPolicy,
         geographicEligibilityMode: source.supportedGeography
           ? source.geographicEligibilityMode
@@ -47,6 +55,10 @@ export default function IssueCreationSource({
         sourcePending: false,
       }));
       onReviewed();
+      if (source.defaultPriority === "urgent")
+        setError(
+          "This source uses Urgent. Select Low, Medium or High before creating the Issue.",
+        );
       if (!source.supportedGeography)
         setError(
           "The source geographic policy is not supported for new Issues. Review and explicitly choose a supported Geographic Eligibility policy.",
@@ -61,11 +73,15 @@ export default function IssueCreationSource({
     }
   }
   function reset(copyExisting) {
-    if (
-      draft.templateId &&
-      !window.confirm("Discard copied configuration and any edits to it?")
-    )
-      return;
+    if (draft.templateId)
+      setConfirmation({
+        action: () => applyReset(copyExisting),
+        returnFocus: document.activeElement,
+        discard: true,
+      });
+    else applyReset(copyExisting);
+  }
+  function applyReset(copyExisting) {
     pending.current?.abort();
     setError("");
     setDraft((d) => ({
@@ -156,6 +172,32 @@ export default function IssueCreationSource({
         <p role="status">Loading source configuration…</p>
       )}
       {error && <p role="alert">{error}</p>}
+      {confirmation && (
+        <Confirmation
+          title={
+            confirmation.discard
+              ? "Discard Copied Configuration?"
+              : "Replace Copied Configuration?"
+          }
+          cancelLabel="Keep Current Configuration"
+          confirmLabel={
+            confirmation.discard
+              ? "Discard Configuration"
+              : "Replace Configuration"
+          }
+          returnFocus={confirmation.returnFocus}
+          onCancel={() => setConfirmation(null)}
+          onConfirm={() => {
+            const action = confirmation.action;
+            setConfirmation(null);
+            action();
+          }}
+        >
+          {confirmation.discard
+            ? "Discard the copied settings and your changes?"
+            : "Choosing another Issue will replace the copied settings and any changes you have made to them."}
+        </Confirmation>
+      )}
     </section>
   );
 }

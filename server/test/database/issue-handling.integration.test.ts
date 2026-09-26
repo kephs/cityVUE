@@ -1,3 +1,4 @@
+import { governedAvailabilityChecks } from './governed-availability-checks.js';
 import { reviewedCreation } from './issue-creation-fixture.js';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
@@ -319,7 +320,7 @@ test(
           await request(api)
             .patch(modernPath)
             .set('Authorization', 'Bearer fictional')
-            .send({ ...(await body()), availability: 'INTERNAL_ONLY' })
+            .send({ ...(await body()), availability: 'INVALID' })
             .expect(400);
           await assert.rejects(
             db
@@ -767,6 +768,14 @@ test(
           assert.equal(changed.revision, 2);
           await assert.rejects(creator.execute(requestInput));
         },
+      );
+      await governedAvailabilityChecks(
+        t,
+        db,
+        service,
+        access,
+        create,
+        otherOrg,
       );
     } finally {
       await app.close();

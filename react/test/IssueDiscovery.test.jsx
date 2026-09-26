@@ -16,6 +16,7 @@ const issue = {
   name: "Fixture Issue",
   category: "Roads",
   active: true,
+  availability: "INTERNAL_AND_EXTERNAL",
   displayOrder: 0,
   requesterPolicy: "IDENTIFIED_REQUIRED",
   assignmentLabel: null,

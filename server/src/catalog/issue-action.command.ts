@@ -122,12 +122,12 @@ export function normalizeAction(input: ActionInput) {
   };
 }
 /** Both entry points participate in this command's caller-owned transaction. */
-export async function configureIssueAction(
+export async function prepareIssueAction(
   trx: Transaction<DatabaseSchema>,
   id: string,
   input: ActionInput,
   access: StaffAccess | undefined,
-  correlation?: string,
+  availability?: string,
 ) {
   assertActionRead(access);
   if (
@@ -164,28 +164,29 @@ export async function configureIssueAction(
       'Issue configuration changed; refresh before retrying',
     );
   const next = normalizeAction(input);
-  validateHandling(old.availability, next.action_type);
-  if (
-    old.action_type === next.action_type &&
-    old.redirect_url === next.redirect_url &&
-    old.redirect_message === next.redirect_message &&
-    old.redirect_label === next.redirect_label
-  )
-    return {
-      ...issueActionProjection(old),
-      revision: old.action_revision,
-      changed: false,
-    };
-  const revision = old.action_revision + 1,
-    correlationId =
-      correlation && requestUuid.test(correlation) ? correlation : randomUUID();
-  await trx
-    .updateTable('service_definition')
-    .set({ ...next, action_revision: revision, updated_at: sql`now()` })
-    .where('id', '=', id)
-    .where('organization_id', '=', access.organizationId)
-    .execute();
-  await validateActiveIssue(trx, access.organizationId, id);
+  validateHandling(availability ?? old.availability, next.action_type);
+  const changed =
+    old.action_type !== next.action_type ||
+    old.redirect_url !== next.redirect_url ||
+    old.redirect_message !== next.redirect_message ||
+    old.redirect_label !== next.redirect_label;
+  return {
+    old,
+    next,
+    changed,
+    revision: old.action_revision + (changed ? 1 : 0),
+  };
+}
+
+export async function recordIssueAction(
+  trx: Transaction<DatabaseSchema>,
+  id: string,
+  plan: Awaited<ReturnType<typeof prepareIssueAction>>,
+  access: StaffAccess,
+  correlationId: string,
+) {
+  if (!plan.changed) return;
+  const { old, next, revision } = plan;
   await sql`insert into issue_action_history(organization_id,issue_id,action_revision,action_type,redirect_url,redirect_message,redirect_label,staff_identity_id,correlation_id)
     values(${access.organizationId},${id},${revision},${next.action_type},${next.redirect_url},${next.redirect_message},${next.redirect_label},${access.staffIdentityId},${correlationId})`.execute(
     trx,
@@ -194,5 +195,41 @@ export async function configureIssueAction(
     values(${access.organizationId},${id},${access.staffIdentityId},${old.action_type},${next.action_type},${old.action_revision},${revision},${next.redirect_url ? new URL(next.redirect_url).hostname : null},${correlationId})`.execute(
     trx,
   );
-  return { ...issueActionProjection(next), revision, changed: true };
+}
+
+/** Legacy and creation writers retain the same authorization and transaction semantics. */
+export async function configureIssueAction(
+  trx: Transaction<DatabaseSchema>,
+  id: string,
+  input: ActionInput,
+  access: StaffAccess | undefined,
+  correlation?: string,
+) {
+  const plan = await prepareIssueAction(trx, id, input, access);
+  assertActionRead(access);
+  if (plan.changed) {
+    await trx
+      .updateTable('service_definition')
+      .set({
+        ...plan.next,
+        action_revision: plan.revision,
+        updated_at: sql`now()`,
+      })
+      .where('id', '=', id)
+      .where('organization_id', '=', access.organizationId)
+      .execute();
+    await validateActiveIssue(trx, access.organizationId, id);
+    await recordIssueAction(
+      trx,
+      id,
+      plan,
+      access,
+      correlation && requestUuid.test(correlation) ? correlation : randomUUID(),
+    );
+  }
+  return {
+    ...issueActionProjection(plan.next),
+    revision: plan.revision,
+    changed: plan.changed,
+  };
 }

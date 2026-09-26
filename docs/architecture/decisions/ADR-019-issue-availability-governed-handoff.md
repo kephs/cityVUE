@@ -1,5 +1,7 @@
 # ADR-019 — Issue availability and governed external handoff
 
+> 2026-09-25 amendment: unconditional post-creation Availability immutability is superseded by [ADR-022](ADR-022-governed-issue-availability.md), explicitly approved by the user. Other decisions remain accepted. The original decision text below is retained as history.
+
 Status: Accepted and implemented in F056.2B; automated and live validation passed. The two-step creation/mandatory-template workflow is superseded by [ADR-021](ADR-021-complete-atomic-issue-creation.md); all other boundaries below remain accepted.
 
 ## Decision
