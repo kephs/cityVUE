@@ -24,7 +24,12 @@ vi.mock(
 );
 async function manage(name) {
   fireEvent.click(
-    await screen.findByRole("button", { name: "Manage " + name.toLowerCase() }),
+    await screen.findByRole("button", {
+      name:
+        name === "Assignment"
+          ? "Change Assignment"
+          : "Manage " + name.toLowerCase(),
+    }),
   );
   return screen.findByRole("dialog", { name });
 }
@@ -148,7 +153,7 @@ test("F058.2 INTERNAL communication capability exposes the lazily selected strea
     },
   });
   show(`/staff/requests/${id}`);
-  await screen.findByText("Internal request");
+  await screen.findByText("Internal");
   await screen.findByText("F042 fictional correspondence");
   expect(
     screen.getByRole("button", { name: "Add Message" }),
@@ -191,7 +196,7 @@ test("F042 PUBLIC to INTERNAL navigation immediately clears correspondence and a
   expect(
     screen.queryByDisplayValue("Fictional unsent draft"),
   ).not.toBeInTheDocument();
-  await screen.findByText("Internal request");
+  await screen.findByText("Internal");
   expect(signal.aborted).toBe(true);
   expect(repository.communications).toHaveBeenCalledTimes(1);
 });
@@ -541,7 +546,7 @@ test("F039 explicit view is single-flight in Strict Mode and workflow refresh do
   closeDialog();
   expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Start Work" }));
-  await screen.findByText("Request moved to Open.");
+  await screen.findByText("Work started.");
   expect(repository.contact).toHaveBeenCalledTimes(1);
   expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
 });
@@ -669,15 +674,13 @@ test.each(["public", "internal"])(
     const metadata = container.querySelector(".request-identity-meta");
     expect(metadata).toContainElement(value);
     expect(
-      within(metadata).getByText(
-        audience === "public" ? "Public request" : "Internal request",
-      ),
+      within(metadata).getByText(audience === "public" ? "Public" : "Internal"),
     ).toHaveClass("ui-audience");
     expect(within(metadata).getByText("Request #")).toBeInTheDocument();
     expect(metadata.parentElement).toHaveClass("request-identity-copy");
-    expect(
-      container.querySelector(".request-current-status"),
-    ).not.toContainElement(value);
+    expect(container.querySelector(".request-work")).not.toContainElement(
+      value,
+    );
     expect(
       screen
         .getByRole("heading", { name: row.issueName, level: 2 })
@@ -700,11 +703,11 @@ test.each(["public", "internal"])(
     const { container } = show(
       "/staff/requests?page=2&sort=issue&direction=asc&assignment=unassigned",
     );
-    expect(await screen.findByLabelText("Row position 26")).toHaveTextContent(
-      "26",
-    );
+    expect(
+      await screen.findByText("Showing 26–40 of 40 requests"),
+    ).toBeInTheDocument();
     const metadata = container.querySelector(
-      ".staff-request-table .request-identity-meta",
+      ".staff-request-table .ui-reference",
     );
     expect(
       screen.getByRole("cell", {
@@ -730,7 +733,9 @@ test.each(["public", "internal"])(
 
 test("list defaults, keyboard sort toggles, assignment composition and Reset", async () => {
   show("/staff/requests");
-  expect(await screen.findByLabelText("Row position 1")).toHaveTextContent("1");
+  expect(
+    await screen.findByText("Showing 1–1 of 1 requests"),
+  ).toHaveTextContent("1");
   expect(repository.list).toHaveBeenLastCalledWith(
     expect.objectContaining({
       audience: "all",
@@ -777,7 +782,9 @@ test("list defaults, keyboard sort toggles, assignment composition and Reset", a
       expect.any(AbortSignal),
     ),
   );
-  await user.click(screen.getByRole("button", { name: "Reset" }));
+  await user.click(
+    screen.getByRole("button", { name: "Clear search and filters" }),
+  );
   await waitFor(() =>
     expect(repository.list).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -794,7 +801,7 @@ test("list defaults, keyboard sort toggles, assignment composition and Reset", a
 
 test("consolidated controls follow search, clear, sort, direction and Refresh keyboard order", async () => {
   show("/staff/requests?q=street");
-  await screen.findByLabelText("Row position 1");
+  await screen.findByText("Showing 1–1 of 1 requests");
   const toolbar = screen.getByRole("group", { name: "Request list controls" });
   const search = within(toolbar).getByRole("searchbox", {
     name: "Search Requests",
@@ -810,7 +817,7 @@ test("consolidated controls follow search, clear, sort, direction and Refresh ke
     direction,
     refresh,
   ]);
-  expect(screen.getByText("1–1 of 1 requests")).toBeInTheDocument();
+  expect(screen.getByText("1 request found")).toBeInTheDocument();
   const user = userEvent.setup();
   search.focus();
   await user.tab();
@@ -829,10 +836,10 @@ test("consolidated controls follow search, clear, sort, direction and Refresh ke
     filters,
     expect.any(AbortSignal),
   );
-  await screen.findByLabelText("Row position 1");
+  await screen.findByText("Showing 1–1 of 1 requests");
   expect(
     screen
-      .getByRole("button", { name: "Sort by Created; descending" })
+      .getByRole("button", { name: "Sort by Reported; descending" })
       .closest("th"),
   ).toHaveAttribute("aria-sort", "descending");
 });
@@ -862,17 +869,15 @@ test("F038 detail is Issue-first with configured icon and authorized location", 
     "Description",
     "Assignment",
     "Watchers",
-    "Issue Details",
-    "Actions",
+    "Request Details",
+    "Work",
     "Recent Activity",
   ])
     expect(
       await screen.findByRole("heading", { name: title }),
     ).toBeInTheDocument();
   expect(
-    screen.getByText(
-      "This is an internal request. Requester contact requires separate permission.",
-    ),
+    screen.getByText("Visible only to authorized staff."),
   ).toBeInTheDocument();
 });
 test("F038 absent location stays absent and unsafe icon falls back without contact substitution", async () => {
@@ -945,9 +950,12 @@ test.each(["public", "internal"])(
     const collaboration = screen.getByRole("heading", {
       name: "Collaboration",
     });
-    expect(description.parentElement.nextElementSibling.firstElementChild).toBe(
-      evidence,
-    );
+    expect(description.parentElement).not.toContainElement(evidence);
+    expect(evidence).toHaveClass("ui-card");
+    expect(
+      description.compareDocumentPosition(evidence) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(description.contains(evidence)).toBe(false);
     expect(
       evidence.compareDocumentPosition(collaboration) &
@@ -968,44 +976,17 @@ test.each(["public", "internal"])(
     const description = (
       await screen.findByRole("heading", { name: "Description" })
     ).closest("section");
-    const notice = description.previousElementSibling;
-    expect(notice.tagName).toBe("ASIDE");
-    expect(notice).toHaveClass("request-internal-notice");
-    expect(notice.classList.contains("request-public-notice")).toBe(
-      audience === "public",
-    );
-    expect(
-      within(notice).getByText(
-        audience === "public" ? "Public Request" : "Internal Request",
-        { exact: true },
-      ),
-    ).toBeInTheDocument();
-    expect(notice.contains(description)).toBe(false);
-    expect(
-      within(notice).getByText(
-        audience === "public"
-          ? "Some information may be limited based on your access."
-          : "This is an internal request. Requester contact requires separate permission.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      within(notice).queryByText(
-        /Staff operational information is protected\./,
-      ),
-    ).not.toBeInTheDocument();
-    if (audience === "public")
+    const notice = document.querySelector(".request-internal-notice");
+    if (audience === "internal") {
+      expect(notice.tagName).toBe("ASIDE");
       expect(
-        within(notice).queryByText(
-          /Requester contact requires separate permission\./,
-        ),
-      ).not.toBeInTheDocument();
-    else
-      expect(
-        within(notice).queryByText(
-          "Some information may be limited based on your access.",
-        ),
-      ).not.toBeInTheDocument();
-    expect(description.parentElement).toHaveClass("request-detail");
+        within(notice).getByText("Internal Request", { exact: true }),
+      ).toBeInTheDocument();
+      expect(notice).toHaveTextContent("Visible only to authorized staff.");
+      expect(notice).not.toHaveTextContent(/Contact|permission/);
+      expect(notice.contains(description)).toBe(false);
+    } else expect(notice).toBeNull();
+    expect(description.parentElement).toHaveClass("request-details");
     expect(description.querySelector("p").textContent).toBe(row.description);
     if (audience === "internal")
       expect(
@@ -1017,7 +998,11 @@ test.each(["public", "internal"])(
 test("final F046 DOM groups preserve primary flow and management-before-Activity without extra reads", async () => {
   repository.detail.mockResolvedValue({
     ...row,
-    capabilities: { ...row.capabilities, canReadNotes: true },
+    capabilities: {
+      ...row.capabilities,
+      canReadNotes: true,
+      canReadAnswers: true,
+    },
   });
   repository.attachments = {
     policy: vi.fn().mockResolvedValue({ enabled: true }),
@@ -1027,28 +1012,23 @@ test("final F046 DOM groups preserve primary flow and management-before-Activity
   await screen.findByText("No attachments");
   await screen.findByText("No activity has been recorded for this request.");
   const grid = container.querySelector(".request-detail-grid");
-  const [primary, sidebar] = grid.children;
-  expect(primary).toHaveClass("request-primary-content");
-  expect(sidebar).toHaveClass("request-sidebar");
-  expect(primary.firstElementChild).toHaveClass("request-detail");
-  expect(
-    [...primary.lastElementChild.children].map((element) => element.className),
-  ).toEqual([
+  expect([...grid.children].map((el) => el.className)).toEqual([
+    expect.stringContaining("request-overview"),
+    expect.stringContaining("request-details"),
+    expect.stringContaining("request-work"),
+    expect.stringContaining("request-requester"),
+    expect.stringContaining("submitted-information"),
     expect.stringContaining("request-evidence"),
     expect.stringContaining("request-collaboration"),
-    expect.stringContaining("request-issue-details"),
+    expect.stringContaining("request-history"),
   ]);
+  const details = grid.querySelector(".request-details");
+  expect(details.querySelector(".request-evidence")).toBeNull();
+  expect(details.querySelector(".request-collaboration")).toBeNull();
   expect(
-    [...sidebar.firstElementChild.children].map((element) => element.className),
-  ).toEqual([
-    expect.stringContaining("request-actions"),
-    expect.stringContaining("request-management"),
-  ]);
-  expect(sidebar.lastElementChild).toHaveClass("request-history");
-  expect(
-    sidebar
-      .querySelector(".request-management")
-      .contains(sidebar.lastElementChild),
+    grid
+      .querySelector(".request-work")
+      .contains(grid.querySelector(".request-history")),
   ).toBe(false);
   expect(repository.activity).toHaveBeenCalledTimes(1);
   expect(repository.activity).toHaveBeenCalledWith(
@@ -1175,12 +1155,16 @@ test("F046 counted Note and Communication attachments remain inside their collab
 test("list has loading, semantic references/status/department/date and no UUID primary display", async () => {
   show();
   expect(screen.getByText("Loading requests…")).toBeInTheDocument();
-  await screen.findByRole("link", { name: row.issueName });
+  await screen.findByRole("link", {
+    name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+  });
   expect(screen.getByRole("table")).toHaveAccessibleName(
     /Service Requests available to you/,
   );
   expect(
-    screen.getByText("Open", { selector: ".request-status" }),
+    within(screen.getByRole("table")).getByText("Open", {
+      selector: ".request-status",
+    }),
   ).toBeInTheDocument();
   expect(screen.queryByText(id)).not.toBeInTheDocument();
   expect(screen.queryByText(row.description)).not.toBeInTheDocument();
@@ -1219,7 +1203,9 @@ test("long description is available through semantic disclosure", async () => {
 });
 test("legacy reference URL survives applied status and Reset clears both", async () => {
   show("/staff/requests?search=CASE");
-  await screen.findByRole("link", { name: row.issueName });
+  await screen.findByRole("link", {
+    name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+  });
   expect(screen.queryByLabelText("Reference")).not.toBeInTheDocument();
   expect(repository.list.mock.lastCall[0].search).toBe("CASE");
   fireEvent.change(screen.getByLabelText("Status"), {
@@ -1233,9 +1219,13 @@ test("legacy reference URL survives applied status and Reset clears both", async
       expect.any(AbortSignal),
     ),
   );
-  const link = await screen.findByRole("link", { name: row.issueName });
+  const link = await screen.findByRole("link", {
+    name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+  });
   expect(link.getAttribute("href")).toContain("search=CASE");
-  fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Clear search and filters" }),
+  );
   await waitFor(() =>
     expect(repository.list).toHaveBeenLastCalledWith(
       expect.objectContaining({ search: "", status: "", page: 1 }),
@@ -1252,7 +1242,9 @@ test("server pagination changes page without loading all records", async () => {
     hasNextPage: true,
   });
   show();
-  await screen.findByRole("link", { name: row.issueName });
+  await screen.findByRole("link", {
+    name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+  });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await waitFor(() =>
     expect(repository.list).toHaveBeenLastCalledWith(
@@ -1262,8 +1254,8 @@ test("server pagination changes page without loading all records", async () => {
   );
 });
 test.each([
-  ["", "No requests to display."],
-  ["?status=open", "No requests match your current filters."],
+  ["", "No requests found."],
+  ["?status=open", "No requests found."],
 ])("empty state %s is clear", async (query, label) => {
   repository.list.mockResolvedValue({
     items: [],
@@ -1296,7 +1288,9 @@ test("list failure has safe retry and no protected rows", async () => {
   show();
   await screen.findByRole("alert");
   expect(
-    screen.queryByRole("link", { name: row.issueName }),
+    screen.queryByRole("link", {
+      name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+    }),
   ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
 });
@@ -1318,12 +1312,12 @@ test.each([
     ).not.toBeInTheDocument();
   const expected = {
     open: ["Close Request"],
-    in_progress: ["Place On Hold", "Close Request"],
+    in_progress: ["Place on Hold", "Close Request"],
     on_hold: ["Close Request"],
     closed: ["Reopen Request"],
     cancelled: [],
   }[status];
-  for (const label of ["Place On Hold", "Close Request", "Reopen Request"]) {
+  for (const label of ["Place on Hold", "Close Request", "Reopen Request"]) {
     if (expected.includes(label))
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     else
@@ -1349,9 +1343,9 @@ test("read-only capability does not infer mutation rights", async () => {
     divisions: [],
   });
   show(`/staff/requests/${id}`);
-  await screen.findByText("You have read-only access to this request.");
+  await screen.findByRole("heading", { name: "Work" });
   expect(
-    screen.queryByRole("button", { name: /Start Work|Route Request/ }),
+    screen.queryByRole("button", { name: /Start Work|Change Routing/ }),
   ).not.toBeInTheDocument();
 });
 test("mutation is revision guarded, prevents duplicate clicks and refetches authoritative state", async () => {
@@ -1367,6 +1361,7 @@ test("mutation is revision guarded, prevents duplicate clicks and refetches auth
     .mockResolvedValue({ ...row, status: "in_progress", revision: 2 });
   show(`/staff/requests/${id}`);
   const button = await screen.findByRole("button", { name: "Start Work" });
+  button.focus();
   fireEvent.click(button);
   fireEvent.click(button);
   expect(repository.workflow).toHaveBeenCalledTimes(1);
@@ -1377,8 +1372,11 @@ test("mutation is revision guarded, prevents duplicate clicks and refetches auth
     expect.any(AbortSignal),
   );
   await act(async () => finish({}));
-  await screen.findByText("Request moved to In Progress.");
+  await screen.findByText("Work started.");
   expect(repository.detail).toHaveBeenCalledTimes(2);
+  expect(
+    screen.getByRole("heading", { name: row.issueName, level: 2 }),
+  ).toHaveFocus();
 });
 test("conflict reloads latest state instead of resubmitting", async () => {
   repository.workflow.mockRejectedValue({ status: 409 });
@@ -1412,7 +1410,9 @@ test("routing uses server options, keyboard focus and current revision then refr
     revision: 2,
   });
   show(`/staff/requests/${id}`);
-  fireEvent.click(await screen.findByRole("button", { name: "Route Request" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Change Routing" }),
+  );
   expect(screen.getByLabelText("Department")).toHaveFocus();
   const user = userEvent.setup();
   await user.selectOptions(screen.getByLabelText("Department"), target);
@@ -1424,7 +1424,11 @@ test("routing uses server options, keyboard focus and current revision then refr
     { departmentId: target, divisionId: division, expectedRevision: 1 },
     expect.any(AbortSignal),
   );
-  expect(screen.getByText("Maintenance")).toBeInTheDocument();
+  expect(
+    within(
+      screen.getByRole("heading", { name: "Work" }).closest("section"),
+    ).getByText("Maintenance"),
+  ).toBeInTheDocument();
 });
 test("switching UUID clears prior request while inaccessible detail loads", async () => {
   repository.detail
@@ -1473,7 +1477,7 @@ test.each([400, 403, 409])(
     repository.route.mockRejectedValue({ status });
     show(`/staff/requests/${id}`);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Route Request" }),
+      await screen.findByRole("button", { name: "Change Routing" }),
     );
     fireEvent.change(screen.getByLabelText("Department"), {
       target: { value: target },
@@ -1644,7 +1648,7 @@ test("empty history and long narrative disclosure are safe", async () => {
   show(`/staff/requests/${id}`);
   await screen.findByText("No activity has been recorded for this request.");
   fireEvent.click(screen.getByRole("button", { name: "Start Work" }));
-  await screen.findByText("Request moved to In Progress.");
+  await screen.findByText("Work started.");
   await fullActivity();
   await screen.findByText("Read narrative");
   expect(document.querySelector(".activity-narrative")).toHaveTextContent(
@@ -1655,7 +1659,7 @@ test.each([
   [
     "in_progress",
     "hold",
-    "Place On Hold",
+    "Place on Hold",
     "Hold reason",
     "on_hold",
     "placed_on_hold",
@@ -1708,7 +1712,11 @@ test.each([
     fireEvent.change(input, { target: { value: "Fictional new narrative" } });
     fireEvent.submit(form);
     await screen.findByText(
-      `Request moved to ${next === "on_hold" ? "On Hold" : next === "closed" ? "Closed" : "Open"}.`,
+      {
+        on_hold: "Request placed on hold.",
+        closed: "Request closed.",
+        open: "Request reopened.",
+      }[next],
     );
     await fullActivity();
     await screen.findByText("Fictional new narrative", {
@@ -1801,7 +1809,9 @@ test("narrative pending prevents duplicate submissions and waits for server conf
   expect(repository.workflow).toHaveBeenCalledTimes(1);
   expect(within(form).getByRole("button", { name: "Saving…" })).toBeDisabled();
   expect(
-    screen.getByText("Open", { selector: ".request-status" }),
+    within(
+      screen.getByRole("heading", { name: "Work" }).closest("section"),
+    ).getByText("Open", { selector: ".request-status" }),
   ).toBeInTheDocument();
   await act(async () => finish({}));
 });
@@ -1817,7 +1827,9 @@ test("completed narrative command with failed detail refresh shows retry without
     target: { value: "Fictional completed resolution" },
   });
   fireEvent.submit(form);
-  await screen.findByText(/temporarily unavailable/);
+  await screen.findByText(
+    /The change was recorded, but the latest details could not be loaded/,
+  );
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   expect(repository.workflow).toHaveBeenCalledTimes(1);
   expect(screen.queryByText("Loading request…")).not.toBeInTheDocument();
@@ -1868,7 +1880,7 @@ test.each(["staff", "role", "group"])(
     await user.click(
       await screen.findByRole("button", { name: "Assign Request" }),
     );
-    await user.selectOptions(screen.getByLabelText("Target type"), type);
+    await user.selectOptions(screen.getByLabelText("Assignment type"), type);
     await user.selectOptions(
       await screen.findByLabelText("Eligible target"),
       other,
@@ -1900,11 +1912,14 @@ test("F037 picker search, no-results, errors, keyboard cancel and focus return",
   await manage("Assignment");
   const trigger = await screen.findByRole("button", { name: "Assign Request" });
   await user.click(trigger);
-  expect(screen.getByLabelText("Target type")).toHaveFocus();
+  expect(screen.getByLabelText("Assignment type")).toHaveFocus();
   expect(
     await screen.findByText("No eligible targets found."),
   ).toBeInTheDocument();
-  await user.type(screen.getByLabelText("Search eligible targets"), "reviewer");
+  await user.type(
+    screen.getByLabelText("Search available staff, roles or teams"),
+    "reviewer",
+  );
   await user.click(screen.getByRole("button", { name: "Search targets" }));
   await waitFor(() =>
     expect(repository.targets).toHaveBeenLastCalledWith(
@@ -1991,7 +2006,7 @@ test("F037 add/remove watchers refreshes from API and preserves separate assignm
   show(`/staff/requests/${id}`);
   await manage("Watchers");
   await user.click(await screen.findByRole("button", { name: "Add Watcher" }));
-  await user.selectOptions(screen.getByLabelText("Target type"), "role");
+  await user.selectOptions(screen.getByLabelText("Watcher type"), "role");
   await user.selectOptions(
     await screen.findByLabelText("Eligible target"),
     other,
@@ -2033,7 +2048,7 @@ test("F037 unassign and duplicate watcher conflict reload authoritative state", 
   show(`/staff/requests/${id}`);
   await manage("Assignment");
   await user.click(
-    await screen.findByRole("button", { name: "Unassign Request" }),
+    await screen.findByRole("button", { name: "Remove Assignment" }),
   );
   await waitFor(() =>
     expect(repository.unassign).toHaveBeenCalledWith(
@@ -2100,7 +2115,9 @@ test.each(["mine", "team", "watching"])(
   async (view) => {
     const user = userEvent.setup();
     show("/staff/requests?status=open&page=3&search=CASE-00000001");
-    await screen.findByRole("link", { name: row.issueName });
+    await screen.findByRole("link", {
+      name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+    });
     await user.selectOptions(screen.getByLabelText("Request View"), view);
     await waitFor(() =>
       expect(repository.list).toHaveBeenLastCalledWith(
@@ -2113,7 +2130,9 @@ test.each(["mine", "team", "watching"])(
         expect.anything(),
       ),
     );
-    const link = await screen.findByRole("link", { name: row.issueName });
+    const link = await screen.findByRole("link", {
+      name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+    });
     expect(link.getAttribute("href")).toContain(`view=${view}`);
   },
 );
@@ -2141,7 +2160,7 @@ test("F040 mixed list exposes readable audience labels, secondary references and
     screen.getByRole("cell", { name: "Internal", exact: true }),
   ).toBeInTheDocument();
   expect(
-    screen.getByRole("link", { name: "Fictional street sign" }),
+    screen.getByRole("link", { name: /Manage Request: Fictional street sign/ }),
   ).toHaveAttribute(
     "href",
     expect.stringContaining(`/staff/requests/${other}`),
@@ -2160,7 +2179,9 @@ test.each(["public", "internal", "all"])(
     show(
       "/staff/requests?audience=public&view=watching&status=open&search=OPAQUE&page=4",
     );
-    await screen.findByRole("link", { name: row.issueName });
+    await screen.findByRole("link", {
+      name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+    });
     await user.selectOptions(screen.getByLabelText("Audience"), audience);
     await waitFor(() =>
       expect(repository.list).toHaveBeenLastCalledWith(
@@ -2175,9 +2196,11 @@ test.each(["public", "internal", "all"])(
       ),
     );
     expect(
-      (await screen.findByRole("link", { name: row.issueName })).getAttribute(
-        "href",
-      ),
+      (
+        await screen.findByRole("link", {
+          name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+        })
+      ).getAttribute("href"),
     ).toContain(`audience=${audience}`);
   },
 );
@@ -2194,7 +2217,7 @@ test.each(["public", "internal"])(
     show(`/staff/requests?audience=${audience}`);
     expect(
       await screen.findByRole("heading", {
-        name: `No ${audience === "public" ? "Public" : "Internal"} requests match your filters.`,
+        name: "No requests found.",
       }),
     ).toBeInTheDocument();
   },
@@ -2216,8 +2239,8 @@ test("F040 PUBLIC detail uses shared hierarchy and on-demand PUBLIC contact; per
   });
   const user = userEvent.setup();
   show(`/staff/requests/${id}`);
-  expect(await screen.findByText("Public request")).toBeInTheDocument();
-  expect(screen.getByText("Phone")).toBeInTheDocument();
+  expect(await screen.findByText("Public")).toBeInTheDocument();
+  expect(screen.getByText(/Channel: Phone/)).toBeInTheDocument();
   expect(screen.queryByText("Internal Request")).not.toBeInTheDocument();
   expect(
     screen.getByRole("heading", { name: row.issueName }),
@@ -2236,7 +2259,7 @@ test("F040 PUBLIC detail uses shared hierarchy and on-demand PUBLIC contact; per
     screen.queryByRole("button", { name: "Start Work" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "Route Request" }),
+    screen.queryByRole("button", { name: "Change Routing" }),
   ).not.toBeInTheDocument();
   expect(repository.contact).not.toHaveBeenCalled();
   await user.click(
@@ -2286,7 +2309,7 @@ test("F040 PUBLIC-to-INTERNAL navigation clears contact, ownership and history b
     screen.queryByRole("heading", { name: "Request Activity" }),
   ).not.toBeInTheDocument();
   await act(async () => resolveNext({ ...row, serviceRequestId: other }));
-  await screen.findByText("Internal request");
+  await screen.findByText("Internal");
   fireEvent.click(
     screen.getByRole("button", { name: "View requester contact" }),
   );
@@ -2431,7 +2454,7 @@ test.each([
     await f043Show();
     const trigger = screen.getByRole("button", {
       name: {
-        Assignment: "Manage assignment",
+        Assignment: "Change Assignment",
         Watchers: "Manage watchers",
         "Requester Contact": "View requester contact",
         "Full Request Activity": "View full activity",

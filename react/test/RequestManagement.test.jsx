@@ -1,8 +1,16 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
-import RequestManagement from "../src/staff/requests/RequestManagement.jsx";
+import ManagementSection from "../src/staff/requests/RequestManagement.jsx";
 
+function RequestManagement(props) {
+  return (
+    <>
+      <ManagementSection {...props} section="work" />
+      <ManagementSection {...props} section="requester" />
+    </>
+  );
+}
 function setup({
   count = 0,
   status = "not_issued",
@@ -46,9 +54,7 @@ function setup({
 
 test("F049 anonymous Contact is an explicit absence with no View action or disclosure", async () => {
   const { props } = setup({ requesterIdentity: "anonymous" });
-  expect(
-    screen.getByText("Not provided — submitted anonymously"),
-  ).toBeInTheDocument();
+  expect(screen.getByText("Submitted anonymously")).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "View requester contact" }),
   ).not.toBeInTheDocument();

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 const labels = {
-  hold: "Place On Hold",
+  hold: "Place on Hold",
   close: "Close Request",
   reopen: "Reopen Request",
 };

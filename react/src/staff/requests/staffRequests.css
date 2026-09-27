@@ -949,3 +949,291 @@
   --bs-btn-color: var(--text-secondary);
   --bs-btn-border-color: var(--border-default);
 }
+
+/* F058.2B: one mobile DOM order; wide-screen placement keeps Collaboration broad. */
+.staff-request-workspace {
+  --font-body: 1.0625rem;
+  --font-small: 0.9375rem;
+  font-size: var(--font-body);
+}
+.staff-request-workspace .btn,
+.staff-request-workspace .request-count,
+.staff-request-workspace .request-subline {
+  font-size: 1rem;
+}
+.request-workspace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+.request-workspace-layout > * {
+  min-width: 0;
+  margin: 0;
+}
+.request-workspace-layout h4 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+.request-overview .request-metadata {
+  margin: 1rem 0 0;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.request-overview .request-audience-notice {
+  display: flex;
+  align-items: start;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: var(--radius-card);
+  margin: 1rem 0 0;
+}
+.request-audience-notice p {
+  margin: 0.5rem 0 0;
+}
+.request-audience-notice > i {
+  font-size: 1.5rem;
+}
+.request-public-notice {
+  background: var(--audience-public-bg);
+  color: var(--audience-public);
+}
+.request-overview .request-metadata dd {
+  font-size: 1.125rem;
+}
+.request-overview .request-issue-title {
+  font-size: clamp(1.5rem, 2.5vw, 2rem);
+}
+.request-overview .request-identity {
+  margin-bottom: 0;
+}
+.request-details > section,
+.request-details > details {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-default);
+}
+.request-details .request-description {
+  border: 0;
+  padding-top: 0;
+}
+.request-details .request-description p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.request-work-actions:has(.request-action-buttons:empty):not(:has(form)) {
+  display: none;
+}
+.request-work-status {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.request-work-status h4 {
+  margin: 0;
+}
+.request-work-routing {
+  padding-block: 1rem;
+  border-bottom: 1px solid var(--border-default);
+}
+.request-work .request-action-buttons {
+  margin-bottom: 1rem;
+}
+.request-result-title {
+  display: flex;
+  gap: 0.65rem;
+  align-items: start;
+  margin-bottom: 0.4rem;
+}
+.request-result-title > a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1.125rem;
+  font-weight: var(--weight-heading);
+}
+.request-results-table {
+  font-size: 1rem;
+}
+.request-results-table th,
+.request-results-table td {
+  padding: 0.85rem 0.5rem;
+}
+.request-results-table thead th {
+  overflow-wrap: normal;
+}
+.request-results-table th:nth-child(2) {
+  width: 25%;
+}
+.request-results-table .request-row-number {
+  width: 2.5rem;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.request-results-table .request-sort-button {
+  padding: 0;
+}
+.request-manage-link {
+  white-space: nowrap;
+  font-size: 1rem;
+}
+.request-result-cards {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+.request-result-card h3 {
+  font-size: 1.125rem;
+}
+.request-result-card h3 .ui-reference {
+  font-size: 0.875rem;
+  font-weight: normal;
+}
+.request-result-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block: 0.75rem;
+}
+.request-result-card dl {
+  display: grid;
+  gap: 0.75rem;
+}
+.request-result-card dt {
+  color: var(--text-secondary);
+  font-size: var(--font-small);
+}
+.request-result-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.request-pagination .request-count {
+  margin: 0 auto 0 0;
+}
+.request-pagination .request-page-size {
+  margin-right: 0;
+}
+.request-page-size label,
+.request-pagination > span {
+  white-space: nowrap;
+}
+@media (min-width: 1200px) {
+  .request-workspace-layout {
+    grid-template-columns: minmax(0, 1.7fr) minmax(22rem, 1fr);
+    grid-template-rows: auto min-content min-content min-content min-content 1fr;
+    grid-template-areas: "overview overview" "details work" "submitted work" "evidence requester" "collaboration requester" "collaboration activity";
+  }
+  .request-overview {
+    grid-area: overview;
+  }
+  .request-details {
+    grid-area: details;
+  }
+  .submitted-information {
+    grid-area: submitted;
+  }
+  .request-evidence {
+    grid-area: evidence;
+  }
+  .request-requester {
+    grid-area: requester;
+  }
+  .request-work {
+    grid-area: work;
+  }
+  .request-collaboration {
+    grid-area: collaboration;
+  }
+  .request-history {
+    grid-area: activity;
+  }
+  .request-overview .request-metadata {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 575.98px) {
+  .request-overview .request-metadata {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .request-pagination {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.75rem;
+  }
+  .request-pagination .request-count,
+  .request-pagination .request-page-size {
+    grid-column: 1 / -1;
+  }
+  .request-pagination > span {
+    text-align: center;
+  }
+}
+
+/* Review correction: cohesive Work groups, aligned labels and controls. */
+.request-work .request-work-lifecycle,
+.request-work > .request-management-row {
+  border: 0;
+  padding: 1rem 0;
+  margin: 0;
+}
+.request-work .request-management-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+.request-work > .request-management-row > button {
+  justify-self: start;
+}
+.request-work .request-management-row p {
+  font-size: 1.125rem;
+  color: var(--text-primary);
+}
+.request-work h4 {
+  color: var(--text-secondary);
+}
+.request-work-routing {
+  flex-wrap: wrap;
+}
+.request-work-routing .routing-form {
+  flex-basis: 100%;
+}
+.request-work .request-action-buttons {
+  margin-bottom: 0;
+}
+.request-result-title > a {
+  text-underline-offset: 3px;
+}
+.request-result-title > a:hover {
+  text-decoration: underline;
+}
+.request-results-table .ui-location,
+.request-result-card .ui-location {
+  font-size: 1rem;
+  font-weight: normal;
+  margin-top: 0.4rem;
+}
+
+@media (max-width: 575.98px) {
+  .staff-request-workspace {
+    --font-body: 1rem;
+    --font-small: 0.875rem;
+  }
+  .request-overview .request-metadata dd,
+  .request-work .request-management-row p {
+    font-size: 1.0625rem;
+  }
+  .staff-request-workspace .request-subline {
+    font-size: 0.9375rem;
+  }
+  .request-work > .request-management-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+  .request-work > .request-management-row > button {
+    justify-self: start;
+  }
+}

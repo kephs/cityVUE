@@ -70,7 +70,7 @@ test("results hierarchy follows filters, consolidated controls, summary and rows
   const filters = screen.getByRole("form", { name: "Request filters" });
   const toolbar = screen.getByRole("group", { name: "Request list controls" });
   const search = input().closest(".request-live-search");
-  const summary = screen.getByText("1–1 of 1 requests");
+  const summary = screen.getByText("1 request found");
   const results = screen.getByRole("table");
   const ordered = [filters, toolbar, summary, results];
   for (let i = 1; i < ordered.length; i++)
@@ -92,7 +92,10 @@ test("results hierarchy follows filters, consolidated controls, summary and rows
   );
   expect(search.closest("form")).toBeNull();
   const keyboard = [
-    screen.getByRole("button", { name: "Reset", exact: true }),
+    screen.getByRole("button", {
+      name: "Clear search and filters",
+      exact: true,
+    }),
     input(),
     screen.getByRole("button", { name: "Clear search" }),
     screen.getByLabelText("Sort By"),
@@ -183,7 +186,7 @@ test("pagination carries search immediately and a subsequent search cancels its 
     resolve({ ...result("Old page"), page: 2 });
   });
   expect(screen.queryByText("Old page")).toBeNull();
-  expect(screen.getByLabelText("Row position 1")).toBeInTheDocument();
+  expect(screen.getByText(/Showing 1–/)).toBeInTheDocument();
 });
 
 test("debounces rapid input, trims edges, resets page and preserves every applied control", async () => {
@@ -240,7 +243,7 @@ test("short input does not search or show stale rows; whitespace means no constr
   expect(input()).toHaveAttribute("maxlength", "160");
 });
 
-test.each(["Clear search", "Reset"])(
+test.each(["Clear search", "Clear search and filters"])(
   "%s cancels pending debounce and late responses",
   async (button) => {
     show("?q=alpha&sort=issue&direction=asc");
@@ -268,7 +271,7 @@ test.each(["Clear search", "Reset"])(
     expect(repository.list.mock.lastCall[0]).toMatchObject({
       q: "",
       page: 1,
-      sort: button === "Reset" ? "created" : "issue",
+      sort: button === "Clear search and filters" ? "created" : "issue",
     });
     expect(
       repository.list.mock.calls.some(([filter]) => filter.q === "gamma"),
@@ -348,21 +351,14 @@ test("empty matches and failed requests have distinct accessible states; retry p
   repository.list.mockResolvedValueOnce(result("", 0));
   show("?q=missing");
   await flush();
-  expect(
-    screen.getByText("No requests match your current filters."),
-  ).toBeInTheDocument();
+  expect(screen.getByText("No requests found.")).toBeInTheDocument();
   repository.list.mockRejectedValueOnce({ status: 500 });
   fireEvent.click(screen.getByText("Refresh"));
   await flush();
   expect(screen.getByRole("alert")).toBeInTheDocument();
-  expect(
-    screen.queryByText("No requests match your current filters."),
-  ).toBeNull();
+  expect(screen.queryByText("No requests found.")).toBeNull();
   fireEvent.click(screen.getByText("Try again"));
   await flush();
   expect(repository.list.mock.lastCall[0]).toMatchObject({ q: "missing" });
-  expect(screen.getByText("1–1 of 1 requests")).toHaveAttribute(
-    "role",
-    "status",
-  );
+  expect(screen.getByText("1 request found")).toHaveAttribute("role", "status");
 });

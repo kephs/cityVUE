@@ -1,3 +1,4 @@
+import RequestResults from "./RequestResults.jsx";
 import SubmittedInformation from "./SubmittedInformation.jsx";
 import { RequestEvidence } from "../../attachments/Attachments.jsx";
 import {
@@ -14,7 +15,7 @@ import ActivityPanel from "./ActivityPanel.jsx";
 import RequestManagement from "./RequestManagement.jsx";
 import CollaborationPanel from "./CollaborationPanel.jsx";
 import WorkflowNarrativeForm from "./WorkflowNarrativeForm.jsx";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { statusLabels, workspaceError } from "./requestRepository.js";
 import "./staffRequests.css";
@@ -24,10 +25,16 @@ const date = (value) => {
     ? "Unavailable"
     : parsed.toLocaleString();
 };
-function Failure({ error, retry, onSignIn }) {
+function mutationProblem(error, completed) {
+  if (error?.status && error.status < 500) return workspaceError(error);
+  return completed
+    ? "The change was recorded, but the latest details could not be loaded. Check the latest request details before trying again."
+    : "We couldn't confirm the result. Check the latest request details before trying again.";
+}
+function Failure({ error, message, retry, onSignIn }) {
   return (
     <div className="workspace-feedback">
-      <p role="alert">{workspaceError(error)}</p>
+      <p role="alert">{message || workspaceError(error)}</p>
       {error?.status === 401 && onSignIn ? (
         <button className="btn btn-primary" onClick={onSignIn}>
           Sign in again
@@ -100,8 +107,8 @@ const listSorts = {
   issue: "Issue / Reference",
   status: "Status",
   department: "Department / Division",
-  assignment: "Assignment",
-  created: "Created",
+  assignment: "Assigned to",
+  created: "Reported",
 };
 function listParams(next) {
   const query = new URLSearchParams();
@@ -207,16 +214,6 @@ function RequestList({ repository, onSignIn }) {
     setParams(listParams({ ...filters, q: "", page: 1 }));
     searchField.current?.focus();
   };
-  const filtered = Boolean(
-    filters.assignment !== "all" ||
-    filters.audience !== "all" ||
-    filters.view !== "all" ||
-    filters.search ||
-    filters.q ||
-    filters.status ||
-    filters.departmentId ||
-    filters.divisionId,
-  );
   return (
     <>
       <form
@@ -258,7 +255,7 @@ function RequestList({ repository, onSignIn }) {
               }}
             >
               <option value="all">All Requests</option>
-              <option value="mine">My Requests</option>
+              <option value="mine">Assigned to me</option>
               <option value="team">My Team</option>
               <option value="watching">Watching</option>
             </select>
@@ -315,7 +312,7 @@ function RequestList({ repository, onSignIn }) {
                 setParams(new URLSearchParams());
               }}
             >
-              Reset
+              Clear search and filters
             </button>
             <button className="btn btn-primary" type="submit">
               Apply Filters
@@ -422,6 +419,42 @@ function RequestList({ repository, onSignIn }) {
       {current?.data && (
         <>
           <p role="status" className="request-count">
+            {current.data.total}{" "}
+            {current.data.total === 1 ? "request" : "requests"} found
+          </p>
+          {!current.data.items.length ? (
+            <div className="workspace-feedback">
+              <h3>No requests found.</h3>
+              <p>Try changing your search or filters.</p>
+            </div>
+          ) : (
+            <RequestResults
+              items={current.data.items}
+              page={current.data.page}
+              pageSize={current.data.pageSize}
+              query={params.toString()}
+              sort={filters.sort}
+              direction={filters.direction}
+              sortLabels={listSorts}
+              onSort={(key) =>
+                apply({
+                  ...filters,
+                  sort: key,
+                  direction:
+                    filters.sort === key && filters.direction === "asc"
+                      ? "desc"
+                      : "asc",
+                  page: 1,
+                })
+              }
+            />
+          )}
+        </>
+      )}
+      <nav aria-label="Request pages" className="request-pagination">
+        {current?.data && (
+          <p className="request-count">
+            Showing{" "}
             {current.data.total
               ? (current.data.page - 1) * current.data.pageSize + 1
               : 0}
@@ -432,139 +465,7 @@ function RequestList({ repository, onSignIn }) {
             )}{" "}
             of {current.data.total} requests
           </p>
-          {!current.data.items.length ? (
-            <div className="workspace-feedback">
-              <h3>
-                {filters.audience === "public"
-                  ? "No Public requests match your filters."
-                  : filters.audience === "internal"
-                    ? "No Internal requests match your filters."
-                    : filtered
-                      ? "No requests match your current filters."
-                      : "No requests to display."}
-              </h3>
-              <p>
-                {filtered
-                  ? "Try another search or reset your filters."
-                  : "Requests available to you will appear here."}
-              </p>
-            </div>
-          ) : (
-            <table className="staff-request-table">
-              <caption className="visually-hidden">
-                Service Requests available to you. Sorted by{" "}
-                {listSorts[filters.sort]},{" "}
-                {filters.direction === "asc" ? "ascending" : "descending"}. Row
-                # is the position in this result set, not a request identifier.
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col" aria-label="Row position">
-                    #
-                  </th>
-                  {Object.entries(listSorts).map(([key, label]) => (
-                    <Fragment key={key}>
-                      <th
-                        scope="col"
-                        key={key}
-                        aria-sort={
-                          filters.sort === key
-                            ? filters.direction === "asc"
-                              ? "ascending"
-                              : "descending"
-                            : "none"
-                        }
-                      >
-                        <button
-                          type="button"
-                          className="request-sort-button"
-                          onClick={() =>
-                            apply({
-                              ...filters,
-                              sort: key,
-                              direction:
-                                filters.sort === key &&
-                                filters.direction === "asc"
-                                  ? "desc"
-                                  : "asc",
-                              page: 1,
-                            })
-                          }
-                          aria-label={`Sort by ${label}; ${filters.sort === key ? (filters.direction === "asc" ? "ascending" : "descending") : "not currently sorted"}`}
-                        >
-                          {label}{" "}
-                          <span aria-hidden="true">
-                            {filters.sort === key
-                              ? filters.direction === "asc"
-                                ? "↑"
-                                : "↓"
-                              : "↕"}
-                          </span>
-                        </button>
-                      </th>
-                      {key === "issue" && <th scope="col">Request Type</th>}
-                    </Fragment>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {current.data.items.map((row, rowIndex) => (
-                  <tr key={row.serviceRequestId}>
-                    <td data-label="Row #" className="request-row-position">
-                      <span
-                        aria-label={`Row position ${(current.data.page - 1) * current.data.pageSize + rowIndex + 1}`}
-                      >
-                        {(current.data.page - 1) * current.data.pageSize +
-                          rowIndex +
-                          1}
-                      </span>
-                    </td>
-                    <th scope="row" data-label="Issue / Reference">
-                      <Link
-                        className="request-issue-link"
-                        to={`/staff/requests/${encodeURIComponent(row.serviceRequestId)}?${params}`}
-                      >
-                        <IssueIcon
-                          icon={row.issueIcon}
-                          categoryId={row.categoryId}
-                        />
-                        <span>{row.issueName}</span>
-                      </Link>
-                      <LocationDisplay value={row.serviceLocation} />
-                      <div className="request-identity-meta">
-                        <ReferenceDisplay value={row.referenceNumber} compact />
-                      </div>
-                    </th>
-                    <td data-label="Request Type">
-                      <AudienceBadge value={row.audience} compact />
-                    </td>
-                    <td data-label="Status">
-                      <Status value={row.status} />
-                    </td>
-                    <td data-label="Department / Division">
-                      {row.departmentName}
-                      {row.divisionName && (
-                        <span className="request-subline">
-                          {row.divisionName}
-                        </span>
-                      )}
-                    </td>
-                    <td data-label="Assignment">
-                      <TargetLabel target={row.assignment} />
-                    </td>
-                    <td data-label="Created">
-                      <time dateTime={row.createdAt}>
-                        {date(row.createdAt)}
-                      </time>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </>
-      )}
-      <nav aria-label="Request pages" className="request-pagination">
+        )}
         <div className="request-page-size">
           <label htmlFor="request-page-size">Rows per page</label>
           <select
@@ -650,6 +551,7 @@ function RequestDetail({ repository, id, onSignIn }) {
     [clearContact],
   );
   const initialFocus = useRef(false);
+  const routineTrigger = useRef(null);
   const heading = useRef(null),
     routeButton = useRef(null),
     inFlight = useRef(false),
@@ -736,6 +638,13 @@ function RequestDetail({ repository, id, onSignIn }) {
       initialFocus.current = true;
     }
   }, [state?.data]);
+  useEffect(() => {
+    const trigger = routineTrigger.current;
+    if (trigger && !trigger.isConnected) {
+      routineTrigger.current = null;
+      if (document.activeElement === document.body) heading.current?.focus();
+    }
+  }, [state?.data]);
   const mutate = async (operation, input) => {
     if (
       inFlight.current ||
@@ -800,7 +709,13 @@ function RequestDetail({ repository, id, onSignIn }) {
               }[operation]
             : operation === "route"
               ? "Request routed successfully."
-              : `Request moved to ${statusLabels[fresh.status]}.`,
+              : {
+                  start_work: "Work started.",
+                  hold: "Request placed on hold.",
+                  resume: "Work resumed.",
+                  close: "Request closed.",
+                  reopen: "Request reopened.",
+                }[input.action],
         );
     } catch (error) {
       if (signal.aborted) return;
@@ -810,14 +725,14 @@ function RequestDetail({ repository, id, onSignIn }) {
         ![401, 404, 409].includes(error.status)
       ) {
         if (error.status === 403) await protectedContentAccessFailure(error);
-        return { error: workspaceError(error) };
+        return { error: mutationProblem(error, commandCompleted) };
       }
       if (
         !commandCompleted &&
         narrativeAction &&
         ![401, 403, 404, 409].includes(error.status)
       ) {
-        setNarrativeError(workspaceError(error));
+        setNarrativeError(mutationProblem(error, commandCompleted));
         return;
       }
       setNarrativeAction(null);
@@ -832,13 +747,14 @@ function RequestDetail({ repository, id, onSignIn }) {
         } catch (refreshError) {
           if (!signal.aborted) setState({ error: refreshError });
         }
-      } else setState({ error });
+      } else
+        setState({ error, message: mutationProblem(error, commandCompleted) });
       if (management)
         return {
           error:
             error.status === 409
               ? "This request changed. Review the latest information before trying again."
-              : workspaceError(error),
+              : mutationProblem(error, commandCompleted),
         };
     } finally {
       inFlight.current = false;
@@ -867,332 +783,302 @@ function RequestDetail({ repository, id, onSignIn }) {
       {state?.error && (
         <Failure
           error={state.error}
+          message={state.message}
           retry={() => setRetry((n) => n + 1)}
           onSignIn={onSignIn}
         />
       )}
       {row && (
-        <article className="request-detail-grid">
-          <div className="request-primary-content">
-            <ContentCard className="request-detail">
-              <header className="request-identity">
-                <IssueIcon
-                  icon={row.issueIcon}
-                  size="large"
-                  categoryId={row.categoryId}
-                />
-                <div className="request-identity-copy">
-                  {row.categoryName && (
-                    <p className="request-eyebrow">{row.categoryName}</p>
-                  )}
-                  <h2
-                    className="request-issue-title"
-                    ref={heading}
-                    tabIndex="-1"
-                  >
-                    {row.issueName}
-                  </h2>
-                  <LocationDisplay value={row.serviceLocation} />
-                  <div className="request-identity-meta">
-                    <AudienceBadge value={row.audience} />
-                    <ReferenceDisplay value={row.referenceNumber} />
-                  </div>
-                </div>
-                <div className="request-current-status">
+        <article className="request-detail-grid request-workspace-layout">
+          <ContentCard className="request-overview">
+            <h3 className="visually-hidden">Overview</h3>
+            <header className="request-identity">
+              <IssueIcon
+                icon={row.issueIcon}
+                size="large"
+                categoryId={row.categoryId}
+              />
+              <div className="request-identity-copy">
+                <h2 className="request-issue-title" ref={heading} tabIndex="-1">
+                  {row.issueName}
+                </h2>
+                <div className="request-identity-meta">
+                  <ReferenceDisplay value={row.referenceNumber} />
+                  <AudienceBadge value={row.audience} compact />
                   <Status value={row.status} />
-                  <span>Last updated</span>
-                  <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
                 </div>
-              </header>
-              <dl className="request-metadata">
-                {row.intakeChannel && (
-                  <div>
-                    <dt>Intake Channel</dt>
-                    <dd>
-                      {
-                        {
-                          web: "Web",
-                          phone: "Phone",
-                          walk_in: "Walk-in",
-                          staff: "Staff",
-                          api: "API",
-                        }[row.intakeChannel]
-                      }
-                    </dd>
-                  </div>
-                )}
+              </div>
+            </header>
+            <dl className="request-metadata">
+              {row.categoryName && (
                 <div>
-                  <dt>
-                    <i className="bi bi-buildings" aria-hidden="true" />{" "}
-                    Department
-                  </dt>
-                  <dd>{row.departmentName}</dd>
+                  <dt>Service Category</dt>
+                  <dd>{row.categoryName}</dd>
                 </div>
-                <div>
-                  <dt>
-                    <i className="bi bi-people" aria-hidden="true" /> Division
-                  </dt>
-                  <dd>{row.divisionName || "Department-level"}</dd>
-                </div>
-                <div>
-                  <dt>
-                    <i className="bi bi-calendar3" aria-hidden="true" /> Created
-                  </dt>
-                  <dd>
-                    <time dateTime={row.createdAt}>{date(row.createdAt)}</time>
-                  </dd>
-                </div>
-                <div>
-                  <dt>
-                    <i className="bi bi-clock" aria-hidden="true" /> Updated
-                  </dt>
-                  <dd>
-                    <time dateTime={row.updatedAt}>{date(row.updatedAt)}</time>
-                  </dd>
-                </div>
-              </dl>
+              )}
+              <div>
+                <dt>Department / Division</dt>
+                <dd>
+                  {row.departmentName}
+                  {row.divisionName && (
+                    <span className="request-subline">{row.divisionName}</span>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Assigned to</dt>
+                <dd>
+                  <TargetLabel target={row.assignment} />
+                </dd>
+              </div>
+              <div>
+                <dt>Reported</dt>
+                <dd>
+                  <time dateTime={row.createdAt}>{date(row.createdAt)}</time>
+                </dd>
+              </div>
+            </dl>
+            {["internal", "public"].includes(row.audience) && (
               <aside
-                className={`request-internal-notice${row.audience === "public" ? " request-public-notice" : ""}`}
+                className={`request-audience-notice request-${row.audience}-notice`}
               >
                 <i className="bi bi-info-circle-fill" aria-hidden="true" />
                 <div>
                   <strong>
-                    {row.audience === "public"
-                      ? "Public Request"
-                      : "Internal Request"}
+                    {row.audience === "internal"
+                      ? "Internal Request"
+                      : "Public Request"}
                   </strong>
                   <p>
-                    {row.audience === "public"
-                      ? "Some information may be limited based on your access."
-                      : "This is an internal request. Requester contact requires separate permission."}
+                    {row.audience === "internal"
+                      ? "Visible only to authorized staff."
+                      : "This request is part of the public service request workflow."}
                   </p>
                 </div>
               </aside>
-              <section className="request-description">
-                <SectionHeading icon="file-earmark-text">
-                  Description
-                </SectionHeading>
-                {row.description.length > 1200 ? (
-                  <>
-                    <p>{row.description.slice(0, 1200)}…</p>
-                    <details>
-                      <summary>Read full description</summary>
-                      <p>{row.description}</p>
-                    </details>
-                  </>
-                ) : (
-                  <p>{row.description}</p>
-                )}
+            )}
+          </ContentCard>
+          <ContentCard className="request-details">
+            <SectionHeading icon="file-earmark-text">
+              Request Details
+            </SectionHeading>
+            <section className="request-description">
+              <h4>Description</h4>
+              {row.description.length > 1200 ? (
+                <>
+                  <p>{row.description.slice(0, 1200)}…</p>
+                  <details>
+                    <summary>Read full description</summary>
+                    <p>{row.description}</p>
+                  </details>
+                </>
+              ) : (
+                <p>{row.description}</p>
+              )}
+            </section>
+            {row.serviceLocation && (
+              <section>
+                <h4>Service Location</h4>
+                <LocationDisplay value={row.serviceLocation} />
               </section>
-            </ContentCard>
-            <div className="request-supporting-content">
-              <SubmittedInformation
-                key={id}
-                id={id}
-                repository={repository}
-                canRead={capabilities.canReadAnswers}
-              />
-              <RequestEvidence
-                key={id}
-                repository={repository.attachments}
-                requestId={id}
-                onAccessFailure={protectedContentAccessFailure}
-              />
-              <CollaborationPanel
-                key={id + ":" + row.audience}
-                repository={repository}
-                id={id}
-                audience={row.audience}
-                requesterIdentity={row.requesterIdentity}
-                capabilities={capabilities}
-                onAccessFailure={protectedContentAccessFailure}
-              />
-              <ContentCard className="request-issue-details">
-                <SectionHeading icon="tag">Issue Details</SectionHeading>
-                <dl className="request-metadata">
-                  <div>
-                    <dt>Issue</dt>
-                    <dd>{row.issueName}</dd>
-                  </div>
-                  {row.categoryName && (
-                    <div>
-                      <dt>Service Category</dt>
-                      <dd>{row.categoryName}</dd>
-                    </div>
-                  )}
-                </dl>
-              </ContentCard>
-            </div>
-          </div>
-          <div className="request-sidebar">
-            <div className="request-supporting-controls">
-              <ContentCard className="request-actions">
-                <SectionHeading icon="lightning-charge-fill">
-                  Actions
-                </SectionHeading>
-                {!workflowActions.length && !capabilities.canRoute ? (
-                  <p>You have read-only access to this request.</p>
-                ) : (
-                  <>
-                    <div className="request-action-buttons">
-                      {routineAction &&
-                        workflowActions.includes(routineAction[0]) && (
-                          <button
-                            className="btn btn-primary"
-                            disabled={busy || Boolean(narrativeAction)}
-                            onClick={() =>
-                              mutate("workflow", { action: routineAction[0] })
-                            }
-                          >
-                            <i className="bi bi-play-fill" aria-hidden="true" />{" "}
-                            {routineAction[1]}
-                          </button>
-                        )}
-                      {(["open", "in_progress", "on_hold"].includes(row.status)
-                        ? [
-                            ...(row.status === "in_progress" ? ["hold"] : []),
-                            "close",
-                          ]
-                        : row.status === "closed"
-                          ? ["reopen"]
-                          : []
-                      )
-                        .filter((action) => workflowActions.includes(action))
-                        .map((action) => (
-                          <button
-                            key={action}
-                            className="btn btn-secondary"
-                            disabled={busy || Boolean(narrativeAction)}
-                            onClick={(e) => {
-                              narrativeTrigger.current = e.currentTarget;
-                              setRouting(false);
-                              setNarrativeError("");
-                              setNarrativeAction(action);
-                            }}
-                          >
-                            <i
-                              className={`bi bi-${{ hold: "pause-fill", close: "check-lg", reopen: "arrow-counterclockwise" }[action]}`}
-                              aria-hidden="true"
-                            />{" "}
-                            {
-                              {
-                                hold: "Place On Hold",
-                                close: "Close Request",
-                                reopen: "Reopen Request",
-                              }[action]
-                            }
-                          </button>
-                        ))}
-                      {row.status !== "cancelled" && capabilities.canRoute && (
-                        <button
-                          ref={routeButton}
-                          className="btn btn-secondary"
-                          disabled={busy || Boolean(narrativeAction)}
-                          onClick={() => setRouting(true)}
-                        >
-                          <i
-                            className="bi bi-signpost-split"
-                            aria-hidden="true"
-                          />{" "}
-                          Route Request
-                        </button>
-                      )}
-                    </div>
-                    {row.status === "cancelled" && (
-                      <p>Cancelled requests have no workflow actions.</p>
-                    )}
-                    {narrativeAction && (
-                      <WorkflowNarrativeForm
-                        key={narrativeAction}
-                        action={narrativeAction}
-                        busy={busy}
-                        error={narrativeError}
-                        onCancel={() => {
-                          setNarrativeAction(null);
-                          setNarrativeError("");
-                          requestAnimationFrame(() =>
-                            narrativeTrigger.current?.focus(),
-                          );
-                        }}
-                        onSubmit={(input) => mutate("workflow", input)}
-                      />
-                    )}
-                    {routing && (
-                      <form
-                        className="routing-form"
-                        aria-label="Route Request"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          mutate("route", {
-                            departmentId: department,
-                            divisionId: division || null,
-                          });
+            )}
+          </ContentCard>
+          <RequestManagement
+            repository={repository}
+            id={id}
+            row={row}
+            busy={busy || Boolean(narrativeAction) || routing}
+            onMutate={mutate}
+            onAccessFailure={protectedContentAccessFailure}
+            actions={
+              <div className="request-work-actions">
+                <div className="request-action-buttons">
+                  {routineAction &&
+                    workflowActions.includes(routineAction[0]) && (
+                      <button
+                        className="btn btn-primary"
+                        disabled={busy || Boolean(narrativeAction)}
+                        onClick={(event) => {
+                          routineTrigger.current = event.currentTarget;
+                          void mutate("workflow", { action: routineAction[0] });
                         }}
                       >
-                        <h4>Route Request</h4>
-                        <fieldset disabled={busy}>
-                          <legend className="visually-hidden">
-                            Choose an authorized destination
-                          </legend>
-                          <ScopeFields
-                            options={state.options}
-                            departmentId={department}
-                            divisionId={division}
-                            onDepartment={(value) => {
-                              setDepartment(value);
-                              setDivision("");
-                            }}
-                            onDivision={setDivision}
-                            prefix="route"
-                          />
-                          <div className="request-action-buttons">
-                            <button
-                              className="btn btn-primary"
-                              disabled={
-                                !department ||
-                                (department === row.departmentId &&
-                                  (division || null) ===
-                                    (row.divisionId || null))
-                              }
-                            >
-                              Confirm routing
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              onClick={() => {
-                                setRouting(false);
-                                routeButton.current?.focus();
-                              }}
-                            >
-                              Cancel routing
-                            </button>
-                          </div>
-                        </fieldset>
-                      </form>
+                        <i className="bi bi-play-fill" aria-hidden="true" />{" "}
+                        {routineAction[1]}
+                      </button>
                     )}
-                  </>
+                  {(["open", "in_progress", "on_hold"].includes(row.status)
+                    ? [
+                        ...(row.status === "in_progress" ? ["hold"] : []),
+                        "close",
+                      ]
+                    : row.status === "closed"
+                      ? ["reopen"]
+                      : []
+                  )
+                    .filter((action) => workflowActions.includes(action))
+                    .map((action) => (
+                      <button
+                        key={action}
+                        className="btn btn-secondary"
+                        disabled={busy || Boolean(narrativeAction)}
+                        onClick={(e) => {
+                          narrativeTrigger.current = e.currentTarget;
+                          setRouting(false);
+                          setNarrativeError("");
+                          setNarrativeAction(action);
+                        }}
+                      >
+                        <i
+                          className={`bi bi-${{ hold: "pause-fill", close: "check-lg", reopen: "arrow-counterclockwise" }[action]}`}
+                          aria-hidden="true"
+                        />{" "}
+                        {
+                          {
+                            hold: "Place on Hold",
+                            close: "Close Request",
+                            reopen: "Reopen Request",
+                          }[action]
+                        }
+                      </button>
+                    ))}
+                </div>
+                {narrativeAction && (
+                  <WorkflowNarrativeForm
+                    key={narrativeAction}
+                    action={narrativeAction}
+                    busy={busy}
+                    error={narrativeError}
+                    onCancel={() => {
+                      setNarrativeAction(null);
+                      setNarrativeError("");
+                      requestAnimationFrame(() =>
+                        narrativeTrigger.current?.focus(),
+                      );
+                    }}
+                    onSubmit={(input) => mutate("workflow", input)}
+                  />
                 )}
-              </ContentCard>
-              <RequestManagement
-                repository={repository}
-                id={id}
-                row={row}
-                busy={busy || Boolean(narrativeAction) || routing}
-                onMutate={mutate}
-                onAccessFailure={protectedContentAccessFailure}
-                contactState={contactState}
-                loadContact={loadContact}
-                clearContact={clearContact}
-              />
-            </div>
-            <ActivityPanel
-              repository={repository}
-              id={id}
-              revision={row.revision}
-              onAccessFailure={accessFailure}
-            />
-          </div>
+              </div>
+            }
+            routing={
+              <section className="request-work-routing request-management-row">
+                <div>
+                  <h4>Routing</h4>
+                  <p>
+                    {row.departmentName}
+                    {row.divisionName && (
+                      <span className="request-subline">
+                        {row.divisionName}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                {row.status !== "cancelled" && capabilities.canRoute && (
+                  <button
+                    ref={routeButton}
+                    className="btn btn-secondary"
+                    disabled={busy || Boolean(narrativeAction)}
+                    onClick={() => setRouting(true)}
+                  >
+                    <i className="bi bi-signpost-split" aria-hidden="true" />{" "}
+                    Change Routing
+                  </button>
+                )}
+                {routing && (
+                  <form
+                    className="routing-form"
+                    aria-label="Route Request"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      mutate("route", {
+                        departmentId: department,
+                        divisionId: division || null,
+                      });
+                    }}
+                  >
+                    <h4>Route Request</h4>
+                    <fieldset disabled={busy}>
+                      <legend className="visually-hidden">
+                        Choose an authorized destination
+                      </legend>
+                      <ScopeFields
+                        options={state.options}
+                        departmentId={department}
+                        divisionId={division}
+                        onDepartment={(value) => {
+                          setDepartment(value);
+                          setDivision("");
+                        }}
+                        onDivision={setDivision}
+                        prefix="route"
+                      />
+                      <div className="request-action-buttons">
+                        <button
+                          className="btn btn-primary"
+                          disabled={
+                            !department ||
+                            (department === row.departmentId &&
+                              (division || null) === (row.divisionId || null))
+                          }
+                        >
+                          Confirm routing
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            setRouting(false);
+                            routeButton.current?.focus();
+                          }}
+                        >
+                          Cancel routing
+                        </button>
+                      </div>
+                    </fieldset>
+                  </form>
+                )}
+              </section>
+            }
+          />
+          <RequestManagement
+            section="requester"
+            repository={repository}
+            id={id}
+            row={row}
+            busy={busy || Boolean(narrativeAction) || routing}
+            onMutate={mutate}
+            onAccessFailure={protectedContentAccessFailure}
+            contactState={contactState}
+            loadContact={loadContact}
+            clearContact={clearContact}
+          />
+          <SubmittedInformation
+            key={`answers:${id}`}
+            id={id}
+            repository={repository}
+            canRead={capabilities.canReadAnswers}
+          />
+          <RequestEvidence
+            key={`evidence:${id}`}
+            repository={repository.attachments}
+            requestId={id}
+            onAccessFailure={protectedContentAccessFailure}
+          />
+          <CollaborationPanel
+            key={id + ":" + row.audience}
+            repository={repository}
+            id={id}
+            audience={row.audience}
+            capabilities={capabilities}
+            onAccessFailure={protectedContentAccessFailure}
+          />
+          <ActivityPanel
+            repository={repository}
+            id={id}
+            revision={row.revision}
+            onAccessFailure={accessFailure}
+          />
         </article>
       )}
     </>
@@ -1215,10 +1101,12 @@ export default function InternalRequestWorkspace({ repository, onSignIn }) {
     >
       {requestId && (
         <Link className="workspace-back" to={`/staff/requests?${params}`}>
-          ← Back to requests
+          ← Back to Service Requests
         </Link>
       )}
-      <header className="staff-workspace-heading">
+      <header
+        className={`staff-workspace-heading${requestId ? " visually-hidden" : ""}`}
+      >
         <div>
           <p className="request-eyebrow">STAFF WORKSPACE</p>
           <h1 id="staff-requests-heading">

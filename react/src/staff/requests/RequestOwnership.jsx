@@ -78,8 +78,12 @@ function TargetPicker({
     >
       <h4>{mode === "assign" ? "Choose assignment" : "Choose watcher"}</h4>
       <fieldset disabled={busy}>
-        <legend className="visually-hidden">Eligible operational target</legend>
-        <label htmlFor="ownership-type">Target type</label>
+        <legend className="visually-hidden">
+          Choose staff, an operational role or a team
+        </legend>
+        <label htmlFor="ownership-type">
+          {mode === "assign" ? "Assignment type" : "Watcher type"}
+        </label>
         <select
           id="ownership-type"
           className="form-select"
@@ -93,7 +97,9 @@ function TargetPicker({
             </option>
           ))}
         </select>
-        <label htmlFor="ownership-search">Search eligible targets</label>
+        <label htmlFor="ownership-search">
+          Search available staff, roles or teams
+        </label>
         <input
           id="ownership-search"
           className="form-control"
@@ -239,7 +245,7 @@ export default function RequestOwnership({
                   disabled={busy || !!mode}
                   onClick={() => onMutate("unassign", {})}
                 >
-                  Unassign Request
+                  Remove Assignment
                 </button>
               )}
             </div>

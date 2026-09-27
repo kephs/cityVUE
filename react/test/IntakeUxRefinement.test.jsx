@@ -73,7 +73,9 @@ test("filter refinement keeps two semantic rows, action priority and keyboard or
       ],
     },
   );
-  await screen.findByRole("link", { name: row.issueName });
+  await screen.findByRole("link", {
+    name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+  });
   const form = screen.getByRole("form", { name: "Request filters" });
   const rows = form.querySelectorAll(".request-filter-row");
   expect(rows).toHaveLength(2);
@@ -84,7 +86,9 @@ test("filter refinement keeps two semantic rows, action priority and keyboard or
     [...rows[1].querySelectorAll("label")].map((x) => x.textContent),
   ).toEqual(["Status", "Department", "Division"]);
   expect(within(form).queryByRole("searchbox")).toBeNull();
-  const reset = within(form).getByRole("button", { name: "Reset" });
+  const reset = within(form).getByRole("button", {
+    name: "Clear search and filters",
+  });
   const apply = within(form).getByRole("button", { name: "Apply Filters" });
   expect(apply).toHaveClass("btn-primary");
   expect(reset).toHaveClass("btn-secondary");
@@ -112,7 +116,9 @@ test("filter refinement keeps live reference search independent and Reset clears
     list,
     "?search=DEV-000021&audience=internal&view=mine&assignment=assigned&status=open&departmentId=dept&divisionId=div&page=2&pageSize=100",
   );
-  await screen.findByRole("link", { name: row.issueName });
+  await screen.findByRole("link", {
+    name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+  });
   expect(list.mock.lastCall[0].search).toBe("DEV-000021");
   fireEvent.change(screen.getByRole("searchbox", { name: "Search Requests" }), {
     target: { value: "DEV-000021" },
@@ -125,7 +131,9 @@ test("filter refinement keeps live reference search independent and Reset clears
     }),
   );
   expect(await screen.findByText(row.referenceNumber)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Clear search and filters" }),
+  );
   await waitFor(() =>
     expect(list.mock.lastCall[0]).toMatchObject({
       audience: "all",
@@ -151,9 +159,9 @@ test("F056.3 approved sizes use server query, reset page and restore URL through
       .getAllByRole("option")
       .map((x) => x.value),
   ).toEqual(["25", "50", "100"]);
-  expect(screen.getByText("51–75 of 327 requests")).toBeInTheDocument();
+  expect(screen.getByText("Showing 51–75 of 327 requests")).toBeInTheDocument();
   fireEvent.change(selector, { target: { value: "50" } });
-  await screen.findByText("1–50 of 327 requests");
+  await screen.findByText("Showing 1–50 of 327 requests");
   expect(list.mock.lastCall[0]).toMatchObject({
     page: 1,
     pageSize: 50,
@@ -162,9 +170,9 @@ test("F056.3 approved sizes use server query, reset page and restore URL through
   });
   expect(screen.getByLabelText("URL")).toHaveTextContent("pageSize=50");
   fireEvent.click(screen.getByText("History back"));
-  await screen.findByText("51–75 of 327 requests");
+  await screen.findByText("Showing 51–75 of 327 requests");
   fireEvent.click(screen.getByText("History forward"));
-  await screen.findByText("1–50 of 327 requests");
+  await screen.findByText("Showing 1–50 of 327 requests");
   fireEvent.click(screen.getByRole("button", { name: "Refresh", exact: true }));
   await waitFor(() => expect(list.mock.lastCall[0].pageSize).toBe(50));
 });
@@ -173,10 +181,12 @@ test("F056.3 dedicated Request Type and absent location keep the Issue cell uncl
     vi.fn(async (q) => page(q)),
     "?pageSize=100",
   );
-  const link = await screen.findByRole("link", { name: row.issueName });
-  const cell = link.closest("th");
+  const link = await screen.findByRole("link", {
+    name: `Manage Request: ${row.issueName} ${row.referenceNumber}`,
+  });
+  const cell = within(link.closest("tr")).getByRole("rowheader");
   expect(
-    screen.getByRole("columnheader", { name: "Request Type" }),
+    screen.getByRole("columnheader", { name: "Audience" }),
   ).toBeInTheDocument();
   expect(within(cell).queryByText("Internal")).toBeNull();
   expect(cell.querySelector(".ui-location")).toBeNull();
@@ -192,7 +202,7 @@ test("F056.3 unsupported URL size falls back to 25 and empty later pages recover
   await screen.findByText("Page 1 of 1");
   expect(list.mock.calls[0][0]).toMatchObject({ page: 99, pageSize: 25 });
   expect(list.mock.lastCall[0]).toMatchObject({ page: 1, pageSize: 25 });
-  expect(screen.getByText("0–0 of 0 requests")).toBeInTheDocument();
+  expect(screen.getByText("Showing 0–0 of 0 requests")).toBeInTheDocument();
 });
 test("F056.3 late page-size response cannot replace a newer response", async () => {
   let stale;
@@ -209,10 +219,10 @@ test("F056.3 late page-size response cannot replace a newer response", async () 
   });
   // Browser history can navigate while the old request is outstanding.
   fireEvent.click(screen.getByText("History back"));
-  await screen.findByText("1–25 of 327 requests");
+  await screen.findByText("Showing 1–25 of 327 requests");
   await act(async () => stale());
-  expect(screen.getByText("1–25 of 327 requests")).toBeInTheDocument();
-  expect(screen.queryByText("1–50 of 327 requests")).toBeNull();
+  expect(screen.getByText("Showing 1–25 of 327 requests")).toBeInTheDocument();
+  expect(screen.queryByText("Showing 1–50 of 327 requests")).toBeNull();
 });
 test("F056.3 protected card does not prefetch, wraps historical content and safely reports denial", async () => {
   const repository = {
