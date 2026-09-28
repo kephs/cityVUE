@@ -9,13 +9,15 @@ import {
 } from "../../components/ui/RequestPresentation.jsx";
 import { TargetLabel } from "./RequestOwnership.jsx";
 
+/** The nine-column desktop table only fits comfortably at 1200px and wider. */
+const listCardQuery = "(max-width: 1199.98px)";
 const reported = (value) => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.valueOf())
     ? "Unavailable"
     : parsed.toLocaleString();
 };
-function RequestTitle({ row, query, heading = false }) {
+function RequestTitle({ row, query, heading = false, reference = false }) {
   const Title = heading ? "h3" : "div";
   return (
     <>
@@ -27,11 +29,14 @@ function RequestTitle({ row, query, heading = false }) {
           {row.issueName}
         </Link>
       </Title>
-      <ReferenceDisplay value={row.referenceNumber} compact />
+      {reference && <ReferenceDisplay value={row.referenceNumber} compact />}
       {row.serviceLocation && <LocationDisplay value={row.serviceLocation} />}
     </>
   );
 }
+/** Presentation-only position. It is never a Service Request identifier. */
+const position = (page, pageSize, rowIndex) =>
+  (page - 1) * pageSize + rowIndex + 1;
 function Routing({ row }) {
   return (
     <>
@@ -65,10 +70,10 @@ export default function RequestResults({
   onSort,
 }) {
   const [compact, setCompact] = useState(
-    () => window.matchMedia?.("(max-width: 991.98px)").matches ?? false,
+    () => window.matchMedia?.(listCardQuery).matches ?? false,
   );
   useEffect(() => {
-    const media = window.matchMedia?.("(max-width: 991.98px)");
+    const media = window.matchMedia?.(listCardQuery);
     if (!media) return;
     const update = () => setCompact(media.matches);
     update();
@@ -78,10 +83,14 @@ export default function RequestResults({
   if (compact)
     return (
       <ul className="request-result-cards" aria-label="Service Request results">
-        {items.map((row) => (
+        {items.map((row, rowIndex) => (
           <li key={row.serviceRequestId}>
             <article className="ui-card request-result-card">
-              <RequestTitle row={row} query={query} heading />
+              <p className="request-row-number request-card-position">
+                <span className="visually-hidden">Result</span>
+                {position(page, pageSize, rowIndex)}
+              </p>
+              <RequestTitle row={row} query={query} heading reference />
               <div className="request-result-badges">
                 <AudienceBadge value={row.audience} compact />
                 <StatusBadge value={row.status} />
@@ -149,7 +158,8 @@ export default function RequestResults({
           <th scope="col" className="request-row-number">
             #
           </th>
-          {heading("issue", "Request")}
+          {heading("issue", "Issue")}
+          <th scope="col">Request #</th>
           <th scope="col">Audience</th>
           {heading("status")}
           {heading("department")}
@@ -162,11 +172,14 @@ export default function RequestResults({
         {items.map((row, rowIndex) => (
           <tr key={row.serviceRequestId}>
             <td className="request-row-number">
-              {(page - 1) * pageSize + rowIndex + 1}
+              {position(page, pageSize, rowIndex)}
             </td>
             <th scope="row">
               <RequestTitle row={row} query={query} />
             </th>
+            <td className="request-reference-cell">
+              <ReferenceDisplay value={row.referenceNumber} labelled={false} />
+            </td>
             <td>
               <AudienceBadge value={row.audience} compact />
             </td>

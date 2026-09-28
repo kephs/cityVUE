@@ -24,12 +24,7 @@ vi.mock(
 );
 async function manage(name) {
   fireEvent.click(
-    await screen.findByRole("button", {
-      name:
-        name === "Assignment"
-          ? "Change Assignment"
-          : "Manage " + name.toLowerCase(),
-    }),
+    await screen.findByRole("button", { name: "Manage " + name.toLowerCase() }),
   );
   return screen.findByRole("dialog", { name });
 }
@@ -79,7 +74,7 @@ test.each([false, true])(
     if (allowed) {
       await userEvent.click(
         await screen.findByRole("button", {
-          name: "View Submitted Information",
+          name: "View Additional Information",
         }),
       );
       await screen.findByText("Historical choice");
@@ -89,7 +84,7 @@ test.each([false, true])(
       );
     } else {
       expect(
-        screen.queryByText("Submitted Information"),
+        screen.queryByText("Additional Information"),
       ).not.toBeInTheDocument();
       expect(repository.readAnswers).not.toHaveBeenCalled();
     }
@@ -678,7 +673,7 @@ test.each(["public", "internal"])(
     ).toHaveClass("ui-audience");
     expect(within(metadata).getByText("Request #")).toBeInTheDocument();
     expect(metadata.parentElement).toHaveClass("request-identity-copy");
-    expect(container.querySelector(".request-work")).not.toContainElement(
+    expect(container.querySelector(".request-management")).not.toContainElement(
       value,
     );
     expect(
@@ -870,7 +865,7 @@ test("F038 detail is Issue-first with configured icon and authorized location", 
     "Assignment",
     "Watchers",
     "Request Details",
-    "Work",
+    "Request Management",
     "Recent Activity",
   ])
     expect(
@@ -1015,19 +1010,24 @@ test("final F046 DOM groups preserve primary flow and management-before-Activity
   expect([...grid.children].map((el) => el.className)).toEqual([
     expect.stringContaining("request-overview"),
     expect.stringContaining("request-details"),
-    expect.stringContaining("request-work"),
-    expect.stringContaining("request-requester"),
+    expect.stringContaining("request-column-controls"),
+    expect.stringContaining("request-column-content"),
+  ]);
+  expect(
+    [...grid.querySelectorAll(".request-column-content > *")].map(
+      (el) => el.className,
+    ),
+  ).toEqual([
     expect.stringContaining("submitted-information"),
     expect.stringContaining("request-evidence"),
     expect.stringContaining("request-collaboration"),
-    expect.stringContaining("request-history"),
   ]);
   const details = grid.querySelector(".request-details");
   expect(details.querySelector(".request-evidence")).toBeNull();
   expect(details.querySelector(".request-collaboration")).toBeNull();
   expect(
     grid
-      .querySelector(".request-work")
+      .querySelector(".request-column-content")
       .contains(grid.querySelector(".request-history")),
   ).toBe(false);
   expect(repository.activity).toHaveBeenCalledTimes(1);
@@ -1343,10 +1343,11 @@ test("read-only capability does not infer mutation rights", async () => {
     divisions: [],
   });
   show(`/staff/requests/${id}`);
-  await screen.findByRole("heading", { name: "Work" });
+  await screen.findByRole("heading", { name: "Request Management" });
   expect(
-    screen.queryByRole("button", { name: /Start Work|Change Routing/ }),
+    screen.queryByRole("button", { name: /Start Work|Route Request/ }),
   ).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Actions" })).toBeNull();
 });
 test("mutation is revision guarded, prevents duplicate clicks and refetches authoritative state", async () => {
   let finish;
@@ -1410,9 +1411,7 @@ test("routing uses server options, keyboard focus and current revision then refr
     revision: 2,
   });
   show(`/staff/requests/${id}`);
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Change Routing" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Route Request" }));
   expect(screen.getByLabelText("Department")).toHaveFocus();
   const user = userEvent.setup();
   await user.selectOptions(screen.getByLabelText("Department"), target);
@@ -1426,7 +1425,7 @@ test("routing uses server options, keyboard focus and current revision then refr
   );
   expect(
     within(
-      screen.getByRole("heading", { name: "Work" }).closest("section"),
+      screen.getByRole("heading", { name: "Overview" }).closest("section"),
     ).getByText("Maintenance"),
   ).toBeInTheDocument();
 });
@@ -1477,7 +1476,7 @@ test.each([400, 403, 409])(
     repository.route.mockRejectedValue({ status });
     show(`/staff/requests/${id}`);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Change Routing" }),
+      await screen.findByRole("button", { name: "Route Request" }),
     );
     fireEvent.change(screen.getByLabelText("Department"), {
       target: { value: target },
@@ -1810,7 +1809,7 @@ test("narrative pending prevents duplicate submissions and waits for server conf
   expect(within(form).getByRole("button", { name: "Saving…" })).toBeDisabled();
   expect(
     within(
-      screen.getByRole("heading", { name: "Work" }).closest("section"),
+      screen.getByRole("heading", { name: "Overview" }).closest("section"),
     ).getByText("Open", { selector: ".request-status" }),
   ).toBeInTheDocument();
   await act(async () => finish({}));
@@ -2240,7 +2239,7 @@ test("F040 PUBLIC detail uses shared hierarchy and on-demand PUBLIC contact; per
   const user = userEvent.setup();
   show(`/staff/requests/${id}`);
   expect(await screen.findByText("Public")).toBeInTheDocument();
-  expect(screen.getByText(/Channel: Phone/)).toBeInTheDocument();
+  expect(screen.getByText(/Intake Channel: Phone/)).toBeInTheDocument();
   expect(screen.queryByText("Internal Request")).not.toBeInTheDocument();
   expect(
     screen.getByRole("heading", { name: row.issueName }),
@@ -2259,7 +2258,7 @@ test("F040 PUBLIC detail uses shared hierarchy and on-demand PUBLIC contact; per
     screen.queryByRole("button", { name: "Start Work" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "Change Routing" }),
+    screen.queryByRole("button", { name: "Route Request" }),
   ).not.toBeInTheDocument();
   expect(repository.contact).not.toHaveBeenCalled();
   await user.click(
@@ -2454,7 +2453,7 @@ test.each([
     await f043Show();
     const trigger = screen.getByRole("button", {
       name: {
-        Assignment: "Change Assignment",
+        Assignment: "Manage assignment",
         Watchers: "Manage watchers",
         "Requester Contact": "View requester contact",
         "Full Request Activity": "View full activity",

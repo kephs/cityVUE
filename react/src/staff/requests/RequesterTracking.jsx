@@ -40,7 +40,7 @@ export default function RequesterTracking({
     return (
       <div className="request-management-row">
         <div>
-          <h4>Requester Tracking</h4>
+          <h4>Request Tracker</h4>
           <p>Protected</p>
         </div>
       </div>
@@ -49,11 +49,11 @@ export default function RequesterTracking({
     <div className="request-management-row">
       <div>
         <div className="request-management-label">
-          <h4>Requester Tracking</h4>
+          <h4>Request Tracker</h4>
           <button
             type="button"
             className="btn btn-secondary request-tracking-help"
-            aria-label="About Requester Tracking"
+            aria-label="About Request Tracker"
             aria-haspopup="dialog"
             onClick={() => setHelpOpen(true)}
           >
@@ -65,7 +65,7 @@ export default function RequesterTracking({
             (summary === "unavailable"
               ? "Status unavailable"
               : "Loading status…")}{" "}
-          · Secure requester access
+          · Manage secure request tracking access
         </p>
       </div>
       <button
@@ -75,18 +75,18 @@ export default function RequesterTracking({
           summaryAbort.current?.abort();
           setOpen(true);
         }}
-        aria-label="Manage requester tracking"
+        aria-label="Manage request tracker"
       >
         Manage
       </button>
       {helpOpen && (
         <RequestDialog
-          title="About Requester Tracking"
+          title="About Request Tracker"
           onClose={() => setHelpOpen(false)}
         >
           <p>
-            Requester Tracking lets you create, rotate, or revoke the secure
-            link a requester can use to track this Service Request.
+            Request Tracker lets you create, rotate, or revoke the secure link a
+            requester can use to track this Service Request.
           </p>
         </RequestDialog>
       )}
@@ -188,7 +188,7 @@ function TrackingDialog({ repository, id, onClose, onState, onAccessFailure }) {
     }
   };
   return (
-    <RequestDialog title="Requester Tracking" onClose={onClose} busy={busy}>
+    <RequestDialog title="Request Tracker" onClose={onClose} busy={busy}>
       {error && <p role="alert">{error}</p>}
       {!state && !error && <p role="status">Loading tracking management…</p>}
       <p role="status">{busy ? "Updating tracking…" : feedback}</p>

@@ -110,11 +110,19 @@ test("results hierarchy follows filters, consolidated controls, summary and rows
   for (const control of keyboard) expect(control.tabIndex).toBe(0);
   for (const control of keyboard.slice(1))
     expect(toolbar).toContainElement(control);
+  // Search stays the primary control of an unchanged single-row toolbar.
+  expect([...toolbar.children].map((el) => el.className)).toEqual([
+    "request-live-search",
+    "",
+    "",
+    "btn btn-secondary",
+  ]);
+  expect(toolbar.firstElementChild).toContainElement(input());
   expect(summary).toHaveAttribute("role", "status");
   expect(toolbar).not.toContainElement(summary);
   expect(input()).toHaveAttribute(
     "placeholder",
-    "Search reference, issue, or service location",
+    "Search by request #, issue, or service location",
   );
   expect(toolbar.querySelectorAll("input, select, button")).toHaveLength(5);
   expect(

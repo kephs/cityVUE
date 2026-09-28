@@ -53,12 +53,17 @@ export function LocationDisplay({ value }) {
     </p>
   );
 }
-export function ReferenceDisplay({ value, compact = false }) {
+/** `labelled={false}` suits a column whose heading already names the value. */
+export function ReferenceDisplay({ value, compact = false, labelled = true }) {
   return (
     <span className="ui-reference">
-      <span className={compact ? "visually-hidden" : undefined}>
-        {compact ? "Reference" : "Request #"}
-      </span>{" "}
+      {labelled && (
+        <>
+          <span className={compact ? "visually-hidden" : undefined}>
+            {compact ? "Reference" : "Request #"}
+          </span>{" "}
+        </>
+      )}
       <span className="ui-reference-value">{value}</span>
     </span>
   );

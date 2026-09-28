@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { test, expect, vi } from "vitest";
+import AppLayout from "../src/components/layout/AppLayout.jsx";
 import SiteHeader from "../src/components/layout/SiteHeader.jsx";
 import { ThemeProvider } from "../src/theme/ThemeProvider.jsx";
 import { useAuth } from "../src/auth/AuthContext.jsx";
@@ -66,3 +67,54 @@ test("approved local logo slot remains decorative beside brand name", () => {
     screen.getByRole("link", { name: "CityVUE home" }),
   ).toBeInTheDocument();
 });
+
+test.each(["/staff/requests", "/staff/requests/fictional-request"])(
+  "%s renders inside the application shell with primary navigation",
+  (path) => {
+    useAuth.mockReturnValue({
+      enabled: true,
+      isAuthenticated: true,
+      displayName: "Fictional staff",
+      signOut: vi.fn(),
+    });
+    const { container } = render(
+      <MemoryRouter initialEntries={[path]}>
+        <ThemeProvider>
+          <AppLayout>
+            <p>Fictional workspace content</p>
+          </AppLayout>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("navigation", { name: "Primary navigation" }),
+    ).toBeInTheDocument();
+    for (const name of [
+      "Home",
+      "Report an Issue",
+      "Issue List",
+      "Dashboard",
+      "AI Workspace",
+      "Map Preview",
+      "Service Requests",
+    ])
+      expect(
+        screen.getByRole("link", { name, exact: true }),
+      ).toBeInTheDocument();
+    expect(screen.getByText("Fictional staff")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sign out" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Switch to .* mode/ }),
+    ).toBeInTheDocument();
+    const main = container.querySelector("main#main-content");
+    expect(main).toHaveClass("request-workspace-container");
+    expect(main).toContainElement(
+      screen.getByText("Fictional workspace content"),
+    );
+    expect(
+      screen.getByRole("navigation", { name: "Primary navigation" }),
+    ).not.toContainElement(main);
+  },
+);

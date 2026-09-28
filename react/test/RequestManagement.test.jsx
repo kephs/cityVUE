@@ -1,16 +1,8 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
-import ManagementSection from "../src/staff/requests/RequestManagement.jsx";
+import RequestManagement from "../src/staff/requests/RequestManagement.jsx";
 
-function RequestManagement(props) {
-  return (
-    <>
-      <ManagementSection {...props} section="work" />
-      <ManagementSection {...props} section="requester" />
-    </>
-  );
-}
 function setup({
   count = 0,
   status = "not_issued",
@@ -54,13 +46,17 @@ function setup({
 
 test("F049 anonymous Contact is an explicit absence with no View action or disclosure", async () => {
   const { props } = setup({ requesterIdentity: "anonymous" });
-  expect(screen.getByText("Submitted anonymously")).toBeInTheDocument();
+  expect(
+    screen.getByText("Submitted anonymously · No contact information provided"),
+  ).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "View requester contact" }),
   ).not.toBeInTheDocument();
   expect(props.loadContact).not.toHaveBeenCalled();
   expect(
-    await screen.findByText("Not issued · Secure requester access"),
+    await screen.findByText(
+      "Not issued · Manage secure request tracking access",
+    ),
   ).toBeInTheDocument();
 });
 
@@ -91,7 +87,9 @@ test.each([
   async (status, label) => {
     const { container } = setup({ status });
     expect(
-      await screen.findByText(`${label} · Secure requester access`),
+      await screen.findByText(
+        `${label} · Manage secure request tracking access`,
+      ),
     ).toBeInTheDocument();
     expect(
       [...container.querySelectorAll(".request-management-row h4")].map(
@@ -100,8 +98,8 @@ test.each([
     ).toEqual([
       "Assignment",
       "Watchers",
-      "Requester Tracking",
       "Requester Contact",
+      "Request Tracker",
     ]);
     expect(container.textContent).not.toMatch(/FORBIDDEN|synthetic-version/);
   },
@@ -109,17 +107,17 @@ test.each([
 
 test("tracking help opens from keyboard and pointer, dismisses with Escape and restores focus", async () => {
   setup();
-  await screen.findByText("Not issued · Secure requester access");
+  await screen.findByText("Not issued · Manage secure request tracking access");
   const user = userEvent.setup();
-  const help = screen.getByRole("button", { name: "About Requester Tracking" });
+  const help = screen.getByRole("button", { name: "About Request Tracker" });
   help.focus();
   await user.keyboard("{Enter}");
   const dialog = screen.getByRole("dialog", {
-    name: "About Requester Tracking",
+    name: "About Request Tracker",
   });
   expect(
     within(dialog).getByText(
-      "Requester Tracking lets you create, rotate, or revoke the secure link a requester can use to track this Service Request.",
+      "Request Tracker lets you create, rotate, or revoke the secure link a requester can use to track this Service Request.",
     ),
   ).toBeInTheDocument();
   fireEvent(dialog, new Event("cancel", { bubbles: true, cancelable: true }));
@@ -152,22 +150,22 @@ test("tracking permission is required for status, help and management, and loss 
   const { repository, props, rerender } = setup({ allowed: false });
   await screen.findByText("No watchers are following this request");
   expect(repository.trackingState).not.toHaveBeenCalled();
-  expect(
-    screen.queryByRole("button", { name: /requester tracking/i }),
-  ).toBeNull();
+  expect(screen.queryByRole("button", { name: /request tracker/i })).toBeNull();
   rerender(
     <RequestManagement
       {...props}
       row={{ ...props.row, capabilities: { canManageRequesterTracking: true } }}
     />,
   );
-  await screen.findByText("Not issued · Secure requester access");
+  await screen.findByText("Not issued · Manage secure request tracking access");
   await userEvent.click(
-    screen.getByRole("button", { name: "About Requester Tracking" }),
+    screen.getByRole("button", { name: "About Request Tracker" }),
   );
   rerender(<RequestManagement {...props} />);
   expect(screen.queryByRole("dialog")).toBeNull();
-  expect(screen.queryByText(/Secure requester access/)).toBeNull();
+  expect(
+    screen.queryByText(/Manage secure request tracking access/),
+  ).toBeNull();
 });
 
 test("watcher revision refresh discards stale results and never presents loading as zero", async () => {
@@ -195,12 +193,16 @@ test("watcher revision refresh discards stale results and never presents loading
 
 test("tracking denial clears the safe summary through the existing failure path", async () => {
   const { repository, props, rerender } = setup();
-  await screen.findByText("Not issued · Secure requester access");
+  await screen.findByText("Not issued · Manage secure request tracking access");
   repository.trackingState.mockRejectedValue({ status: 403 });
   rerender(<RequestManagement {...props} id="other-fictional-request" />);
-  await screen.findByText("Status unavailable · Secure requester access");
+  await screen.findByText(
+    "Status unavailable · Manage secure request tracking access",
+  );
   expect(props.onAccessFailure).toHaveBeenCalledWith({ status: 403 });
-  expect(screen.queryByText("Not issued · Secure requester access")).toBeNull();
+  expect(
+    screen.queryByText("Not issued · Manage secure request tracking access"),
+  ).toBeNull();
 });
 
 test("opening tracking management ignores a stale initial summary response", async () => {
@@ -221,7 +223,7 @@ test("opening tracking management ignores a stale initial summary response", asy
     />,
   );
   await userEvent.click(
-    screen.getByRole("button", { name: "Manage requester tracking" }),
+    screen.getByRole("button", { name: "Manage request tracker" }),
   );
   await screen.findByRole("button", { name: "Create new tracking link" });
   await userEvent.click(
@@ -229,7 +231,7 @@ test("opening tracking management ignores a stale initial summary response", asy
   );
   await act(async () => resolveOld({ status: "active" }));
   expect(
-    screen.getByText("Revoked · Secure requester access"),
+    screen.getByText("Revoked · Manage secure request tracking access"),
   ).toBeInTheDocument();
   expect(repository.changeTracking).not.toHaveBeenCalled();
 });

@@ -4,7 +4,13 @@ import AnswerValue from "../../components/ui/AnswerValue.jsx";
 import { formatCalendarDate } from "../../components/ui/calendarDate.js";
 
 /** Protected content stays in memory and is never inferred from ordinary detail. */
-export default function SubmittedInformation({ id, repository, canRead }) {
+/** `label` is presentation only; the protected read and its permission are unchanged. */
+export default function SubmittedInformation({
+  id,
+  repository,
+  canRead,
+  label = "Submitted Information",
+}) {
   const auth = useAuth();
   const [state, setState] = useState(null);
   const pending = useRef(null);
@@ -40,23 +46,18 @@ export default function SubmittedInformation({ id, repository, canRead }) {
     }
   };
   const current = state?.id === id && state.context === context ? state : null;
+  const noun = label.toLowerCase();
+  const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
   return (
-    <section
-      className="ui-card submitted-information"
-      aria-label="Submitted Information"
-    >
-      <h3 className="ui-section-heading">Submitted Information</h3>
+    <section className="ui-card submitted-information" aria-label={label}>
+      <h3 className="ui-section-heading">{label}</h3>
       {!current && (
         <p>View the additional information submitted with this request.</p>
       )}
-      {current?.denied && (
-        <p role="alert">Submitted information is unavailable.</p>
-      )}
-      {current?.loading && <p role="status">Loading submitted information…</p>}
+      {current?.denied && <p role="alert">{Noun} is unavailable.</p>}
+      {current?.loading && <p role="status">Loading {noun}…</p>}
       {current?.error && (
-        <p role="alert">
-          Submitted information could not be loaded. Please try again.
-        </p>
+        <p role="alert">{Noun} could not be loaded. Please try again.</p>
       )}
       {current?.data &&
         (current.data.length ? (
@@ -81,7 +82,7 @@ export default function SubmittedInformation({ id, repository, canRead }) {
             ))}
           </dl>
         ) : (
-          <p>No submitted information was provided.</p>
+          <p>No {noun} was provided.</p>
         ))}
       {!current?.denied && (
         <button
@@ -90,9 +91,7 @@ export default function SubmittedInformation({ id, repository, canRead }) {
           disabled={current?.loading}
           onClick={load}
         >
-          {current?.data
-            ? "Refresh submitted information"
-            : "View Submitted Information"}
+          {current?.data ? `Refresh ${noun}` : `View ${label}`}
         </button>
       )}
     </section>

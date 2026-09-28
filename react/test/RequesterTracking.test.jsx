@@ -184,7 +184,7 @@ test("F044 issue shows link once; close clears it; rotation/revocation require c
   };
   render(<RequesterTracking repository={repository} id={id} allowed />);
   const trigger = screen.getByRole("button", {
-    name: "Manage requester tracking",
+    name: "Manage request tracker",
   });
   await user.click(trigger);
   await user.click(
@@ -237,7 +237,7 @@ test("F044 duplicate activation sends one mutation and denied result clears cont
     />,
   );
   await userEvent.click(
-    screen.getByRole("button", { name: "Manage requester tracking" }),
+    screen.getByRole("button", { name: "Manage request tracker" }),
   );
   const create = await screen.findByRole("button", {
     name: "Create tracking link",
@@ -264,7 +264,7 @@ test("F044 management permission loss removes live one-time link", async () => {
     <RequesterTracking repository={repository} id={id} allowed />,
   );
   await userEvent.click(
-    screen.getByRole("button", { name: "Manage requester tracking" }),
+    screen.getByRole("button", { name: "Manage request tracker" }),
   );
   await userEvent.click(
     await screen.findByRole("button", { name: "Create tracking link" }),

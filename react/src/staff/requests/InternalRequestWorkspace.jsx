@@ -17,8 +17,26 @@ import CollaborationPanel from "./CollaborationPanel.jsx";
 import WorkflowNarrativeForm from "./WorkflowNarrativeForm.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { statusLabels, workspaceError } from "./requestRepository.js";
+import {
+  intakeChannelLabels,
+  statusLabels,
+  workspaceError,
+} from "./requestRepository.js";
 import "./staffRequests.css";
+const lifecycleLabels = {
+  start_work: "Start Work",
+  resume: "Resume Work",
+  hold: "Place on Hold",
+  close: "Close Request",
+  reopen: "Reopen Request",
+};
+const lifecycleIcons = {
+  start_work: "play-fill",
+  resume: "play-fill",
+  hold: "pause-fill",
+  close: "check-lg",
+  reopen: "arrow-counterclockwise",
+};
 const date = (value) => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.valueOf())
@@ -341,7 +359,7 @@ function RequestList({ repository, onSignIn }) {
               className="form-control"
               value={searchInput}
               maxLength={160}
-              placeholder="Search reference, issue, or service location"
+              placeholder="Search by request #, issue, or service location"
               aria-describedby="request-live-search-help"
               aria-invalid={invalidSearch || undefined}
               onChange={(event) =>
@@ -766,10 +784,21 @@ function RequestDetail({ repository, id, onSignIn }) {
   const workflowActions = capabilities.workflowActions || [];
   const routineAction =
     row?.status === "open"
-      ? ["start_work", "Start Work"]
+      ? "start_work"
       : row?.status === "on_hold"
-        ? ["resume", "Resume Work"]
+        ? "resume"
         : null;
+  // Server capabilities remain the only source of available lifecycle commands.
+  const lifecycleActions = [
+    routineAction,
+    ...(["open", "in_progress", "on_hold"].includes(row?.status)
+      ? [...(row.status === "in_progress" ? ["hold"] : []), "close"]
+      : row?.status === "closed"
+        ? ["reopen"]
+        : []),
+  ].filter((action) => action && workflowActions.includes(action));
+  const canRouteNow =
+    row?.status !== "cancelled" && capabilities.canRoute === true;
   return (
     <>
       <p role="status" className="workspace-notice">
@@ -805,17 +834,16 @@ function RequestDetail({ repository, id, onSignIn }) {
                 <div className="request-identity-meta">
                   <ReferenceDisplay value={row.referenceNumber} />
                   <AudienceBadge value={row.audience} compact />
+                  {row.intakeChannel && (
+                    <span className="request-channel">
+                      Intake Channel: {intakeChannelLabels[row.intakeChannel]}
+                    </span>
+                  )}
                   <Status value={row.status} />
                 </div>
               </div>
             </header>
             <dl className="request-metadata">
-              {row.categoryName && (
-                <div>
-                  <dt>Service Category</dt>
-                  <dd>{row.categoryName}</dd>
-                </div>
-              )}
               <div>
                 <dt>Department / Division</dt>
                 <dd>
@@ -825,6 +853,12 @@ function RequestDetail({ repository, id, onSignIn }) {
                   )}
                 </dd>
               </div>
+              {row.categoryName && (
+                <div>
+                  <dt>Service Category</dt>
+                  <dd>{row.categoryName}</dd>
+                </div>
+              )}
               <div>
                 <dt>Assigned to</dt>
                 <dd>
@@ -883,66 +917,62 @@ function RequestDetail({ repository, id, onSignIn }) {
               </section>
             )}
           </ContentCard>
-          <RequestManagement
-            repository={repository}
-            id={id}
-            row={row}
-            busy={busy || Boolean(narrativeAction) || routing}
-            onMutate={mutate}
-            onAccessFailure={protectedContentAccessFailure}
-            actions={
-              <div className="request-work-actions">
-                <div className="request-action-buttons">
-                  {routineAction &&
-                    workflowActions.includes(routineAction[0]) && (
-                      <button
-                        className="btn btn-primary"
-                        disabled={busy || Boolean(narrativeAction)}
-                        onClick={(event) => {
-                          routineTrigger.current = event.currentTarget;
-                          void mutate("workflow", { action: routineAction[0] });
-                        }}
-                      >
-                        <i className="bi bi-play-fill" aria-hidden="true" />{" "}
-                        {routineAction[1]}
-                      </button>
+          <div className="request-column request-column-controls">
+            {(lifecycleActions.length > 0 || canRouteNow) && (
+              <ContentCard className="request-actions">
+                <SectionHeading icon="lightning-charge">Actions</SectionHeading>
+                {lifecycleActions.length > 0 && (
+                  <div className="request-action-buttons">
+                    {lifecycleActions.map((action) =>
+                      action === routineAction ? (
+                        <button
+                          key={action}
+                          className="btn btn-primary"
+                          disabled={busy || Boolean(narrativeAction)}
+                          onClick={(event) => {
+                            routineTrigger.current = event.currentTarget;
+                            void mutate("workflow", { action });
+                          }}
+                        >
+                          <i
+                            className={`bi bi-${lifecycleIcons[action]}`}
+                            aria-hidden="true"
+                          />{" "}
+                          {lifecycleLabels[action]}
+                        </button>
+                      ) : (
+                        <button
+                          key={action}
+                          className="btn btn-secondary"
+                          disabled={busy || Boolean(narrativeAction)}
+                          onClick={(e) => {
+                            narrativeTrigger.current = e.currentTarget;
+                            setRouting(false);
+                            setNarrativeError("");
+                            setNarrativeAction(action);
+                          }}
+                        >
+                          <i
+                            className={`bi bi-${lifecycleIcons[action]}`}
+                            aria-hidden="true"
+                          />{" "}
+                          {lifecycleLabels[action]}
+                        </button>
+                      ),
                     )}
-                  {(["open", "in_progress", "on_hold"].includes(row.status)
-                    ? [
-                        ...(row.status === "in_progress" ? ["hold"] : []),
-                        "close",
-                      ]
-                    : row.status === "closed"
-                      ? ["reopen"]
-                      : []
-                  )
-                    .filter((action) => workflowActions.includes(action))
-                    .map((action) => (
-                      <button
-                        key={action}
-                        className="btn btn-secondary"
-                        disabled={busy || Boolean(narrativeAction)}
-                        onClick={(e) => {
-                          narrativeTrigger.current = e.currentTarget;
-                          setRouting(false);
-                          setNarrativeError("");
-                          setNarrativeAction(action);
-                        }}
-                      >
-                        <i
-                          className={`bi bi-${{ hold: "pause-fill", close: "check-lg", reopen: "arrow-counterclockwise" }[action]}`}
-                          aria-hidden="true"
-                        />{" "}
-                        {
-                          {
-                            hold: "Place on Hold",
-                            close: "Close Request",
-                            reopen: "Reopen Request",
-                          }[action]
-                        }
-                      </button>
-                    ))}
-                </div>
+                  </div>
+                )}
+                {canRouteNow && (
+                  <button
+                    ref={routeButton}
+                    className="btn btn-secondary request-route-action"
+                    disabled={busy || Boolean(narrativeAction)}
+                    onClick={() => setRouting(true)}
+                  >
+                    <i className="bi bi-signpost-split" aria-hidden="true" />{" "}
+                    Route Request
+                  </button>
+                )}
                 {narrativeAction && (
                   <WorkflowNarrativeForm
                     key={narrativeAction}
@@ -958,32 +988,6 @@ function RequestDetail({ repository, id, onSignIn }) {
                     }}
                     onSubmit={(input) => mutate("workflow", input)}
                   />
-                )}
-              </div>
-            }
-            routing={
-              <section className="request-work-routing request-management-row">
-                <div>
-                  <h4>Routing</h4>
-                  <p>
-                    {row.departmentName}
-                    {row.divisionName && (
-                      <span className="request-subline">
-                        {row.divisionName}
-                      </span>
-                    )}
-                  </p>
-                </div>
-                {row.status !== "cancelled" && capabilities.canRoute && (
-                  <button
-                    ref={routeButton}
-                    className="btn btn-secondary"
-                    disabled={busy || Boolean(narrativeAction)}
-                    onClick={() => setRouting(true)}
-                  >
-                    <i className="bi bi-signpost-split" aria-hidden="true" />{" "}
-                    Change Routing
-                  </button>
                 )}
                 {routing && (
                   <form
@@ -1038,47 +1042,49 @@ function RequestDetail({ repository, id, onSignIn }) {
                     </fieldset>
                   </form>
                 )}
-              </section>
-            }
-          />
-          <RequestManagement
-            section="requester"
-            repository={repository}
-            id={id}
-            row={row}
-            busy={busy || Boolean(narrativeAction) || routing}
-            onMutate={mutate}
-            onAccessFailure={protectedContentAccessFailure}
-            contactState={contactState}
-            loadContact={loadContact}
-            clearContact={clearContact}
-          />
-          <SubmittedInformation
-            key={`answers:${id}`}
-            id={id}
-            repository={repository}
-            canRead={capabilities.canReadAnswers}
-          />
-          <RequestEvidence
-            key={`evidence:${id}`}
-            repository={repository.attachments}
-            requestId={id}
-            onAccessFailure={protectedContentAccessFailure}
-          />
-          <CollaborationPanel
-            key={id + ":" + row.audience}
-            repository={repository}
-            id={id}
-            audience={row.audience}
-            capabilities={capabilities}
-            onAccessFailure={protectedContentAccessFailure}
-          />
-          <ActivityPanel
-            repository={repository}
-            id={id}
-            revision={row.revision}
-            onAccessFailure={accessFailure}
-          />
+              </ContentCard>
+            )}
+            <RequestManagement
+              repository={repository}
+              id={id}
+              row={row}
+              busy={busy || Boolean(narrativeAction) || routing}
+              onMutate={mutate}
+              onAccessFailure={protectedContentAccessFailure}
+              contactState={contactState}
+              loadContact={loadContact}
+              clearContact={clearContact}
+            />
+            <ActivityPanel
+              repository={repository}
+              id={id}
+              revision={row.revision}
+              onAccessFailure={accessFailure}
+            />
+          </div>
+          <div className="request-column request-column-content">
+            <SubmittedInformation
+              key={`answers:${id}`}
+              id={id}
+              repository={repository}
+              canRead={capabilities.canReadAnswers}
+              label="Additional Information"
+            />
+            <RequestEvidence
+              key={`evidence:${id}`}
+              repository={repository.attachments}
+              requestId={id}
+              onAccessFailure={protectedContentAccessFailure}
+            />
+            <CollaborationPanel
+              key={id + ":" + row.audience}
+              repository={repository}
+              id={id}
+              audience={row.audience}
+              capabilities={capabilities}
+              onAccessFailure={protectedContentAccessFailure}
+            />
+          </div>
         </article>
       )}
     </>

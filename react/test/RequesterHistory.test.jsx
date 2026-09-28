@@ -57,7 +57,7 @@ function setup(overrides = {}) {
   };
   const view = render(
     <MemoryRouter>
-      <RequestManagement {...props} section="requester" />
+      <RequestManagement {...props} />
     </MemoryRouter>,
   );
   return { ...view, props, repository };
@@ -82,7 +82,7 @@ test("F050 history is lazy, Contact independent, factual and closes/restores foc
   expect(
     within(
       screen.getByText("Requester Contact").closest(".request-management-row"),
-    ).getByText("Protected contact information"),
+    ).getByText("Separate, audited access"),
   ).toBeInTheDocument();
   expect(props.loadContact).not.toHaveBeenCalled();
   fireEvent(
@@ -117,8 +117,11 @@ test.each([
   "F050 unlinked/anonymous/INTERNAL have no history action or count",
   async (row) => {
     const { repository } = setup({ row });
-    await screen.findByRole("heading", { name: "Requester", exact: true });
-    expect(repository.watchers).not.toHaveBeenCalled();
+    await screen.findByRole("heading", {
+      name: "Request Management",
+      exact: true,
+    });
+    expect(repository.watchers).toHaveBeenCalledTimes(1);
     expect(
       screen.queryByRole("button", { name: "View Request History" }),
     ).not.toBeInTheDocument();

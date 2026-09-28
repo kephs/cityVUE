@@ -27,10 +27,26 @@
   align-items: start;
   gap: var(--space-3);
   margin: 1rem 0 0.75rem;
-  padding: var(--space-3);
-  background: rgba(var(--bs-primary-rgb), .055);
-  border: 1px solid rgba(var(--bs-primary-rgb), .3);
+  padding: var(--space-4);
+  background: rgba(var(--bs-primary-rgb), .085);
+  border: 1px solid rgba(var(--bs-primary-rgb), .42);
+  border-left: 4px solid rgba(var(--bs-primary-rgb), .75);
   border-radius: var(--radius-card);
+}
+.request-live-search > label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.request-live-search-controls input {
+  font-size: 1.0625rem;
+  min-height: 48px;
+  background: var(--surface-card);
+  border-width: 2px;
+  border-color: rgba(var(--bs-primary-rgb), .5);
+}
+.request-live-search-controls input::placeholder {
+  color: var(--text-muted);
 }
 .request-list-controls > div {
   min-width: 0;
@@ -967,9 +983,18 @@
   gap: 1.25rem;
   align-items: start;
 }
-.request-workspace-layout > * {
+.request-workspace-layout > *,
+.request-column > * {
   min-width: 0;
   margin: 0;
+}
+/* F058.2B refinement: each column is its own block flow, so a tall Actions /
+   Request Management column cannot stretch rows or open gaps in the left column. */
+.request-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  align-self: start;
 }
 .request-workspace-layout h4 {
   font-size: 1rem;
@@ -1021,25 +1046,27 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.request-work-actions:has(.request-action-buttons:empty):not(:has(form)) {
-  display: none;
-}
-.request-work-status {
-  display: flex;
-  flex-direction: column;
-  align-items: start;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-.request-work-status h4 {
+.request-actions .request-action-buttons {
   margin: 0;
+  gap: 0.75rem;
 }
-.request-work-routing {
-  padding-block: 1rem;
-  border-bottom: 1px solid var(--border-default);
+.request-actions .request-route-action {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
 }
-.request-work .request-action-buttons {
-  margin-bottom: 1rem;
+.request-actions .routing-form,
+.request-actions .workflow-narrative-form {
+  margin-top: 1rem;
+}
+.request-channel {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.request-overview .request-identity-meta {
+  column-gap: var(--space-5);
 }
 .request-result-title {
   display: flex;
@@ -1050,30 +1077,68 @@
 .request-result-title > a {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 1.125rem;
+  font-size: 1.1875rem;
   font-weight: var(--weight-heading);
 }
+/* F058.2B list refinement: readable desktop columns, no horizontal scroll. */
 .request-results-table {
-  font-size: 1rem;
+  font-size: 1.0625rem;
 }
 .request-results-table th,
 .request-results-table td {
   padding: 0.85rem 0.5rem;
+  overflow-wrap: break-word;
 }
 .request-results-table thead th {
   overflow-wrap: normal;
+  font-size: 1rem;
+  font-weight: 650;
+}
+/* Short, scannable values keep one line; the Issue column absorbs the rest. */
+.request-results-table th:nth-child(1) {
+  width: 3.25rem;
 }
 .request-results-table th:nth-child(2) {
-  width: 25%;
+  width: 26%;
+}
+.request-results-table th:nth-child(3),
+.request-results-table td:nth-child(3) {
+  white-space: nowrap;
+}
+.request-results-table td:nth-child(6),
+.request-results-table td:nth-child(7) {
+  overflow-wrap: normal;
+}
+.app-shell .request-results-table td .request-manage-link {
+  padding-inline: 0.8rem;
+}
+.request-results-table .ui-status,
+.request-results-table .ui-audience {
+  font-size: 0.9375rem;
 }
 .request-results-table .request-row-number {
-  width: 2.5rem;
+  width: 3.25rem;
   white-space: nowrap;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  font-size: 1.125rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+.request-reference-cell .ui-reference {
+  font-size: 0.9375rem;
+}
+.request-reference-cell .ui-reference-value {
+  padding-inline: 0.4rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.request-results-table tbody td {
+  color: var(--text-primary);
 }
 .request-results-table .request-sort-button {
   padding: 0;
+  font-size: 1rem;
+  font-weight: 650;
 }
 .request-manage-link {
   white-space: nowrap;
@@ -1123,32 +1188,26 @@
 @media (min-width: 1200px) {
   .request-workspace-layout {
     grid-template-columns: minmax(0, 1.7fr) minmax(22rem, 1fr);
-    grid-template-rows: auto min-content min-content min-content min-content 1fr;
-    grid-template-areas: "overview overview" "details work" "submitted work" "evidence requester" "collaboration requester" "collaboration activity";
+    grid-template-rows: none;
   }
   .request-overview {
-    grid-area: overview;
+    grid-column: 1 / -1;
   }
+  /* Request Details and the content stack are separate column-1 rows, so the
+     DOM can read Details -> Actions -> Management -> content while the controls
+     column spans both rows. The content stack is always the taller side, so the
+     span never grows a row or opens a gap in the left column. */
   .request-details {
-    grid-area: details;
+    grid-column: 1;
+    grid-row: 2;
   }
-  .submitted-information {
-    grid-area: submitted;
+  .request-column-controls {
+    grid-column: 2;
+    grid-row: 2 / span 2;
   }
-  .request-evidence {
-    grid-area: evidence;
-  }
-  .request-requester {
-    grid-area: requester;
-  }
-  .request-work {
-    grid-area: work;
-  }
-  .request-collaboration {
-    grid-area: collaboration;
-  }
-  .request-history {
-    grid-area: activity;
+  .request-column-content {
+    grid-column: 1;
+    grid-row: 3;
   }
   .request-overview .request-metadata {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1172,36 +1231,28 @@
   }
 }
 
-/* Review correction: cohesive Work groups, aligned labels and controls. */
-.request-work .request-work-lifecycle,
-.request-work > .request-management-row {
-  border: 0;
-  padding: 1rem 0;
-  margin: 0;
-}
-.request-work .request-management-row {
+/* F058.2B refinement: Request Management rows keep one label/value/action rhythm. */
+.request-management > .request-management-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 1rem;
+  row-gap: 0.5rem;
+  padding: 0.85rem 0;
+  margin: 0;
+  border-top: 0;
+  border-bottom: 1px solid var(--border-default);
 }
-.request-work > .request-management-row > button {
-  justify-self: start;
+.request-management > .request-management-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
 }
-.request-work .request-management-row p {
-  font-size: 1.125rem;
+.request-management .request-management-row p {
+  font-size: 1.0625rem;
   color: var(--text-primary);
 }
-.request-work h4 {
+.request-management h4 {
   color: var(--text-secondary);
-}
-.request-work-routing {
-  flex-wrap: wrap;
-}
-.request-work-routing .routing-form {
-  flex-basis: 100%;
-}
-.request-work .request-action-buttons {
-  margin-bottom: 0;
 }
 .request-result-title > a {
   text-underline-offset: 3px;
@@ -1214,6 +1265,18 @@
   font-size: 1rem;
   font-weight: normal;
   margin-top: 0.4rem;
+  color: var(--text-secondary);
+}
+/* Mobile cards carry the same presentation-only position as the desktop table. */
+.request-card-position {
+  margin: 0 0 0.35rem;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.request-result-card .request-result-title > a {
+  font-size: 1.1875rem;
 }
 
 @media (max-width: 575.98px) {
@@ -1222,18 +1285,20 @@
     --font-small: 0.875rem;
   }
   .request-overview .request-metadata dd,
-  .request-work .request-management-row p {
+  .request-management .request-management-row p {
     font-size: 1.0625rem;
   }
   .staff-request-workspace .request-subline {
     font-size: 0.9375rem;
   }
-  .request-work > .request-management-row {
-    display: grid;
+  .request-management > .request-management-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.65rem;
   }
-  .request-work > .request-management-row > button {
+  .request-management > .request-management-row > button {
     justify-self: start;
+  }
+  .request-actions .request-action-buttons {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

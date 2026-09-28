@@ -132,5 +132,5 @@ body {
 }
 
 /* F056.3 route-specific workspace widths; other routes retain their tokens. */
-.app-shell > main.request-workspace-container { max-width: 1600px; }
+.app-shell > main.request-workspace-container { max-width: 1760px; }
 .app-shell > main.report-workspace-container { max-width: 1280px; }

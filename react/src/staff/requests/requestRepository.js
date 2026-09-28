@@ -14,6 +14,14 @@ export const statusLabels = {
   closed: "Closed",
   cancelled: "Cancelled",
 };
+/** Presentation labels for the already-projected intake channel; no new read. */
+export const intakeChannelLabels = {
+  web: "Web",
+  phone: "Phone",
+  walk_in: "Walk-in",
+  staff: "Staff",
+  api: "API",
+};
 const invalid = () =>
   new CityVueApiError(
     "invalid-response",

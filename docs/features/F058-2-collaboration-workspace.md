@@ -1,6 +1,149 @@
 # F058.2 — Collaboration and Service Request Workspace
 
-## F058.2B final manual visual review corrections — current checkpoint
+## F058.2B final workspace composition refinement — current checkpoint
+
+This bounded presentation/composition pass builds on the accepted F058.2B workspace, which is now committed as `ffe8e727527da545cbf584c81c470cef35e9b381`. The refinement is unstaged and uncommitted on the isolated branch `claude/f058-2b-layout-refinement`. Nothing in the backend, API contracts, authorization, permission keys, database, migrations, Migration 40, request revisions, routing/assignment/watcher/tracking semantics, F058.1 or F058.2A changed.
+
+- **Actions card.** The former Work card is replaced by an `Actions` card using the lightning action icon. Available lifecycle commands sit side by side on the first row (Start Work + Close Request when open, Place on Hold + Close Request in progress, Resume Work + Close Request on hold, Reopen Request when closed), and `Route Request` is a full-width second row with the existing signpost icon. Buttons come only from the server-provided `workflowActions` and `canRoute`; when no lifecycle or routing command is authorized, the card is not rendered at all rather than shown empty. Lifecycle and routing semantics, narrative forms, revision guarding, focus restoration and error reconciliation are unchanged.
+- **Request Management card.** A single card directly below Actions carries `Assignment`, `Watchers`, `Requester Contact` and `Request Tracker` in that order, each as a label / current-state / action row separated by dividers. `Requester History` is retained as a fifth row so the F050 capability is not removed; it remains gated on public audience, identified requester and `canReadRequesterHistory`.
+- **Assignment** keeps its existing state, capability gate, dialog and API. Only the trigger wording changed to `Manage` (accessible name `Manage assignment`), matching the other management rows. The Assign/Unassign commands inside the dialog are untouched.
+- **Watchers** keep the existing bounded count summary, capability handling and dialog. The one watcher summary read moved from the former Work card to the single Request Management card, so the request still performs exactly one watcher call.
+- **Requester Contact** remains an explicit, audited, non-prefetched read. The row reads `Requester Contact / Separate, audited access` with a `View` action; anonymous requests keep an explicit absence (`Submitted anonymously · No contact information provided`) with no action.
+- **Request Tracker** is the presentation rename of Requester Tracking. The row shows the safe issued state plus `Manage secure request tracking access`; no tracking URL is implied before one is issued. Backend concepts, API contracts, database fields and permission keys keep their existing names.
+- **Overview.** Intake Channel moved into the upper Issue metadata row, which now reads `Request # → audience → Channel → Status` with wrapping at narrow widths. It uses the existing safe projected `intakeChannel` value; there is no new API call. Department / Division now precedes Service Category, ahead of Assigned to and Reported. The Issue icon, title, reference, audience badge, status and the truthful PUBLIC/INTERNAL banners are otherwise unchanged.
+- **Additional Information** is the presentation rename of the Submitted Information heading and its action wording inside the staff workspace. `SubmittedInformation` takes an optional `label`; the older `ServiceRequestDetailsPage` keeps its existing wording byte for byte. The protected read stays explicit and capability-gated, with no prefetch and no backend or permission-key rename.
+- **Request Details** and **Request Evidence** remain separate cards with their existing content and permissions. Collaboration and Recent Activity keep their accepted content, behavior and desktop placement.
+- **Left-column gaps.** The wide-screen layout no longer uses `grid-template-areas` with coupled rows. Overview spans the full width, and two flex columns flow independently: `Request Details → Additional Information → Request Evidence → Collaboration` on the left, `Actions → Request Management → Recent Activity` on the right. No card is height-coupled to the opposite column, and measured left-column gaps are a uniform 20–21 px at every reviewed viewport in both themes.
+
+### Service Requests list refinement
+
+The list is included in the same uncommitted pass. Behavior, filtering, sorting, pagination, debounced live search, URL query state, server-side authorization and call counts are unchanged; only presentation moved.
+
+- **Pagination-aware numbering** keeps `(page - 1) * pageSize + rowIndex + 1` from the authoritative response, and is now 18 px semibold in primary text colour with tabular figures. It carries no chip or badge treatment, so it cannot be mistaken for the reference, and routes and React keys still use the stable request identifier.
+- **Dedicated Request # column.** Desktop order is `# | Issue | Request # | Audience | Status | Department / Division | Assigned to | Reported | Action`. The Issue column holds the category icon, the clickable Issue title and the Service Location beneath it; the reference is no longer duplicated there. `ReferenceDisplay` gained a `labelled` option so the cell shows only the value, with the column heading supplying the name. Both the Issue link and Manage Request keep their existing route and preserved query string.
+- **Desktop width.** `main.request-workspace-container` moves from a 1600 px to a 1760 px cap, with the existing page gutters untouched. No viewport hack, transform or zoom is used. Measured content widths are 1760 px at 1920, 1372 px at 1440 and 1216 px at 1280.
+- **Readability.** Table body text is 17 px, headings and sort controls 16 px semibold, the Issue title 19 px heading weight, Service Location 16 px secondary, the reference 15 px semibold tabular in its chip, and Manage Request 16 px. Row values no longer break mid-word: cells use `overflow-wrap: break-word`, the reference column stays on one line and Department / Division and Assigned to keep whole words.
+- **Search toolbar.** The single-row desktop composition is unchanged — `Live Search | Sort By | Direction | Refresh` remain one `request-list-controls` grid row of `minmax(0, 1fr) 10rem 10rem auto`. Prominence comes only from colour and hierarchy: a stronger tint and border, a 4 px leading accent, a bolder Search Requests label and a taller 17 px input with a 2 px accent border on a card surface. The placeholder is now `Search by request #, issue, or service location`; `Results update as you type.`, the debounce, the clear control and the described-by help text are unchanged. Below 1100 px the existing rule lets Search take its own row, as accepted.
+- **Filters** keep every control, label, semantic and URL behavior, and remain a visually separate panel above the search section.
+- **Responsive breakpoint.** The nine-column table measurably overflowed at 1024 px, so the list card breakpoint moves from 991.98 px to 1199.98 px, matching the accepted "list cards below 1200px" description. Cards now carry the human row position in addition to Issue, Request #, Service Location, Audience, Status, Department / Division, Assigned to, Reported and Manage Request.
+
+### Reading order — preferred order implemented
+
+Manual review rejected the interim order that placed Actions and Request Management after Collaboration. The **preferred** order is now implemented in full:
+
+`Overview → Request Details → Actions → Request Management → Additional Information → Request Evidence → Collaboration → Recent Activity`
+
+The stated fallback was not needed. The order is achieved by splitting column 1 into two grid items instead of one wrapper, so the DOM can interleave without duplication or CSS order tricks:
+
+| Grid item | Contents | Wide-screen placement |
+| --------- | -------- | --------------------- |
+| `.request-overview` | Overview | row 1, both columns |
+| `.request-details` | Request Details | column 1, row 2 |
+| `.request-column-controls` | Actions, Request Management | column 2, rows 2–3 |
+| `.request-column-content` | Additional Information, Request Evidence, Collaboration, Recent Activity | column 1, row 3 |
+
+The controls column spans both content rows rather than sharing one with Request Details. Because the content stack is always the far taller side (2,424 px against 809 px in the reviewed synthetic case, and larger still with real notes, messages and attachments), the span never grows a row, so no height coupling reaches the left column. Measured left-column gaps are a uniform 20–21 px at every viewport and both themes, between Request Details and Additional Information as well as within the content stack. There is one DOM element per card, visual order matches DOM and focus order within each column, and no `order`, `float` or negative-margin trick is used.
+
+**One desktop consequence for UAT.** Recent Activity has to be the last DOM node to satisfy the requested order, and it must therefore sit at the end of the wide left column rather than at the bottom of the narrow right rail. Its content, behavior and card presentation are unchanged, and it gains reading width; the right rail now ends after Request Management. Keeping Recent Activity in the right rail is only possible by making it the fourth node in the DOM — which is the rejected ordering — or by giving column 2 its own shared grid row, which re-introduces the coupling this pass removed. Flagged for the reviewer to confirm or redirect.
+
+### Refinement allocation — exactly 17 files
+
+| File | Included refinement scope |
+| ---- | ------------------------- |
+| `react/src/staff/requests/InternalRequestWorkspace.jsx` | Workspace composition and preferred reading order; Actions card and capability-derived lifecycle/route buttons; Overview channel and metadata order; Additional Information label; single Request Management usage; live search placeholder. |
+| `react/src/staff/requests/RequestManagement.jsx` | Single management card with the approved row order; `Manage` assignment wording; unchanged watcher, contact, tracking, history and dialog behavior. |
+| `react/src/staff/requests/RequesterTracking.jsx` | Request Tracker labels, helper text, accessible names and dialog titles only. |
+| `react/src/staff/requests/SubmittedInformation.jsx` | Optional presentation `label` with the previous copy retained as the default. |
+| `react/src/staff/requests/requestRepository.js` | Exported `intakeChannelLabels` presentation map; no contract or projection change. |
+| `react/src/staff/requests/staffRequests.css` | Independent column flow and interleaved wide-screen placement, Actions composition, Request Management rows, channel chip, list table columns and typography, search emphasis, narrow-width rules. |
+| `react/test/WorkspaceRefinement.test.jsx` | Composition, Actions capability cases, management row order, channel placement, metadata order, Additional Information, independent stacking and reading order. |
+| `react/test/StaffRequestWorkspace.test.jsx` | Updated composition/label assertions; existing security, lifecycle, routing, race and focus coverage retained. |
+| `react/test/RequestManagement.test.jsx` | Single-card composition and Request Tracker terminology; existing protected-dialog behavior retained. |
+| `react/test/RequesterTracking.test.jsx` | Accessible-name update only. |
+| `react/test/RequesterHistory.test.jsx` | Single-card composition and contact copy; lazy history, navigation and focus coverage retained. |
+| `react/src/staff/requests/RequestResults.jsx` | Dedicated Request # column and column order; Issue column composition; shared presentation-only position helper; card position; 1200 px list card breakpoint. |
+| `react/src/components/ui/RequestPresentation.jsx` | Optional `labelled` mode on `ReferenceDisplay`; existing compact and default output unchanged. |
+| `react/src/styles.css` | Staff request workspace width cap only (1600 px to 1760 px). |
+| `react/test/StaffLiveSearch.test.jsx` | Placeholder and preserved single-row toolbar composition; debounce, query and race coverage retained. |
+| `react/test/NavigationDesign.test.jsx` | Added application-shell coverage for both workspace routes; existing header, brand, menu and theme coverage retained. |
+| `react/test/WorkspaceRefinement.test.jsx` (further) | Added projected Issue icon, category accent, catalog fallback and Recent Activity event/badge regression coverage. |
+| `docs/features/F058-2-collaboration-workspace.md` | This checkpoint. |
+
+### Final UAT regression restoration — presentation frozen
+
+Manual UAT reported two presentation regressions. **Both were synthetic harness/fixture regressions (B); neither was a production React regression.** `RequestActivity.jsx`, `presentation.js`, `categoryAccent.js`, `RequestPresentation.jsx`'s `IssueIcon` and `Attachments.jsx` all match accepted HEAD and were not modified. No production component was altered to make synthetic screenshots look correct.
+
+**1. Issue icons.** `IssueIcon` renders `safeIssueIcon(row.issueIcon)` against the finite catalog in `components/ui/presentation.js`, falling back to `bi-file-earmark-text`, and colours the badge with `categoryAccent(row.categoryId)`. The repository already projects `issueIcon` (`requestRepository.js:142`). The ignored preview fixture simply never supplied `issueIcon` or `categoryId`, so every synthetic record legitimately took the generic fallback. The fixture now carries both as ordinary projected values. Restored consistently in the list table and the detail Overview, with one deliberately unmapped row retaining the catalog fallback, the existing accent palette unchanged, and every icon still `aria-hidden`. No second icon system was introduced and no icon is hard-coded in a component.
+
+**2. Recent Activity presentation.** The accepted `RequestActivity` component already renders the tone-coloured marker, event-specific icon, title, timestamp, actor, `fromStatus → StatusBadge(toStatus)` transition, routing destination, assignment targets, intake channel, narrative card, timeline connector, bounded preview and View full activity. The preview fixture supplied only `type`, `occurredAt` and an out-of-vocabulary `actorDisplay`, with no status transitions, so the richer presentation had nothing to render. The fixture is now a faithful projection carrying the exact field set and actor vocabulary (`Staff member`, `System`, `Resident`) the repository validates, and the harness `activity` call is bounded and paginated like the real one. Status badges now come only from projected `fromStatus`/`toStatus`; `request_routed` correctly shows its destination and **no** badge, because the projection carries no status transition for it and the frontend must not manufacture one.
+
+Focused regression tests were added so neither gap can recur silently: projected icon, category accent and safe fallback across list rows; the Overview icon for mapped and absent values; and Recent Activity event presentation with a badge only where a transition exists, including its right-sidebar placement and bounded single call.
+
+### Final UAT corrections and presentation freeze
+
+Manual UAT accepted the pass with exactly three corrections. F058.2B presentation is frozen after them; nothing else was changed, renamed, reformatted or rearranged.
+
+**1. Application navigation in the UAT preview — synthetic harness omission, not a production regression.** Production routing is intact: `staff/requests` and `staff/requests/:requestId` are children of the `App` route in `react/src/app/router.jsx`, which renders `AppLayout` → `SiteHeader` → `PrimaryNavigation` with the brand, all six public links, the authorized Service Requests link, the Dark/Light Mode control, the signed-in staff identity and Sign out. No production navigation file was modified. The omission was entirely in the ignored preview: `.local-uat/f0582b/main.jsx` mounted `InternalRequestWorkspace` inside a hand-written `div.app-shell > main.container` instead of the real shell. The harness now renders the genuine `ThemeProvider` + `AppLayout`, so manual UAT uses the real navigation, the real theme control and the real footer. No duplicate navigation bar was created; the DOM contains exactly one `nav[aria-label="Primary navigation"]`. Because the real navigation only reveals Service Requests, the staff identity and Sign out when `auth.enabled && auth.isAuthenticated`, the preview substitutes a harness-only `syntheticAuth.jsx` through a Vite `resolve.alias`, so the signed-in state renders without a tenant, an MSAL redirect or any production change. It issues no token and contacts no identity service.
+
+A focused production test now guards the composition this omission hid: `AppLayout` on both workspace routes must render the primary navigation, every link, the identity, Sign out and the theme control, with `main#main-content.request-workspace-container` holding the page content outside the navigation.
+
+**2. Recent Activity returns to the right operational column.** `ActivityPanel` moved from the content column back into `.request-column-controls`, directly below Request Management. Desktop right column is now Actions → Request Management → Recent Activity, measured 21 px below Request Management in the same column, with exactly one `.request-history` element in the DOM. The component, timeline, bounded loading, permissions and behavior are untouched, and it is not merged with Request Management. This was a single-node move, the smallest available adjustment: no wrapper was added or removed, no CSS ordering trick was introduced, and the left column keeps its uniform 21 px rhythm. The single-column order becomes `Overview → Request Details → Actions → Request Management → Recent Activity → Additional Information → Request Evidence → Collaboration`, which keeps DOM, visual and focus order in agreement. This UAT decision supersedes the earlier left-column placement.
+
+**3. Intake Channel label.** The Overview metadata row now reads `Intake Channel: API`, using the same already-projected value for every channel. `.request-overview .request-identity-meta` gains a `var(--space-5)` column gap, measured at 26 px between each item, so the row reads `Request # …    Public    Intake Channel: API    Open` with the existing responsive wrapping preserved. Presentation terminology only: no API field, persisted value, backend term or request contract changed.
+
+### Final manual-review decisions applied
+
+- **Search toolbar composition — accepted and unchanged.** `Live Search | Sort By | Direction | Refresh` remain one desktop row; wrapping below 1100 px is retained.
+- **List breakpoint — accepted.** Nine-column table at 1200 px and wider, semantic cards below it, no horizontal table scrolling. The 1152 px list screenshot is provided for card-density review; those cards were not redesigned.
+- **Request Management — final order confirmed** as Assignment, Watchers, Requester Contact, Request Tracker, Requester History. The F050 history capability is retained.
+- **Reading order — preferred order implemented** (see above); the fallback was not required.
+
+### Refinement validation
+
+Focused React ran first: `WorkspaceRefinement`, `StaffRequestWorkspace`, `RequestManagement`, `RequesterTracking`, `RequesterHistory`, `StaffLiveSearch`, `DesignSystem`, `DynamicQuestions`, `ExtendedQuestions`, `IntakeUxRefinement`, `ServiceRequestDetailsPage`, `Attachments` and `CollaborationPanel` all pass.
+
+Three full React invocations are recorded, none overwritten:
+
+| Invocation | Result |
+| ---------- | ------ |
+| Workspace refinement | **767 passed / 0 failed**, 767 total, 54 files, 329.06 s |
+| Plus list refinement | **771 passed / 0 failed**, 771 total, 54 files, 360.14 s |
+| Plus reading-order correction | **770 passed / 1 failed**, 771 total, 54 files, 398.99 s |
+| Plus final UAT corrections | **772 passed / 1 failed**, 773 total, 54 files, 303.39 s |
+| Plus regression restoration (first) | **774 passed / 4 failed**, 778 total, 54 files, 233.64 s |
+| Plus regression restoration (second) | **778 passed / 0 failed**, 778 total, 54 files, 229.36 s |
+
+The first restoration invocation failed four scattered tests (`F041 Notes response 404`, `F058.2B mobile cards reuse list data`, `F042 load older appends server order`, `sign-out unmounts already rendered protected data`) in 233.64 s, a markedly faster run than the 300–400 s norm on this machine. All four pass in isolation and all four passed in the immediately following clean 778/778 invocation, which also passed the usually-flaky Issue Creation timeout. Both invocations are reported rather than only the clean one. The scattered timing failures are environmental, matching the flakiness history recorded below; no threshold was raised and no test was modified to obtain a pass.
+
+The single failure in the three preceding invocations is `IssueCreation.test.jsx` → *F056.5 External Redirect is configured before one complete Create request*, which exceeded the existing 5,000 ms limit at 5,047 ms. It is unrelated to this scope and **demonstrably pre-existing**: with the entire refinement stashed away, a pristine HEAD checkout fails the same test at 5,031 ms, and the same test failed in both pre-refinement baseline invocations on this machine (756/3 and 758/1 of 759). No timeout was raised, no sleep added, no isolation workaround introduced and no authorization or behavioral assertion weakened. The clean 771/771 result remains valid validation history for the same tree minus the reading-order correction.
+
+`StaffRequestWorkspace.test.jsx` → *F041 Notes response 401/404 clears the inaccessible parent/contact/Notes* is intermittently racy on this machine, failing roughly one run in three both before and after this pass; it passed in the recorded full invocations. It is recorded here rather than adjusted, since the flake is in the test's timing assumptions, not in product behavior.
+
+New list coverage asserts the nine-column order, the dedicated reference column with no duplicate inside the Issue cell, the clickable Issue link and Service Location, pagination-aware numbering that never reaches a route, the card position and complete card fields, the 1199.98 px card query, the search placeholder, and the preserved toolbar and filter composition. Reading-order coverage asserts the four grid items, their exact contents, that neither column contains the other or Request Details, and the full landmark and focus sequence.
+
+New list coverage asserts the nine-column order, the dedicated reference column with no duplicate inside the Issue cell, the clickable Issue link and Service Location, pagination-aware numbering that never reaches a route, the card position and complete card fields, the 1199.98 px card query, the search placeholder, and the preserved toolbar and filter composition.
+
+Two pre-refinement baseline invocations of the same suite on this machine returned **756 passed / 3 failed** and **758 passed / 1 failed** out of 759, the failure being the previously recorded `IssueCreation.test.jsx` five-second External Redirect timeout and its demonstrated typing-leakage cascade. That history is retained rather than overwritten; the refinement run is clean, but the underlying timing sensitivity is environmental and unresolved.
+
+Frontend production build passes and retains its existing >500 kB chunk warning. `styles.css` and `staffRequests.css` were rebuilt from HEAD and re-patched after a Prettier write reformatted them whole-file, so both diffs contain only intended changes and the baseline CSS formatting condition is retained. There is no configured frontend lint script. Canonical formatting was verified with the repository's Prettier on every changed JavaScript/JSX file using `--end-of-line auto`, since the working tree is CRLF; all changed files match. `RequesterTracking.test.jsx` retains a pre-existing formatting deviation identical to HEAD, and the whole-file CSS formatting baseline is likewise unchanged.
+
+Backend, API E2E, PostgreSQL integration and shared suites were **not rerun**: this change touches no backend or shared code. Their last recorded results (320 / 41 / 578 / 64) are inherited evidence from the accepted checkpoint, not a fresh run.
+
+### Refinement responsive, theme and keyboard evidence
+
+A synthetic Chrome harness at `http://127.0.0.1:5198` renders the workspace from fictional in-memory data with no API client, network call or mutation. It lives in ignored `.local-uat/f0582b/` and accepts `?theme=dark`, `?audience=internal`, `?status=…` and `?readonly`.
+
+- 12 detail viewport/theme combinations pass: 1440×1000, 1280×900, 1024×768, 768×1024, 390×844 and 1280×500, in light and dark. No horizontal overflow, no duplicate element ids, no unlabelled form field and no unnamed button in any combination. No browser page errors were observed; the only console entry is the harness's own missing favicon.
+- 14 list viewport/theme combinations pass: 1920×1080, 1440×1000, 1280×900, 1152×900, 1024×768, 768×1024 and 390×844, in light and dark. No page or table horizontal scrolling at any width. The table renders at 1280 and wider, cards at 1152 and narrower, and Live Search, Sort By, Direction and Refresh share one row down to 1152 before the accepted narrow wrapping.
+- Measured left-column gaps are 21 px at desktop widths and 20 px at 768/390 in both themes, with no card exceeding a 24 px separation, including the Request Details to Additional Information boundary that now crosses two grid rows. At 1440 the left column measures 2,424 px against an 809 px controls column, confirming the spanning column does not couple heights.
+- Keyboard checks pass: tab order follows `Actions (Start Work, Close Request, Route Request) → Request Management (Assignment, Watchers, Requester Contact, Request Tracker, Requester History) → Additional Information → Collaboration → Recent Activity`, matching both the DOM and the single-column visual order. The Assignment dialog opens from Enter with initial focus inside it, forward and reverse tabbing stay contained, Escape dismisses it and focus returns to `Manage assignment`. Route Request moves focus to the department field and `Cancel routing` returns focus to the Route Request trigger. These are accessibility-oriented checks, not WCAG certification.
+- Screenshots are ignored `.local-uat/f0582b-shots/` artifacts: full desktop detail at 1440/1280/1024/768/390 and short height in both themes; card-level captures of Overview, Actions, Request Management, Request Details, Additional Information, Request Evidence and the whole left column; Actions per lifecycle state; internal-audience and read-only compositions; and the Service Requests list at 1920/1440/1280/1152/1024/768/390 in both themes. All data is synthetic; the harness accepts `?list`.
+
+Initial repository call counts are unchanged: 2 on the list and 8 on the detail in the writable configuration, with no per-row detail fetch, no Requester Contact prefetch and no protected-data prefetch. The `intakeChannel` value shown in Overview is the already-projected detail field. The list continues to rely on server-side filtering, search, sorting and pagination with its existing debounce; no client-side search was added.
+
+Git state: branch `claude/f058-2b-layout-refinement`, parent `ffe8e727527da545cbf584c81c470cef35e9b381`, index empty, **16 files** (15 modified tracked files and this document). Screenshots, the synthetic harness and logs remain ignored local artifacts. No stage, commit, push, deployment, migration, provisioning, live-request mutation or cloud change occurred. **Stop for manual visual review.**
+
+## F058.2B final manual visual review corrections — accepted foundation
 
 This presentation-only pass supersedes the earlier review checkpoints below. Parent remains `114d3814306d45fa8391c93d7045fe650b8e6e1d`; all F058.2B work remains unstaged and uncommitted.
 
