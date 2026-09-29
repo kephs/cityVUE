@@ -231,6 +231,11 @@ test('SEC-001 an admitted request carrying the advisory field shapes is rejected
 });
 
 test('SEC-001 parser limits and malformed multipart surface sanitized HTTP failures', async () => {
+  // The configured maximum is inclusive: exactly `fileBytes` is accepted and
+  // reaches the handler, while `fileBytes + 1` is rejected as 413 before it.
+  // This is Reqro's intended contract and agrees with assertAttachmentCount.
+  // Both sides are asserted so the boundary cannot drift unnoticed. See
+  // SEC-001 section 10.6 for the upstream Multer 2.4.0 change behind it.
   reset();
   await intakeUpload()
     .set('Origin', ALLOWED_ORIGIN)
@@ -238,6 +243,22 @@ test('SEC-001 parser limits and malformed multipart surface sanitized HTTP failu
     .send(
       multipart(
         filePart('file', 'a.png', Buffer.alloc(attachmentLimits.fileBytes, 0)),
+      ),
+    )
+    .expect(201);
+  assert.equal(observed.handled, 1);
+
+  reset();
+  await intakeUpload()
+    .set('Origin', ALLOWED_ORIGIN)
+    .set('x-reqro-attachment', TOKEN)
+    .send(
+      multipart(
+        filePart(
+          'file',
+          'a.png',
+          Buffer.alloc(attachmentLimits.fileBytes + 1, 0),
+        ),
       ),
     )
     .expect(413);

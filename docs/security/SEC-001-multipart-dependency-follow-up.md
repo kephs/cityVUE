@@ -2,9 +2,11 @@
 
 **Original assessment:** 2026-09-13. **Reassessed:** 2026-09-29 at baseline `f235f8b02b34e231261807113fa0d29d8bdca14a`.
 
-**Status:** Open tracked follow-up. Remediation remains deferred and **not performed**; no package version, lockfile entry or override changed in the reassessment. This is a repository risk assessment, not City production risk acceptance.
+**Remediated:** 2026-09-29 at baseline `fd2ca1e769cce3c5ea98e2c68c51207a8bcf37d9` — approved Option A. See [section 10](#10-remediation-performed--option-a-2026-09-29).
 
-**Current headline:** all five Multer advisories now recorded against the installed tree are assessed **NOT REACHABLE through Reqro's currently configured multipart upload paths, under the inspected and tested configuration** — which is *not* a claim that the affected Multer code can never be reached (see [Precision of the reachability conclusion](#precision-of-the-reachability-conclusion)). A **supported same-major patched adapter now exists** (`@nestjs/platform-express@11.2.6` pins `multer@2.4.0`), which invalidates the original remediation conclusion. Reachability is a property of the current interceptor configuration, not of the dependency, and one configuration change would re-expose a remote unauthenticated process crash. See [Residual risks](#7-residual-risks).
+**Status:** Multer advisories **remediated**; the item remains open for the configuration-dependent residual risks in [section 10.8](#108-residual-risks-after-remediation). The reassessment in sections 1–9 did **not** change any package version, lockfile entry or override; that record is retained as written and describes the pre-remediation state. This is a repository risk assessment, not City production risk acceptance.
+
+**Headline at the time of the reassessment** (superseded by section 10, retained as written): all five Multer advisories then recorded against the installed tree are assessed **NOT REACHABLE through Reqro's currently configured multipart upload paths, under the inspected and tested configuration** — which is *not* a claim that the affected Multer code can never be reached (see [Precision of the reachability conclusion](#precision-of-the-reachability-conclusion)). A **supported same-major patched adapter now exists** (`@nestjs/platform-express@11.2.6` pins `multer@2.4.0`), which invalidates the original remediation conclusion. Reachability is a property of the current interceptor configuration, not of the dependency, and one configuration change would re-expose a remote unauthenticated process crash. See [Residual risks](#7-residual-risks).
 
 ---
 
@@ -263,7 +265,7 @@ Controls actually verified at this baseline, with the advisory each addresses:
 5. **Anonymous staging-budget exhaustion** (section 5) is a real availability path independent of Multer, arising from per-Organization caps shared by all anonymous residents.
 6. **Memory-storage buffering** holds up to 5 MiB per admitted request in process memory. Bounded by the in-flight cap of 2 per process — a per-process bound, not distributed abuse protection, as the code comment already states.
 7. **`fieldNestingDepth` is not configured**, and `fieldArrayIndexLimit` does not exist in 2.2.0. Both are moot while `fields: 0` holds, and both become relevant the moment fields are permitted.
-8. **Observed parser boundary behavior (not a defect):** busboy flags a file the instant it reaches `fileSize`, so the largest body the parser accepts is `fileBytes - 1`, while `assertAttachmentCount` rejects only *above* `fileBytes`. The parser is stricter by one byte. Recorded so the one-byte difference is not later mistaken for a bug.
+8. **Observed parser boundary behavior (not a defect):** busboy flags a file the instant it reaches `fileSize`, so the largest body the parser accepts is `fileBytes - 1`, while `assertAttachmentCount` rejects only *above* `fileBytes`. The parser is stricter by one byte. Recorded so the one-byte difference is not later mistaken for a bug. **Amendment 2026-09-29:** resolved by the Option A upgrade — `multer@2.4.0` made the `fileSize` boundary inclusive, so the parser and the domain rule now agree. See [section 10.6](#106-behavior-change-found-by-the-sec-001-tests-the-filesize-boundary).
 9. **Out-of-scope finding observed during reassessment:** moderate `js-yaml@5.3.0` advisory GHSA-r3ph-w7gj-g6xm via `@nestjs/swagger@11.4.7`, plus one new moderate finding in the root project audit. Neither was reassessed here; both are logged for the dependency-review workstream.
 10. **City operational risk owner and production exception approval remain unassigned/pending.** No production readiness or deployment approval is established by this document.
 
@@ -322,8 +324,151 @@ Validation that option A should carry, if authorized: refresh root and server au
 
 ---
 
+## 10. Remediation performed — Option A (2026-09-29)
+
+**This section records a change. Sections 1–9 describe the pre-remediation state and are retained unaltered; they must not be read as describing the current dependency graph.** Reqro ran on `multer@2.2.0` from the original assessment through baseline `fd2ca1e769cce3c5ea98e2c68c51207a8bcf37d9`. The patched version was adopted only at this point.
+
+### 10.1 Dependency before and after
+
+| Package | Before (`fd2ca1e`) | After | Change |
+| --- | --- | --- | --- |
+| `@nestjs/platform-express` declared | `^11.2.3` | `^11.2.3` | **Unchanged** — the patched version was already inside the declared range |
+| `@nestjs/platform-express` resolved | 11.2.3 | **11.2.6** | Upgraded (same major, same minor) |
+| `multer` resolved | 2.2.0 | **2.4.0** | Upgraded, via the adapter's exact pin `dependencies.multer` |
+| `busboy` | 1.6.0 | 1.6.0 | Unchanged |
+| `append-field` | 1.0.0 | 1.0.0 | Unchanged and still installed |
+| `concat-stream` (+ 6 transitives) | 2.0.0 | **removed** | `multer@2.4.0` dropped the dependency; `MemoryStorage` now buffers with a chunk array and `Buffer.concat` |
+| `@nestjs/common` / `core` / `testing` / `swagger` | 11.2.3 / 11.2.3 / 11.2.3 / 11.4.7 | unchanged | Not touched |
+
+Peer requirements were satisfied without intervention: `@nestjs/platform-express@11.2.6` declares `@nestjs/common ^11.0.0` and `@nestjs/core ^11.0.0`, both met by the installed 11.2.3.
+
+### 10.2 Remediation approach
+
+`npm update @nestjs/platform-express --save=false`, run in `server/`.
+
+Because `^11.2.3` already admits 11.2.6, **`server/package.json` was not modified**. No `overrides`, no `resolutions`, no `--force`, no `--legacy-peer-deps`, no major upgrade, and no unrelated package was touched. The only dependency path that installs Multer is `@nestjs/platform-express -> multer` (verified by scanning every manifest in the lockfile), so upgrading the adapter is sufficient and no override is needed. The root project lockfile contains no `multer` entry and was not modified.
+
+### 10.3 Exact lockfile delta
+
+`server/package-lock.json` only — 7 insertions, 84 deletions.
+
+- **Added:** none.
+- **Upgraded (2):** `@nestjs/platform-express` 11.2.3 -> 11.2.6; `multer` 2.2.0 -> 2.4.0.
+- **Downgraded:** none.
+- **Removed (7), all transitively caused by `multer@2.4.0` dropping `concat-stream`:** `concat-stream@2.0.0`, `readable-stream@3.6.2`, `buffer-from@1.1.2`, `safe-buffer@5.2.1`, `string_decoder@1.3.0`, `typedarray@0.0.6`, `util-deprecate@1.0.2`.
+- **Unrelated churn: none in the resulting diff.** npm 10.8.2 (the local client) initially stripped the `libc` metadata field from 16 `@img/sharp-*` optional platform entries that a newer npm had written. That is a lockfile-format artifact of the client version, not a dependency decision, and it would have degraded Linux musl/glibc binary selection metadata for `sharp`. Those 16 fields were restored to their prior values so the diff carries only the remediation. `npm ci` was then re-run from the edited lockfile: it installed cleanly and did not rewrite the file.
+
+### 10.4 Resulting advisory state
+
+`npm --prefix server audit`, the same command used in the reassessment:
+
+| | Before | After |
+| --- | --- | --- |
+| Total findings | 4 (2 high, 2 moderate) | **2 (0 high, 2 moderate)** |
+| `multer` | High, 5 advisories | **Absent** |
+| `@nestjs/platform-express` | High (affected `<=11.2.5`) | **Absent** |
+| `@nestjs/swagger` via `js-yaml@5.3.0` | Moderate | Moderate — **unchanged, out of scope** |
+
+All five reassessed Multer advisories — CVE-2026-77078 / GHSA-wc9g-mqfw-jrwm, CVE-2026-77037 / GHSA-qfvm-cv95-jqjf, CVE-2026-82333 / GHSA-535w-7cp7-47q4, CVE-2026-77063 / GHSA-qvfw-j98x-7q72 and CVE-2026-88932 / GHSA-3pph-fpjx-jg34 — are **removed from the installed dependency graph**, including CVE-2026-88932, which 2.3.0 would not have fixed. The propagated adapter finding is cleared with them.
+
+The remaining moderate `js-yaml` finding via `@nestjs/swagger` was **not** remediated here; it stays in [Follow-up gates](#follow-up-gates) for the dependency-review workstream, as does the separate moderate finding in the root project audit.
+
+### 10.5 Security invariants after the upgrade
+
+Asserted against the **built production controllers** (`dist/`), reading the real interceptor from Nest route metadata on both upload routes, and by the unchanged SEC-001 test files:
+
+| Invariant | Intake route | Staff route | Evidence |
+| --- | --- | --- | --- |
+| `limits.fields === 0` | Holds | Holds | Route metadata; parser test 3 |
+| Storage engine is `MemoryStorage` | Holds | Holds | `storage.constructor.name === 'MemoryStorage'`; no `getDestination`, so `DiskStorage` is not constructed |
+| Synchronous/default `fileFilter` | Holds | Holds | Callback invoked in the same tick |
+| `fileSize` 5242880, `files` 1, `parts` 2, `fieldNameSize` 40, `headerPairs` 20 | Holds | Holds | Asserted exactly |
+| `append-field` never reached | Holds | Holds | Parser test 3 passes under 2.4.0: advisory field shapes yield `LIMIT_FIELD_COUNT` with zero appended keys |
+| Resident batch-token admission before the parser | Holds | n/a | E2E test 3 (404, parser not invoked) |
+| Origin enforcement before the parser | Holds | Holds | E2E test 2 (403, parser not invoked) |
+| Throttling / concurrency / enablement admission before the parser | Holds | Holds | E2E test 4 (503, parser not invoked) |
+| Staff authentication before the parser | n/a | Holds | E2E test 5 (401, parser not invoked) |
+| Parser runs only after admission controls | Holds | Holds | E2E tests 1–6 |
+
+No control was redesigned, relaxed or removed. `server/src` is unmodified.
+
+`MemoryStorage` internals changed upstream — 2.4.0 accumulates chunks and calls `Buffer.concat` instead of piping through `concat-stream` — but it remains memory-backed, so the structural exclusion of the two `diskStorage` advisories is unaffected.
+
+### 10.6 Behavior change found by the SEC-001 tests: the `fileSize` boundary
+
+**`multer@2.4.0` changed the `limits.fileSize` boundary from exclusive to inclusive.** Measured directly against the installed parser using the production limits:
+
+| Body size | 2.2.0 | 2.4.0 |
+| --- | --- | --- |
+| `fileBytes - 1` (5242879) | accepted | accepted |
+| `fileBytes` (5242880) | **`LIMIT_FILE_SIZE`** | **accepted** |
+| `fileBytes + 1` (5242881) | `LIMIT_FILE_SIZE` | `LIMIT_FILE_SIZE` |
+
+This is an upstream change, not a configuration change: the interceptor options are byte-identical. Its effect is that the parser now agrees exactly with Reqro's own domain rule — `assertAttachmentCount` rejects only *above* `fileBytes`. **Residual risk 8, the one-byte discrepancy in which the parser was stricter than the domain rule, is therefore resolved by this upgrade.** The user-visible consequence is narrow: an upload of exactly 5 MiB now returns 201 instead of 413. It is a one-byte relaxation at the parser, still bounded by the same `fileSize` limit, and it moves the parser toward the documented intent rather than away from it.
+
+Two assertions in the existing SEC-001 tests encoded the old exclusive boundary and initially failed under 2.4.0:
+
+- `server/test/unit/attachment-multipart-parser.test.ts` — "the configured parser enforces file size, count and field-name length": `exactlyAtLimit` expected `LIMIT_FILE_SIZE`, observed `undefined`.
+- `server/test/e2e/attachment-multipart-security.e2e.test.ts` — "parser limits and malformed multipart surface sanitized HTTP failures": a body of exactly `fileBytes` expected 413, observed 201.
+
+**Human security review accepted the inclusive semantics on 2026-09-29 and authorized aligning exactly these two assertions.** The decision states Reqro's intended attachment contract explicitly:
+
+- a file **exactly equal** to the configured `fileBytes` maximum is **accepted**;
+- a file **exceeding** `fileBytes`, including `fileBytes + 1`, is **rejected**.
+
+Both assertions were aligned to that contract, and both now prove **both sides** of the boundary rather than one:
+
+| Test | Exactly `fileBytes` | `fileBytes + 1` |
+| --- | --- | --- |
+| Parser unit test | accepted, `file.size === fileBytes` | `LIMIT_FILE_SIZE` |
+| E2E over the real HTTP stack | **201**, handler reached | **413**, handler not reached |
+
+This is an accepted upstream behavior change associated with the remediation, **not a relaxation of Reqro's configured maximum**. `attachmentLimits.fileBytes` is unchanged at 5242880, the interceptor options are unchanged, and no production source was modified. The parser now agrees with the existing application-level validation in `assertAttachmentCount`, which has always rejected only *above* `fileBytes`; the tests were aligned to that established application contract rather than the contract being changed to suit the dependency.
+
+Every other assertion in both files is unchanged. Nothing was weakened: `fields: 0`, the advisory-shaped and malformed multipart protections, the `MemoryStorage` assertions, the synchronous `fileFilter` assumptions, the token/Origin/authentication/throttle admission tests, and the parser-order assertions all remain exactly as written, and all pass.
+
+### 10.7 Validation performed for the remediation
+
+Run in `server/` at baseline `fd2ca1e` plus the lockfile change, on node v20.20.2 / npm 10.8.2.
+
+| Invocation | Result |
+| --- | --- |
+| Dependency tree (`npm ls`, `npm explain multer`) | **Verified** — `@nestjs/platform-express@11.2.6` -> `multer@2.4.0`, single path, deduped across `core` and `testing` |
+| `npm ci` from the edited lockfile | **Clean**, 291 packages, lockfile not rewritten |
+| SEC-001 focused unit (`attachment-multipart-parser.test.ts`) | **5 tests, 5 passed, 0 failed** |
+| SEC-001 focused E2E (`attachment-multipart-security.e2e.test.ts`) | **7 tests, 7 passed, 0 failed** |
+| `npm run typecheck` | **Clean** |
+| `npm run lint` | **Clean** |
+| `npm run test:e2e` (full) | **48 tests, 48 passed, 0 failed, 0 skipped** |
+| `npm test` (full unit) | **326 tests, 325 passed, 1 failed, 0 skipped** — the established pre-existing failure below; matches the section 8 baseline exactly |
+| `npm run build` | **Clean**, `dist/main.js` produced |
+| `npm run test:db` | **Not executed** — requires PostgreSQL; outside this dependency remediation. Reported as not run, not as passing. |
+
+**The one remaining unit failure is unrelated to the dependency change.** `logging-sanitization.test.ts` › "migration, seed and API startup configuration failures never echo credentials or CA paths" fails with `main.js: Error / null !== 1` (subprocess exit code `null`, i.e. killed) only under full-suite load — the **established pre-existing failure** recorded in section 8 at the previous baseline, reproduced here with an identical shape. It passes in isolation (7/7). **That isolated pass is supplemental evidence and does not rewrite the failed full-suite invocation.**
+
+An earlier full-suite run during this remediation also saw `development-startup.test.ts` › "configured development compiler initializes the complete Nest application" fail with `spawnSync ... ETIMEDOUT` after 60 s. It passed in the final full-suite run and in isolation (1/1), so it is recorded as a **load-dependent flake** — not an established failure and not a consequence of the upgrade: it is a timeout rather than an assertion failure, and it exercises no multipart code. It is noted so a future recurrence is recognized rather than re-investigated from scratch.
+
+No assertion was weakened, no timeout raised, and no test skipped or disabled to obtain these results.
+
+Against the section 8 baseline the unit suite is unchanged at 325/326 with the same single pre-existing failure, and the full E2E suite is clean at 48/48 with the two boundary assertions now proving both sides of the limit.
+
+### 10.8 Residual risks after remediation
+
+The dependency risk is closed; the configuration risks are not.
+
+1. **`fields: 0` remains the single point of mitigation and remains essential.** Patching Multer does not retire it. It still bounds parser work, still prevents field accumulation, and is the control that would contain the next field-handling defect. Removing it because "Multer is patched now" would be the wrong lesson from this remediation. Residual risks 1 and 3 of section 7 stand unchanged.
+2. **Memory storage, the synchronous `fileFilter`, and guard-before-interceptor ordering likewise remain required** as defense in depth, for the same reason.
+3. **Residual risk 8 is resolved** by the inclusive-boundary change in 10.6.
+4. **Residual risks 4, 5, 6, 9 and 10 of section 7 are unaffected** by a dependency upgrade and remain open: `Origin` enforced only when present; anonymous staging-budget exhaustion; 5 MiB per-request memory buffering bounded only per process; the out-of-scope `js-yaml` and root-project advisories; and the unassigned City operational risk owner and pending production exception approval.
+5. **The boundary is now pinned on both sides by regression tests** (10.6), so a future dependency change that shifts it again fails loudly in both the parser unit test and the E2E suite. The former one-sided assertions would not have caught a relaxation above the maximum.
+6. **Audit data is time-specific.** A clean Multer audit today is not a durable property; re-run it at the next dependency review.
+
+---
+
 ## Follow-up gates
 
+- **Done (2026-09-29):** remediation of the five Multer advisories, performed as approved Option A under [section 10](#10-remediation-performed--option-a-2026-09-29). The gate below records the authorization that governed it.
+- **Done (2026-09-29):** the two SEC-001 boundary assertions were aligned with Multer 2.4.0's inclusive `fileSize` semantics under explicit human security review approval ([section 10.6](#106-behavior-change-found-by-the-sec-001-tests-the-filesize-boundary)). No test was modified before that approval.
 - Remediation of the five Multer advisories requires explicit authorization as a **separate dependency change**; it was excluded from this reassessment.
 - Reassess again before any production API activation, before enabling attachments outside the development profile, and at the next dependency review.
 - **Re-run this reassessment whenever the multipart configuration changes** — specifically on any change to the `FileInterceptor` limits, the storage engine, the `fileFilter`, the guard order on the upload routes, or the addition of any new multipart route. Residual risk 1 makes this the highest-value trigger.

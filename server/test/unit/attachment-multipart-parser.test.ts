@@ -221,10 +221,6 @@ test('SEC-001 the configured parser enforces file size, count and field-name len
   );
   assert.equal(oversized.error?.code, 'LIMIT_FILE_SIZE');
 
-  // Busboy flags a file the moment it reaches `fileSize`, so the largest body
-  // the parser accepts is one byte below the configured limit. The domain rule
-  // in assertAttachmentCount rejects above the limit, so the parser is stricter
-  // by a single byte. Recorded as observed behavior, not as a finding.
   const belowLimit = await parse(
     middleware,
     multipart(
@@ -239,6 +235,13 @@ test('SEC-001 the configured parser enforces file size, count and field-name len
   assert.equal(belowLimit.error, undefined);
   assert.equal(belowLimit.request.file?.size, attachmentLimits.fileBytes - 1);
 
+  // `limits.fileSize` is inclusive in Multer 2.4.0: exactly the configured
+  // maximum is accepted and anything above it is rejected. That is Reqro's
+  // intended attachment contract and it matches the application-level rule in
+  // assertAttachmentCount, which also rejects only above `fileBytes`. Multer
+  // 2.2.0 flagged the file on reaching the limit, so the parser used to be
+  // stricter by one byte; SEC-001 section 10.6 records that upstream change.
+  // Both sides are asserted here so the boundary cannot drift unnoticed.
   const exactlyAtLimit = await parse(
     middleware,
     multipart(
@@ -250,7 +253,8 @@ test('SEC-001 the configured parser enforces file size, count and field-name len
       ),
     ),
   );
-  assert.equal(exactlyAtLimit.error?.code, 'LIMIT_FILE_SIZE');
+  assert.equal(exactlyAtLimit.error, undefined);
+  assert.equal(exactlyAtLimit.request.file?.size, attachmentLimits.fileBytes);
 
   const twoFiles = await parse(
     middleware,
