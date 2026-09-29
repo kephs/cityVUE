@@ -147,3 +147,41 @@ test('F046 finalized retries obey capability expiry while valid retries remain a
   row.expires_at = new Date(Date.now() + 60000);
   assert.equal(await service.prepare(trx, claim, owner, digest), row);
 });
+
+test('SEC-001 parser admission fails closed for non-development deployments and beyond the concurrency cap', () => {
+  const database = {
+    client: { transaction: () => ({ execute: () => Promise.resolve() }) },
+  } as unknown as DatabaseService;
+  const settings = (overrides: Record<string, unknown>) =>
+    new ConfigService<AppConfiguration, true>({
+      attachments: { developmentEnabled: true },
+      app: { environment: 'development' },
+      deployment: { profile: 'development' },
+      catalog: {
+        developmentOrganizationId: '10000000-0000-4000-8000-000000000001',
+      },
+      ...overrides,
+    });
+  const build = (overrides: Record<string, unknown>) =>
+    new AttachmentService(
+      database,
+      settings(overrides),
+      {} as ServiceRequestRepository,
+    );
+
+  // AttachmentUploadGuard calls acquire() before the FileInterceptor runs, so a
+  // closed gate keeps Multer from parsing an untrusted multipart body at all.
+  for (const closed of [
+    { attachments: { developmentEnabled: false } },
+    { app: { environment: 'production' } },
+    { deployment: { profile: 'client' } },
+  ])
+    assert.throws(() => build(closed).acquire(), ServiceUnavailableException);
+
+  const open = build({});
+  const first = open.acquire();
+  open.acquire();
+  assert.throws(() => open.acquire(), ServiceUnavailableException);
+  first();
+  assert.equal(typeof open.acquire(), 'function');
+});
