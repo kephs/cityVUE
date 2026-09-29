@@ -1188,15 +1188,22 @@
 @media (min-width: 1200px) {
   .request-workspace-layout {
     grid-template-columns: minmax(0, 1.7fr) minmax(22rem, 1fr);
-    grid-template-rows: none;
+    /* The trailing column-1 row is flexible so the controls column, which spans
+       rows 2 and 3, cannot distribute its excess height into row 2. Grid splits a
+       spanning item's excess equally across spanned tracks with intrinsic max
+       sizing, which opened a gap under Request Details whenever the controls
+       column was taller than the left column. A flexible track is excluded from
+       that distribution, so the excess collects in row 3 instead and Request
+       Details keeps the accepted gap above the content stack. */
+    grid-template-rows: auto auto 1fr;
   }
   .request-overview {
     grid-column: 1 / -1;
   }
   /* Request Details and the content stack are separate column-1 rows, so the
      DOM can read Details -> Actions -> Management -> content while the controls
-     column spans both rows. The content stack is always the taller side, so the
-     span never grows a row or opens a gap in the left column. */
+     column spans both rows. Either column may be the taller one; neither
+     column's height may shift the other column's cards. */
   .request-details {
     grid-column: 1;
     grid-row: 2;
