@@ -1,5 +1,11 @@
 # F058.2 — Collaboration and Service Request Workspace
 
+**Current state (F058.4 reconciliation): DELIVERED and synchronized.** F058.2A is `114d3814306d45fa8391c93d7045fe650b8e6e1d`; F058.2B is `ffe8e727527da545cbf584c81c470cef35e9b381` and `3b1bd8803ab8320d936df6097380a7f4f603b082`. All are ancestors of `main`. F058.2B **passed manual UAT**, with the three accepted corrections recorded below. Every `unstaged`, `uncommitted`, `not committed or synchronized` and `Stop for manual visual review` statement in the sections that follow records the state at its own checkpoint and is retained as historical fact; **none is a current claim**.
+
+Two points remain current rather than historical. **Migration 40** (`20261010000000-extend-internal-communication-attachments.ts`) is committed, but its live-development application state is **UNCERTAIN**: the last recorded observation was 39 applied / 1 pending / 60 tables, and it must not be represented as applied without operator verification via `npm run database:status`. Until then, authenticated UAT of INTERNAL communication attachment finalization is gated. **F058.2 outbound Requester Communication delivery and INTERNAL requester self-service remain deferred and not started**; no email, SMS or notification capability exists in either package manifest, so recorded correspondence still does not establish delivery.
+
+The workspace and list presentation frozen here was subsequently corrected by [F058.3A](F058-3A-workspace-row-sizing.md) and, together with it, forms the **Accepted UI Baseline** at `6732837d86dd5a03a3e7604d869bd156fd010fa5`. See [F058.4](F058-4-delivered-work-documentation-reconciliation.md).
+
 ## F058.2B final workspace composition refinement — current checkpoint
 
 This bounded presentation/composition pass builds on the accepted F058.2B workspace, which is now committed as `ffe8e727527da545cbf584c81c470cef35e9b381`. The refinement is unstaged and uncommitted on the isolated branch `claude/f058-2b-layout-refinement`. Nothing in the backend, API contracts, authorization, permission keys, database, migrations, Migration 40, request revisions, routing/assignment/watcher/tracking semantics, F058.1 or F058.2A changed.

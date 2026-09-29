@@ -1,5 +1,7 @@
 # F058.1 — Request authorization and read consistency
 
+**Current state (F058.4 reconciliation): DELIVERED and synchronized as `cc5439c8c48e574e9c5f82f51c2cc1e93147c726`, an ancestor of `main`.** The status line below records the state at the original checkpoint and is retained as historical fact; it is not a current claim. [ADR-024](../architecture/decisions/ADR-024-transaction-time-request-authorization.md) remains **Proposed** — its architecture is implemented on `main`, but implementation is not architectural approval. See [F058.4](F058-4-delivered-work-documentation-reconciliation.md).
+
 Status: implemented and validated locally; approved for the controlled F058.1 local commit. Synchronization is not authorized. The original React failure and subsequent classification remain recorded below.
 
 Baseline: `7d0e294f5977749c5bbe1ce60d17aa9f6b5c4503`. This slice does not implement F058.2 UI, change the permission registry, add a migration, or authorize deployment.

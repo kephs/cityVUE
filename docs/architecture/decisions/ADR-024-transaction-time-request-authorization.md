@@ -1,6 +1,8 @@
 # ADR-024 — Transaction-Time Authorization Coordination for Request Operations
 
-Status: Proposed — implementation under review; not Accepted.
+Status: **Proposed** — not Accepted.
+
+**Implementation state (F058.4 reconciliation).** The architecture described below **is implemented on `main`** and is the live authorization model for request operations. Its implementing slice, [F058.1](../../features/F058-1-request-authorization-consistency.md), is **delivered and synchronized** as `cc5439c8c48e574e9c5f82f51c2cc1e93147c726`. This ADR nevertheless **remains Proposed**, pending separate architecture and security ratification: implementation is not architectural approval, and F058.4 records the discrepancy rather than resolving it. Nothing in the decision below is amended by that record. When ratification is separately authorized, assess the "Evidence required before acceptance" section against the delivered evidence, noting that the deterministic disposable PostgreSQL coverage it requires cannot currently be re-executed because `TEST_DATABASE_URL` is not configured in this environment.
 
 ## Context
 

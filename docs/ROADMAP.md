@@ -1,5 +1,123 @@
 # Reqro — Roadmap
 
+This roadmap describes accepted progress and possible direction. It is not implementation, synchronization or deployment authorization.
+
+**How to read this document.** Sections 1–6 describe current state and are **authoritative**. [Section 7](#7-historical-checkpoints) preserves every earlier checkpoint paragraph and table verbatim as historical evidence. Where a historical paragraph conflicts with sections 1–6, sections 1–6 govern and the historical text records only the state at its own checkpoint. **Do not treat the newest paragraph in section 7 as current state**; that reading is what [F057.4](features/F057-4-access-administration-architecture-refresh.md) and F058.4 were written to prevent.
+
+Follow the [development protocol](development/REQRO_CODEX_PROTOCOL.md) for execution, [Architecture](ARCHITECTURE.md) for current behavior, [ADRs](architecture/decisions/README.md) for durable decisions and [feature records](features/README.md) for implementation evidence. Historical CityVUE identifiers remain unchanged in code, packages and deployment configuration.
+
+## 1. Current product state
+
+Reqro is a client-neutral resident-engagement and staff-work platform: a React/Vite frontend, a versioned NestJS API, and canonical PostgreSQL persistence, with optional Microsoft Entra workforce identity and database-resolved authorization.
+
+**Delivered and operating in development.** Resident catalog discovery and intake with versioned dynamic questions, service location and optional evidence; PUBLIC/INTERNAL request classification with independent read and operational authorization; the unified staff Service Request List and Service Request Workspace; lifecycle, routing, assignment, watchers and operational Activity; protected requester contact, submitted answers, requester history and secure requester tracking; staff-only Internal Notes and recorded Requester Communication; secure attachments across three contexts; Organization administration covering Issue configuration, participation setup, analytics privacy and configuration status; and Administrative Access & Permissions at `/admin/access`.
+
+**Not delivered.** There is no outbound delivery of any kind — no email, SMS or notification capability exists in either package manifest. There is no enterprise integration adapter and no integration router. There is no production attachment storage or malware scanning; the development scanner is an explicit stub. There is no authoritative GIS, geocoding or boundary provider; geospatial data is synthetic. There is no live AI generation; the provider registry is intentionally empty. There is no citizen identity design. There is no canonical operational dashboard: `/dashboard` and the public home page still read browser-local legacy data. Resident alerts are read-only, with a complete schema and no authoring surface.
+
+**Not deployed.** No backend, database or staff feature is deployed. [F007](features/F007-react-stage-10-production-cutover.md) records a historical *static frontend* Hosting cutover that predates every backend feature and establishes nothing about later work.
+
+## 2. Current authoritative checkpoint
+
+| Fact | Verified state |
+| ---- | -------------- |
+| Integration branch | `main` |
+| `main` and `origin/main` | Both `36f13d8a17f9c9e1defbceae82cb5d1cfdc85454` |
+| Outstanding unsynchronized feature work | **None.** All F057 and F058 slices are ancestors of `main` and are pushed |
+| Migration inventory | **40 files** in `server/migrations/` |
+| Live development migration/table state | **UNCERTAIN.** The last recorded observation was 39 applied / Migration 40 pending / 60 tables at the F058.2B checkpoint. No current claim is made; an operator must verify with `npm run database:status` before any work that depends on it |
+| Deployment | None |
+
+**F058 delivered status.** All four slices are implemented, validated and synchronized:
+
+| Slice | Capability | Commit | Manual UAT |
+| ----- | ---------- | ------ | ---------- |
+| [F058.1](features/F058-1-request-authorization-consistency.md) | Request authorization and read consistency: shared Organization/access-state barrier, fresh transaction authority, repeatable-read list snapshot | `cc5439c8c48e574e9c5f82f51c2cc1e93147c726` | Not required for this slice |
+| [F058.2A](features/F058-2-collaboration-workspace.md) | Collaboration eligibility: Requester Communication extended to eligible INTERNAL requests; Migration 40 aligns attachment structural integrity | `114d3814306d45fa8391c93d7045fe650b8e6e1d` | Automated and synthetic review; authenticated mutation UAT remains a separate gate |
+| [F058.2B](features/F058-2-collaboration-workspace.md) | Service Request Workspace and List refinement | `ffe8e727527da545cbf584c81c470cef35e9b381`, `3b1bd8803ab8320d936df6097380a7f4f603b082` | **PASS**, with three accepted corrections recorded in the feature record |
+| [F058.3](features/F058-3-workflow-activity-narrative.md) | Workflow Activity narrative completeness in Recent Activity | `dad644f47562e29419b0cdd2af6f5b421071ab48` | **PASS** |
+| [F058.3A](features/F058-3A-workspace-row-sizing.md) | Workspace column row-sizing correction | `6732837d86dd5a03a3e7604d869bd156fd010fa5` | **PASS** |
+
+**Accepted UI Baselines.** Under [AGENTS.md](../AGENTS.md), the **Service Request List** and **Service Request Workspace** at `6732837d86dd5a03a3e7604d869bd156fd010fa5` are Accepted UI Baselines, as are the F057 Access & Permissions discovery table, View Access drawer and Configure Access flow. They are immutable unless a feature explicitly authorizes changing a named area.
+
+**Deliberately not started.** F058.2 outbound Requester Communication delivery and INTERNAL requester self-service remain **deferred and not started**. Recorded correspondence does not establish delivery.
+
+**ADR-024 status.** [ADR-024](architecture/decisions/ADR-024-transaction-time-request-authorization.md) remains **Proposed**. Its architecture is implemented on `main` and F058.1 is delivered, but implementation is not architectural approval; ratification is a separate reviewed decision.
+
+## 3. Delivered capability families
+
+Each linked record preserves its own test scope, UAT scope, limitations and deferred work. "Delivered" identifies an accepted implementation checkpoint in development; none of these statuses independently authorizes deployment.
+
+| Family | Capability | Qualification |
+| ------ | ---------- | ------------- |
+| F001, F004–F007 | React migration from the Parcel/browser-local prototype | F007 is a historical static Hosting cutover only |
+| F009–F014 | Backend platform, Organization/catalog persistence, canonical request persistence, intake API, detail and list read models | — |
+| F015 | Server-authoritative geographic eligibility boundary | Development provider only |
+| F017, F018 | Staff/assignment foundation; Entra authentication and database RBAC | Validated against a personal tenant; production activation unauthorized |
+| F019 | Resident alerts and notices | **Read-only.** Schema is complete; no authoring API, permission or admin surface exists |
+| F020, F021 | Provider-neutral staff AI gateway and governance metadata; stakeholder previews | Provider registry is intentionally empty; no live generation |
+| F022–F028 | Client-neutral development isolation; MapLibre presentation; protected Organization-scoped geospatial reads | Synthetic data; map is a standalone preview route |
+| F029–F033 | Request audience and assisted intake; INTERNAL access policy and lifecycle; Issue action / external redirect; configurable Organization-scoped references | Reference configuration has an API and permission but no administrative UI |
+| F034–F038 | Staff INTERNAL workspace; append-only operational Activity; safe development provisioning; assignment, ownership and watchers; shared design system | — |
+| F039–F043 | Protected requester contact; unified PUBLIC/INTERNAL workspace and PUBLIC operations; Internal Notes; recorded Requester Communication; workspace consolidation | Communication is recorded, never delivered |
+| F044–F047 | Secure requester tracking; requester issue location experience; secure attachments; live search | Attachments are a development foundation: local private storage, stub scanner |
+| F048–F051 | Issue-based default assignment; anonymous request policy; trusted requester identity and authorized history; participation geography and suppressed aggregates | F048 and F049 configuration is now administered through the authenticated Admin Issue API |
+| F052–F056.5 | Organization administration foundation; intake settings; branding projection; participation areas; Issue configuration management, scalability, dynamic questions, availability and handling, admin shell, Issue workspace | Branding writes remain a development CLI; condition authoring and answer reuse remain deferred |
+| F057.1–F057.4 | Administrative Access & Permissions at `/admin/access`: people-centric, Organization-scoped, fail-closed, governed atomic mutations, immutable access-change audit | See [F057.4](features/F057-4-access-administration-architecture-refresh.md) for the verified as-built architecture and gaps G1–G11 |
+| F058.1–F058.3A | Request authorization consistency; collaboration eligibility; workspace and list refinement; Activity narratives; row-sizing correction | See section 2 |
+
+## 4. Active and recommended next work
+
+Nothing below is approved. Each candidate requires its own reviewed task and explicit authorization.
+
+| Candidate | Why it matters | Risk | Gate |
+| --------- | -------------- | ---- | ---- |
+| **F058.4 — documentation and governance reconciliation** (this change) | Prevents a future agent concluding that delivered F058 work is unstarted | LOW | Documentation only |
+| **SEC-001 reassessment** | [SEC-001](security/SEC-001-multipart-dependency-follow-up.md) is an **open** security follow-up whose stated premise — that no application multipart parser is registered — was invalidated when F046 introduced upload routes. Its own text says any such route invalidates the assessment. **Immediate security follow-up** | MODERATE for the reassessment; HIGH for any dependency remediation | Separate reviewed workstream; do not change its conclusions outside that task |
+| **Resident-facing client-neutrality remediation** | The server and Admin are client-neutral, but the resident home page, AI workspace and admin preview still hard-code a single client's identity, contacts and assets. High commercial value for a client-neutral product | LOW | Presentation only; no backend, authorization or schema change |
+| **Reference configuration administration** | Completes [F033](features/F033-configurable-service-request-reference-numbers.md): the API, permission, domain and audit exist; only the administrative client is missing. Requires no new permission key and no migration | LOW–MODERATE | Authenticated administrative write; manual UAT |
+| **Canonical staff operational dashboard** | `/dashboard` still reports browser-local legacy data. Server-authorized metrics would replace prototype statistics with operational reporting | MODERATE | Practically blocked while no disposable PostgreSQL test database exists (see section 6) |
+
+## 5. Planned, deferred and blocked
+
+### Access administration candidates (recorded, not approved)
+
+Recorded in [F057.4](features/F057-4-access-administration-architecture-refresh.md) with their gates preserved: **F057.5** Organization-wide access audit read (may require an additive index and therefore remains behind the migration approval gate); **F057.6** bootstrap and effective-administrator-count visibility (touches an Accepted UI Baseline; must be serialized after F057.5); **F057.7** production bootstrap and recovery (**must not be implemented before separate architecture and security approval**); **F057.8** Department/Division ownership (**blocked** on whether Reqro owns those memberships or consumes them); **F057.9** optional access-read auditing (policy question first); **F057.10** staff lifecycle and deprovisioning (depends on F057.8).
+
+### Deferred product capabilities
+
+Outbound correspondence delivery and notifications with approved recipients, preferences, queues and failure handling. Production attachment storage, malware scanning, retention and operations. Note correction, redaction and versioning. Priority, SLA and escalation foundations. Resident alerts administration. Production branding CRUD and uploads. Conditional intake authoring and answer reuse. Notes editing, search, mentions, exports and analytics. Contact editing, search and resident profiles, each needing independent privacy review. Citizen identity and a requester self-service portal.
+
+The unnumbered stakeholder requirements table and the post-F044 candidate list are preserved verbatim in [section 7](#7-historical-checkpoints); they assign no feature IDs and approve no implementation.
+
+### Structural gates that constrain selection
+
+- **A new permission key requires a migration.** `auth.types.ts`, `access-policy.ts` and the frozen `managedPermissionKeys` allowlist in Migration 38 form a parity set that must change together, and keys are registered by migration. Any capability needing new authority is therefore behind the migration approval gate.
+- **Migration numbering is a global ordering constraint.** Migration-bearing work must be serialized against all other migration-bearing work.
+- **F057.5 and F057.6 share files** and must be serialized rather than parallelized.
+
+## 6. Production readiness gaps
+
+None of the following is established by local feature work, and each is a separate authorization gate.
+
+| Gap | State |
+| --- | ----- |
+| **Disposable PostgreSQL test database** | `TEST_DATABASE_URL` is not configured, so the `server/test/database` suite — which carries the Organization-isolation, authorization-scope, concurrency and audit-integrity proofs — does not execute. Reported honestly as skipped, never as passed. This is the highest-leverage unblocking decision available |
+| **Production bootstrap and recovery** | No production path to a first administrator exists; the operator command is restricted to a development profile and an approved local database. See F057.4 gaps G1 and G2 |
+| **Client identity activation** | Entra is validated against a personal tenant only. Administrator consent, operational lifecycle validation and production activation remain outstanding |
+| **Deployment architecture** | [F008](features/F008-production-backend-persistence-security-architecture.md) and [F016](features/F016-production-hosting-deployment-readiness-plan.md) describe Azure Container Apps, managed PostgreSQL, private Blob Storage and Key Vault as a *target*. Nothing is provisioned. Prefer isolated client environments initially; shared SaaS needs its own tenancy and operating-model decision |
+| **Outbound delivery infrastructure** | No SMTP, provider, queue, retry or delivery-state design exists |
+| **Production storage and scanning** | Attachments use a private local filesystem root; the scanner is an explicit stub |
+| **GIS and location providers** | No authoritative address, geocoder, tile or boundary provider is selected |
+| **Enterprise integrations** | No adapter or router exists. Discover actual vendor APIs before a controlled pilot; portability can be demonstrated with a second approved or mock adapter without requiring a vendor purchase |
+| **Security operations** | Sign-in and denial auditing, access-read auditing, distributed throttling, endpoint-specific abuse controls, retention, alerting and incident ownership remain outstanding. See the [security framework](security/SECURITY_FRAMEWORK.md) |
+| **Records, privacy and accessibility review** | Approved classification, retention, aggregate-analytics thresholds and accessibility certification remain undecided. Accessibility-oriented checks are evidence, not WCAG certification |
+| **Naming and rollout** | A technical CityVUE-to-Reqro rename requires its own plan. Git push and cloud deployment require separate authorization |
+| **Environment hygiene** | Node 20.20.2 is below the ≥22 one package requests, and the working path is OneDrive-synced; both have repeatedly produced spawn timeouts and test flakes that corrupt validation signal |
+
+## 7. Historical checkpoints
+
+Everything below is preserved verbatim as historical evidence. Each paragraph and table records **the state at its own checkpoint** and is not a current claim. Where it conflicts with sections 1–6, sections 1–6 govern. Historical validation counts, UAT statements, live database observations, migration counts and authorization statements are retained rather than rewritten.
+
 Current documentation state: [F057.4 access administration documentation and governance reconciliation](features/F057-4-access-administration-architecture-refresh.md) records that **F057 Administrative Access & Permissions is DELIVERED through F057.3D and synchronized on `main`**. Do not treat F057 as unstarted; earlier checkpoint paragraphs that describe it as UNSTARTED or NOT SYNCHRONIZED are historical. The delivered surface is `/admin/access`, people-centric, Organization-scoped and fail-closed, with governed atomic access mutations and durable immutable access-change audit. F057.4 is documentation only: no runtime behavior, permission, grant, schema, interface, database or deployment change. Recorded but **not approved** future candidates are F057.5 Organization-wide audit read (may require an additive index and therefore remains behind the migration approval gate), F057.6 bootstrap/administrator-count visibility, F057.7 production bootstrap and recovery (requires separate architecture and security approval), F057.8 Department/Division ownership decision (blocked on determining whether Reqro owns those memberships), F057.9 optional access-read auditing and F057.10 staff lifecycle/deprovisioning administration.
 
 Current local work: [F058.1 request authorization and read consistency](features/F058-1-request-authorization-consistency.md) implements Organization/access-state shared coordination and fresh transaction authority from synchronized `7d0e294f5977749c5bbe1ce60d17aa9f6b5c4503`. Backend/security validation passes; the final serial full React rerun passed all 712 tests at the unchanged timeout. The report preserves the original failed invocation and classifies its timeout-triggered test leakage. The reviewed 32-file scope is approved for one controlled local commit; synchronization remains unauthorized. No schema change, live database mutation, push or deployment; F058.2 remains unstarted. [ADR-024](architecture/decisions/ADR-024-transaction-time-request-authorization.md) is Proposed, not Accepted. Earlier checkpoints below retain their historical scope.
@@ -58,7 +176,7 @@ The separately authorized [F051 Organization collection follow-up](features/F051
 
 This roadmap describes accepted progress and possible direction, not implementation or deployment authorization. Follow the [development protocol](development/REQRO_CODEX_PROTOCOL.md) for execution, [Architecture](ARCHITECTURE.md) for current behavior and [ADRs](architecture/decisions/README.md) for durable decisions. Historical CityVUE identifiers remain unchanged.
 
-## Accepted progress
+### Accepted progress
 
 The preceding accepted application checkpoint is **F041 complete**: separate append-only Internal Notes for authorized PUBLIC and INTERNAL requests. See the [F041 report](features/F041-implementation-report.md). **F042 — Requester Communication & Correspondence Foundation is accepted and synchronized at `8018acf8f2caf9699faa682241a026f09b101e90`.** See its [feature record](features/F042-requester-communication-foundation.md) and [implementation report](features/F042-implementation-report.md), including the approved two-record UAT automation exception and disclosed live coverage limits.
 
@@ -86,13 +204,13 @@ F044 adds locally validated secure requester tracking; its report distinguishes 
 
 Earlier foundations include React migration, canonical PostgreSQL catalog/intake, API eligibility, optional Entra/database RBAC, resident alerts, AI/provider governance and synthetic/protected geospatial boundaries. Individual reports distinguish local implementation, previews and deferred production work. The earlier global reference plan was superseded by F033; authentication, lifecycle, ownership and Notes are no longer pending foundations.
 
-## Governance and synchronization checkpoint
+### Governance and synchronization checkpoint
 
 Governance consolidation and the separately authorized GitHub synchronization are complete at `371ec3bd753b6054cdc5403ad0e88898ef0ea161`. F042 begins from that synchronized checkpoint.
 
 F042 was separately reviewed and its GitHub synchronization completed. [F043 — Service Request Workspace UX Consolidation](features/F043-service-request-workspace-ux-consolidation.md) was subsequently accepted and synchronized at the starting checkpoint above. F044's current authorization ends at the reviewed local commit and completion report, without push or deployment. The [governance review](development/GOVERNANCE_REVIEW.md) records the earlier synchronization evidence and conditions.
 
-## Product review after F044
+### Product review after F044
 
 The following candidates are deferred and unnumbered. No candidate below has priority or a future feature ID assigned. Review value, privacy, operational impact and dependencies before selecting one:
 
@@ -105,7 +223,7 @@ The following candidates are deferred and unnumbered. No candidate below has pri
 
 Notes editing, deletion, search, mentions, exports, analytics and AI use are also deferred; they must not appear as incidental F041 extensions. Contact editing/search and resident profiles need independent privacy review.
 
-## Deferred stakeholder requirements (unnumbered)
+### Deferred stakeholder requirements (unnumbered)
 
 These requirements are recorded during F044 completion for future design and prioritization only. They assign no feature IDs, approve no implementation, and establish no City policy or production configuration.
 
@@ -123,17 +241,17 @@ These requirements are recorded during F044 completion for future design and pri
 
 External delivery, notifications and vendor integrations remain separately reviewed work. These deferred requirements do not select or start F047.
 
-## Staff capabilities
+### Staff capabilities
 
-### Service Request Live Search
+#### Service Request Live Search
 
 Selected as [F047](features/F047-service-request-live-search.md), implemented and locally validated. Debounced server-side search narrows independently authorized requests by Reference, Issue name and displayed Service Location. Existing audience/view/filter/sort/page behavior composes with it; exact Reference filtering remains separate. Protected domains, UUIDs and tracking are excluded. Validation and live logging gates passed; no production deployment is implied.
 
-### Issue-Based Default Assignment
+#### Issue-Based Default Assignment
 
 Selected and implemented as [F048](features/F048-issue-based-default-assignment.md): one optional STAFF, operational ROLE or GROUP/Team owner per Organization-scoped Issue. Creation applies a currently eligible target atomically with System Activity/audit; unavailable targets create Unassigned with safe evidence. Existing owners, manual override, finalized retries, routing, watchers and authorization remain independent. Guarded personal-development provisioning is implemented; production administration UI/API and its authorization policy are deferred. Location and other advanced criteria, fallback, balancing, escalation, notifications and general rules remain unimplemented. See the [validation record](features/F048-implementation-report.md) for passed completion gates; F049 is recorded above; no F050 work is authorized.
 
-## Longer-term platform direction
+### Longer-term platform direction
 
 **Catalog and intake:** extend narrow implemented configuration toward reviewed authoring/publication/preview administration, richer conditional intake, accessible discovery and routing policy. Preserve version/Answer history and distinguish platform intake from external redirect. Historical [domain requirements](features/F002-core-product-capabilities-domain-requirements.md) and [catalog direction](features/F003-dynamic-service-catalog-intelligent-intake.md) are broad requirements, not evidence every capability exists.
 
@@ -147,7 +265,7 @@ Selected and implemented as [F048](features/F048-issue-based-default-assignment.
 
 **Naming and rollout:** a technical CityVUE-to-Reqro rename requires its own plan. The historical [F007 static Hosting cutover](features/F007-react-stage-10-production-cutover.md) does not establish deployment of later backend/staff features. Git push and cloud deployment require separate authorization.
 
-## Decision and feature records
+### Decision and feature records
 
 Move a candidate through design, explicit approval, implementation and validation before marking it complete. Use [feature records](features/README.md) for requirements/evidence and the [ADR convention](architecture/decisions/README.md) for durable choices. Do not silently rewrite accepted decisions or turn roadmap entries into permission to use client resources.
 

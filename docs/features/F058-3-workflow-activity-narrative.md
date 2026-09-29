@@ -1,5 +1,7 @@
 # F058.3 — Workflow Activity narrative completeness
 
+**Current state (F058.4 reconciliation): DELIVERED, manually accepted and synchronized as `dad644f47562e29419b0cdd2af6f5b421071ab48`, an ancestor of `main`.** The status line below records the state at the original checkpoint and is retained as historical fact; it is not a current claim. The PostgreSQL integration limitation below **does remain current**: `TEST_DATABASE_URL` is still not configured, so that suite still does not execute and is reported as skipped, never as passed. A subsequent manual UAT of this work surfaced a workspace layout defect, corrected separately by [F058.3A](F058-3A-workspace-row-sizing.md). See [F058.4](F058-4-delivered-work-documentation-reconciliation.md).
+
 Status: implemented locally and validated except for the PostgreSQL integration suite, which cannot run in this worktree. Not staged, not committed, not pushed, not deployed.
 
 Baseline: `3b1bd8803ab8320d936df6097380a7f4f603b082` on `claude/f058-3-activity-narrative`, clean working tree.

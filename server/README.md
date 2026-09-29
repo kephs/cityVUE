@@ -1,6 +1,6 @@
 # CityVUE API — Backend Workspace
 
-This workspace began with the Phase A platform foundation and now contains Reqro's implemented backend through F041: canonical catalog/requests, Entra/database authorization, operations, protected contact and Internal Notes. CityVUE remains the existing technical identifier. Read the [current architecture](../docs/ARCHITECTURE.md) and [development protocol](../docs/development/REQRO_CODEX_PROTOCOL.md) before changes; historical phase-specific sections below describe their original scope.
+This workspace began with the Phase A platform foundation and now contains Reqro's implemented backend through **F058**: canonical catalog/requests, Entra/database authorization, operations, protected contact, Internal Notes, recorded Requester Communication, secure attachments, Organization administration, Administrative Access & Permissions (F057) and transaction-time request authorization coordination (F058.1). There are **40 migration files**; a live database's applied state must be verified with `npm run migration:status` rather than assumed. CityVUE remains the existing technical identifier. Read the [current architecture](../docs/ARCHITECTURE.md) and [development protocol](../docs/development/REQRO_CODEX_PROTOCOL.md) before changes; historical phase-specific sections below describe their original scope.
 
 ## Prerequisites
 

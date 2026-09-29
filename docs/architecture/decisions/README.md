@@ -47,4 +47,4 @@ New decisions in this series use the next unused number and include title, statu
 
 [ADR-022 — Governed Issue Availability](ADR-022-governed-issue-availability.md): approved transaction-bound audit enforcement; supersedes only post-creation Availability immutability.
 
-[ADR-024 — Transaction-Time Authorization Coordination for Request Operations](ADR-024-transaction-time-request-authorization.md): Proposed; F058.1 implementation and validation under review.
+[ADR-024 — Transaction-Time Authorization Coordination for Request Operations](ADR-024-transaction-time-request-authorization.md): **Proposed, not Accepted.** Its architecture is implemented on `main` and [F058.1](../../features/F058-1-request-authorization-consistency.md) is delivered and synchronized, but implementation is not architectural approval; ratification remains a separate reviewed decision. See [F058.4](../../features/F058-4-delivered-work-documentation-reconciliation.md).
