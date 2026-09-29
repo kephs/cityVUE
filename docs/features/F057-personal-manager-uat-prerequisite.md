@@ -1,5 +1,7 @@
 # F057 personal-development manager-UAT prerequisite
 
+Current-state reconciliation: this development-only tooling is **DELIVERED AND SYNCHRONIZED** on `main` as commit `52ecbcbd0cf0b84291297326fae3d8755d336caa`. It remains separately governed local provisioning support and authorizes no production, client or cloud provisioning. The approval-boundary statements below describe the authorizations in force at their own checkpoints and are retained unchanged as historical record. See the [F057.4 architecture refresh](F057-4-access-administration-architecture-refresh.md).
+
 Initial approval on 2026-09-26 covered implementation and dry-run only. A subsequent explicit user approval authorized exactly the reviewed personal bootstrap and minimum synthetic target preparation; see the execution record below. No runtime mutation UAT, commit, push, deployment, migration or cloud change was authorized.
 
 ## Selection and execution boundary

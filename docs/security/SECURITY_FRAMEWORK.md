@@ -91,11 +91,27 @@ Resolve workforce identity through immutable tenant/object identity and active, 
 
 **Locally observed, outside this committed baseline:** Workforce identity and permission code exists in the development working tree. **Planned/future:** Live delegated-token UAT, administrator consent, operational lifecycle validation, and production activation remain incomplete.
 
+**Reconciliation (F057.4):** the preceding paragraph describes the September 8, 2026 baseline. Workforce identity resolution and RBAC evaluation are now committed repository code, and delegated-token UAT has been performed against a personal development tenant. Administrator consent, operational lifecycle validation and production activation remain **Planned/future**; no production or client identity resource is configured or approved by this framework.
+
 ## Authorization and least privilege
 
 RBAC with scoped permissions is the target model: Entra establishes workforce identity/coarse admission; CityVUE determines effective application permissions. Check resource ownership, Organization, applicable Department/Division membership, action, and field visibility server-side. Apply scope to lists, counts, details, exports, and mutations. Assignment, a guessed reference, or a client-selected Category does not grant access.
 
 Public, Citizen, Staff, Supervisor, Administrator, and Integration Service are **conceptual access personas**, not an approved role/grant matrix. Locally observed development permissions do not establish final City-wide grants. Administrative and service identities also require constrained permissions; no implicit cross-Organization administration is authorized.
+
+### Implemented — administrative access and permissions (F057)
+
+Committed repository code implements Organization-scoped, fail-closed administration of staff permissions at `/admin/access`, served by `/api/v1/admin/access`. This is verified repository behavior; it is not deployment, production approval, or an independent assessment.
+
+- **Separate read and manage authority.** [`admin.access.read` and `admin.access.manage`](../../server/src/auth/auth.types.ts) are registered with zero default grants and classified provisioning-only in [access-policy](../../server/src/access/access-policy.ts), so neither can be granted through the runtime administrative API. Reading additionally requires `admin.configuration.read`; managing requires all three.
+- **No implicit administrator.** Bootstrap is explicit and starts false. Sign-in, startup, migration, permission registration, and existing Admin permissions promote no principal. The controlled operator command is restricted to a development profile and an approved local database; **production bootstrap and recovery remain Planned/future and require separate security approval.**
+- **Deny by default.** The Organization is resolved only from authenticated staff context and never accepted from a request. The development fallback principal is rejected. Unknown and cross-Organization targets return the same safe not-found response.
+- **Least privilege preserved.** Self-edit is prohibited in application code and by database constraint. Runtime commands cannot change a target's effective Access Administrator status in either direction, including indirectly through `admin.configuration.read`, and cannot grant access, geospatial, or AI authority.
+- **Reevaluated, not cached.** Effective permissions are recomputed from the database on every request; access tokens carry no permission claims. A revocation takes effect on the next request.
+- **Governed concurrency.** One command occupies one transaction with Organization-first locking, an expected-revision check taken after the lock, in-transaction actor re-resolution, and no automatic retry or idempotency key for consequential access mutations.
+- **Externally and provisioning-owned access is read-only** to Access & Permissions, as is Department and Division membership.
+
+**Planned/future for this area:** production bootstrap and recovery, endpoint-specific abuse controls for access mutation, Organization-wide audit retrieval, access-read auditing, and staff lifecycle/deprovisioning administration. See the [F057.4 refresh](../features/F057-4-access-administration-architecture-refresh.md) for the recorded gaps; none of that future work is approved for implementation.
 
 ## Public/citizen versus staff access
 
@@ -144,6 +160,10 @@ Retain validated/generated correlation IDs across approved backend calls where s
 Unknown messages become `Application event`; unknown error names/codes become `UnknownError`/`unknown`. New messages, fields, and codes require allowlist review. HTTP correlation IDs are fresh server-owned UUID v4 values, returned in the response header; inbound values are never echoed or logged, even if UUID-shaped. Custom context IDs must also use UUID v4. Route templates come only from private provenance attached at the HTTP boundary after framework route resolution, never arbitrary `route` fields or child bindings. Service identity is fixed to `cityvue-api`; version is restricted to numeric major.minor.patch with one to three digits per part and environment to development/test/production, with `unknown` replacing invalid values. Components use a fixed allowlist. The HTTP context builder is an internal trusted API and must only receive real framework requests. The policy does not sanitize independent console output, third-party logging, proxy logs, or future exporters. Removing raw stacks/messages limits diagnostics; central security monitoring, retention enforcement, alerting, and full audit logging remain future work.
 
 **Planned/future:** Security audit events should cover sign-in/admission failures, access denials, provisioning and role changes, privileged configuration, sensitive exports, and integration credential or operational changes. Record a safe actor identifier, Organization, timestamp, action, resource, outcome, and correlation context as appropriate, without secret payloads. Define access, integrity, retention, alerting, and incident ownership separately. Existing business Activity and Pino logs do not constitute this subsystem.
+
+**Implemented for access changes (F057):** the permission-change portion of the above is committed. Every governed access mutation writes an immutable change set and permission deltas recording actor, target, Organization, constrained operation, source, server-generated correlation UUID, transaction identity, before/after authorization revisions, and timestamp. Database triggers reject UPDATE, DELETE, and TRUNCATE on the audit and ownership tables, require matching same-transaction delta evidence before any owned permission or assignment write, and verify completeness through deferred constraint triggers at COMMIT, so a mutation and its audit cannot partially commit. No secret payload, provider identifier, token, or requester content is stored. This stream is deliberately distinct from operational request Activity.
+
+This covers permission changes only. Sign-in and admission failures, access denials, privileged configuration, sensitive exports, integration credential changes, access-read auditing, retention, alerting, and incident ownership remain **Planned/future**, and a privileged database owner able to alter schema or disable triggers is outside the guarantees this audit provides.
 
 ## Secure error handling
 

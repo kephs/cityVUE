@@ -1,5 +1,7 @@
 # Controlled Access Reader prerequisite for F057.2
 
+Current-state reconciliation: this prerequisite is **DELIVERED AND SYNCHRONIZED** on `main` as commit `7c00f80e16732b2c018119ba731cc62e8b1a08d5`, including Migration 39. The status line and evidence below describe the state at the original checkpoint, including the then-current migration and table counts, and are retained unchanged as historical record. See the [F057.4 architecture refresh](F057-4-access-administration-architecture-refresh.md).
+
 Status: COMPLETE LOCALLY — NOT SYNCHRONIZED. Migration 39 and the separately approved personal Reader grant passed validation. The grant remains in place. F057.2 authenticated manual UAT subsequently passed; its read-only application work is a separate commit.
 
 The pre-grant read-only inspection found one existing active Entra-mapped personal-development staff identity in the configured personal tenant and active Organization. Configuration-read was effective; access-read and access-manage were absent. Authorization revision was 0 and bootstrap false. Existing manager provisioning would overgrant manage authority and establish bootstrap. F036 and F057 operational roles deliberately exclude both access keys. No provider identifiers are published.

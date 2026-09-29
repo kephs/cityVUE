@@ -1,5 +1,7 @@
 # F057.2 — Read-Only Access Discovery
 
+Current-state reconciliation: this slice is **DELIVERED AND SYNCHRONIZED** on `main` as commit `f866fa21193174a4e053251fe70ec4c5f2b15048`. Its `/admin/access` discovery table and View Access drawer passed user-performed authenticated manual UAT and are therefore **Accepted UI Baselines** under AGENTS.md. The status line and evidence below describe the state at the original checkpoint and are retained unchanged as historical record. See the [F057.4 architecture refresh](F057-4-access-administration-architecture-refresh.md).
+
 Status: COMPLETE LOCALLY — NOT SYNCHRONIZED. Baseline: synchronized F057.1 `e495d9bae5b30aa57674c71a169c8fa1a146540f`. Reader provisioning is a separate prerequisite, described in [its report](F057-access-reader-prerequisite.md) and the explicit [ADR-023 amendment](../architecture/decisions/ADR-023-administrative-access-management-controlled-delegation.md). F057.3 is UNSTARTED. No push or deployment.
 
 ## Read-only application boundary

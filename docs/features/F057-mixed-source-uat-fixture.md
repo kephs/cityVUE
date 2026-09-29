@@ -1,5 +1,7 @@
 # F057.3 — Jordan mixed-source development fixture
 
+Current-state reconciliation: this development-only fixture tooling is **DELIVERED AND SYNCHRONIZED** on `main` as commit `7d0e294f5977749c5bbe1ce60d17aa9f6b5c4503`. The fixture itself was installed and subsequently removed under separate approvals during F057.3 UAT; the approval-boundary and live-state statements below describe their own checkpoints and are retained unchanged as historical record. See the [F057.4 architecture refresh](F057-4-access-administration-architecture-refresh.md).
+
 ## Scope and approval boundary
 
 This operator-only mechanism prepares one synthetic outside contribution for Jordan Example, stable internal ID `90000000-0000-4000-8000-000000000002`. It supports only `service_request.create`. Implementation, automated validation and a live **dry-run only** are authorized. Actual add, runtime UAT and later cleanup require their respective explicit approvals. Alex is never targeted. There is no HTTP endpoint, migration, identity creation, provider mapping or membership change.

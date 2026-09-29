@@ -1,5 +1,7 @@
 # F057.3 — Configure Access
 
+Current-state reconciliation: this slice is **DELIVERED AND SYNCHRONIZED** on `main` as commits `9d4181909c222f55e8905b3e544f6a349510a54a` (atomic managed access backend) and `210086dd83c290f2751a540a182577b50b6f2928` (Configure Access workflow). The Configure Access draft, review and sensitive-confirmation flow passed user-performed authenticated manual UAT and is therefore an **Accepted UI Baseline** under AGENTS.md. Every dated section below describes the state at its own checkpoint and is retained unchanged as historical record, including the live revisions, fixture states and validation counts observed at those times. See the [F057.4 architecture refresh](F057-4-access-administration-architecture-refresh.md).
+
 Historical initial status: F057.3A–C implemented locally following explicit architecture approval on 2026-09-26; personal authenticated F057.3D UAT remains deferred. Starting checkpoint: main `f866fa21193174a4e053251fe70ec4c5f2b15048`, clean, synchronized. No commit, push, deployment, migration or personal grant is authorized by this work.
 
 ## Approved scope
