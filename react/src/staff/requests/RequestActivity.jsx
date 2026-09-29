@@ -189,7 +189,9 @@ export default function RequestActivity({
                       }[event.intakeChannel] || "Recorded intake"}
                     </p>
                   )}
-                  {!preview && event.narrative && (
+                  {/* F058.3: the persisted workflow narrative belongs to its own
+                      Activity event in both the Recent Activity preview and full history. */}
+                  {event.narrative && (
                     <div className="activity-narrative-card">
                       <strong>
                         {event.type === "request_closed"

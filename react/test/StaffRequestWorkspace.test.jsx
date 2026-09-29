@@ -13,7 +13,10 @@ import { StrictMode } from "react";
 import InternalRequestWorkspace from "../src/staff/requests/InternalRequestWorkspace.jsx";
 import StaffRequestsPage from "../src/staff/requests/StaffRequestsPage.jsx";
 import { useAuth } from "../src/auth/AuthContext.jsx";
-import { createStaffRequestRepository } from "../src/staff/requests/requestRepository.js";
+import {
+  createStaffRequestRepository,
+  statusLabels,
+} from "../src/staff/requests/requestRepository.js";
 vi.mock("../src/auth/AuthContext.jsx", () => ({ useAuth: vi.fn() }));
 vi.mock(
   "../src/staff/requests/requestRepository.js",
@@ -1648,10 +1651,170 @@ test("empty history and long narrative disclosure are safe", async () => {
   await screen.findByText("No activity has been recorded for this request.");
   fireEvent.click(screen.getByRole("button", { name: "Start Work" }));
   await screen.findByText("Work started.");
-  await fullActivity();
-  await screen.findByText("Read narrative");
-  expect(document.querySelector(".activity-narrative")).toHaveTextContent(
-    "Fictional resolution",
+  const dialog = await fullActivity();
+  // F058.3 discloses the narrative in both places under the same bounded treatment.
+  await waitFor(() =>
+    expect(screen.getAllByText("Read narrative")).toHaveLength(2),
+  );
+  expect(within(dialog).getByText("Read narrative")).toBeInTheDocument();
+  const narratives = document.querySelectorAll(".activity-narrative");
+  expect(narratives).toHaveLength(2);
+  for (const narrative of narratives)
+    expect(narrative).toHaveTextContent("Fictional resolution");
+});
+const previewActivity = () =>
+  document.querySelector(".request-activity-preview");
+test.each([
+  [
+    "placed_on_hold",
+    "Placed on hold",
+    "in_progress",
+    "on_hold",
+    "Reason",
+    "Waiting for replacement part.",
+  ],
+  [
+    "request_closed",
+    "Request closed",
+    "in_progress",
+    "closed",
+    "Resolution",
+    "Damaged sign replaced and inspected.",
+  ],
+  [
+    "request_reopened",
+    "Request reopened",
+    "closed",
+    "open",
+    "Reason",
+    "Resident reported the problem remains unresolved.",
+  ],
+])(
+  "F058.3 %s keeps its narrative with the same event in Recent Activity and full history",
+  async (type, label, fromStatus, toStatus, term, narrative) => {
+    repository.activity.mockResolvedValue({
+      items: [{ ...event(type, narrative), fromStatus, toStatus }],
+      page: 1,
+      hasPreviousPage: false,
+      hasNextPage: false,
+    });
+    show(`/staff/requests/${id}`);
+    await screen.findByText(narrative);
+    const preview = previewActivity();
+    // One event carries both the transition and its narrative; no second event is invented.
+    expect(preview.querySelectorAll(".activity-item")).toHaveLength(1);
+    const item = preview.querySelector(".activity-item");
+    expect(within(item).getByRole("heading", { name: label })).toBeVisible();
+    expect(item).toHaveTextContent(statusLabels[fromStatus]);
+    expect(within(item).getByText(statusLabels[toStatus])).toHaveClass(
+      "ui-status",
+    );
+    const card = item.querySelector(".activity-narrative-card");
+    expect(card).toHaveTextContent(term);
+    expect(card.querySelector(".activity-narrative")).toHaveTextContent(
+      narrative,
+    );
+    // Recent Activity reuses the bounded page it already requested.
+    expect(repository.activity).toHaveBeenCalledTimes(1);
+    expect(repository.activity).toHaveBeenCalledWith(
+      id,
+      1,
+      expect.any(AbortSignal),
+      5,
+    );
+    const dialog = await fullActivity();
+    await waitFor(() => expect(repository.activity).toHaveBeenCalledTimes(2));
+    const full = within(dialog);
+    expect(full.getByText(term)).toBeInTheDocument();
+    expect(full.getByText(narrative)).toBeInTheDocument();
+    expect(repository.activity).toHaveBeenLastCalledWith(
+      id,
+      1,
+      expect.any(AbortSignal),
+      25,
+    );
+  },
+);
+test("F058.3 events without narrative show no Reason block and retain routed presentation", async () => {
+  repository.activity.mockResolvedValue({
+    items: [
+      {
+        ...event("work_started"),
+        id,
+        fromStatus: "open",
+        toStatus: "in_progress",
+      },
+      {
+        ...event("request_routed"),
+        fromDepartment: "Fictional Old",
+        toDepartment: "Fictional New",
+        toDivision: "District A",
+      },
+    ],
+    page: 1,
+    hasPreviousPage: false,
+    hasNextPage: false,
+  });
+  show(`/staff/requests/${id}`);
+  await screen.findByRole("heading", { name: "Work started" });
+  const preview = previewActivity();
+  expect(preview.querySelector(".activity-narrative-card")).toBeNull();
+  expect(within(preview).queryByText("Reason")).not.toBeInTheDocument();
+  expect(within(preview).queryByText("Resolution")).not.toBeInTheDocument();
+  // The accepted routed treatment, icon and destination remain unchanged.
+  const routed = within(preview)
+    .getByRole("heading", { name: "Request routed" })
+    .closest(".activity-item");
+  expect(routed).toHaveClass("tone-routing");
+  expect(routed.querySelector(".activity-marker i")).toHaveClass(
+    "bi-signpost-split",
+  );
+  expect(routed).toHaveTextContent("To Fictional New / District A");
+  expect(routed.querySelector(".activity-narrative-card")).toBeNull();
+});
+test("F058.3 older Activity pages retain narrative without per-event requests", async () => {
+  repository.activity.mockResolvedValue({
+    items: [
+      {
+        ...event("placed_on_hold", "Fictional current hold reason"),
+        fromStatus: "in_progress",
+        toStatus: "on_hold",
+      },
+    ],
+    page: 1,
+    hasNextPage: true,
+  });
+  show(`/staff/requests/${id}`);
+  const dialog = await fullActivity();
+  await within(dialog).findByText("Fictional current hold reason");
+  repository.activity.mockResolvedValue({
+    items: [
+      {
+        ...event("request_reopened", "Fictional older reopen reason"),
+        fromStatus: "closed",
+        toStatus: "open",
+      },
+    ],
+    page: 2,
+    hasPreviousPage: true,
+  });
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Older activity" }),
+  );
+  const older = await within(dialog).findByText(
+    "Fictional older reopen reason",
+  );
+  expect(older).toHaveClass("activity-narrative");
+  expect(
+    older.closest(".activity-item").querySelector(".activity-narrative-card"),
+  ).toHaveTextContent("Reason");
+  // One page request per rendered stream; narrative never triggers its own fetch.
+  expect(repository.activity).toHaveBeenCalledTimes(3);
+  expect(repository.activity).toHaveBeenLastCalledWith(
+    id,
+    2,
+    expect.any(AbortSignal),
+    25,
   );
 });
 test.each([
@@ -1717,11 +1880,17 @@ test.each([
         open: "Request reopened.",
       }[next],
     );
-    await fullActivity();
-    await screen.findByText("Fictional new narrative", {
+    const dialog = await fullActivity();
+    await within(dialog).findByText("Fictional new narrative", {
       selector: ".activity-narrative",
     });
-    expect(screen.getByText("Prior resolution")).toBeInTheDocument();
+    expect(within(dialog).getByText("Prior resolution")).toBeInTheDocument();
+    // F058.3: the refreshed Recent Activity preview carries the same narrative.
+    expect(
+      within(previewActivity()).getByText("Fictional new narrative", {
+        selector: ".activity-narrative",
+      }),
+    ).toBeInTheDocument();
     expect(repository.workflow).toHaveBeenCalledWith(
       id,
       {
