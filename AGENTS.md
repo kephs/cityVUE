@@ -151,7 +151,112 @@ Use `docs/features/F00X-feature-name.md` for significant feature specifications 
 
 ## Git Workflow
 
-When practical, use focused branches and logical commits, avoid unrelated cleanup, and review `git diff`. Do not push, merge, force-push, rebase shared branches, or deploy unless explicitly requested.
+Use focused branches and logical commits under the [Multi-Agent Engineering Protocol](#multi-agent-engineering-protocol), avoid unrelated cleanup, and review `git diff`. Do not push, merge, force-push, rebase shared branches, or deploy unless explicitly requested. Staging and committing also require explicit authorization under the action gates below.
+
+## Multi-Agent Engineering Protocol
+
+This protocol supplements the existing project-specific security, architecture, validation and development requirements; it does not replace or weaken them.
+
+### Source of truth
+
+- Git `main` is the authoritative integration branch.
+- Every task must identify and verify its baseline before editing: repository, branch, exact HEAD, working tree/index and ahead/behind state against the applicable tracking reference. A local tracking reference is last-known state, not proof of current remote state.
+- Never assume another agent's conversational state represents repository state.
+- Agent handoffs occur through verified Git state and documented feature records.
+
+### Isolated engineering agents
+
+- Codex, Claude Code, Gemini/Antigravity, GitHub Copilot and any other coding agent must use its own branch/worktree for independent feature work.
+- Agents must not edit another agent's worktree.
+- Parallel agents must have non-overlapping authorized scope unless an explicit coordination plan says otherwise.
+- If another active agent has overlapping changes, STOP and report the conflict.
+
+### Accepted UI Baseline
+
+Any screen, component or layout that has passed manual UAT is an **Accepted UI Baseline**. The **Service Request List** and **Service Request Workspace** at checkpoint `6732837d86dd5a03a3e7604d869bd156fd010fa5` are Accepted UI Baselines.
+
+- Accepted UI is immutable unless the current feature explicitly authorizes changing a named area.
+- Do not opportunistically redesign, reorganize, rename, restyle, reformat or “improve” accepted UI.
+- Preserve accepted responsive behavior, light/dark behavior, typography, iconography, terminology, navigation and accessibility behavior unless explicitly in scope.
+- If a feature appears to require changing another accepted UI area, STOP and request approval.
+- A bug may be diagnosed without authorization to redesign the surrounding surface.
+
+### Scope discipline
+
+- Make the smallest coherent change that satisfies the approved requirement and preserve behavior outside authorized scope.
+- Do not perform unrelated cleanup or refactoring during feature work.
+- Diagnose adjacent defects and report them separately instead of silently expanding scope.
+- For presentation-only tasks, do not modify backend, API, security or database behavior unless investigation proves it necessary; STOP for approval before implementing such changes.
+
+### Security and authorization gates
+
+Explicit approval is required before implementing:
+
+- New or changed authorization semantics.
+- New permission keys or grants.
+- Identity or authentication architecture changes.
+- Schema migrations.
+- Destructive database operations.
+- New dependencies with security or architecture impact.
+- Cloud, infrastructure or provisioning changes.
+- Production or live configuration changes.
+
+Preserve fail-closed behavior. Never add a development or authentication bypass merely to make UAT or testing easier.
+
+### Database and live-environment safety
+
+- Do not point automated integration tests at a development or production database merely because a dedicated test database is unavailable.
+- Never invent or copy database credentials or `.env` secrets merely to satisfy validation.
+- Prefer synthetic, disposable test data.
+- Do not mutate live requests or databases merely for automated or visual UAT unless explicitly authorized.
+- Report skipped or unavailable suites as skipped/not executed, never passed.
+
+### Validation integrity
+
+- Report exact test counts and invocation outcomes; distinguish clean full-suite runs from focused reruns.
+- Preserve failures, timeouts, retries, flakes and skipped tests honestly.
+- A successful isolated rerun is supplemental evidence; it does not rewrite a failed full-suite invocation.
+- Do not double-count focused or responsive reruns in repository-wide distinct totals.
+- Do not weaken assertions, increase timeouts, disable tests or change expected behavior solely to obtain a pass without explicit approval.
+- Do not claim WCAG certification from accessibility-oriented checks.
+
+### Git/action gates
+
+Default state after implementation and validation: **STOP BEFORE STAGING.**
+
+Staging, committing, pushing, deployment, database migration and provisioning/cloud mutation each require explicit authorization. Approval for one action does not authorize the others. Never force-push unless explicitly directed under a reviewed recovery procedure.
+
+### Commit and synchronization discipline
+
+- Preserve coherent feature boundaries.
+- Do not amend an accepted or pre-existing commit unless explicitly authorized.
+- Before synchronization, verify parent, file allocation, clean index/tree and ahead/behind state.
+- Prefer fast-forward integration when the accepted feature branch is a direct descendant of `main`.
+- Verify local HEAD and `origin/main` after push.
+- Temporary worktree and UAT artifacts must not enter feature commits.
+
+### Manual UAT
+
+- When manual UAT is required, automated validation does not substitute for it.
+- STOP after producing the requested UAT evidence.
+- Do not stage or commit while awaiting manual acceptance unless explicitly instructed.
+- After UAT passes, freeze the accepted state before integration; acceptance does not independently authorize staging, committing or integration.
+
+### Stop conditions
+
+STOP and report rather than improvise when:
+
+- A migration appears necessary but was not authorized.
+- Security or authorization semantics are ambiguous.
+- Implementation requires altering a frozen UI outside scope.
+- Another agent has overlapping active work.
+- Requested validation would require unsafe/live credentials or mutations.
+- Repository state differs materially from the supplied baseline.
+- Completing the task would require weakening an established protection.
+
+### Agent-neutral rule
+
+These rules apply equally to Codex, Claude Code, Gemini/Antigravity, GitHub Copilot and future engineering agents. No agent receives authority merely because it can technically perform an operation.
 
 ## Completion Report
 
