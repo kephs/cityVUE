@@ -3,6 +3,7 @@ import SiteHeader from "./SiteHeader.jsx";
 import { useLocation } from "react-router-dom";
 import { HomeHeader, HomeFooter } from "../../pages/home/HomeShell.jsx";
 import { HomePresentationProvider } from "../../pages/home/HomePresentationContext.jsx";
+import PublishedHomePresentationProvider from "../../pages/home/PublishedHomePresentationProvider.jsx";
 
 export default function AppLayout({ children, homepagePresentation }) {
   const location = useLocation();
@@ -24,6 +25,8 @@ export default function AppLayout({ children, homepagePresentation }) {
     </div>
   );
   return location.pathname === "/"
-    ? <HomePresentationProvider value={homepagePresentation}>{shell}</HomePresentationProvider>
+    ? homepagePresentation === undefined
+      ? <PublishedHomePresentationProvider>{shell}</PublishedHomePresentationProvider>
+      : <HomePresentationProvider value={homepagePresentation}>{shell}</HomePresentationProvider>
     : shell;
 }

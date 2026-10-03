@@ -777,6 +777,165 @@ test(
           );
         },
       );
+      await t.test(
+        'Slice 2: unpublished drafts and latest revisions are never public',
+        async () => {
+          assert.equal(await repository.getPublished(org), null);
+          assert.equal(
+            await repository.getPublished(other.access.organizationId),
+            null,
+          );
+          await assert.rejects(
+            () => repository.getPublished(randomUUID()),
+            /Not Found/,
+          );
+        },
+      );
+      // Test-only publication setup in this unique disposable schema. No runtime
+      // publisher, session replication bypass or migration changes are introduced.
+      async function publishFixture(revisionId: string) {
+        await database.transaction().execute(async (trx) => {
+          await sql`alter table organization_resident_experience disable trigger resident_resource_audited`.execute(
+            trx,
+          );
+          await trx
+            .updateTable('organization_resident_experience')
+            .set({
+              published_revision_id: revisionId,
+              revision: sql`revision + 1`,
+            })
+            .where('organization_id', '=', org)
+            .execute();
+          await sql`alter table organization_resident_experience enable trigger resident_resource_audited`.execute(
+            trx,
+          );
+        });
+      }
+      await t.test(
+        'Slice 2: published snapshot stays separate from newer current draft and other tenants',
+        async () => {
+          await publishFixture(savedId);
+          assert.deepEqual(await repository.getPublished(org), phoneFixture());
+          assert.equal(
+            await repository.getPublished(other.access.organizationId),
+            null,
+          );
+          const resource = await repository.getResource(org);
+          assert.notEqual(resource?.draft_revision_id, savedId);
+          assert.ok(resource);
+          await assert.rejects(
+            () =>
+              database
+                .updateTable('organization_resident_experience')
+                .set({
+                  published_revision_id: savedId,
+                  revision: 2,
+                })
+                .where('organization_id', '=', other.access.organizationId)
+                .execute(),
+            { code: '23503' },
+          );
+          await assert.rejects(
+            () =>
+              database
+                .updateTable('organization_resident_experience')
+                .set({
+                  published_revision_id: resource.draft_revision_id,
+                  revision: resource.revision + 1,
+                })
+                .where('organization_id', '=', org)
+                .execute(),
+            /publication is not implemented/,
+          );
+        },
+      );
+      await t.test(
+        'Slice 2: read pins one published snapshot while a later fixture publication commits',
+        async () => {
+          const resource = await repository.getResource(org);
+          assert.ok(resource?.draft_revision_id);
+          const original = repository.loadRevision.bind(repository);
+          await sql`alter table organization_resident_experience disable trigger resident_resource_audited`.execute(
+            database,
+          );
+          repository.loadRevision = async (trx, organizationId, revisionId) => {
+            await database
+              .updateTable('organization_resident_experience')
+              .set({
+                published_revision_id: resource.draft_revision_id,
+                revision: sql`revision + 1`,
+              })
+              .where('organization_id', '=', org)
+              .execute();
+            return original(trx, organizationId, revisionId);
+          };
+          try {
+            assert.deepEqual(
+              await repository.getPublished(org),
+              phoneFixture(),
+            );
+          } finally {
+            repository.loadRevision = original;
+            await sql`alter table organization_resident_experience enable trigger resident_resource_audited`.execute(
+              database,
+            );
+          }
+          assert.notDeepEqual(
+            await repository.getPublished(org),
+            phoneFixture(),
+          );
+          await publishFixture(savedId);
+        },
+      );
+      for (const assetKey of ['unknown', null]) {
+        await t.test(
+          `Slice 2: malformed stored publication asset ${assetKey ?? 'missing'} fails closed`,
+          async () => {
+            const presentation = structuredClone(phoneFixture().presentation);
+            if (assetKey === null)
+              Reflect.deleteProperty(presentation.hero, 'assetKey');
+            else presentation.hero.assetKey = assetKey;
+            async function setPresentation(value: typeof presentation) {
+              await database.transaction().execute(async (trx) => {
+                await sql`alter table resident_experience_revision disable trigger resident_revision_immutable`.execute(
+                  trx,
+                );
+                await sql`update resident_experience_revision set presentation = ${JSON.stringify(value)}::jsonb where organization_id = ${org} and id = ${savedId}`.execute(
+                  trx,
+                );
+                await sql`alter table resident_experience_revision enable trigger resident_revision_immutable`.execute(
+                  trx,
+                );
+              });
+            }
+            try {
+              await setPresentation(presentation);
+              await assert.rejects(
+                () => repository.getPublished(org),
+                /Invalid resident/,
+              );
+            } finally {
+              await setPresentation(phoneFixture().presentation);
+            }
+          },
+        );
+      }
+      await t.test(
+        'Slice 2: inactive Organization cannot disclose a published snapshot',
+        async () => {
+          await database
+            .updateTable('organization')
+            .set({ status: 'inactive' })
+            .where('id', '=', org)
+            .execute();
+          await assert.rejects(() => repository.getPublished(org), /Not Found/);
+          await database
+            .updateTable('organization')
+            .set({ status: 'active' })
+            .where('id', '=', org)
+            .execute();
+        },
+      );
     } finally {
       await db?.destroy();
       if (schemaCreated)

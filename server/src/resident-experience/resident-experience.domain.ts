@@ -70,7 +70,8 @@ export interface ResidentAction {
   iconKey: string;
   title: string;
   description: string;
-  // Phone labels are constructed from this number-free label plus the referenced displayValue.
+  // Phone labels prefix the referenced displayValue; exact '{phone}' means contact-only.
+  // Both forms remain number-free in storage; the validated contact owns the number.
   ctaLabel: string;
   actionType: 'internal' | 'external' | 'phone';
   target: string | null;

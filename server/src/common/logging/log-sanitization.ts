@@ -3,6 +3,7 @@ import type { Request } from 'express';
 /** Operational logs are an allowlist, not a dump of application objects. */
 const messages = new Set([
   'Application event',
+  'Resident experience unavailable',
   'CityVUE API started',
   'API startup failed',
   'request completed',

@@ -94,7 +94,7 @@ Accepted operational work continued past this table through F045–F051, F052–
 
 Other historical specifications remain in this directory. New features should link applicable prior evidence rather than copy every historical requirement into a new prompt.
 
-- [F059.2 — Tenant-configurable resident experience](F059-2-tenant-resident-experience.md): Slice 1 backend persistence/validation foundation accepted after architecture/security review and dedicated PostgreSQL validation; local commit authorized. No public API, UI, publication or live/development migration application. Slice 2 remains unstarted.
+- [F059.2 — Tenant-configurable resident experience](F059-2-tenant-resident-experience.md): Slice 1 accepted and pushed; Slice 2 implements the published-only public read and safe presentation-provider integration. Architecture/security review and manual visual UAT passed; one local Slice 2 commit is approved. Historical full-suite failures remain recorded; the automated visual matrix was not executed because browser tooling was unavailable. Homepage design and F019 remain frozen. Publication/admin workflows and production tenant resolution remain deferred.
 
 - [F055 — Admin Participation Area Management](F055-admin-participation-area-management.md): implemented and validated locally; see the [validation record](F055-implementation-report.md). No push or deployment.
 

@@ -19,6 +19,7 @@ import { AlertsModule } from './alerts/alerts.module.js';
 import { AiModule } from './ai/ai.module.js';
 import { GeospatialModule } from './geospatial/geospatial.module.js';
 import { AdminModule } from './admin/admin.module.js';
+import { ResidentExperienceModule } from './resident-experience/resident-experience.module.js';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { AdminModule } from './admin/admin.module.js';
     HealthModule,
     CatalogModule,
     AlertsModule,
+    ResidentExperienceModule,
     LocationEligibilityModule,
     ServiceRequestModule,
   ],

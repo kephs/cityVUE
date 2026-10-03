@@ -1,5 +1,10 @@
 # F059.2 — Tenant-configurable resident experience
 
+**Current work: Slice 2 public read and frozen homepage integration.** Slice 1
+was accepted, committed and pushed as `746a4f26a8d61fa2a1b34246dce578d3154267e1`.
+The separately authorized Slice 2 scope and validation record follow the retained
+Slice 1 history below. No Slice 2 staging, commit, push or deployment is authorized.
+
 ## Slice 1 scope and baseline
 
 Backend/data foundation accepted after architecture/security review and dedicated
@@ -404,3 +409,355 @@ STOP after the local commit and Git-state report. No push, deployment,
 live/development migration application or Slice 2 is authorized. No public/admin
 controllers, homepage integration, preview/publish UI, Alerts administration,
 tenant domain resolver or uploads were added.
+
+## Slice 2 — Published-only public read and homepage integration
+
+Baseline verified before editing: this worktree, `codex/f059-tenant-config`, HEAD
+`746a4f26a8d61fa2a1b34246dce578d3154267e1`, clean index/tree and an actual
+`git ls-remote` match to `origin/codex/f059-tenant-config`. AGENTS.md and the
+execution protocol were read. Frozen homepage reference:
+`b1d0c4dff912501b0b546e1675d440ce863cd85f`.
+
+### Implemented read contract
+
+`GET /api/v1/resident-experience` is anonymous, read-only and initially
+`Cache-Control: no-store`. All query parameters and nonempty GET bodies are
+rejected with 400. The module registers only the public GET controller/read
+service and an internal repository; it does not register the draft-write service
+or any write, preview, history, approval or publication route. Existing global
+throttling, validation, security headers, logging and error sanitation apply.
+
+Organization resolution reuses `catalog.developmentOrganizationId`, the existing
+server-owned anonymous catalog/Alerts convention. Host, X-Forwarded-Host, custom
+browser headers, body and query values never choose Organization. Production
+hostname/domain tenant resolution remains a separate deployment architecture
+requirement; this slice does not implement or claim it.
+
+The repository starts a read-only REPEATABLE READ transaction, selects only the
+published pointer for the active Organization resource, and loads that immutable
+revision and its Organization/revision-scoped children in the same transaction.
+It never selects the draft pointer for this path, chooses a latest revision,
+mixes revision children or substitutes another tenant. An inactive/missing
+Organization is 404. No published pointer returns an explicit null configuration.
+Invalid stored content or persistence failures produce sanitized 503 responses;
+only the fixed operational message `Resident experience unavailable` is logged.
+No full documents, contact history, raw errors or SQL are logged.
+
+The versioned DTO is:
+
+```text
+{ schemaVersion: 1, configuration: null | {
+  presentation: { branding, metadata, navigation, hero,
+                  actionsTitle, benefitsLabel, footer },
+  actions: [{ id, enabled: true, order, iconKey, title, description,
+              ctaLabel, actionType, target, tone }],
+  benefits: [{ id, enabled: true, order, iconKey, title, description }]
+} }
+```
+
+Presentation carries the validated public text, structured headline/tagline,
+navigation/footer links and packaged asset/theme keys from Slice 1. Actions and
+benefits are deterministically ordered and disabled items omitted. Phone CTA
+labels combine the number-free action label with the referenced contact's display
+number; their normalized target comes from that same validated contact. The frozen
+renderer constructs `tel:` from this target. Contact records, guidance/history,
+Organization/revision/actor IDs, draft pointers, events, approval state and internal
+debug/correlation fields are absent. There is no publication token or browser
+cache because it is unnecessary for this no-store read.
+
+### Frontend and fallback policy
+
+The dedicated repository calls only `/resident-experience` in existing API mode,
+without authentication or Organization selectors. Existing legacy mode uses the
+same safe generic presentation without making a configuration request. The adapter
+validates the complete bounded DTO before producing one complete homepage input;
+there is no merge of partial configuration with defaults. Empty published action
+collections remain empty. Malformed responses fail back to safe generic content.
+
+The separate safe public fallback keeps packaged Reqro visuals, generic metadata,
+hero/benefits/footer and only Report a Concern to `/report`. It contains no phone
+actions, emergency numbers or tenant emergency guidance. The original three-action
+configuration remains a code-owned reference/template, never the automatic public
+fallback. Both the context default and runtime loader start safely, so initial
+load, network delay and errors cannot flash unverified emergency contacts.
+
+`AppLayout` mounts one loader above the existing `HomePresentationProvider` on the
+homepage. The header, hero, actions, benefits, footer and metadata consume the same
+atomic provider value. Requests are aborted and old completions suppressed on
+unmount, account/login/logout changes and API-source changes. Prior-context content
+is removed during render before the next effect. No tenant configuration is stored
+in local/session storage or mutable process-wide globals. Explicit code-owned
+presentation injection remains available for reference tests.
+
+The adapter uses role-specific packaged asset mappings; unknown/wrong-role keys
+select only the generic asset for that role. Missing required fields reject the
+whole DTO. Unknown theme keys map to Reqro. Icon keys, semantic tones and internal
+destinations have separate closed allowlists. CSS, arbitrary paths, styles,
+dimensions and staff route destinations are not accepted from the DTO. Staff entry
+stays code-owned. Frozen rendering components and `home.css` are unchanged.
+
+F019 remains independent and unchanged above the hero: no alteration to polling,
+eligibility, ordering, empty-space behavior or storage. No Alerts administration.
+
+### Validation and review status
+
+Focused backend units: **117 passed / 0 failed / 0 skipped**. Public API E2E:
+**12 passed / 0 failed / 0 skipped**. Dedicated PostgreSQL suite: **26 passed /
+0 failed / 0 skipped**, including its parent case (the accepted 20 plus six Slice 2
+cases). The exact approved test database/user were verified before execution;
+only TEST_DATABASE_URL was used and its value was not printed. Fixtures live in
+unique disposable schemas which are removed afterward.
+
+Test-only fixture SQL temporarily disables named triggers only within its own
+disposable schema to seed publication/corruption states, then restores them.
+Composite ownership checks remain active during publication setup, and tests
+confirm the runtime publication guard still rejects changes afterward. No runtime
+backdoor, migration change, new permission or grant exists. PostgreSQL tests prove
+unpublished/latest drafts stay private, a differing published snapshot is returned,
+other Organizations remain isolated, concurrent publication changes cannot tear a
+read snapshot, malformed/missing assets fail closed, and inactive Organizations
+cannot disclose publications. Unit/API tests also cover invalid destinations,
+unknown themes/role substitution, missing contacts, phone mismatch, projection
+privacy, unsupported selectors and absence of anonymous mutations.
+
+Initial test compilation failed on a deliberately corrupted fixture update because
+the accepted immutable column type correctly forbids UPDATE. The test was corrected
+to controlled SQL in the disposable schema; runtime types and protections were
+not weakened. The later compilation and focused suites passed.
+
+Frontend dependencies were installed from the unchanged lockfile with scripts
+disabled. The initial sandboxed install failed with registry EACCES errors; the
+approved retry succeeded. npm reported six high-severity advisories in the existing
+lockfile; no dependency upgrade or audit fix was performed.
+
+The first full API E2E invocation found an integration defect: the new module
+factory eagerly accessed the database client during initialization, violating the
+existing AI and geospatial test harnesses' no-database-access boundary. That run
+had 47 tests: 45 passed / 2 failed (their nested cases did not execute). The
+repository now accepts a lazy client supplier; its module resolves the client only
+when a repository operation runs. Existing tests and guards were not weakened.
+The complete E2E rerun passed all 60 tests, including the restored nested cases.
+
+| Invocation                                                            | Result                                                                      |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Final focused resident-experience units                               | 117 passed, 0 failed/skipped/cancelled; exit 0                              |
+| Full backend unit invocation                                          | 443 total: 441 passed, 2 failed, 0 skipped/cancelled; exit 1                |
+| Supplemental isolated rerun of both failing startup names             | 2 passed, 0 failed/skipped/cancelled; exit 0                                |
+| Focused public API E2E                                                | 12 passed, 0 failed/skipped/cancelled; exit 0                               |
+| First full E2E invocation                                             | 45 passed, 2 failed, 0 skipped/cancelled; exit 1                            |
+| Final full E2E invocation                                             | 60 passed, 0 failed/skipped/cancelled; exit 0                               |
+| Full PostgreSQL suite                                                 | 604 passed, 0 failed/skipped/cancelled; exit 0                              |
+| Post-lazy-client focused PostgreSQL rerun                             | 26 passed, 0 failed/skipped/cancelled; exit 0                               |
+| Shared suite                                                          | 64 passed, 0 failed/skipped/cancelled; exit 0                               |
+| First focused React invocation                                        | 43 passed across 4 files, 2 worker-startup errors; exit 1                   |
+| Unchanged focused React rerun outside sandbox                         | 82 passed across 6 files; exit 0                                            |
+| Final adapter/provider focused React rerun                            | 82 passed across 6 files; exit 0                                            |
+| Full React suite                                                      | 849 passed, 3 failed across 58 files (852 tests); exit 1                    |
+| Supplemental isolated React timeout rerun                             | 2 passed, 1 failed, 30 skipped by name selection; exit 1                    |
+| Final React production build                                          | Passed, exit 0; large-chunk warning                                         |
+| Whole-server ESLint after ten new-code findings were corrected        | Passed, exit 0                                                              |
+| Post-lazy-client compilation/typecheck/build and affected-file ESLint | Passed, exit 0                                                              |
+| Whole-server Prettier                                                 | Failed, exit 1: 338 unchanged files flagged; no changed server file flagged |
+| Changed backend/new frontend/feature-record Prettier                  | Passed after one test-file formatting correction, exit 0                    |
+| Git whitespace and changed-file private-value/artifact checks         | Passed, exit 0                                                              |
+
+The two full-unit failures are the unchanged development compiler subprocess's
+60-second ETIMEDOUT and the logging startup subprocess returning null under its
+10-second limit. Both passed on the isolated serial rerun at their original
+limits (approximately 35.0 and 9.1 seconds). This is supplemental evidence, not
+a clean 443-test invocation. The first React run failed to start workers for
+HomePage and ResidentExperienceAdapter; the same six files passed outside the
+sandbox without timeout/assertion changes. Focused and repeated counts are
+subsets, never added to full-suite totals. No aggregate all-green claim is made.
+
+The full React failures were the unchanged IssueCreation External Redirect and
+changing Availability tests, plus ReportIssuePage Category filtering, each at the
+existing 5-second limit. The isolated rerun passed Availability and Category
+filtering; External Redirect timed out again. Its timeout is also recorded in the
+accepted F059.1 history. These unrelated tests/components were not changed, and
+the full-suite failure remains recorded. No assertion or timeout was weakened.
+The final six-file focused rerun passed 82 tests after the adapter review edits.
+The final React production build passed with a large-chunk warning. No standalone
+frontend lint script exists; no frontend lint pass is claimed. The original
+AppLayout/context formatting is preserved around the narrow integration edits.
+
+The browser tool currently reports no browser available. The nine-width visual
+matrix (360/480/720/900/1200/1366/1440/1536/1920, light/dark) is therefore unverified,
+not passed. The explicit publication fixture uses `Call 240-314-8567` under the
+accepted number-free-label/contact derivation contract; the frozen reference's
+water CTA is just the number. This content difference does not change CSS/layout.
+
+Commands use the bundled Node executable and existing package-script entry points.
+Backend commands, from `server/`: `tsc -p tsconfig.test.json`,
+`tsc -p tsconfig.json --noEmit`, `tsc -p tsconfig.build.json`, `eslint .`, and the
+package's Prettier glob check. Compiled tests use `node --test` from each
+`server/dist-test/test/{unit,database}` directory and
+`node --test --test-concurrency=1` from `server/dist-test/test/e2e`.
+Focused commands select the resident-experience files; the supplemental unit
+invocation uses `--test-concurrency=1` and the unchanged name pattern
+`configured development compiler|migration, seed and API startup`.
+Frontend: `node node_modules/vitest/vitest.mjs run --config vitest.config.mjs
+--maxWorkers=1` (six named files for the focused invocation, no file selectors
+for the full suite), and `node node_modules/vite/bin/vite.js build react
+--outDir ../dist-react --emptyOutDir`. Shared tests use the root package's eight
+explicit test files and its module-warning flag. No new validation command was
+added to the manifests.
+
+Ignored evidence logs are under `.local-uat/f059-2-s2-*.log`, including
+`focused-unit`, `focused-unit-final`, `focused-e2e`, `focused-db`,
+`focused-db-final`, `full-unit`, `unit-timeout-rerun`, `full-e2e`,
+`full-e2e-final`, `full-db`, `shared`, `focused-react`, `focused-react-rerun`,
+`focused-react-final`, `full-react`, `react-timeout-rerun`, `react-build`,
+`react-build-final`, `lint`, `lint-final`, and `format-full`.
+
+### Deferred and stop gate
+
+Admin editor, draft/preview/history UI, approval/publication workflows, production
+hostname resolution, uploads, arbitrary remote assets, permissions/grants and
+Slice 3 remain unimplemented. Slice 1 publication-pointer protections stay intact.
+STOP FOR ARCHITECTURE / SECURITY / MANUAL HOMEPAGE REVIEW after validation. No
+staging, commit, push or deployment is authorized.
+
+### Manual-preview correction: explicit Reqro publication fixture
+
+The manual preview showed the safe one-action fallback. The normal frontend
+defaults to legacy mode, and the public loader intentionally returns the safe
+fallback in that mode. The earlier three-action test fixture was not connected
+to an executable preview API. The user's specific preview URL/launch command was
+not supplied, so its exact runtime mode could not be independently established.
+Do not fix this by turning emergency contacts into automatic defaults.
+
+An explicit local harness now serves the approved Reqro publication through the
+ordinary API loader: `node react/test/preview-resident-experience.mjs`, after
+`npm --prefix server run test:compile`. It binds only `127.0.0.1:5173`, uses no
+environment files or database, and uses the real compiled server validator/DTO
+projection. Startup asserts that the projected snapshot equals the expected
+public fixture. It serves only the fixture GET and an empty Alerts result; other
+API operations return 404. This is a visual test harness, not a runtime tenant
+resolver, publication workflow, live database seed, or production fallback.
+Normal application startup and production builds do not import it.
+
+The prior water-CTA difference is corrected and supersedes the earlier recorded
+exception. The exact stored phone label `{phone}` now means display the validated
+contact number alone. Other phone labels retain prefix-plus-contact behavior.
+This explicit whole-label marker is number-free/nonempty and requires no schema
+or validation relaxation. It does not interpolate arbitrary templates. Phone
+display and target still derive from the same validated contact. The approved
+Reqro fixture now reproduces `Report Issue`, `Call 911`, and `240-314-8567` exactly.
+
+The fixture's complete presentation is compared against the frozen reference,
+with only invisible normalized telephone targets/explicit highlight booleans.
+Added rendering checks cover the delayed safe-to-three-action transition and
+exact CTA links, plus explicit no-publication rendering. Existing checks cover
+failure, empty/disabled actions, atomic metadata/content, stale responses and
+logout/unmount protection. The safe fallback and runtime loader are unchanged;
+the fallback contains no unverified tenant phone actions.
+
+Correction validation: **118 focused backend units passed**, **12 public API E2E
+tests passed**, **84 focused React tests passed across six files**; test compilation,
+backend typecheck/build and React production build passed (existing chunk warning).
+Affected-file lint passed after removing one redundant optional chain in the new
+test; its first invocation reported that error. The local preview homepage and public fixture
+API both returned HTTP 200; the API returned `Cache-Control: no-store` and all
+three expected actions/labels. Frozen CSS/rendering source comparison and
+`git diff --check` passed. No database operation was performed for this correction.
+The earlier full-suite failures remain recorded above and were not overwritten
+by these focused results. One initial formatting command used the wrong working
+directory and failed module resolution; the corrected command passed.
+
+Browser inventory was empty and opening the running preview returned "No browser
+is available". **1440 light/dark and 360 light/dark remain visually unverified**;
+source/DTO/rendering tests do not replace screenshot comparison or manual UAT.
+No layout/CSS changes were needed or made. STOP FOR MANUAL VISUAL UAT. Nothing is
+staged, committed, pushed or deployed.
+
+### Final Slice 2 gate closure
+
+The user explicitly reported **manual visual UAT PASSED** on the corrected
+published Reqro preview. This supersedes the earlier pending-manual-UAT status,
+without converting earlier automated browser limitations into passes. On this
+closure pass the browser inventory still returned no available browsers. The
+automated nine-width, two-theme matrix remains unavailable; the user's manual
+UAT is the accepted visual evidence. No further frontend/layout/CSS changes were
+made. Frozen source comparison still matches
+`b1d0c4dff912501b0b546e1675d440ce863cd85f`; approved headline/card/benefits/footer
+structure, proportions and responsive rules remain intact. No new claim of
+automated overflow or screenshot testing is made.
+
+Baseline: `codex/f059-tenant-config`, HEAD
+`746a4f26a8d61fa2a1b34246dce578d3154267e1`, empty index, intended uncommitted
+Slice 2 files only. No Slice 3 implementation, migration, permission grant,
+publication command or admin controller was found.
+
+**Logging disposition: retain the one-line literal allowlist addition.**
+`Resident experience unavailable` preserves a useful sanitized operational
+diagnostic; without it the existing logger would replace that message with
+`Application event`. The shared allowlist recognizes only that exact string,
+not prefixes, interpolation, raw errors or arbitrary context fields. This
+technically makes the fixed literal available to all logger callers, but changes
+no unrelated route behavior, serializer, log level, field retention or HTTP
+logging policy. The public service passes only that fixed string on failure.
+HTTP logs retain existing safe request IDs, route templates, timing/status and
+error classifications; no presentation, contacts, phone numbers, URLs, tenant
+IDs, actors, authorization headers, bodies, drafts, error messages or stacks
+are admitted by this change. New focused unit coverage checks exact-message
+matching and direct/child payload exclusion. Public E2E now captures the real
+operational logger and verifies success, selector/body rejection and service
+failure do not log publication content or injected private sentinels. Existing
+global logging tests remain intact.
+
+**Endpoint review:** the module registers only the public GET controller and
+read service/repository. No other controller exposes resident-experience writes.
+Only the server-owned development Organization configuration participates in
+resolution. Query parameters are rejected, browser headers cannot select tenant,
+and missing/inactive Organizations fail safely. The repository reads the published
+pointer in one Organization-scoped snapshot, without draft/latest substitution.
+The DTO excludes actor/persistence IDs and draft/audit/history/admin metadata;
+successful reads remain no-store. Framework-provided HEAD handling is read-only;
+no separate HEAD or mutation handler is registered.
+
+One closure defect was found and fixed: key-count body rejection allowed empty
+JSON containers or non-JSON request bytes to evade rejection. The GET controller
+now rejects parsed bodies or indicated body framing (positive Content-Length or
+Transfer-Encoding), including `{}`, `[]` and text. New E2E coverage verifies 400
+before the repository is read. This changes only request validation; persistence
+and published projection are unchanged, so no database work was needed.
+
+**Frontend review:** initial/loading/error/malformed/no-publication states use
+generic Reqro and only the internal Report action, with neither phone number nor
+emergency guidance. The provider clears prior-context content during render,
+aborts on cleanup and suppresses stale completions. One loader above the existing
+provider supplies one complete atomic value; sections do not fetch independently,
+and no tenant presentation is stored in browser storage or mutable globals.
+Valid publication restores all three approved actions and exact labels
+`Report Issue`, `Call 911`, `240-314-8567`; empty published actions stay empty.
+Closed role-specific asset mappings prevent paths/remote URLs/role substitution;
+strict DTO fields prevent CSS/classes/styles. Unknown themes fall back to Reqro,
+with semantic action tones governed separately.
+
+Closure tests: **126/126 focused unit tests** (118 resident-experience plus 8
+logging tests), **14/14 public API E2E tests**, zero failed/skipped/cancelled,
+both commands exit 0. Test compilation, backend typecheck/build, affected-file
+ESLint/Prettier and final `git diff --check` passed. These are focused runs, not new
+full-suite passes. Previous evidence remains: final full E2E 60/60, focused
+PostgreSQL 26/26, full PostgreSQL 604/604, shared 64/64, corrected focused React
+84/84. Historical full backend units remain 441 passed/2 failed, full React
+849 passed/3 failed; supplemental reruns retain their separate outcomes above.
+Whole-server format's 338 unchanged-file findings remain recorded. No timeout
+or assertion was weakened. No database identity/credentials were changed or read
+for this closure; previous disposable validation was only `reqro_f0592_test` /
+`reqro_test_user`.
+
+Admin/editor/preview/history UI, approval/publication workflows, permission
+registration/grants, uploads, production tenant resolution and Slice 3 remain
+deferred. STOP FOR FINAL SLICE 2 HUMAN REVIEW. No staging, commit, push or deploy.
+
+### Slice 2 acceptance
+
+The user accepted Slice 2 after architecture/security review and passed manual
+visual UAT, authorizing the intended 24 files for one local commit with subject
+`feat(resident-experience): add published tenant homepage configuration`.
+The validation history above is preserved, including failed full-suite
+invocations and supplemental reruns. The automated nine-width/two-theme matrix
+was not executed because browser tooling was unavailable. Push, merge,
+deployment and Slice 3 remain unauthorized.

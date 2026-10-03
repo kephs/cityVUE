@@ -10,7 +10,36 @@ import {
 type Db = Kysely<DatabaseSchema>;
 /** Internal persistence only. Never register directly as a public/admin API provider. */
 export class ResidentExperienceRepository {
-  constructor(readonly database: Db) {}
+  constructor(private readonly client: Db | (() => Db)) {}
+
+  get database(): Db {
+    return typeof this.client === 'function' ? this.client() : this.client;
+  }
+
+  /** Anonymous reads select only the published pointer, in one coherent snapshot. */
+  async getPublished(organizationId: string): Promise<ResidentSnapshot | null> {
+    if (!requestUuid.test(organizationId)) throw new NotFoundException();
+    return this.database
+      .transaction()
+      .setIsolationLevel('repeatable read')
+      .execute(async (trx) => {
+        await sql`set transaction read only`.execute(trx);
+        const resource = await trx
+          .selectFrom('organization_resident_experience as r')
+          .innerJoin('organization as o', 'o.id', 'r.organization_id')
+          .select('r.published_revision_id')
+          .where('r.organization_id', '=', organizationId)
+          .where('o.status', '=', 'active')
+          .executeTakeFirst();
+        if (!resource) throw new NotFoundException();
+        if (!resource.published_revision_id) return null;
+        return this.loadRevision(
+          trx,
+          organizationId,
+          resource.published_revision_id,
+        );
+      });
+  }
 
   async getResource(organizationId: string, db: Db = this.database) {
     if (!requestUuid.test(organizationId)) throw new NotFoundException();

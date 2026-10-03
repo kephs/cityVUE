@@ -12,6 +12,7 @@ import {
 import {
   commandFailure,
   safeErrorContext,
+  safeLogMessage,
 } from '../../src/common/logging/log-sanitization.js';
 import { DatabaseService } from '../../src/database/database.service.js';
 import { selectRequestId } from '../../src/common/logging/request-logging.middleware.js';
@@ -40,6 +41,37 @@ function capture() {
       lines.map((line) => JSON.parse(line) as Record<string, unknown>),
   };
 }
+
+test('resident experience diagnostic allows only the exact static message and omits all content', () => {
+  const message = 'Resident experience unavailable';
+  const output = capture();
+  const payload = {
+    presentation: sentinel,
+    contacts: ['911', '240-314-8567'],
+    phone: '240-314-8567',
+    url: `https://example.org/${sentinel}`,
+    organizationId: sentinel,
+    actorId: sentinel,
+    authorization: `Bearer ${sentinel}`,
+    headers: { authorization: sentinel },
+    body: { draft: sentinel },
+    draft: sentinel,
+    err: new Error(sentinel),
+  };
+  output.logger.warn(payload, message);
+  output.logger.child(payload).warn(message);
+  output.logger.warn(`${message}: ${sentinel}`);
+  assert.equal(safeLogMessage(message), message);
+  assert.equal(safeLogMessage(`${message} %s`), 'Application event');
+  assert.equal(safeLogMessage(`${message}: ${sentinel}`), 'Application event');
+  assert.equal(output.records()[0]?.msg, message);
+  assert.equal(output.records()[1]?.msg, message);
+  assert.equal(output.records()[2]?.msg, 'Application event');
+  assert.doesNotMatch(
+    output.lines.join(''),
+    /HARMLESS_SECRET_SENTINEL|911|240-314-8567|https:|presentation|contacts|organizationId|actorId|authorization|headers|body|draft|stack/,
+  );
+});
 
 test('direct, child, nested, error, string and interpolation paths omit secret payloads', () => {
   const output = capture();

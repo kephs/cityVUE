@@ -1,12 +1,12 @@
 import { createContext, useContext } from "react";
-import { homePresentation } from "./homePresentation.js";
+import { safeHomePresentation } from "./safeHomePresentation.js";
 
-const HomePresentationContext = createContext(homePresentation);
+const HomePresentationContext = createContext(safeHomePresentation);
 
-// One presentation input for the public header, content and footer. A future
-// approved public configuration source can supply this value without changing
-// the rendering components. This is not an Organization or permission source.
-export function HomePresentationProvider({ value = homePresentation, children }) {
+// One presentation input for the public header, content and footer. The public
+// loader supplies a complete validated value without changing rendering components.
+// This is not an Organization or permission source; the default has no contacts.
+export function HomePresentationProvider({ value = safeHomePresentation, children }) {
   return <HomePresentationContext.Provider value={value}>{children}</HomePresentationContext.Provider>;
 }
 
