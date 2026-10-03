@@ -94,6 +94,8 @@ Accepted operational work continued past this table through F045–F051, F052–
 
 Other historical specifications remain in this directory. New features should link applicable prior evidence rather than copy every historical requirement into a new prompt.
 
+- [F059.2 — Tenant-configurable resident experience](F059-2-tenant-resident-experience.md): Slice 1 backend persistence/validation foundation accepted after architecture/security review and dedicated PostgreSQL validation; local commit authorized. No public API, UI, publication or live/development migration application. Slice 2 remains unstarted.
+
 - [F055 — Admin Participation Area Management](F055-admin-participation-area-management.md): implemented and validated locally; see the [validation record](F055-implementation-report.md). No push or deployment.
 
 - [Post-F055 Participation Setup UX consolidation](F055-participation-setup-refinement.md): unnumbered presentation refinement; separate F053/F055 backend contracts, no F056.

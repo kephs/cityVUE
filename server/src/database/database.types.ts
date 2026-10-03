@@ -1,6 +1,7 @@
 import type { RequestActivityType } from '../service-request/request-activity.domain.js';
 import type { ColumnType, Generated, Insertable, Selectable } from 'kysely';
 import type { AlertType, AlertSeverity } from '../alerts/alert.dto.js';
+import type { ResidentExperienceTables } from '../resident-experience/resident-experience.database.js';
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type JsonValue = ColumnType<unknown, unknown, unknown>;
@@ -446,7 +447,7 @@ export interface RequestCommunicationTable {
   delivery_state: Generated<'recorded'>;
 }
 
-export interface DatabaseSchema {
+export interface DatabaseSchema extends ResidentExperienceTables {
   organization_access_state: {
     organization_id: string;
     authorization_revision: Generated<string>;
