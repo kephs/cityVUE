@@ -1,5 +1,216 @@
 # F059.1 — Reqro homepage: approved composition implementation
 
+## Frozen Accepted Reqro Homepage UI Baseline — final manual UAT approved
+
+The product owner approved final manual visual UAT on 2026-10-02, including the
+wide desktop correction and supporting typography refinement. This approved
+homepage is the **Frozen Accepted UI Baseline**. The authorized local commit is
+`fix(home): finalize approved homepage proportions and typography`, on
+`codex/f059-home-redesign`, with parent
+`7ec4db41275771ec5595653fa71d0d670865f03d`. Before staging, the branch was
+0 ahead / 0 behind local `main` and the index was clean. The commit includes
+only `react/src/pages/home/home.css` and this report; the three intentionally
+excluded untracked assets and all local UAT tooling remain excluded.
+
+Preserve the approved wide layout, three-line desktop headline, action-card
+and benefits-band proportions, compact footer, responsive behavior, centralized
+presentation configuration, functionality and tenant configurability. Future
+visual changes require explicit product-owner authorization. No push, deployment
+or F059.2 work is authorized by this approval.
+
+### Typography values
+
+The old column below means the width-corrected implementation immediately before
+this refinement. All sizes use rem-aware bounds; the pixel examples are measured
+at 1440px with the existing 17px root size.
+
+| Element | Old size | New size | Weight old → new | 1440px size old → new |
+| --- | --- | --- | --- | --- |
+| Tagline | `clamp(1.05rem, 1.55vw, 1.45rem)` | `clamp(1.1rem, 1.7vw, 1.55rem)` | 650 → 700 | 22.32 → 24.48px |
+| Action title | `1.05rem` | `clamp(1.075rem, 1.35vw, 1.15rem)` | 750 retained | 17.85 → 19.44px |
+| Action description | `.875rem` | `clamp(.9rem, 1.12vw, .95rem)` | 400 retained | 14.875 → 16.128px |
+| Action CTA | `.925rem` | `clamp(.95rem, 1.2vw, 1rem)` | 700 → 750 | 15.725 → 17px |
+| Benefit title | `1rem` | `clamp(1.025rem, 1.3vw, 1.1rem)` | 700 → 750 | 17 → 18.7px |
+| Benefit description | `.875rem` | `clamp(.9rem, 1.12vw, .95rem)` | 400 retained | 14.875 → 16.128px |
+| Footer tagline | `.95rem` | `clamp(1rem, 1.25vw, 1.05rem)` | 600 retained | 16.15 → 17.85px |
+
+Action-description line-height increases from 1.45 to 1.5. All other line-height
+ratios remain unchanged. Below 600px the tagline changes from 1rem to 1.05rem;
+below 960px the footer tagline changes from .85rem to .9rem. Action titles retain
+their existing strong weight to avoid making them heavier than the reference.
+Action descriptions use `text-wrap: pretty`; benefit descriptions use
+`text-wrap: balance` to prevent isolated final words. These are typography-only
+enhancements with normal wrapping fallback.
+
+### Wrapping and dimensions
+
+- The headline font, emphasis and three exact lines are unchanged at all five
+  desktop targets (1200, 1366, 1440, 1536, 1920). Headline wrapping also remains
+  unchanged at 360, 480, 720 and 900.
+- Action titles and CTA labels retain their line counts. Descriptions have some
+  different word breaks; at 1536px the Report description changes from one line
+  to two. The water description remains three lines at 1200px.
+- The Responsive Services description becomes two balanced lines at 720 and
+  1536px; its existing two lines at 1200/1366/1440 are balanced to
+  `The right request` / `to the right team`. No benefit-title wrap changes.
+- Every shared-container and card width/x-position matches the pre-refinement
+  measurements. Spacing, grids, divider x-positions and icons were not edited.
+  Natural card growth is 0–7.33px at desktop targets; no fixed heights were added.
+  Desktop benefits-band growth is 0–5.65px. Desktop footer height stays 93.30px.
+- The direct reference comparison shows stronger supporting text while retaining
+  the authorized wide composition. Existing artwork/logo/icon differences from
+  the reference remain outside this typography scope.
+
+### Validation and evidence
+
+- Focused homepage/presentation/navigation/F019 React invocation: **51 passed,
+  0 failed**, four files; no skipped tests.
+- Theme-preference Node tests: **7 passed, 0 failed**, no skipped tests.
+- Production Vite build: **passed**; existing large-chunk warning and plugin
+  timing advisory remain. `git diff --check`: **passed**.
+- **18 homepage cases** (nine requested widths × both themes) and **126 synthetic
+  action-layout cases** (0–6 actions × nine widths × both themes) passed.
+- Nine-width measurements confirm preserved headline wraps, unchanged container
+  and card widths, and no copy/CTA collisions. Browser checks found no horizontal
+  overflow; 360px at 200% root text size has no container clipping. The existing
+  720×450 zoom-equivalent reflow, keyboard menu, focus/forced-colors, image-failure
+  and Report Issue routing checks passed. No telephone link was activated.
+- Full React suite was **not rerun for this typography-only task**. Earlier
+  full-suite failures and diagnostic reruns below remain part of the honest
+  historical record; focused passes do not replace them.
+
+Commands: `node node_modules/vitest/vitest.mjs run --config vitest.config.mjs
+--maxWorkers=1 react/test/HomePage.test.jsx react/test/HomePresentation.test.js
+react/test/NavigationDesign.test.jsx react/test/ResidentAlertBanner.test.jsx`;
+`node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test test/ThemePreferences.test.js`;
+`node node_modules/vite/bin/vite.js build react --outDir ../dist-react --emptyOutDir`.
+Ignored browser tooling: `.local-uat/typography-{measure,visual,audit,compare}.cjs`.
+
+New 1440px light screenshot:
+`.local-uat/typography-screenshots/home-1440-reference-height-light.png`.
+Direct reference comparison:
+`.local-uat/typography-screenshots/reference-vs-typography.png`.
+Other nine-width/theme captures are in `.local-uat/typography-screenshots/`;
+measurements and word-break changes are in `.local-uat/typography-before.json`,
+`typography-after.json`, `typography-wrap-changes.json`, and
+`typography-visual-results.json`. These remain local UAT artifacts.
+
+**Final manual visual UAT approved; stop after the authorized local commit.**
+No F059.2, configuration/content/assets, backend/auth/permissions, F019 behavior
+or frozen staff/admin surface changes. No manual setup required. The validation
+record above is preserved; final approval does not make the historical full
+React suite green. Push and deployment remain separately gated.
+
+## Width correction — preceding validation record
+
+The following records the earlier pre-approval state; final approval above
+supersedes its pending-UAT status without changing its validation results.
+
+The product owner authorized a focused width/proportion correction after the
+accepted commit `7ec4db41275771ec5595653fa71d0d670865f03d`. This correction is
+**not yet manually approved**. Work remains on `codex/f059-home-redesign` at that
+HEAD, synchronized with local `main`; only the three previously excluded assets
+were untracked at the start. They remain untouched. No staging, commit, push,
+deployment or F059.2 work is authorized for this correction.
+
+The authoritative visual reference remains
+`.local-uat/design-reference/reqro-home-approved.png`. This investigation used
+the local checkout/preview; no deployed URL or deployed bundle was supplied,
+so it does not claim to identify a production-only packaging or cache issue.
+
+### Cause and correction
+
+The homepage's own `.reqro-home-container` rule capped the header, hero,
+benefits and footer at **1280px** (`min(100% - 4rem, 1280px)`). It was not a
+Bootstrap container constraint. At 1920px this left 320px side margins. The
+hero retained a 1.12:1 grid while its headline font grew to 79.05px. The left
+column limited the heading to 649.28px despite its 14ch maximum, causing
+`A more` / `connected` / `community starts` / `with you.`. The local 1440px
+baseline already had three lines, but its shared footprint remained capped.
+
+The new shared rule is
+`width: min(100% - clamp(2rem, 4vw, 5rem), 1760px)`. Headline maximum width grows
+from 14ch to 15ch. Desktop cards have fluid horizontal padding/column gaps, and
+minimum card/benefit-row heights preserve their vertical presence as wider
+descriptions need fewer lines. These are minimums, not fixed-height clipping.
+No font, logo or icon size is reduced. Hero grid proportions, backgrounds,
+section composition, mobile/tablet overrides and all content/behavior remain
+unchanged. Only `react/src/pages/home/home.css` and this record change.
+
+Measured widths in CSS pixels, same browser and fonts:
+
+| Viewport | Previous shared container | New shared container | Previous card | New card |
+| --- | ---: | ---: | ---: | ---: |
+| 1200 | 1132 | 1152 | 516.98 | 526.42 |
+| 1366 | 1280 | 1311.36 | 584.45 | 599.25 |
+| 1440 | 1280 | 1382.39 | 583.41 | 631.70 |
+| 1536 | 1280 | 1474.55 | 582.05 | 673.81 |
+| 1920 | 1280 | 1760 | 579.72 | 806.14 |
+
+All five desktop widths now render exactly `A more connected` / `community
+starts` / `with you.`. Headline font sizes remain 53.4 / 60.787 / 64.08 /
+68.352 / 79.05px respectively. Range-based browser measurements verified line
+contents and unchanged font sizes. Shared containers align header, hero,
+benefits and footer; configuration remains the same provider/input architecture.
+
+### Correction validation and comparison
+
+- Focused React command documented below: **4 files / 51 tests passed**,
+  19.42s, exit 0; no skips or failures.
+- Theme-preference Node command documented below: **7 tests passed**,
+  no skips or failures. These are separate from the React total.
+- Full React command documented below: **819 passed / 2 failed / 821 total**,
+  54 files passed / 2 failed / 56 total, 384.26s, exit 1, no skipped tests.
+  `IssueCreation.test.jsx:132` had the previously observed 5,000ms External
+  Redirect timeout. `WorkspaceRefinement.test.jsx:1088` Recent Activity failed
+  because its timeline query returned null before `querySelectorAll`.
+  Both files and the corresponding frozen implementation are unchanged.
+  Supplemental rerun of only the exact Recent Activity test name: **1 passed /
+  40 deliberately filtered skips**, 6.10s, exit 0. The failure did not reproduce
+  in isolation; this does not erase the failed full run or prove its root cause.
+  No assertions/timeouts were weakened. Full-suite validation is **not green**.
+  Logs: `.local-uat/width-full-react.log` and `width-workspace-diagnostic.log`.
+- Production build command documented below: **passed**, exit 0. Existing
+  large-chunk and plugin timing notices remain; no dependencies changed.
+- Responsive checks: **18 homepage cases and 126 action-count cases passed**,
+  using 360/480/720/900/1200/1366/1440/1536/1920px in light and dark themes.
+  No page errors or horizontal overflow. No hero/benefits or benefits/footer
+  gap; natural scenic image ratio preserved; 0–6 actions and disabled omission
+  checked. Keyboard menu, 200% text at 360px, short-height reflow, image failure,
+  forced-colors focus and existing report-route shell restoration passed.
+- `git diff --check` passed. Configuration, JSX, assets, auth, F019, backend and
+  frozen staff/admin screens have no changes in this correction.
+
+The new 1440px light screenshot is
+`.local-uat/width-screenshots/home-1440-light.png`. A second capture at a 1440×810
+viewport enables proportional comparison with the reference:
+`home-1440-reference-height-light.png`. The side-by-side artifact is
+`.local-uat/width-screenshots/reference-vs-correction.png`, with its local HTML
+at `.local-uat/width-comparison.html`. It displays the original reference scaled
+proportionally beside the actual page capture; it is not a production asset.
+
+Remaining visible differences: the shared content now sits closer to the edges
+than the mockup's inset hero/header, as requested by the width correction; the
+cards are correspondingly wider. The established typography, natural scenic
+asset/sky fade, supplied blue/green logo with faint edge artifact, and radial
+responsive-services icon still differ from the flattened reference. These
+were not redesigned or replaced in this width-only correction. The page is
+not claimed to be pixel-identical. Normal text wrapping, viewport height and
+theme also affect its appearance.
+
+### Freeze after approval
+
+**STOP FOR MANUAL VISUAL UAT.** Once the product owner approves this correction,
+its resulting homepage becomes the new Frozen Accepted UI Baseline. Future
+features must preserve layout proportions, three-line headline wrapping at the
+desktop reference widths, navigation composition, action-card placement/sizing,
+hero composition, benefits band, footer treatment and desktop scale unless the
+product owner explicitly authorizes a homepage visual change. Tenant content
+may change through configuration; it must not silently change the accepted
+structural design. Approval itself does not authorize Git integration.
+
+## Previously accepted implementation and validation
+
 Status: **manual visual UAT approved by the product owner**. The currently
 displayed and validated F059.1 homepage is the accepted visual implementation.
 The product owner authorized staging and one local commit with subject

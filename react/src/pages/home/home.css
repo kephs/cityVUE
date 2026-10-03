@@ -11,7 +11,8 @@
   --home-warning: #ffbf00;
   color: var(--text-primary);
 }
-.reqro-home-container { width: min(100% - 4rem, 1280px); margin-inline: auto; }
+/* Shared wide footprint for the header, hero, benefits and footer. */
+.reqro-home-container { width: min(100% - clamp(2rem, 4vw, 5rem), 1760px); margin-inline: auto; }
 .reqro-home-main { display: flex; }
 .reqro-home { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .reqro-home-header { background: var(--home-blue); color: #fff; }
@@ -30,11 +31,11 @@
 .reqro-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, #f4fbff85, #f4fbff30 65%, transparent); pointer-events: none; }
 .reqro-hero-content { display: grid; grid-template-columns: 1.12fr 1fr; align-items: start; gap: clamp(2rem, 3vw, 3rem); min-height: clamp(480px, 34vw, 570px); padding-block: 2.5rem 6rem; }
 .reqro-hero-heading { padding-top: .65rem; min-width: 0; color: var(--home-navy); }
-.reqro-home-tagline { display: flex; flex-wrap: wrap; align-items: center; gap: .35em; margin: 0 0 .55rem; font-size: clamp(1.05rem, 1.55vw, 1.45rem); font-weight: 650; line-height: 1.5; }
+.reqro-home-tagline { display: flex; flex-wrap: wrap; align-items: center; gap: .35em; margin: 0 0 .55rem; font-size: clamp(1.1rem, 1.7vw, 1.55rem); font-weight: 700; line-height: 1.5; }
 .reqro-tagline-word { white-space: nowrap; }
 .reqro-home-dot { display: inline-block; font-size: 1.18em; margin-inline: .16em .3em; line-height: 1; }
 .reqro-home-dot.is-accent { color: var(--home-accent); }
-.reqro-home .reqro-hero h1 { margin: 0; font-size: clamp(2.8rem, 4.45vw, 4.65rem); line-height: 1.04; font-weight: 800; letter-spacing: -.045em; max-width: 14ch; }
+.reqro-home .reqro-hero h1 { margin: 0; font-size: clamp(2.8rem, 4.45vw, 4.65rem); line-height: 1.04; font-weight: 800; letter-spacing: -.045em; max-width: 15ch; }
 .reqro-headline-highlight { display: inline-block; color: var(--home-highlight); }
 .reqro-hero-heading h1, .reqro-action-copy, .reqro-benefits-grid article > div { min-width: 0; overflow-wrap: anywhere; }
 .reqro-hero-no-actions .reqro-hero-content { grid-template-columns: 1fr; }
@@ -43,13 +44,17 @@
 .reqro-action-stack { display: flex; flex-direction: column; gap: .8rem; }
 .reqro-action-card { display: grid; grid-template-columns: 3.75rem minmax(0, 1fr) auto; align-items: center; gap: 1rem; min-width: 0; padding: 1.25rem; border: 1px solid var(--border-default); border-radius: .8rem; background: var(--surface-card); box-shadow: 0 5px 18px #133d6612; transition: border-color 160ms, box-shadow 160ms; }
 .reqro-action-card:hover, .reqro-action-card:focus-within { border-color: var(--brand-primary); box-shadow: 0 6px 20px #133d6630; }
+@media (min-width: 1200px) {
+  .reqro-action-card { min-height: 116px; padding-inline: clamp(1.25rem, 1.6vw, 1.75rem); column-gap: clamp(1rem, 1.4vw, 1.5rem); }
+  .reqro-benefits-grid { min-height: 74px; }
+}
 .reqro-action-icon { display: grid; place-items: center; width: 3.75rem; height: 3.75rem; border-radius: 50%; background: #e9f4ff; }
 .reqro-action-icon img { width: 2.65rem; height: 2.65rem; }
 .reqro-tone-danger .reqro-action-icon { background: #fff0f2; }
 .reqro-tone-warning .reqro-action-icon { background: #e5f7fb; }
-.reqro-action-card h3 { margin: 0 0 .35rem; font-size: 1.05rem; font-weight: 750; line-height: 1.25; color: var(--text-primary); }
-.reqro-action-card p { margin: 0; font-size: .875rem; line-height: 1.45; color: var(--text-secondary); }
-.reqro-action-button { display: inline-flex; justify-content: center; align-items: center; gap: .5rem; min-height: 48px; min-width: 8.2rem; padding: .7rem .85rem; border: 2px solid transparent; border-radius: .45rem; background: var(--home-blue, var(--brand-primary)); color: #fff; font-weight: 700; font-size: .925rem; text-decoration: none; text-align: center; overflow-wrap: anywhere; }
+.reqro-action-card h3 { margin: 0 0 .35rem; font-size: clamp(1.075rem, 1.35vw, 1.15rem); font-weight: 750; line-height: 1.25; color: var(--text-primary); }
+.reqro-action-card p { margin: 0; font-size: clamp(.9rem, 1.12vw, .95rem); line-height: 1.5; text-wrap: pretty; color: var(--text-secondary); }
+.reqro-action-button { display: inline-flex; justify-content: center; align-items: center; gap: .5rem; min-height: 48px; min-width: 8.2rem; padding: .7rem .85rem; border: 2px solid transparent; border-radius: .45rem; background: var(--home-blue, var(--brand-primary)); color: #fff; font-weight: 750; font-size: clamp(.95rem, 1.2vw, 1rem); text-decoration: none; text-align: center; overflow-wrap: anywhere; }
 .reqro-action-button:hover { color: #fff; background: var(--home-blue-hover, var(--brand-primary-hover)); }
 .reqro-tone-danger .reqro-action-button { background: var(--home-danger, #c81e36); color: #fff; }
 .reqro-tone-danger .reqro-action-button:hover { background: #a8182c; }
@@ -63,11 +68,11 @@
 .reqro-benefits-grid article:last-child { padding-right: 0; }
 .reqro-benefit-icon { display: grid; place-items: center; flex-shrink: 0; width: 3.75rem; height: 3.75rem; border-radius: 50%; background: #0b58a8; }
 .reqro-benefit-icon img { width: 2.5rem; height: 2.5rem; }
-.reqro-benefits-grid h2 { margin: 0 0 .35rem; font-size: 1rem; font-weight: 700; line-height: 1.35; }
-.reqro-benefits-grid p { margin: 0; font-size: .875rem; line-height: 1.5; }
+.reqro-benefits-grid h2 { margin: 0 0 .35rem; font-size: clamp(1.025rem, 1.3vw, 1.1rem); font-weight: 750; line-height: 1.35; }
+.reqro-benefits-grid p { margin: 0; font-size: clamp(.9rem, 1.12vw, .95rem); line-height: 1.5; text-wrap: balance; }
 .reqro-home-footer { background: var(--home-footer); color: #fff; border-top: 1px solid #8cb5f4; padding-block: .65rem; }
 .reqro-footer-content { display: flex; align-items: center; gap: 2rem; }
-.reqro-home-footer p { margin: 0; border-left: 1px solid #8cb5f4; padding-left: 2rem; font-size: .95rem; font-weight: 600; }
+.reqro-home-footer p { margin: 0; border-left: 1px solid #8cb5f4; padding-left: 2rem; font-size: clamp(1rem, 1.25vw, 1.05rem); font-weight: 600; }
 .reqro-theme-toggle { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; margin-left: auto; border: 1px solid #a2c4f6; border-radius: 50%; background: transparent; color: #fff; font-size: 1.25rem; }
 .reqro-theme-toggle:hover { background: #ffffff20; }
 .reqro-footer-links { list-style: none; display: flex; flex-wrap: wrap; gap: 1rem; margin: 0; padding: 0; }
@@ -108,11 +113,11 @@
   .reqro-action-button { grid-column: auto; justify-self: stretch; }
   .reqro-footer-content { gap: 1rem; }
   .reqro-footer-wordmark { width: 128px; }
-  .reqro-home-footer p { padding-left: 1rem; font-size: .85rem; }
+  .reqro-home-footer p { padding-left: 1rem; font-size: .9rem; }
 }
 @media (max-width: 599.98px) {
   .reqro-home-container { width: calc(100% - 2rem); }
-  .reqro-home-tagline { font-size: 1rem; gap: .1em; }
+  .reqro-home-tagline { font-size: 1.05rem; gap: .1em; }
   .reqro-home-dot { margin-inline: .12em .2em; }
   .reqro-action-card { grid-template-columns: 3rem minmax(0, 1fr); padding: 1rem; gap: .75rem; }
   .reqro-action-icon { width: 3rem; height: 3rem; }
