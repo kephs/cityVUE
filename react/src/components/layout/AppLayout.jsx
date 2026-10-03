@@ -1,24 +1,29 @@
 import SiteFooter from "./SiteFooter.jsx";
 import SiteHeader from "./SiteHeader.jsx";
 import { useLocation } from "react-router-dom";
+import { HomeHeader, HomeFooter } from "../../pages/home/HomeShell.jsx";
+import { HomePresentationProvider } from "../../pages/home/HomePresentationContext.jsx";
 
-export default function AppLayout({ children }) {
+export default function AppLayout({ children, homepagePresentation }) {
   const location = useLocation();
   const mainClassName =
     location.pathname === "/"
-      ? "flex-grow-1"
+      ? "flex-grow-1 reqro-home-main"
       : `container flex-grow-1 py-4 py-md-5${location.pathname === "/staff/requests" || location.pathname.startsWith("/staff/requests/") ? " request-workspace-container" : location.pathname === "/report" ? " report-workspace-container" : ""}`;
 
-  return (
+  const shell = (
     <div className="app-shell d-flex min-vh-100 flex-column">
       <a className="skip-link" href="#main-content">
         Skip to main content
       </a>
-      <SiteHeader />
+      {location.pathname === "/" ? <HomeHeader /> : <SiteHeader />}
       <main className={mainClassName} id="main-content" tabIndex="-1">
         {children}
       </main>
-      <SiteFooter />
+      {location.pathname === "/" ? <HomeFooter /> : <SiteFooter />}
     </div>
   );
+  return location.pathname === "/"
+    ? <HomePresentationProvider value={homepagePresentation}>{shell}</HomePresentationProvider>
+    : shell;
 }

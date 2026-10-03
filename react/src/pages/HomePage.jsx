@@ -1,30 +1,19 @@
-import { useState } from "react";
-import IssueService from "../../../assets/services/IssueService.js";
-import Hero from "./home/Hero.jsx";
-import ImpactSummary from "./home/ImpactSummary.jsx";
-import QuickActions from "./home/QuickActions.jsx";
-import RecentActivity from "./home/RecentActivity.jsx";
-import "./home/home.css";
 import ResidentAlertBanner from "../alerts/ResidentAlertBanner.jsx";
+import Hero from "./home/Hero.jsx";
+import HomeBenefits from "./home/HomeBenefits.jsx";
+import { useHomePresentation } from "./home/HomePresentationContext.jsx";
+import { useHomeMetadata } from "./home/useHomeMetadata.js";
+import { themeChoice } from "./home/presentationPolicy.js";
+import "./home/home.css";
 
-export default function HomePage({ loadIssues = () => IssueService.getIssues() }) {
-    const [readState] = useState(() => {
-        try {
-            const issues = loadIssues();
-            return { issues: Array.isArray(issues) ? issues : [], error: false };
-        } catch {
-            return { issues: [], error: true };
-        }
-    });
-
-    return (
-        <div className="home-page">
-            <ResidentAlertBanner />
-            <Hero />
-            <div className="home-container home-main-content">
-                <QuickActions />
-                {readState.error ? <section className="home-data-error" role="alert" aria-labelledby="home-data-error-heading"><i className="bi bi-exclamation-circle" aria-hidden="true" /><div><h2 id="home-data-error-heading">Home issue information could not be loaded</h2><p>Refresh the page to try again. You can still report or view issues.</p></div></section> : <><ImpactSummary issues={readState.issues} /><RecentActivity issues={readState.issues} /></>}
-            </div>
-        </div>
-    );
+export default function HomePage() {
+  const presentation = useHomePresentation();
+  useHomeMetadata(presentation);
+  return (
+    <div className="home-page reqro-home" data-home-theme={themeChoice(presentation.theme)}>
+      <ResidentAlertBanner />
+      <Hero presentation={presentation} />
+      <HomeBenefits benefits={presentation.benefits} label={presentation.benefitsLabel} />
+    </div>
+  );
 }
