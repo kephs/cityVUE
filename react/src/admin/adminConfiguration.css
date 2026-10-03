@@ -1,5 +1,7 @@
 .configuration-shell {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   color: var(--bs-body-color);
   background: var(--bs-body-bg);
   overflow-wrap: anywhere;
@@ -38,9 +40,11 @@
 }
 .configuration-layout {
   display: grid;
+  flex: 1;
+  width: 100%;
   grid-template-columns: 15rem minmax(0, 1fr);
   max-width: 1440px;
-  margin: auto;
+  margin: 0 auto;
 }
 .configuration-navigation {
   padding: 1.5rem;
@@ -65,7 +69,14 @@
 .configuration-navigation .configuration-menu {
   display: none;
 }
+.configuration-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 92rem;
+}
 .configuration-main {
+  flex: 1;
   min-width: 0;
   padding: 2rem;
 }
@@ -566,12 +577,12 @@
   margin-bottom: 1.5rem;
 }
 .configuration-brand-message {
-  margin: 2.5rem 0 0;
-  padding-top: 1.5rem;
+  margin: auto clamp(1.25rem, 3vw, 3rem) 0;
+  padding: 0.875rem 0 1.25rem;
   border-top: 1px solid var(--bs-border-color);
-  color: var(--bs-body-color);
-  font-size: 1.1rem;
-  font-weight: 600;
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 .reqro-tagline-separator {
   color: var(--brand-accent);
@@ -611,6 +622,10 @@
   .configuration-layout {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
+    grid-template-rows: auto 1fr;
+  }
+  .configuration-brand-message {
+    margin-inline: 1.25rem;
   }
   .configuration-header {
     padding: 1rem 1.25rem;

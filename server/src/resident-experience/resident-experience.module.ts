@@ -3,9 +3,14 @@ import { DatabaseService } from '../database/database.service.js';
 import { ResidentExperienceRepository } from './resident-experience.repository.js';
 import { PublicResidentExperienceController } from './resident-experience.public.controller.js';
 import { PublicResidentExperienceService } from './resident-experience.public.service.js';
+import { AdminResidentExperienceService } from './resident-experience.admin.service.js';
+import { AdminResidentExperienceController } from './resident-experience.admin.controller.js';
 
 @Module({
-  controllers: [PublicResidentExperienceController],
+  controllers: [
+    PublicResidentExperienceController,
+    AdminResidentExperienceController,
+  ],
   providers: [
     {
       provide: ResidentExperienceRepository,
@@ -14,6 +19,7 @@ import { PublicResidentExperienceService } from './resident-experience.public.se
         new ResidentExperienceRepository(() => database.client),
     },
     PublicResidentExperienceService,
+    AdminResidentExperienceService,
   ],
 })
 export class ResidentExperienceModule {}

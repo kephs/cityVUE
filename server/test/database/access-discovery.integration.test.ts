@@ -518,7 +518,7 @@ test(
               await accessRead(db, actor, () =>
                 Promise.resolve(permissionCatalog.length),
               ),
-              32,
+              35,
             );
             for (const id of [foreign, randomUUID()]) {
               await assert.rejects(accessDetail(db, actor, id), {

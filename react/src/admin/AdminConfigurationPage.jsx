@@ -15,6 +15,7 @@ import {
 import ParticipationSetup from "./ParticipationSetup.jsx";
 import IssueConfiguration from "./IssueConfiguration.jsx";
 import AccessDiscovery from "./AccessDiscovery.jsx";
+import ResidentExperienceEditor from "./ResidentExperienceEditor.jsx";
 
 const sections = [
   ["", "Overview"],
@@ -23,6 +24,7 @@ const sections = [
   ["privacy", "Analytics & Privacy"],
   ["status", "Configuration Status"],
   ["access", "Access & Permissions"],
+  ["resident-experience", "Resident Experience"],
 ];
 function Values({ items }) {
   return (
@@ -166,7 +168,7 @@ export function AdminConfiguration({ client, displayName }) {
               ].map(([group, items, icon]) => (
                 <section className="configuration-nav-group" key={group}>
                   <h2>{group}</h2>
-                  {items.filter(([key]) => key !== "access" || data?.capabilities?.canReadAccess).map(([key, label]) => (
+                  {items.filter(([key]) => (key !== "access" || data?.capabilities?.canReadAccess) && (key !== "resident-experience" || !!data)).map(([key, label]) => (
                     <NavLink
                       key={key}
                       to={key ? `/admin/${key}` : "/admin"}
@@ -186,191 +188,195 @@ export function AdminConfiguration({ client, displayName }) {
             <OrganizationBrand branding={data?.branding} />
           </div>
         </aside>
-        <main
-          id="configuration-main"
-          className="configuration-main"
-          tabIndex="-1"
-        >
-          <h1 tabIndex="-1" ref={heading}>
-            {title || "Administration page not found"}
-          </h1>
-          {section !== "issues" && section !== "access" && (
-            <p>
-              {section === "participation"
-                ? "Configure optional service-participation information for new requests."
-                : "Review your Organization’s configuration."}
-            </p>
-          )}
-          {!title ? (
-            <Link to="/admin">Return to Administration</Link>
-          ) : !current ? (
-            <p role="status">Loading authorized configuration…</p>
-          ) : current.error ? (
-            <div>
-              <p role="alert">
-                {current.denied
-                  ? "Administration access is not authorized."
-                  : "Configuration could not be loaded. Please retry."}
+        <div className="configuration-content">
+          <main
+            id="configuration-main"
+            className="configuration-main"
+            tabIndex="-1"
+          >
+            <h1 tabIndex="-1" ref={heading}>
+              {title || "Administration page not found"}
+            </h1>
+            {section !== "issues" && section !== "access" && (
+              <p>
+                {section === "participation"
+                  ? "Configure optional service-participation information for new requests."
+                  : "Review your Organization’s configuration."}
               </p>
-              <button className="btn btn-primary" onClick={refresh}>
-                Retry configuration
-              </button>
-            </div>
-          ) : section === "access" ? (
-            data.capabilities?.canReadAccess ? (
-              <AccessDiscovery
-                canManage={data.capabilities?.canManageAccess}
-                client={client}
-                onDenied={() =>
-                  setState((previous) => ({
-                    ...previous,
-                    data: {
-                      ...previous.data,
-                      capabilities: {
-                        ...previous.data.capabilities,
-                        canReadAccess: false,
-                      },
-                    },
-                  }))
-                }
-              />
-            ) : (
-              <p role="alert">Access & Permissions is not authorized.</p>
-            )
-          ) : (
-            <>
-              {section !== "participation" && section !== "issues" && (
-                <button
-                  className="btn btn-outline-primary mb-4"
-                  onClick={refresh}
-                >
-                  Refresh configuration
+            )}
+            {!title ? (
+              <Link to="/admin">Return to Administration</Link>
+            ) : !current ? (
+              <p role="status">Loading authorized configuration…</p>
+            ) : current.error ? (
+              <div>
+                <p role="alert">
+                  {current.denied
+                    ? "Administration access is not authorized."
+                    : "Configuration could not be loaded. Please retry."}
+                </p>
+                <button className="btn btn-primary" onClick={refresh}>
+                  Retry configuration
                 </button>
-              )}
-              {section === "" && (
-                <>
-                  <div className="configuration-welcome">
-                    <p className="configuration-eyebrow">
-                      Your administration workspace
-                    </p>
-                    <h2>Configuration at a glance</h2>
+              </div>
+            ) : section === "resident-experience" ? (
+              <ResidentExperienceEditor client={client} />
+            ) : section === "access" ? (
+              data.capabilities?.canReadAccess ? (
+                <AccessDiscovery
+                  canManage={data.capabilities?.canManageAccess}
+                  client={client}
+                  onDenied={() =>
+                    setState((previous) => ({
+                      ...previous,
+                      data: {
+                        ...previous.data,
+                        capabilities: {
+                          ...previous.data.capabilities,
+                          canReadAccess: false,
+                        },
+                      },
+                    }))
+                  }
+                />
+              ) : (
+                <p role="alert">Access & Permissions is not authorized.</p>
+              )
+            ) : (
+              <>
+                {section !== "participation" && section !== "issues" && (
+                  <button
+                    className="btn btn-outline-primary mb-4"
+                    onClick={refresh}
+                  >
+                    Refresh configuration
+                  </button>
+                )}
+                {section === "" && (
+                  <>
+                    <div className="configuration-welcome">
+                      <p className="configuration-eyebrow">
+                        Your administration workspace
+                      </p>
+                      <h2>Configuration at a glance</h2>
+                      <p>
+                        Review your Organization’s service setup and keep intake
+                        working clearly and consistently.
+                      </p>
+                    </div>
+                    <Values
+                      items={[
+                        ["Issues configured", data.issues.total],
+                        [
+                          "Service Participation collection",
+                          data.collection.enabled ? "Enabled" : "Disabled",
+                        ],
+                        [
+                          "Active Participation Areas",
+                          data.participationAreas.active,
+                        ],
+                        [
+                          "Configuration health",
+                          data.health.some((h) => h.severity === "WARNING")
+                            ? "Review configuration warnings"
+                            : "All checks passed",
+                        ],
+                      ]}
+                    />
                     <p>
-                      Review your Organization’s service setup and keep intake
-                      working clearly and consistently.
+                      These are configuration facts, not Service Request or
+                      requester statistics.
                     </p>
-                  </div>
-                  <Values
-                    items={[
-                      ["Issues configured", data.issues.total],
-                      [
-                        "Service Participation collection",
-                        data.collection.enabled ? "Enabled" : "Disabled",
-                      ],
-                      [
-                        "Active Participation Areas",
-                        data.participationAreas.active,
-                      ],
-                      [
-                        "Configuration health",
-                        data.health.some((h) => h.severity === "WARNING")
-                          ? "Review configuration warnings"
-                          : "All checks passed",
-                      ],
-                    ]}
+                    <p>
+                      <Link to="/admin/participation">Participation Setup</Link>
+                    </p>
+                    <p>
+                      Each managed resource has its own revision. This page has no
+                      global configuration revision.
+                    </p>
+                  </>
+                )}
+                {section === "issues" && (
+                  <IssueConfiguration
+                    key={attempt}
+                    client={client}
+                    onDenied={refresh}
                   />
-                  <p>
-                    These are configuration facts, not Service Request or
-                    requester statistics.
-                  </p>
-                  <p>
-                    <Link to="/admin/participation">Participation Setup</Link>
-                  </p>
-                  <p>
-                    Each managed resource has its own revision. This page has no
-                    global configuration revision.
-                  </p>
-                </>
-              )}
-              {section === "issues" && (
-                <IssueConfiguration
-                  key={attempt}
-                  client={client}
-                  onDenied={refresh}
-                />
-              )}
-              {section === "participation" && (
-                <ParticipationSetup
-                  key={attempt}
-                  client={client}
-                  initial={data}
-                  onRefresh={refresh}
-                  onDenied={refresh}
-                />
-              )}
-              {section === "privacy" && (
-                <>
-                  <Values
-                    items={[
-                      [
-                        "Service Participation collection",
-                        data.collection.enabled ? "Enabled" : "Disabled",
-                      ],
-                      [
-                        "Privacy threshold",
-                        `${data.privacy.suppressionThreshold} requests`,
-                      ],
-                      ["Small-count suppression", "Enabled"],
-                      ["Exact suppressed counts", "Not disclosed"],
-                      ["Configuration ownership", "Deployment policy"],
-                    ]}
+                )}
+                {section === "participation" && (
+                  <ParticipationSetup
+                    key={attempt}
+                    client={client}
+                    initial={data}
+                    onRefresh={refresh}
+                    onDenied={refresh}
                   />
-                  <p>
-                    Analytics access requires separate authorization and
-                    existing PUBLIC request scope. Administration access does
-                    not grant analytics or operational access.
-                  </p>
-                  <p>
-                    The privacy threshold is deployment-owned. It has no
-                    Admin-editable resource revision and is not editable here.
-                  </p>
-                </>
-              )}
-              {section === "status" && (
-                <>
-                  <p>
-                    These checks describe configuration consistency. They do not
-                    monitor infrastructure, scan security vulnerabilities or
-                    repair configuration.
-                  </p>
-                  <ul className="configuration-cards">
-                    {data.health.map((check) => (
-                      <li key={check.resource}>
-                        <h2>{check.resource}</h2>
-                        <p
-                          className={
-                            check.severity === "WARNING"
-                              ? "configuration-warning"
-                              : ""
-                          }
-                        >
-                          <strong>{check.severity}:</strong> {check.message}
-                        </p>
-                        {check.resource === "Service Participation" && (
-                          <Link to="/admin/participation">
-                            Participation Setup
-                          </Link>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </>
-          )}
+                )}
+                {section === "privacy" && (
+                  <>
+                    <Values
+                      items={[
+                        [
+                          "Service Participation collection",
+                          data.collection.enabled ? "Enabled" : "Disabled",
+                        ],
+                        [
+                          "Privacy threshold",
+                          `${data.privacy.suppressionThreshold} requests`,
+                        ],
+                        ["Small-count suppression", "Enabled"],
+                        ["Exact suppressed counts", "Not disclosed"],
+                        ["Configuration ownership", "Deployment policy"],
+                      ]}
+                    />
+                    <p>
+                      Analytics access requires separate authorization and
+                      existing PUBLIC request scope. Administration access does
+                      not grant analytics or operational access.
+                    </p>
+                    <p>
+                      The privacy threshold is deployment-owned. It has no
+                      Admin-editable resource revision and is not editable here.
+                    </p>
+                  </>
+                )}
+                {section === "status" && (
+                  <>
+                    <p>
+                      These checks describe configuration consistency. They do not
+                      monitor infrastructure, scan security vulnerabilities or
+                      repair configuration.
+                    </p>
+                    <ul className="configuration-cards">
+                      {data.health.map((check) => (
+                        <li key={check.resource}>
+                          <h2>{check.resource}</h2>
+                          <p
+                            className={
+                              check.severity === "WARNING"
+                                ? "configuration-warning"
+                                : ""
+                            }
+                          >
+                            <strong>{check.severity}:</strong> {check.message}
+                          </p>
+                          {check.resource === "Service Participation" && (
+                            <Link to="/admin/participation">
+                              Participation Setup
+                            </Link>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </>
+            )}
+          </main>
           <footer className="configuration-brand-message">
             {reqroBrand.message}
           </footer>
-        </main>
+        </div>
       </div>
     </div>
   );

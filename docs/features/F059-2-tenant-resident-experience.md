@@ -1,9 +1,11 @@
 # F059.2 — Tenant-configurable resident experience
 
-**Current work: Slice 2 public read and frozen homepage integration.** Slice 1
-was accepted, committed and pushed as `746a4f26a8d61fa2a1b34246dce578d3154267e1`.
-The separately authorized Slice 2 scope and validation record follow the retained
-Slice 1 history below. No Slice 2 staging, commit, push or deployment is authorized.
+**Slice 3 accepted: protected draft authoring and shared preview.** Slices 1
+and 2 were accepted and pushed; Slice 2 is
+`30c7770ebbdff7523a78be30c67d17dc6640462b`. Manual Admin UAT PASSED; the user approved
+Slice 3 for one local commit. Push, merge, deployment and Slice 4 are not authorized.
+The records below retain earlier pending states and failed invocations as history;
+the Slice 3 acceptance record supersedes those pending acceptance statements.
 
 ## Slice 1 scope and baseline
 
@@ -761,3 +763,414 @@ The validation history above is preserved, including failed full-suite
 invocations and supplemental reruns. The automated nine-width/two-theme matrix
 was not executed because browser tooling was unavailable. Push, merge,
 deployment and Slice 3 remain unauthorized.
+
+## Slice 3 — Protected Admin drafts and shared preview
+
+### Baseline and authorization
+
+Verified `codex/f059-tenant-config` at
+`30c7770ebbdff7523a78be30c67d17dc6640462b`, clean index/tree, matching both local
+tracking reference and an actual remote feature-branch query. AGENTS.md and the
+execution/authorization records were reviewed. No overlapping changes were found.
+The initial pass stopped before edits at the registration migration gate. The
+user then explicitly authorized registration-only Migration 42 and disposable
+validation for exactly the three proposed permissions.
+
+Migration `20261012000000-register-resident-experience-permissions.ts` inserts only
+`resident_experience.write`, `resident_experience.publish`, and
+`resident_experience.contact.manage`. It creates no grants, roles, assignments or
+bundles. Down removes only these registry rows, refusing retained permission
+contributions or access audit. Other FK dependencies also fail safely. Code
+recognition and exhaustive access metadata mark all three **provisioning-only**;
+the frozen 27-key F057 manageable list and its database restriction are unchanged.
+No provisioning CLI or bundle is extended. Publication authority is reserved and
+has no operation in this slice. No development/staging/production migration was
+applied and no live permissions were assigned.
+
+### Protected API and transaction policy
+
+Routes under `/api/v1/admin/resident-experience`:
+
+- `GET /`: resource revision, complete saved draft or null, publication-exists
+  flag, consequential-difference indicator, current write/contact capabilities,
+  and closed registry keys/roles needed by the editor.
+- `PUT /draft`: exactly `{ expectedRevision, snapshot }`; returns resource
+  revision and whether anything changed, never an internal revision UUID.
+- `GET /preview`: `{ revision, unpublished: true, presentation }`, where
+  presentation is the same versioned public DTO used by the published endpoint.
+
+Every route requires verified Entra/active trusted staff and
+`admin.configuration.read`, is no-store, and rejects query selectors. GET bodies
+are rejected. Caller Organization IDs are never accepted or used; writes reject
+unknown command/snapshot fields. Missing or revoked authority fails closed.
+There is no public preview flag, URL token, draft-public endpoint, publication,
+approval, rollback or history route. The module registers only the public read
+controller and the protected three-route Admin controller.
+
+Admin reads take the existing Organization/access-state shared authorization
+barrier, re-resolve identity and permissions, and hold the resource FOR SHARE
+while loading the immutable pointers/children. Saves require Admin admission and
+`resident_experience.write` both before dispatch and freshly under the transaction
+barrier, before resource revision disclosure. The existing save command then
+locks the resource FOR UPDATE and derives consequential changes from actual
+snapshots. Consequential saves also require `resident_experience.contact.manage`.
+No client consequential flag is accepted. The default command policy remains
+deny-all unless the protected Admin service supplies the explicit policy.
+
+Slice 1's conservative classification is preserved: **all action edits**, contacts,
+guidance, navigation links and footer links require contact authority, including
+labels and order. Branding, hero, benefits and ordinary footer copy can be changed
+with write authority. A first draft establishes navigation links and therefore
+needs contact authority; the editor explains this. It starts from generic packaged
+content with no actions/contacts, not from unverified emergency defaults.
+
+Each actual save creates an immutable revision and children, advances only the
+draft pointer/resource revision, and records the existing append-only event in
+the same transaction. Audit failure rolls back. No-op saves still authorize but
+write no revision/event. Stale expected revisions return 409; neither server nor
+client automatically retries or merges. Existing publication and public output
+are unaffected. Reads expose no actor, audit history or internal revision IDs.
+No draft, contact, URL, token, body or raw error logging was introduced; existing
+allowlisted logging/error sanitation remains unchanged.
+
+### Editor and preview
+
+Administration → Resident Experience appears after successful protected Admin
+configuration admission. Readers can inspect saved drafts/preview; capability
+flags control authoring. The editor maintains the whole snapshot in component
+memory, preserving disabled/read-only fields. Closed server registry options
+govern assets, roles, icons, themes, tones and internal destinations. Contact
+display editing derives the normalized target from the same record; the server
+still validates both. `{phone}` remains the contact-only CTA convention, preserving
+the approved `240-314-8567` label.
+
+Save errors use safe fixed messages. Client checks cover required text, unique
+orders and basic destinations/phones; strict server validation is authoritative.
+A 409 keeps edits for review, disables repeat save and offers explicit reload
+with discard wording. Uncertain write results also require reload. A successful
+save reauthorizes/reloads before retaining content; failed reauthorization clears
+the editor. Identity/source changes, logout, denial and unmount invalidate requests
+and clear protected state. Operation generations suppress old completions. No
+draft data enters localStorage/sessionStorage or process-wide mutable state.
+
+Preview explicitly fetches the **saved** draft; unsaved edits are not previewed.
+The existing DTO adapter, HomePresentationProvider, HomeHeader, HomePage (including
+Hero/ResidentActions/HomeBenefits/F019), and HomeFooter render it. The external
+dialog/banner and stylesheet belong to the Admin surface. No frozen home CSS or
+component markup changed. A full-viewport overlay avoids squeezing the homepage
+into the Admin content column. Neutral browser title/description prevent draft
+metadata leaking into document titles; visible content still uses the saved draft.
+
+The wrapper cancels anchor/button/form click, auxiliary click, keyboard activation,
+context menu and drag interactions inside the rendered preview, including staff
+sign-out buttons. Thus internal/external/telephone actions are inert. The external
+toolbar provides Close preview and the existing theme toggle. Escape closes,
+focus enters the dialog, Tab stays in it and focus returns on close. Preview does
+not change the public loader or persist content. It creates no second homepage
+renderer or preview publication workflow.
+
+### Slice 3 validation and UAT
+
+Disposable identity was verified without displaying the connection string:
+`reqro_f0592_test` / `reqro_test_user`, using only TEST_DATABASE_URL. All database
+fixtures use unique disposable schemas and controlled test-only grants/publication
+fixtures. No other database or environment file was used.
+
+Initial focused evidence: migration/Admin DB **7/7**, expanded Slice 1–3 DB
+**34/34**, public+Admin E2E **20/20**, React editor/adapter/loader **44/44**.
+The first focused unit invocation was **127 passed / 1 failed**: its old Slice 1
+assertion required no recognized resident permissions. With the user's explicit
+registration authorization, that assertion now requires exactly the three keys;
+Migration 41's no-registration/no-grant assertion and the 27-key delegation parity
+checks remain. Initial lint reported ten new-code/test issues, subsequently
+corrected; no timeout or behavior assertion was weakened.
+
+Final Slice 3 automated evidence (overlapping focused/full counts are not added):
+
+- Backend focused units: **128/128 passed**; full backend units: **448/448 passed**.
+- Public/Admin focused E2E: **20/20 passed**; full E2E: **68/68 passed**.
+- Final focused PostgreSQL: **34/34 passed**; final full PostgreSQL:
+  **612/612 passed**, no skips. Migration 42 forward/exact registration/no new
+  grants/existing nonempty grants and roles preserved/rollback/reapply passed.
+  Future grants prevent rollback; the frozen 27-key delegation list is unchanged.
+- Shared: **64/64 passed**.
+- Final focused React regression set: **122/122 passed**, eight files covering
+  editor, adapter, loader, Administration, homepage, presentation, alerts and
+  navigation.
+- Full React: **864 passed / 1 failed**, 59 files. The existing Participation
+  anonymous-intake Review/Back test exceeded its unchanged 5-second timeout.
+  Its isolated file rerun was **9/9 passed**, supplemental evidence only; the
+  failed full invocation remains failed.
+- Backend test compilation, typecheck, build and whole-server ESLint passed.
+  React production build passed with bundle-size/plugin timing warnings.
+  Changed-file formatting passed except two intentionally preserved existing
+  formatting surfaces: the feature-index table and Administration page's compact
+  navigation markup. Only their targeted feature text/wiring changed. A formatter
+  invocation initially used an unavailable root executable; it was rerun with
+  the installed server formatter. `git diff --check` passed.
+
+The first full PostgreSQL invocation was **598 passed / 7 failed** (605 executed):
+three access-discovery cases plus their parent still expected the pre-registration
+32-key catalog; the new Admin fixture referenced a permission not present in the
+migration-only chain; an unchanged Migration 40 catalog-introspection case and
+its parent failed. The authorized catalog expectation is now 35, and the existing
+grant preservation fixture uses an already registered permission. Migration 40
+was not changed; it passed in the clean full rerun. The initial failure is retained
+as history, not reclassified. Slice 2 historical failures above remain unchanged.
+
+Security review also ensured fresh transactional write admission before revision
+disclosure, editor cleanup after failed save reauthorization, and neutral preview
+document metadata. No frozen homepage source, public loader, logging sanitizer,
+default bundle, existing migration or runtime delegation semantics changed.
+
+The browser tool returned an empty browser inventory. Automated 360/720/1200/1440
+light/dark preview validation is **blocked/not executed**, not passed. Manual
+Admin/editor/preview UAT and architecture/security review remain required. The
+accepted Slice 2 public-homepage manual UAT is retained as historical evidence,
+not substituted for new protected-preview UAT. No live identity grants or
+authenticated live authoring were performed.
+
+Deferred: publish/approval commands, history/rollback UI, automatic/default grants,
+provisioning commands, uploads/remote images, production tenant resolution, Alerts
+administration, deployment and Slice 4. STOP FOR ARCHITECTURE / SECURITY / MANUAL
+ADMIN UAT. No stage, commit, push, merge or deploy.
+
+### Slice 3 Admin editor polish before manual acceptance
+
+Manual Admin UAT found the authoring functionality working and requested a narrow
+presentation refinement. The editor now has six ordinary section anchors
+(Branding, Hero, Resident Actions, Contacts, Benefits, Footer), sticky below the
+existing Admin header on desktop. All sections remain expanded, with focusable
+anchor targets and visible validation messages. Compact indicators distinguish
+draft revision, separate publication, saved-draft consequential differences and
+local saved/unsaved state; conflicts and uncertain writes still require reload.
+
+Save, saved-draft Preview and Reload are grouped, with Save primary. Preview's
+existing enablement is preserved: unsaved edits are excluded, and a missing saved
+draft disables preview with a visible, programmatically associated explanation.
+Action/Benefit cards have stronger legends, compact field spacing and secondary
+Remove buttons. Contacts explain their existing structured phone-value purpose.
+Styles remain scoped to the editor and use existing theme tokens.
+
+Polish validation: `NODE_ENV=test npm run test:react --
+react/test/ResidentExperienceEditor.test.jsx react/test/AdminConfiguration.test.jsx
+react/test/ResidentExperienceAdapter.test.js
+react/test/ResidentExperienceLoading.test.jsx` passed **73/73 tests in four files**,
+exit 0. An earlier invocation inherited development mode and was stopped after
+stalling without reported test outcomes (exit 1); it is not a passed invocation.
+`NODE_ENV=production npm run build:react` passed, exit 0, with the existing
+large-chunk warning. An initial build under inherited development mode also
+exited 0 but is not the production-mode validation. Changed-file Prettier and
+`git diff --check` passed; the index remains empty. No frontend lint script exists.
+
+Only the editor JSX/CSS, focused editor tests and this feature record changed for
+this polish. No permission, data-model, route, save/concurrency, public homepage,
+home.css or preview-renderer changes. Manual visual/keyboard Admin UAT remains
+pending; automated component checks do not constitute acceptance. No staging,
+commit, push, deployment or Slice 4 is authorized.
+
+### Slice 3 final tabbed Admin editor refinement
+
+The subsequent manual-UAT request supersedes the expanded section-anchor layout
+above. Branding is initially selected; only the selected editor panel is visible.
+Six horizontal tabs use tablist/tab/tabpanel semantics, selected/control/label
+relationships and a single tab stop. Left/Right wrap and activate tabs; Home/End
+select the first/last tab. Tab then reaches the active panel and its fields.
+Inactive panels are hidden from display, keyboard traversal and the accessibility
+tree. On smaller screens the tab strip scrolls within its own width.
+
+Selection is separate presentation state. All panels edit the existing complete
+in-memory draft; switching performs no fetch, reload or save. Global summary,
+errors and Save/Preview/Reload stay outside panels. Unsaved dots compare each
+section against the saved draft (or initial generic draft); error counts classify
+existing validation messages without adding validation rules. Unclassified
+server/concurrency errors remain global. Save still validates/submits the full
+draft with the existing revision and reauthorization behavior. Preview still
+fetches only the protected saved draft and excludes local unsaved edits.
+
+The editor uses a theme-aware light surface, subtle shadow/borders, a blue tab
+accent, compact repeated cards and secondary destructive Remove controls.
+Contacts retain the phone-value helper and now explain the empty state. The two
+requested global helper sentences use the simpler user-approved wording.
+Only editor JSX/CSS, editor tests and this feature record are changed in this
+refinement. Backend, permission, schema, consequential-change, concurrency,
+preview renderer, public loader/homepage, F019 and other Admin/staff surfaces
+remain outside scope. Manual Admin UAT is pending; no staging, commit, push,
+deployment or Slice 4.
+
+Tabbed-editor validation: the same focused four-file React command documented
+above, with `NODE_ENV=test`, passed **76/76 tests**, four files, exit 0. Coverage
+includes initial/visible panel selection, cross-tab complete-draft persistence
+and save, validation persistence, stable accessible names/status descriptions,
+arrow/Home/End/Tab behavior, saved preview and read-only permissions. The first
+invocation had **73 passed / 3 failed**, exit 1: hidden status text polluted tab
+and panel accessible names. Explicit stable tab labels corrected the UI issue;
+assertions were retained and the complete focused invocation reran cleanly.
+Final `NODE_ENV=production npm run build:react` passed, exit 0, retaining the
+large-chunk warning. Four changed-file formatting checks and `git diff --check`
+passed. Public homepage files have no diff; the index remains empty. Responsive
+visual review and manual Admin acceptance remain pending at
+`http://localhost:5175/admin/resident-experience`.
+
+### Slice 3 Administration footer positioning
+
+Manual UAT accepted the tabbed editor appearance and requested a shell-only footer
+positioning refinement. The existing exact text, “Built for Today. Ready for a
+Stronger Tomorrow.”, now sits after `main` in the Administration content column.
+The minimum-viewport-height shell and growing flex/grid content keep it at the
+bottom on short pages and after content on long pages. Mobile navigation occupies
+an auto-sized row above the growing content row. The footer stays aligned with
+the main content padding, with a subtle divider and restrained typography; no
+fixed/absolute positioning or overlay is used for the footer.
+
+Only `AdminConfigurationPage.jsx`, `adminConfiguration.css` and this record changed
+for the footer refinement. Editor state, tabs, controls, permissions, preview and
+public homepage are unchanged. `NODE_ENV=test npm run test:react --
+react/test/AdminConfiguration.test.jsx react/test/ResidentExperienceEditor.test.jsx`
+passed **43/43 tests in two files**, exit 0. `NODE_ENV=production npm run build:react`
+passed, exit 0, with the existing large-chunk warning. `git diff --check` passed.
+Manual Admin visual UAT remains pending. No staging, commit, push, deployment or
+Slice 4.
+
+### Slice 3 Benefits-tab-only card polish
+
+Benefits now use compact, numbered cards with Enabled/Order/Icon aligned in a
+desktop row and Title/Description in a second row; small screens stack the fields.
+Remove stays secondary/destructive and aligned right; Add benefit remains the
+existing secondary action at the bottom. The visible “Section label” and its
+homepage helper still edit `presentation.benefitsLabel`. Styling is scoped to
+Benefits, with light theme-aware surfaces, subtle borders/shadows and compact
+spacing. All existing fields, callbacks, validation, permission restrictions,
+unsaved indicators and complete-draft saves are retained. Other tabs, preview,
+public homepage and backend are unchanged. Only editor JSX/CSS and this record
+changed; existing focused tests required no markup adjustments.
+
+The production React build passed (exit 0) with the existing large-chunk warning;
+changed-code formatting and `git diff --check` passed. Initial focused
+ResidentExperienceEditor/AdminConfiguration invocation: **42 passed / 1 failed**,
+exit 1. The unchanged protected-preview test observed an empty document title
+instead of its expected neutral title. No preview code, test assertion or timeout
+was changed; the same focused invocation was rerun separately.
+
+The complete focused rerun passed **43/43 tests in two files**, exit 0. This is
+supplemental evidence and does not erase the first failure. Manual Benefits-tab
+visual UAT remains pending. No staging, commit, push, deployment or Slice 4.
+
+### Slice 3 Benefits surface contrast
+
+The approved Benefits layout is retained. Benefits-only CSS adds a subtle
+blue-gray card tint, clearer borders, restrained shadow, stronger numbered
+headers and Section label, distinct input/select surfaces and explicit focus
+rings. Remove uses a muted-danger outline. Theme tokens provide equivalent dark
+panel/card/control separation; no shared layout or other-tab styling changed.
+Only `residentExperience.css` and this record changed. Field order, markup,
+checkbox alignment/behavior, validation, permissions, draft operations and public
+homepage remain unchanged.
+
+Focused `NODE_ENV=test npm run test:react --
+react/test/ResidentExperienceEditor.test.jsx react/test/AdminConfiguration.test.jsx`
+passed **43/43 tests in two files**, exit 0. `NODE_ENV=production npm run build:react`
+passed, exit 0, with the existing large-chunk warning. Changed-file formatting
+and `git diff --check` passed. Manual light/dark visual acceptance remains pending;
+no staging, commit, push, deployment or Slice 4.
+
+### Slice 3 Benefits minimalist visual treatment
+
+The next manual-UAT refinement supersedes the blue-gray card treatment above.
+Benefits now use neutral surfaces, subtle one-pixel borders, no card shadow,
+compact padding and spacing, smaller bold neutral headers, muted labels and
+neutral control borders. Remove is a text-style danger action with an explicit
+keyboard focus outline. Dark mode uses a neutral dark panel and slightly lighter
+cards; focus rings remain clear. The existing secondary Add button is retained.
+All selectors remain Benefits-specific. Only `residentExperience.css` and this
+record changed; layout structure, field order, data and behavior are unchanged.
+
+Focused `NODE_ENV=test npm run test:react --
+react/test/ResidentExperienceEditor.test.jsx react/test/AdminConfiguration.test.jsx`
+passed **43/43 tests in two files**, exit 0. `NODE_ENV=production npm run build:react`
+passed, exit 0, with the existing large-chunk warning. Changed-file formatting and
+`git diff --check` passed; the index is empty. Manual light/dark Admin UAT remains
+pending. No staging, commit, push, deployment or Slice 4.
+
+### Slice 3 final Benefits surface treatment
+
+The final surface correction restores restrained separation without the earlier
+blue fill: Benefits cards use existing `--surface-page` (light `#f4f7fb`) and
+`--border-default` tokens, with no shadow, on the unchanged white panel. Enabled
+inputs/selects remain white in light mode. Dark-mode Benefits-only selectors use
+neutral theme-token mixtures for progressively lighter panel, card and control
+surfaces. Layout, markup, spacing, fields, heading treatment, quiet Remove action,
+focus states and all behavior are unchanged. Only `residentExperience.css` and
+this record changed; other tabs and the Administration shell are untouched.
+
+Focused `NODE_ENV=test npm run test:react --
+react/test/ResidentExperienceEditor.test.jsx react/test/AdminConfiguration.test.jsx`
+passed **43/43 tests in two files**, exit 0. `NODE_ENV=production npm run build:react`
+passed, exit 0, with bundle-size and plugin-timing warnings. Changed-file formatting
+and `git diff --check` passed; the index remains empty. Manual light/dark Admin UAT
+is pending. No staging, commit, push, deployment or Slice 4.
+
+### Slice 3 Resident Actions spacing correction
+
+The user accepted the Benefits tab during manual UAT. Its accepted styling and
+structure remain unchanged. A Resident-Actions-only adjacent-sibling rule adds
+`--space-3` (12px) above Add action when it directly follows the Actions heading
+input. Existing action-card spacing, all controls and behavior are unchanged.
+Only `residentExperience.css` and this record changed. Manual Admin UAT remains
+in progress; no staging, commit, push, deployment or Slice 4.
+
+Validation: focused ResidentExperienceEditor/AdminConfiguration React tests
+passed **43/43 in two files**, exit 0 (`NODE_ENV=test npm run test:react --
+react/test/ResidentExperienceEditor.test.jsx react/test/AdminConfiguration.test.jsx`).
+`NODE_ENV=production npm run build:react` passed, exit 0, with the existing
+large-chunk warning. Changed-file formatting and `git diff --check` passed.
+
+### Slice 3 final status wording
+
+The top summary now reads “High-impact changes” with “Detected” when the existing
+`summary.consequential` flag is true and “None detected” otherwise. This is display
+wording only in `ResidentExperienceEditor.jsx`; classification/comparison logic,
+other status cards, permissions, publication state, save and preview are unchanged.
+Existing focused tests require no wording updates. Final manual Admin UAT remains
+pending; no staging, commit, push, deployment or Slice 4.
+
+Initial focused ResidentExperienceEditor/AdminConfiguration run: **42 passed /
+1 failed**, exit 1. The existing initial-tab/saved-preview test exceeded its
+unchanged 5-second timeout. No assertion or timeout was changed. Production React
+build passed, exit 0, with bundle-size/plugin-timing warnings. Formatting and
+`git diff --check` passed.
+
+The complete focused rerun passed **43/43 tests in two files**, exit 0, using
+`NODE_ENV=test npm run test:react -- react/test/ResidentExperienceEditor.test.jsx
+react/test/AdminConfiguration.test.jsx`. This supplements, rather than replaces,
+the initial timeout result. STOP FOR FINAL MANUAL ADMIN UAT.
+
+## Slice 3 acceptance and local commit authorization
+
+Manual Admin UAT **PASSED**. The user approved Slice 3 for one local commit:
+`feat(resident-experience): add protected draft authoring and preview`.
+Pre-staging baseline: `codex/f059-tenant-config` at accepted Slice 2
+`30c7770ebbdff7523a78be30c67d17dc6640462b`, empty index, 2 ahead/0 behind local
+`main`, 0 ahead/0 behind the last-known feature tracking reference. No remote
+query or fetch was performed. Earlier pending-UAT statements above are historical.
+
+Retained validation evidence (overlapping runs are not summed):
+
+- Migration 42 registers exactly `resident_experience.write`,
+  `resident_experience.publish`, and `resident_experience.contact.manage`, with
+  **zero default grants** and the frozen **27-key runtime delegation list** intact.
+- Full backend units: **448 passed**; full E2E: **68 passed**.
+- Focused PostgreSQL: **34 passed**; full PostgreSQL rerun: **612 passed**.
+- Shared tests: **64 passed**; focused React feature regression run: **122 passed**.
+- Full React: **864 passed / 1 timeout**. Supplemental Participation file rerun:
+  **9 passed**; it does not replace the failed full invocation.
+- Final UI-wording focused Admin/editor rerun: **43 passed**, following the
+  separately recorded **42 passed / 1 timeout** invocation.
+- Production build passed; recorded bundle-size/plugin-timing warnings remain.
+- Manual Admin UAT: **PASSED**. Automated preview visual matrix: **not executed**.
+
+All earlier failures, timeouts, corrections and supplemental reruns remain in
+this record. Local UAT launchers, environment files, fixture manifests, identity
+values and temporary staff/grant data remain outside committed source. The
+temporary database fixture is not part of this commit. Push, merge, deployment
+and Slice 4 remain unauthorized. Stop after the approved local commit.

@@ -6,7 +6,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import type { Transaction } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
-import type { StaffAccess } from '../auth/auth.types.js';
+import type { StaffAccess, Permission } from '../auth/auth.types.js';
 import { authorizeRequestTransaction } from '../service-request/request-authorization.js';
 import { requestUuid } from '../service-request/staff-request-scope.js';
 import {
@@ -16,8 +16,8 @@ import {
 } from './resident-experience.domain.js';
 import type { ResidentExperienceRepository } from './resident-experience.repository.js';
 
-/** Future policy must check approved permissions against fresh transaction authority and actual changes.
- * No production policy is provided in Slice 1; the default denies every save.
+/** Policies check approved permissions against fresh transaction authority and actual changes.
+ * The default still denies every save; Slice 3 supplies an explicit protected policy.
  * This is dependency injection, not an environment flag or development bypass.
  */
 export type ResidentDraftPolicy = (
@@ -30,11 +30,12 @@ const denyDraftSave: ResidentDraftPolicy = () =>
     new ForbiddenException('Resident experience writes are not enabled'),
   );
 
-// Intentionally not Injectable and not registered in any Nest module/controller/CLI.
+// Internal command, constructed by the protected Admin service with its explicit policy.
 export class ResidentExperienceService {
   constructor(
     private readonly repository: ResidentExperienceRepository,
     private readonly authorizeSave: ResidentDraftPolicy = denyDraftSave,
+    private readonly requiredPermissions: readonly Permission[] = [],
   ) {}
 
   async saveDraft(access: StaffAccess, input: unknown, correlationId: string) {
@@ -58,7 +59,11 @@ export class ResidentExperienceService {
       .transaction()
       .setIsolationLevel('read committed')
       .execute(async (trx) => {
-        const currentAccess = await authorizeRequestTransaction(trx, access);
+        const currentAccess = await authorizeRequestTransaction(
+          trx,
+          access,
+          this.requiredPermissions,
+        );
         const organizationId = currentAccess.organizationId;
         const resource = await trx
           .selectFrom('organization_resident_experience')

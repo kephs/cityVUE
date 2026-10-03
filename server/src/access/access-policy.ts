@@ -45,6 +45,33 @@ const definition = (
 const parent =
   'Requires the applicable PUBLIC or INTERNAL parent read permission and current request scope.';
 export const accessPermissionMetadata = {
+  'resident_experience.write': definition(
+    'Edit resident experience drafts',
+    'Author immutable Organization resident experience drafts.',
+    'Administrative Configuration',
+    ['admin.configuration.read'],
+    false,
+    'Explicit provisioning only; saving never publishes.',
+    'provisioning-only',
+  ),
+  'resident_experience.publish': definition(
+    'Publish resident experience',
+    'Reserved publication authority; no publish operation is implemented.',
+    'Administrative Configuration',
+    ['admin.configuration.read'],
+    true,
+    'Reserved; explicit provisioning only.',
+    'provisioning-only',
+  ),
+  'resident_experience.contact.manage': definition(
+    'Manage resident contacts and destinations',
+    'Authorize consequential contact and destination draft changes.',
+    'Administrative Configuration',
+    ['admin.configuration.read', 'resident_experience.write'],
+    true,
+    'Explicit provisioning only; not runtime delegable.',
+    'provisioning-only',
+  ),
   'admin.configuration.read': definition(
     'View configuration',
     'Read Organization administration configuration.',

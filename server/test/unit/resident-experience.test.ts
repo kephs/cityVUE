@@ -535,7 +535,7 @@ test('F059.2 cosmetic-only and no-op diffs are distinct; output contains bounded
     },
   );
 });
-test('F059.2 asset registry paths exist; migration ordinal/order and no permission registration', () => {
+test('F059.2 assets and Migration 41 remain unchanged; Slice 3 recognizes exactly the approved keys', () => {
   const root = path.resolve(__dirname, '../../../..');
   for (const asset of Object.values(residentAssets))
     assert.ok(
@@ -555,5 +555,12 @@ test('F059.2 asset registry paths exist; migration ordinal/order and no permissi
       migration,
     ),
   );
-  assert.ok(!permissions.some((key) => key.startsWith('resident_experience.')));
+  assert.deepEqual(
+    permissions.filter((key) => key.startsWith('resident_experience.')).sort(),
+    [
+      'resident_experience.contact.manage',
+      'resident_experience.publish',
+      'resident_experience.write',
+    ],
+  );
 });

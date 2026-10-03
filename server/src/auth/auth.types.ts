@@ -1,6 +1,9 @@
 export const GEOSPATIAL_READ_PERMISSION = 'geospatial.read' as const;
 
 export const permissions = [
+  'resident_experience.write',
+  'resident_experience.publish',
+  'resident_experience.contact.manage',
   'admin.access.read',
   'admin.access.manage',
   'service_request.answers.read',

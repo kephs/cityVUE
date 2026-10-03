@@ -54,7 +54,11 @@ test(
       const database = db;
       const folder = path.resolve(__dirname, '../../migrations');
       const migrations = (await readdir(folder))
-        .filter((f) => f.endsWith('.js'))
+        .filter(
+          (f) =>
+            f.endsWith('.js') &&
+            f <= '20261011000000-add-resident-experience.js',
+        )
         .sort();
       assert.equal(migrations.length, 41);
       assert.equal(migrations[40], '20261011000000-add-resident-experience.js');

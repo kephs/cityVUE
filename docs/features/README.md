@@ -94,7 +94,7 @@ Accepted operational work continued past this table through F045–F051, F052–
 
 Other historical specifications remain in this directory. New features should link applicable prior evidence rather than copy every historical requirement into a new prompt.
 
-- [F059.2 — Tenant-configurable resident experience](F059-2-tenant-resident-experience.md): Slice 1 accepted and pushed; Slice 2 implements the published-only public read and safe presentation-provider integration. Architecture/security review and manual visual UAT passed; one local Slice 2 commit is approved. Historical full-suite failures remain recorded; the automated visual matrix was not executed because browser tooling was unavailable. Homepage design and F019 remain frozen. Publication/admin workflows and production tenant resolution remain deferred.
+- [F059.2 — Tenant-configurable resident experience](F059-2-tenant-resident-experience.md): Slices 1/2 accepted and pushed; Slice 3 accepted for one local commit after manual Admin UAT PASSED. Protected complete-draft authoring and shared saved-draft preview use registration-only Migration 42 with zero default grants/delegation expansion. Validation retains the full React timeout and supplemental reruns; automated preview visual matrix was not executed. Public homepage design and F019 remain frozen. Publication/approval/history, production tenant resolution and Slice 4 remain deferred; push/merge/deployment are not authorized.
 
 - [F055 — Admin Participation Area Management](F055-admin-participation-area-management.md): implemented and validated locally; see the [validation record](F055-implementation-report.md). No push or deployment.
 
