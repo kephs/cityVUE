@@ -1,12 +1,47 @@
 import type { ColumnType, Generated } from 'kysely';
 import type { ResidentPresentation } from './resident-experience.domain.js';
+import type {
+  ReviewPurpose,
+  ReviewOutcome,
+} from './resident-experience.review.js';
 type Time = Generated<ColumnType<Date, Date | string | undefined, never>>;
+type ReviewTime = ColumnType<Date, Date | string | undefined, never>;
 interface Child {
   organization_id: string;
   revision_id: string;
   logical_id: string;
 }
 export interface ResidentExperienceTables {
+  resident_experience_review_request: {
+    id: string;
+    organization_id: string;
+    target_revision_id: string;
+    baseline_revision_id: string | null;
+    draft_revision_id: string | null;
+    resource_revision: number;
+    authorization_revision: string;
+    purpose: ReviewPurpose;
+    policy_version: 1;
+    classifier_version: 1;
+    consequential: boolean;
+    changed_fields: string[];
+    reasons: string[];
+    requested_by: string;
+    supersedes_request_id: string | null;
+    review_sequence: Generated<string>;
+    created_at: ReviewTime;
+    creation_txid: Generated<string>;
+  };
+  resident_experience_review_decision: {
+    id: string;
+    organization_id: string;
+    request_id: string;
+    reviewer_id: string;
+    outcome: ReviewOutcome;
+    decided_at: ReviewTime;
+    expires_at: ReviewTime;
+    creation_txid: Generated<string>;
+  };
   organization_resident_experience: {
     organization_id: string;
     revision: Generated<number>;
@@ -53,6 +88,9 @@ export interface ResidentExperienceTables {
     guidance: string;
   };
   resident_experience_event: {
+    review_request_id: Generated<string | null>;
+    review_decision_id: Generated<string | null>;
+    publication_txid: Generated<string | null>;
     id: string;
     organization_id: string;
     actor_id: string;

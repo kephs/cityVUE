@@ -65,9 +65,9 @@ export const accessPermissionMetadata = {
   ),
   'resident_experience.contact.manage': definition(
     'Manage resident contacts and destinations',
-    'Authorize consequential contact and destination draft changes.',
+    'Authorize consequential contact and destination operations; draft changes also require edit authority.',
     'Administrative Configuration',
-    ['admin.configuration.read', 'resident_experience.write'],
+    ['admin.configuration.read'],
     true,
     'Explicit provisioning only; not runtime delegable.',
     'provisioning-only',

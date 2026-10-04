@@ -1,5 +1,10 @@
 # F059.2 — Tenant-configurable resident experience
 
+Slice 4A has separate, explicitly authorized persistence/security work documented
+in [the review/publication foundation record](F059-2-slice4A-review-publication-foundation.md).
+That work does not expose publication routes, apply Migration 43 to development,
+or supersede the historical Slice 1–3 evidence below.
+
 **Slice 3 accepted: protected draft authoring and shared preview.** Slices 1
 and 2 were accepted and pushed; Slice 2 is
 `30c7770ebbdff7523a78be30c67d17dc6640462b`. Manual Admin UAT PASSED; the user approved
