@@ -2,6 +2,12 @@ import 'reflect-metadata';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import httpRequest from 'supertest';
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,6 +20,9 @@ import { phoneFixture } from '../helpers/resident-experience.fixture.js';
 import { ResidentExperienceRepository } from '../../src/resident-experience/resident-experience.repository.js';
 import { AdminResidentExperienceService } from '../../src/resident-experience/resident-experience.admin.service.js';
 import { ResidentReviewRepository } from '../../src/resident-experience/resident-experience.review.repository.js';
+import { AdminResidentReviewService } from '../../src/resident-experience/resident-experience.review.service.js';
+import { residentReviewApi } from '../helpers/resident-experience-review-api.js';
+import { projectPublishedResidentExperience } from '../../src/resident-experience/resident-experience.public.dto.js';
 import {
   classifyResidentPublication,
   type ResidentReviewBinding,
@@ -1024,6 +1033,548 @@ test(
               .execute(),
             requests,
           );
+        },
+      );
+      const lifecycle = new AdminResidentReviewService(snapshots);
+      async function lifecycleInput(f: Fixture) {
+        const context = await lifecycle.context(f.author.access);
+        return {
+          targetRevisionId: context.draftRevisionId,
+          expectedRevision: context.resourceRevision,
+          purpose: 'draft',
+          supersedesRequestId: context.latestRequestId,
+        };
+      }
+      await t.test(
+        '4B exact read is immutable, scoped and projects review values separately from public presentation',
+        async () => {
+          const f = await fixture(),
+            other = await fixture(),
+            input = await lifecycleInput(f);
+          assert.ok(input.targetRevisionId);
+          const original = await lifecycle.revision(
+            f.reviewer.access,
+            input.targetRevisionId,
+          );
+          assert.deepEqual(
+            original.presentation,
+            projectPublishedResidentExperience(f.snapshot),
+          );
+          assert.deepEqual(original.review, f.snapshot);
+          assert.equal(original.changes.consequential, true);
+          assert.deepEqual(
+            Object.keys(original).sort(),
+            [
+              'baselineRevisionId',
+              'changes',
+              'currentDraft',
+              'latestRequestId',
+              'presentation',
+              'resourceRevision',
+              'review',
+              'revisionId',
+              'unpublished',
+            ].sort(),
+          );
+          const next = structuredClone(f.snapshot);
+          next.presentation.metadata.title = 'Cosmetic next draft';
+          assert.ok(next.actions[0] && next.benefits[0]);
+          next.actions[0].enabled = false;
+          next.benefits[0].enabled = false;
+          await drafts.save(
+            f.author.access,
+            { expectedRevision: 2, snapshot: next },
+            randomUUID(),
+          );
+          const retained = await lifecycle.revision(
+            f.reviewer.access,
+            input.targetRevisionId,
+          );
+          assert.deepEqual(retained.review, f.snapshot);
+          assert.equal(retained.currentDraft, false);
+          const latest = await lifecycle.revision(
+            f.reviewer.access,
+            (await binding(f)).targetRevisionId,
+          );
+          assert.equal(latest.review.actions[0]?.enabled, false);
+          assert.equal(latest.review.benefits[0]?.enabled, false);
+          assert.equal(latest.presentation.configuration?.actions.length, 1);
+          assert.equal(latest.presentation.configuration.benefits.length, 0);
+          for (const id of [
+            randomUUID(),
+            (await binding(other)).targetRevisionId,
+          ])
+            await assert.rejects(
+              lifecycle.revision(f.reviewer.access, id),
+              NotFoundException,
+            );
+          await assert.rejects(
+            lifecycle.create(f.author.access, input),
+            ConflictException,
+          );
+          await assert.rejects(
+            lifecycle.create(f.author.access, {
+              ...input,
+              expectedRevision: 3,
+            }),
+            ConflictException,
+          );
+        },
+      );
+      await t.test(
+        '4B request/approve/reject preserve pointers, public output, events and immutable evidence',
+        async () => {
+          for (const outcome of ['approved', 'rejected'] as const) {
+            const f = await fixture(),
+              input = await lifecycleInput(f);
+            const before = await snapshots.getResource(f.org),
+              publicBefore = await snapshots.getPublished(f.org);
+            const r = await lifecycle.create(f.author.access, input);
+            assert.equal(r.changes.reasons[0], 'first_publication');
+            assert.equal(r.canReview, false);
+            assert.equal(
+              (await lifecycle.get(f.reviewer.access, r.id)).canReview,
+              true,
+            );
+            const d = await lifecycle.decide(f.reviewer.access, r.id, {
+              expectedRevision: 2,
+              outcome,
+            });
+            assert.equal(d.decision?.outcome, outcome);
+            assert.equal(d.usability.usable, outcome === 'approved');
+            assert.equal(d.independentPublisherRequired, true);
+            assert.ok(d.decision);
+            assert.equal(
+              d.decision.expiresAt.getTime() - d.decision.decidedAt.getTime(),
+              86400000,
+            );
+            const stored = await database
+              .selectFrom('resident_experience_review_request')
+              .selectAll()
+              .where('id', '=', r.id)
+              .executeTakeFirstOrThrow();
+            const b = await binding(f);
+            assert.equal(
+              stored.authorization_revision,
+              b.authorizationRevision,
+            );
+            assert.equal(stored.baseline_revision_id, b.baselineRevisionId);
+            assert.equal(stored.target_revision_id, b.targetRevisionId);
+            await assert.rejects(
+              lifecycle.decide(f.reviewer.access, r.id, {
+                expectedRevision: 2,
+                outcome,
+              }),
+              ConflictException,
+            );
+            await assert.rejects(
+              sql`update resident_experience_review_decision set outcome='rejected' where id=${d.decision.id}::uuid`.execute(
+                database,
+              ),
+            );
+            await assert.rejects(
+              sql`delete from resident_experience_review_request where id=${r.id}::uuid`.execute(
+                database,
+              ),
+            );
+            assert.deepEqual(await snapshots.getResource(f.org), before);
+            assert.deepEqual(await snapshots.getPublished(f.org), publicBefore);
+            const events = await database
+              .selectFrom('resident_experience_event')
+              .select(['operation', 'review_decision_id'])
+              .where('organization_id', '=', f.org)
+              .execute();
+            assert.deepEqual(events, [
+              { operation: 'draft_saved', review_decision_id: null },
+            ]);
+          }
+        },
+      );
+      await t.test(
+        '4B concurrent requests and decisions have one winner; supersession is explicit',
+        async () => {
+          const f = await fixture(),
+            input = await lifecycleInput(f);
+          const results = await Promise.allSettled([
+            lifecycle.create(f.author.access, input),
+            lifecycle.create(f.author.access, input),
+          ]);
+          assert.equal(
+            results.filter((r) => r.status === 'fulfilled').length,
+            1,
+          );
+          const failure = results.find((r) => r.status === 'rejected');
+          assert.ok(
+            failure?.status === 'rejected' &&
+              failure.reason instanceof ConflictException,
+          );
+          const winner = results.find((r) => r.status === 'fulfilled');
+          assert.ok(winner?.status === 'fulfilled');
+          const r = winner.value;
+          const decisions = await Promise.allSettled([
+            lifecycle.decide(f.reviewer.access, r.id, {
+              expectedRevision: 2,
+              outcome: 'approved',
+            }),
+            lifecycle.decide(f.publisher.access, r.id, {
+              expectedRevision: 2,
+              outcome: 'rejected',
+            }),
+          ]);
+          assert.equal(
+            decisions.filter((d) => d.status === 'fulfilled').length,
+            1,
+          );
+          assert.ok(
+            decisions.some(
+              (d) =>
+                d.status === 'rejected' &&
+                d.reason instanceof ConflictException,
+            ),
+          );
+          const replacement = await lifecycle.create(f.author.access, {
+            ...input,
+            supersedesRequestId: r.id,
+          });
+          assert.equal(replacement.supersedesRequestId, r.id);
+          assert.equal(
+            (await lifecycle.get(f.reviewer.access, r.id)).usability.reason,
+            'superseded',
+          );
+          await assert.rejects(
+            lifecycle.decide(f.reviewer.access, r.id, {
+              expectedRevision: 2,
+              outcome: 'approved',
+            }),
+            ConflictException,
+          );
+          await assert.rejects(
+            lifecycle.create(f.author.access, {
+              ...input,
+              supersedesRequestId: r.id,
+            }),
+            ConflictException,
+          );
+        },
+      );
+      await t.test(
+        '4B consequential lineage excludes both the contact author and final cosmetic saver',
+        async () => {
+          const f = await fixture();
+          const original = await request(f),
+            approved = await decide(f, original);
+          await publish(f, original, approved); // test-only accepted 4A fixture establishes prior publication
+          const changed = structuredClone(f.snapshot);
+          assert.ok(changed.contacts[0]);
+          changed.contacts[0].phoneTarget = '+12025550101';
+          changed.contacts[0].displayValue = '+1 (202) 555-0101';
+          changed.contacts[0].classification = 'emergency';
+          await drafts.save(
+            f.author.access,
+            { expectedRevision: 3, snapshot: changed },
+            randomUUID(),
+          );
+          changed.presentation.metadata.title = 'Cosmetic second author';
+          await drafts.save(
+            f.publisher.access,
+            { expectedRevision: 4, snapshot: changed },
+            randomUUID(),
+          );
+          const before = await snapshots.getPublished(f.org);
+          const r = await lifecycle.create(
+            f.author.access,
+            await lifecycleInput(f),
+          );
+          assert.equal(r.changes.consequential, true);
+          for (const person of [f.author, f.publisher]) {
+            assert.equal(
+              (await lifecycle.get(person.access, r.id)).canReview,
+              false,
+            );
+            await assert.rejects(
+              lifecycle.decide(person.access, r.id, {
+                expectedRevision: 5,
+                outcome: 'approved',
+              }),
+              ForbiddenException,
+            );
+          }
+          assert.equal(
+            (
+              await lifecycle.decide(f.reviewer.access, r.id, {
+                expectedRevision: 5,
+                outcome: 'approved',
+              })
+            ).usability.usable,
+            true,
+          );
+          assert.deepEqual(await snapshots.getPublished(f.org), before);
+        },
+      );
+      await t.test(
+        '4B edits and fresh authority changes invalidate immutable approvals and stale guard context',
+        async () => {
+          for (const mutation of ['draft', 'permission', 'inactive'] as const) {
+            const f = await fixture(),
+              r = await lifecycle.create(
+                f.author.access,
+                await lifecycleInput(f),
+              );
+            const approval = await lifecycle.decide(f.reviewer.access, r.id, {
+              expectedRevision: 2,
+              outcome: 'approved',
+            });
+            if (mutation === 'draft') {
+              const changed = structuredClone(f.snapshot);
+              changed.presentation.metadata.title = 'Later content';
+              await drafts.save(
+                f.author.access,
+                { expectedRevision: 2, snapshot: changed },
+                randomUUID(),
+              );
+            } else
+              await database.transaction().execute(async (trx) => {
+                await trx
+                  .selectFrom('organization')
+                  .select('id')
+                  .where('id', '=', f.org)
+                  .forUpdate()
+                  .execute();
+                await trx
+                  .selectFrom('organization_access_state')
+                  .select('organization_id')
+                  .where('organization_id', '=', f.org)
+                  .forUpdate()
+                  .execute();
+                if (mutation === 'permission')
+                  await trx
+                    .deleteFrom('role_permission')
+                    .where('role_id', '=', f.reviewer.role)
+                    .where('permission_key', '=', 'resident_experience.publish')
+                    .execute();
+                else
+                  await trx
+                    .updateTable('staff_identity')
+                    .set({ active: false })
+                    .where('id', '=', f.reviewer.access.staffIdentityId)
+                    .execute();
+              });
+            const projected = await lifecycle.get(f.author.access, r.id);
+            assert.equal(projected.usability.usable, false);
+            assert.deepEqual(projected.decision, approval.decision);
+            await assert.rejects(
+              lifecycle.decide(f.reviewer.access, r.id, {
+                expectedRevision: 2,
+                outcome: 'approved',
+              }),
+              mutation === 'draft' ? ConflictException : ForbiddenException,
+            );
+            assert.equal(await snapshots.getPublished(f.org), null);
+          }
+        },
+      );
+      await t.test(
+        '4B historical requests need prior publication evidence and never republish',
+        async () => {
+          const f = await fixture(),
+            input = await lifecycleInput(f);
+          await assert.rejects(
+            lifecycle.create(f.author.access, {
+              ...input,
+              purpose: 'historical',
+            }),
+            ConflictException,
+          );
+          const r1 = await request(f),
+            d1 = await decide(f, r1);
+          await publish(f, r1, d1);
+          const changed = structuredClone(f.snapshot);
+          changed.presentation.metadata.title = 'New publication';
+          await drafts.save(
+            f.author.access,
+            { expectedRevision: 3, snapshot: changed },
+            randomUUID(),
+          );
+          const r2 = await request(f),
+            d2 = await decide(f, r2);
+          await publish(f, r2, d2);
+          const before = await snapshots.getPublished(f.org);
+          const historical = await lifecycle.create(f.author.access, {
+            ...(await lifecycleInput(f)),
+            purpose: 'historical',
+            targetRevisionId: r1.target_revision_id,
+          });
+          assert.equal(historical.baselineRevisionId, r2.target_revision_id);
+          assert.equal(historical.purpose, 'historical');
+          assert.equal(historical.decision, null);
+          await lifecycle.decide(f.reviewer.access, historical.id, {
+            expectedRevision: 5,
+            outcome: 'approved',
+          });
+          assert.deepEqual(await snapshots.getPublished(f.org), before);
+          assert.equal(
+            (await lifecycle.get(f.reviewer.access, r1.id)).usability.usable,
+            false,
+          );
+        },
+      );
+      await t.test(
+        '4B protected HTTP lifecycle uses actual service/database authority, errors and no-store',
+        async (apiTest) => {
+          const f = await fixture(),
+            other = await fixture();
+          const reader = await actor(f.org, ['admin.configuration.read']);
+          const limited = await actor(f.org, [
+            'admin.configuration.read',
+            'resident_experience.publish',
+          ]);
+          const app = await residentReviewApi(lifecycle, {
+            author: f.author.access,
+            reviewer: f.reviewer.access,
+            reader: reader.access,
+            limited: limited.access,
+            other: other.reviewer.access,
+          });
+          const base = '/api/v1/admin/resident-experience';
+          const input = await lifecycleInput(f);
+          const targetId = input.targetRevisionId;
+          assert.ok(targetId);
+          const post = (suffix: string, token: string, body: unknown) =>
+            httpRequest(app.getHttpServer())
+              .post(base + suffix)
+              .set('Authorization', `Bearer ${token}`)
+              .send(body as object);
+          const get = (suffix: string, token = 'reviewer') =>
+            httpRequest(app.getHttpServer())
+              .get(base + suffix)
+              .set('Authorization', `Bearer ${token}`);
+          try {
+            await apiTest.test(
+              'anonymous and missing request authority denied; errors are no-store',
+              async () => {
+                const denied = await httpRequest(app.getHttpServer())
+                  .get(base + '/review-context')
+                  .expect(401);
+                assert.equal(denied.headers['cache-control'], 'no-store');
+                await post('/review-requests', 'reader', input).expect(403);
+              },
+            );
+            await apiTest.test(
+              'exact projection and forged selectors/malformed body isolation',
+              async () => {
+                const read = await get('/revisions/' + targetId).expect(200);
+                assert.deepEqual(
+                  (read.body as { presentation: unknown }).presentation,
+                  projectPublishedResidentExperience(f.snapshot),
+                );
+                assert.equal(read.headers['cache-control'], 'no-store');
+                await get('/revisions/' + targetId, 'other').expect(404);
+                await get('/revisions/' + randomUUID()).expect(404);
+                await get('/review-context?organizationId=forged').expect(400);
+                await get('/review-context').send({}).expect(400);
+                for (const body of [
+                  {},
+                  { ...input, organizationId: other.org },
+                  { ...input, consequential: false },
+                ])
+                  await post('/review-requests', 'author', body).expect(400);
+                await post('/review-requests', 'author', {
+                  ...input,
+                  targetRevisionId: (await binding(other)).targetRevisionId,
+                }).expect(404);
+              },
+            );
+            const response = await post(
+              '/review-requests',
+              'author',
+              input,
+            ).expect(201);
+            const r = response.body as { id: string };
+            assert.equal(response.headers['cache-control'], 'no-store');
+            await apiTest.test(
+              'decision checks publish/contact authority, saver separation and tenant before mutation',
+              async () => {
+                for (const token of ['reader', 'limited', 'author'])
+                  await post('/review-requests/' + r.id + '/decision', token, {
+                    expectedRevision: 2,
+                    outcome: 'approved',
+                  }).expect(403);
+                await get('/review-requests/' + r.id, 'other').expect(404);
+                await post('/review-requests/' + r.id + '/decision', 'other', {
+                  expectedRevision: 2,
+                  outcome: 'approved',
+                }).expect(404);
+                await post(
+                  '/review-requests/' + r.id + '/decision',
+                  'reviewer',
+                  {
+                    expectedRevision: 2,
+                    outcome: 'approved',
+                    reviewerId: 'forged',
+                  },
+                ).expect(400);
+                await post(
+                  '/review-requests/' + r.id + '/decision',
+                  'reviewer',
+                  { expectedRevision: 1, outcome: 'approved' },
+                ).expect(409);
+                const decision = await post(
+                  '/review-requests/' + r.id + '/decision',
+                  'reviewer',
+                  { expectedRevision: 2, outcome: 'approved' },
+                ).expect(201);
+                assert.equal(decision.headers['cache-control'], 'no-store');
+                await post(
+                  '/review-requests/' + r.id + '/decision',
+                  'reviewer',
+                  { expectedRevision: 2, outcome: 'rejected' },
+                ).expect(409);
+                await post('/review-requests', 'author', input).expect(409);
+                assert.equal(await snapshots.getPublished(f.org), null);
+              },
+            );
+            await apiTest.test(
+              'ordinary exact review needs publish but neither contact nor write',
+              async () => {
+                // Set up a published baseline using only the existing 4A disposable test helper.
+                const stored = await database
+                  .selectFrom('resident_experience_review_request')
+                  .selectAll()
+                  .where('id', '=', r.id)
+                  .executeTakeFirstOrThrow();
+                const decision = await database
+                  .selectFrom('resident_experience_review_decision')
+                  .selectAll()
+                  .where('request_id', '=', r.id)
+                  .executeTakeFirstOrThrow();
+                await publish(f, stored, decision);
+                const changed = structuredClone(f.snapshot);
+                changed.presentation.metadata.title = 'Ordinary wording';
+                await drafts.save(
+                  f.author.access,
+                  { expectedRevision: 3, snapshot: changed },
+                  randomUUID(),
+                );
+                const next = await post(
+                  '/review-requests',
+                  'author',
+                  await lifecycleInput(f),
+                ).expect(201);
+                const id = (next.body as { id: string }).id;
+                await post('/review-requests/' + id + '/decision', 'limited', {
+                  expectedRevision: 4,
+                  outcome: 'approved',
+                }).expect(201);
+                assert.deepEqual(
+                  await snapshots.getPublished(f.org),
+                  f.snapshot,
+                );
+                await post('/publish', 'author', {}).expect(404);
+              },
+            );
+          } finally {
+            await app.close();
+          }
         },
       );
     } finally {

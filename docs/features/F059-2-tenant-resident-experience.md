@@ -1,5 +1,11 @@
 # F059.2 — Tenant-configurable resident experience
 
+Slice 4B's protected exact-revision review lifecycle is documented in
+[the review lifecycle record](F059-2-slice4B-exact-revision-review.md).
+It adds no publication command or public output changes; architecture/security
+review is pending. Earlier acceptance and authorization statements below are
+retained historical checkpoints.
+
 Slice 4A has separate, explicitly authorized persistence/security work documented
 in [the review/publication foundation record](F059-2-slice4A-review-publication-foundation.md).
 That work does not expose publication routes, apply Migration 43 to development,

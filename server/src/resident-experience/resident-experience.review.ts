@@ -111,18 +111,38 @@ export function residentReviewContributors(
   return [...actors].sort();
 }
 
-export function assertResidentApprovalUsable(
+export interface ResidentApprovalState {
+  readonly latestRequestId: string | null;
+  /** Optional until an actual publisher is selected in Slice 4C. */
+  readonly publisherId?: string;
+  readonly excludedReviewers: readonly string[];
+  readonly consumed: boolean;
+  readonly now: Date;
+  readonly reviewerAuthorized: boolean;
+  readonly targetEligible: boolean;
+}
+
+/** One fail-closed evaluation, with current state resolved under the authority barrier.
+ * A usable approval is not permission to publish; 4C must supply/authorize the publisher.
+ */
+export function evaluateResidentApproval(
   request: ResidentReviewRequest,
-  decision: ResidentReviewDecision,
+  decision: ResidentReviewDecision | null,
   current: ResidentReviewBinding,
-  state: {
-    readonly latestRequestId: string;
-    readonly publisherId: string;
-    readonly excludedReviewers: readonly string[];
-    readonly consumed: boolean;
-    readonly now: Date;
-  },
-): void {
+  state: ResidentApprovalState,
+): {
+  usable: boolean;
+  reason:
+    | 'pending'
+    | 'stale'
+    | 'superseded'
+    | 'rejected'
+    | 'consumed'
+    | 'expired'
+    | 'authority'
+    | 'separation'
+    | null;
+} {
   const fields = [
     'organizationId',
     'targetRevisionId',
@@ -134,28 +154,56 @@ export function assertResidentApprovalUsable(
     'policyVersion',
     'classifierVersion',
   ] as const;
-  const decided = decision.decidedAt.getTime(),
-    now = state.now.getTime();
   if (
     fields.some((key) => request[key] !== current[key]) ||
     current.policyVersion !== residentReviewPolicyVersion ||
     current.classifierVersion !== residentPublicationClassifierVersion ||
-    request.id !== state.latestRequestId ||
+    !state.targetEligible ||
+    (request.purpose === 'draft' &&
+      current.draftRevisionId !== request.targetRevisionId)
+  )
+    return { usable: false, reason: 'stale' };
+  if (request.id !== state.latestRequestId)
+    return { usable: false, reason: 'superseded' };
+  if (!decision) return { usable: false, reason: 'pending' };
+  if (
     decision.requestId !== request.id ||
-    decision.organizationId !== request.organizationId ||
-    decision.outcome !== 'approved' ||
-    state.consumed ||
+    decision.organizationId !== request.organizationId
+  )
+    return { usable: false, reason: 'stale' };
+  if (decision.outcome !== 'approved')
+    return { usable: false, reason: 'rejected' };
+  if (state.consumed) return { usable: false, reason: 'consumed' };
+  const decided = decision.decidedAt.getTime(),
+    now = state.now.getTime();
+  if (
     !Number.isFinite(now) ||
     !Number.isFinite(decided) ||
     now < decided ||
     now >= decided + residentApprovalLifetimeMs ||
     decision.expiresAt.getTime() !== decided + residentApprovalLifetimeMs
   ) {
-    throw new ConflictException('Resident approval is no longer usable');
+    return { usable: false, reason: 'expired' };
   }
+  if (!state.reviewerAuthorized) return { usable: false, reason: 'authority' };
   if (
     decision.reviewerId === state.publisherId ||
     state.excludedReviewers.includes(decision.reviewerId)
   )
+    return { usable: false, reason: 'separation' };
+  return { usable: true, reason: null };
+}
+
+/** Assertion form of the same evaluation; callers must resolve all current facts. */
+export function assertResidentApprovalUsable(
+  request: ResidentReviewRequest,
+  decision: ResidentReviewDecision,
+  current: ResidentReviewBinding,
+  state: ResidentApprovalState & { readonly publisherId: string },
+): void {
+  const result = evaluateResidentApproval(request, decision, current, state);
+  if (result.reason === 'separation')
     throw new ForbiddenException('Independent resident review required');
+  if (!result.usable)
+    throw new ConflictException('Resident approval is no longer usable');
 }

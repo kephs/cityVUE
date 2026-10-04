@@ -15,9 +15,15 @@ import {
   classifyResidentPublication,
   residentApprovalLifetimeMs,
   residentReviewContributors,
+  evaluateResidentApproval,
   type ResidentReviewRequest,
   type ResidentReviewDecision,
 } from '../../src/resident-experience/resident-experience.review.js';
+import {
+  parseResidentReviewRequest,
+  parseResidentReviewDecision,
+  residentReviewId,
+} from '../../src/resident-experience/resident-experience.review.input.js';
 import { phoneFixture } from '../helpers/resident-experience.fixture.js';
 
 const request: ResidentReviewRequest = {
@@ -50,12 +56,122 @@ const decision: ResidentReviewDecision = {
   expiresAt: new Date(1000 + residentApprovalLifetimeMs),
 };
 const state = {
+  reviewerAuthorized: true,
+  targetEligible: true,
   latestRequestId: 'request',
   publisherId: 'publisher',
   excludedReviewers: ['author'],
   consumed: false,
   now: new Date(2000),
 };
+test('usability projection fails closed on fresh authority, eligibility and immutable decision state', () => {
+  const facts = { ...state, reviewerAuthorized: true, targetEligible: true };
+  assert.deepEqual(
+    evaluateResidentApproval(request, decision, request, facts),
+    { usable: true, reason: null },
+  );
+  for (const [change, reason] of [
+    [{ reviewerAuthorized: false }, 'authority'],
+    [{ targetEligible: false }, 'stale'],
+    [{ latestRequestId: 'new' }, 'superseded'],
+    [{ consumed: true }, 'consumed'],
+    [{ publisherId: 'reviewer' }, 'separation'],
+    [{ excludedReviewers: ['reviewer'] }, 'separation'],
+    [{ now: decision.expiresAt }, 'expired'],
+    [{ now: new Date(NaN) }, 'expired'],
+  ] as const)
+    assert.deepEqual(
+      evaluateResidentApproval(request, decision, request, {
+        ...facts,
+        ...change,
+      }),
+      { usable: false, reason },
+    );
+  assert.equal(
+    evaluateResidentApproval(request, null, request, facts).reason,
+    'pending',
+  );
+  assert.equal(
+    evaluateResidentApproval(
+      request,
+      { ...decision, outcome: 'rejected' },
+      request,
+      facts,
+    ).reason,
+    'rejected',
+  );
+  const noLongerDraft = { ...request, draftRevisionId: 'other' };
+  assert.equal(
+    evaluateResidentApproval(noLongerDraft, decision, noLongerDraft, facts)
+      .reason,
+    'stale',
+  );
+  for (const key of [
+    'organizationId',
+    'targetRevisionId',
+    'baselineRevisionId',
+    'draftRevisionId',
+    'resourceRevision',
+    'authorizationRevision',
+    'purpose',
+    'policyVersion',
+    'classifierVersion',
+  ]) {
+    assert.equal(
+      evaluateResidentApproval(
+        request,
+        decision,
+        { ...request, [key]: 'changed' },
+        facts,
+      ).usable,
+      false,
+    );
+  }
+});
+test('strict review bodies reject caller identity, baseline, classification and clock overrides', () => {
+  const input = {
+    targetRevisionId: '00000000-0000-4000-8000-000000000059',
+    expectedRevision: 2,
+    purpose: 'draft',
+    supersedesRequestId: null,
+  };
+  assert.equal(parseResidentReviewRequest(input).purpose, 'draft');
+  for (const key of [
+    'organizationId',
+    'requestedBy',
+    'baselineRevisionId',
+    'consequential',
+    'policyVersion',
+    'authorizationRevision',
+    'createdAt',
+  ])
+    assert.throws(() =>
+      parseResidentReviewRequest({ ...input, [key]: 'forged' }),
+    );
+  for (const value of [
+    null,
+    [],
+    {},
+    { ...input, expectedRevision: '2' },
+    { ...input, expectedRevision: 0 },
+    { ...input, purpose: 'publish' },
+    { ...input, targetRevisionId: 'wrong' },
+    { ...input, supersedesRequestId: undefined },
+  ])
+    assert.throws(() => parseResidentReviewRequest(value));
+  for (const outcome of ['approved', 'rejected'])
+    assert.equal(
+      parseResidentReviewDecision({ expectedRevision: 2, outcome }).outcome,
+      outcome,
+    );
+  for (const value of [
+    { expectedRevision: 2, outcome: 'pending' },
+    { expectedRevision: 2, outcome: 'approved', reviewerId: 'forged' },
+    { expectedRevision: 2, outcome: 'approved', decidedAt: 'forged' },
+  ])
+    assert.throws(() => parseResidentReviewDecision(value));
+  assert.throws(() => residentReviewId('invalid'));
+});
 test('publication classification preserves draft classifier and marks every first publication consequential', () => {
   const original = phoneFixture(),
     next = structuredClone(original);
