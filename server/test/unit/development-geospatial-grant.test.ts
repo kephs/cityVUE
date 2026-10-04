@@ -14,6 +14,7 @@ const base = {
   CITYVUE_DEPLOYMENT_PROFILE: 'development',
   CITYVUE_ENABLE_EXTERNAL_IDENTITY: 'true',
   DATABASE_URL: 'postgresql://example:placeholder@localhost/test',
+  DEVELOPMENT_ORGANIZATION_ID: '10000000-0000-4000-8000-000000000001',
   ENTRA_TENANT_ID: tenant,
   ENTRA_API_CLIENT_ID: '50000000-0000-4000-8000-000000000005',
   ENTRA_EXPECTED_AUDIENCE: 'api://fictional',
@@ -98,15 +99,21 @@ test('provisioning needs explicit, valid identity, Organization and grant choice
 
 test('provisioning rejects production, client and missing external identity opt-in', () => {
   for (const overrides of [
+    // ADR-025: a client profile may not use development Organization
+    // resolution, so these cases validate under the registry strategy.
     {
       NODE_ENV: 'production',
       CITYVUE_DEPLOYMENT_PROFILE: 'client',
       CITYVUE_ENABLE_EXTERNAL_IDENTITY: 'false',
       DATABASE_SSL_MODE: 'verify-full',
+      TENANT_RESOLUTION_STRATEGY: 'registry',
+      DEVELOPMENT_ORGANIZATION_ID: undefined,
     },
     {
       CITYVUE_DEPLOYMENT_PROFILE: 'client',
       CITYVUE_ENABLE_EXTERNAL_IDENTITY: 'false',
+      TENANT_RESOLUTION_STRATEGY: 'registry',
+      DEVELOPMENT_ORGANIZATION_ID: undefined,
     },
   ]) {
     const env = validateEnvironment({ ...base, ...overrides });

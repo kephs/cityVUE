@@ -14,6 +14,8 @@ import {
 test('F044 actual HTTP rate limiting, privacy headers and sanitized failures protect credential header/path/query/body', async () => {
   process.env.NODE_ENV = 'test';
   process.env.DATABASE_URL = 'postgresql://localhost:5432/cityvue_test';
+  process.env.DEVELOPMENT_ORGANIZATION_ID =
+    '10000000-0000-4000-8000-000000000001';
   process.env.RATE_LIMIT_MAX = '4';
   process.env.RATE_LIMIT_TTL_MS = '60000';
   const lines: string[] = [];

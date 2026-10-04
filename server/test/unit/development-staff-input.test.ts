@@ -18,6 +18,7 @@ const base = {
   ENTRA_EXPECTED_AUDIENCE: 'api://fictional',
   DATABASE_URL:
     'postgresql://reqro_dev_user:placeholder@localhost:5432/reqro_dev',
+  DEVELOPMENT_ORGANIZATION_ID: '10000000-0000-4000-8000-000000000001',
 };
 
 test('F036 requires raw explicit development profile and personal tenant confirmation', () => {

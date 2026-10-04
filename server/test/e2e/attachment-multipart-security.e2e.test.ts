@@ -73,6 +73,8 @@ before(async () => {
   process.env.NODE_ENV = 'test';
   process.env.DATABASE_URL =
     'postgresql://cityvue:placeholder@localhost:5432/cityvue_test';
+  process.env.DEVELOPMENT_ORGANIZATION_ID =
+    '10000000-0000-4000-8000-000000000001';
   process.env.LOG_LEVEL = 'silent';
   process.env.CORS_ORIGINS = ALLOWED_ORIGIN;
   process.env.RATE_LIMIT_MAX = '200';

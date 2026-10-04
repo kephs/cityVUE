@@ -4,13 +4,32 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import type { AppConfiguration } from './config/configuration.js';
-import { parseCorsOrigins } from './config/environment.js';
+import {
+  parseCorsOrigins,
+  type TenantResolutionStrategy,
+} from './config/environment.js';
 import { HttpExceptionFilter } from './common/errors/http-exception.filter.js';
 import { PinoLoggerService } from './common/logging/pino-logger.service.js';
+
+/** ADR-025. The verified tenant-domain registry and hostname resolver are a
+ * later slice. Refuse to serve HTTP under `registry` rather than starting with
+ * no Organization authority; migration and operator CLIs are unaffected. */
+export function assertServableTenantStrategy(
+  strategy: TenantResolutionStrategy,
+): void {
+  if (strategy === 'registry')
+    throw new Error(
+      'Invalid server configuration: registry tenant resolution is not implemented; the API cannot serve requests under it',
+    );
+}
 
 export function configureApplication(app: INestApplication): void {
   const config = app.get(ConfigService<AppConfiguration, true>);
   const logger = app.get(PinoLoggerService);
+
+  assertServableTenantStrategy(
+    config.get('tenancy.resolutionStrategy', { infer: true }),
+  );
 
   app.useLogger(logger);
   app.use(helmet());

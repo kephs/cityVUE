@@ -60,6 +60,8 @@ class Harness {
 test('test-only HTTP harness verifies DTO, Entra/RBAC, correlated lifecycle and logging privacy', async (t) => {
   process.env.NODE_ENV = 'test';
   process.env.DATABASE_URL = 'postgresql://cityvue:placeholder@localhost/test';
+  process.env.DEVELOPMENT_ORGANIZATION_ID =
+    '10000000-0000-4000-8000-000000000001';
   process.env.LOG_LEVEL = 'silent';
   process.env.AI_ENABLED = 'false';
   process.env.AI_TEST_EXECUTION_ENABLED = 'false';

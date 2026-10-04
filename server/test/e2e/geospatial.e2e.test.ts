@@ -44,6 +44,8 @@ test('protected geospatial HTTP path authenticates, authorizes and scopes before
   process.env.NODE_ENV = 'test';
   process.env.CITYVUE_DEPLOYMENT_PROFILE = 'development';
   process.env.DATABASE_URL = 'postgresql://cityvue:placeholder@localhost/test';
+  process.env.DEVELOPMENT_ORGANIZATION_ID =
+    '10000000-0000-4000-8000-000000000001';
   process.env.LOG_LEVEL = 'silent';
   delete process.env.ENTRA_TENANT_ID;
   delete process.env.ENTRA_API_CLIENT_ID;

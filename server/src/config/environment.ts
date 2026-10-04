@@ -3,6 +3,11 @@ import { databaseConnectionOptions } from './database-tls.js';
 
 export type NodeEnvironment = 'development' | 'test' | 'production';
 export type DatabaseSslMode = 'disable' | 'require' | 'verify-full';
+/** ADR-025. `development` serves one configured Organization to anonymous
+ * callers and is never a production tenant boundary. `registry` is the future
+ * verified hostname resolver; no resolver exists yet, so the API refuses to
+ * serve under it (see assertServableTenantStrategy in bootstrap.ts). */
+export type TenantResolutionStrategy = 'development' | 'registry';
 
 export interface EnvironmentVariables {
   PARTICIPATION_SUPPRESSION_THRESHOLD: number;
@@ -27,7 +32,8 @@ export interface EnvironmentVariables {
   RATE_LIMIT_TTL_MS: number;
   RATE_LIMIT_MAX: number;
   OTEL_SERVICE_NAME: string;
-  DEVELOPMENT_ORGANIZATION_ID: string;
+  TENANT_RESOLUTION_STRATEGY: TenantResolutionStrategy;
+  DEVELOPMENT_ORGANIZATION_ID?: string;
   ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS: boolean;
   ENABLE_DEVELOPMENT_STAFF_ACTIONS: boolean;
   DEVELOPMENT_STAFF_ACTOR_ID: string;
@@ -111,9 +117,14 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
   RATE_LIMIT_TTL_MS: Joi.number().integer().min(1000).default(60000),
   RATE_LIMIT_MAX: Joi.number().integer().min(1).default(120),
   OTEL_SERVICE_NAME: Joi.string().trim().min(1).default('cityvue-api'),
+  TENANT_RESOLUTION_STRATEGY: Joi.string()
+    .valid('development', 'registry')
+    .default('development'),
+  // No default. A repository-known fixture Organization must never be selected
+  // implicitly; the development strategy requires an explicit value below.
   DEVELOPMENT_ORGANIZATION_ID: Joi.string()
     .guid({ version: ['uuidv4'] })
-    .default('10000000-0000-4000-8000-000000000001'),
+    .optional(),
   ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS: Joi.boolean()
     .truthy('true')
     .falsy('false')
@@ -270,6 +281,26 @@ export function validateEnvironment(
   ) {
     throw new Error(
       'Invalid server configuration: production requires an explicit client deployment profile',
+    );
+  }
+  // ADR-025 tenant resolution. These run after the existing production/profile
+  // checks so their more specific messages continue to surface first.
+  if (environment.TENANT_RESOLUTION_STRATEGY === 'development') {
+    if (environment.NODE_ENV === 'production')
+      throw new Error(
+        'Invalid server configuration: development Organization resolution cannot be used in production',
+      );
+    if (environment.CITYVUE_DEPLOYMENT_PROFILE !== 'development')
+      throw new Error(
+        'Invalid server configuration: development Organization resolution requires an explicit development deployment profile',
+      );
+    if (!environment.DEVELOPMENT_ORGANIZATION_ID)
+      throw new Error(
+        'Invalid server configuration: development Organization resolution requires an explicit DEVELOPMENT_ORGANIZATION_ID',
+      );
+  } else if (environment.DEVELOPMENT_ORGANIZATION_ID) {
+    throw new Error(
+      'Invalid server configuration: registry tenant resolution cannot be combined with DEVELOPMENT_ORGANIZATION_ID',
     );
   }
 

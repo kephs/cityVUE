@@ -52,6 +52,7 @@ test('AI configuration defaults closed and rejects chat activation and invalid f
   const base = {
     NODE_ENV: 'test',
     DATABASE_URL: 'postgresql://cityvue:placeholder@localhost/test',
+    DEVELOPMENT_ORGANIZATION_ID: '10000000-0000-4000-8000-000000000001',
   };
   const defaults = validateEnvironment(base);
   assert.equal(defaults.AI_ENABLED, false);

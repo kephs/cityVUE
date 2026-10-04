@@ -429,6 +429,7 @@ test('test execution flag defaults off and cannot be enabled in production or wi
   const base = {
     NODE_ENV: 'test',
     DATABASE_URL: 'postgresql://cityvue:placeholder@localhost/test',
+    DEVELOPMENT_ORGANIZATION_ID: '10000000-0000-4000-8000-000000000001',
   };
   assert.equal(validateEnvironment(base).AI_TEST_EXECUTION_ENABLED, false);
   assert.throws(() =>

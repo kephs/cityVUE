@@ -15,11 +15,14 @@ import { databaseConnectionOptions } from '../../src/config/database-tls.js';
 import { validateEnvironment } from '../../src/config/environment.js';
 
 const url = 'postgresql://localhost/cityvue_tls_test';
+const developmentOrganizationId = '10000000-0000-4000-8000-000000000001';
 const production = {
   NODE_ENV: 'production',
   CITYVUE_DEPLOYMENT_PROFILE: 'client',
   DATABASE_URL: url,
   DATABASE_SSL_MODE: 'verify-full',
+  // ADR-025: a client profile may not use development Organization resolution.
+  TENANT_RESOLUTION_STRATEGY: 'registry',
 };
 
 function effectiveTls(options: PoolConfig): false | ConnectionOptions {
@@ -120,6 +123,7 @@ test('development/test keep explicit plaintext Docker support but never unverifi
     const env = validateEnvironment({
       NODE_ENV: environment,
       DATABASE_URL: url,
+      DEVELOPMENT_ORGANIZATION_ID: developmentOrganizationId,
     });
     assert.equal(
       effectiveTls(
@@ -136,6 +140,7 @@ test('development/test keep explicit plaintext Docker support but never unverifi
         validateEnvironment({
           NODE_ENV: environment,
           DATABASE_URL: url,
+          DEVELOPMENT_ORGANIZATION_ID: developmentOrganizationId,
           DATABASE_SSL_MODE: 'require',
         }),
       /unverified TLS is unsupported/,

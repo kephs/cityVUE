@@ -1,3 +1,5 @@
+import type { TenantResolutionStrategy } from './environment.js';
+
 export interface AppConfiguration {
   participation?: { suppressionThreshold: number };
   attachments?: { developmentEnabled: boolean };
@@ -32,6 +34,10 @@ export interface AppConfiguration {
     serviceName: string;
     otlpEndpoint?: string;
   };
+  tenancy: { resolutionStrategy: TenantResolutionStrategy };
+  /** Populated only under the ADR-025 development strategy. Validated
+   * environment guarantees an explicit UUID there; it is empty under the
+   * registry strategy, which the API refuses to serve. */
   catalog: { developmentOrganizationId: string };
   serviceRequestReads: { developmentEnabled: boolean };
   staffActions: { developmentEnabled: boolean; developmentActorId: string };
@@ -104,10 +110,14 @@ export function configuration(): AppConfiguration {
       serviceName: process.env.OTEL_SERVICE_NAME ?? 'cityvue-api',
       ...(otlpEndpoint ? { otlpEndpoint } : {}),
     },
+    tenancy: {
+      resolutionStrategy: (process.env.TENANT_RESOLUTION_STRATEGY ??
+        'development') as TenantResolutionStrategy,
+    },
+    // No fixture fallback. An absent value cannot match any Organization row,
+    // so a misconfigured process fails instead of serving a known tenant.
     catalog: {
-      developmentOrganizationId:
-        process.env.DEVELOPMENT_ORGANIZATION_ID ??
-        '10000000-0000-4000-8000-000000000001',
+      developmentOrganizationId: process.env.DEVELOPMENT_ORGANIZATION_ID ?? '',
     },
     serviceRequestReads: {
       developmentEnabled:

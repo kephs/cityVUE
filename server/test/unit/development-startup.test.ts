@@ -30,6 +30,9 @@ test('configured development compiler initializes the complete Nest application'
           NODE_ENV: 'test',
           CITYVUE_DEPLOYMENT_PROFILE: 'development',
           DATABASE_URL: 'postgresql://example:placeholder@localhost/test',
+          // ADR-025: the development tenant strategy requires an explicit
+          // Organization; no fixture fallback exists.
+          DEVELOPMENT_ORGANIZATION_ID: '10000000-0000-4000-8000-000000000001',
           LOG_LEVEL: 'silent',
         },
       },
