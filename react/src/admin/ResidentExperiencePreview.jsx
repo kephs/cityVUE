@@ -58,11 +58,21 @@ export default function ResidentExperiencePreview({ presentation, onClose }) {
         <strong>Unpublished Preview</strong>
         <span>Saved draft only. Resident actions are disabled.</span>
         <ThemeToggle />
-        <button ref={close} className="btn btn-secondary" onClick={onClose}>
+        <button
+          ref={close}
+          type="button"
+          className="btn btn-secondary"
+          aria-label="Close preview"
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
+        >
           Close preview
         </button>
       </div>
       <div
+        className="resident-preview-home"
         onClickCapture={intercept}
         onAuxClickCapture={intercept}
         onContextMenuCapture={intercept}
@@ -74,7 +84,7 @@ export default function ResidentExperiencePreview({ presentation, onClose }) {
       >
         <HomePresentationProvider value={previewPresentation}>
           <HomeHeader />
-          <main className="reqro-home-main">
+          <main className="reqro-home-main resident-preview-main">
             <HomePage />
           </main>
           <HomeFooter />

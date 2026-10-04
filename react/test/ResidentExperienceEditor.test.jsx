@@ -429,6 +429,34 @@ test("protected saved preview reuses frozen content and intercepts links, calls,
   ).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Close preview" }));
   expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByLabelText("Public application name")).toHaveValue("Reqro");
+  expect(client.put).not.toHaveBeenCalled();
+});
+test("preview close is keyboard actionable and uses the full resident shell", async () => {
+  const user = userEvent.setup();
+  const client = clientFor();
+  render(app(client));
+  await screen.findByLabelText("Public application name");
+  await user.click(screen.getByRole("button", { name: "Preview saved draft" }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "Unpublished Preview",
+  });
+  expect(screen.getByText(/Resident actions are disabled\./)).toBeVisible();
+  expect(dialog.querySelector(".resident-preview-home")).toHaveClass(
+    "resident-preview-home",
+  );
+  expect(dialog.querySelector(".resident-preview-main")).toHaveClass(
+    "resident-preview-main",
+  );
+  const close = screen.getByRole("button", { name: "Close preview" });
+  close.focus();
+  expect(close).toHaveFocus();
+  await user.keyboard("{Enter}");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Preview saved draft" }),
+  ).toHaveFocus();
+  expect(client.put).not.toHaveBeenCalled();
 });
 test("Admin navigation requires successful protected configuration admission", async () => {
   const client = clientFor();
