@@ -151,6 +151,53 @@ test('answer read requires an explicit selection and is absent from broad bundle
   );
 });
 
+test('Resident Experience UAT permissions are accepted only as explicit development selections', () => {
+  assert.deepEqual(
+    selectedDevelopmentPermissions(
+      'admin.configuration.read,resident_experience.publish,resident_experience.contact.manage',
+      undefined,
+    ),
+    [
+      'admin.configuration.read',
+      'resident_experience.publish',
+      'resident_experience.contact.manage',
+    ],
+  );
+  assert.deepEqual(
+    selectedDevelopmentPermissions(
+      'admin.configuration.read,resident_experience.write,resident_experience.contact.manage',
+      undefined,
+    ),
+    [
+      'admin.configuration.read',
+      'resident_experience.write',
+      'resident_experience.contact.manage',
+    ],
+  );
+  for (const invalid of [
+    '*',
+    'resident_experience.*',
+    'resident_experience.publish,unknown.permission',
+    'resident_experience.publish,resident_experience.publish',
+  ]) {
+    if (invalid.includes(',')) {
+      if (invalid.endsWith('publish'))
+        assert.deepEqual(selectedDevelopmentPermissions(invalid, undefined), [
+          'resident_experience.publish',
+        ]);
+      else
+        assert.throws(() => selectedDevelopmentPermissions(invalid, undefined));
+    } else
+      assert.throws(() => selectedDevelopmentPermissions(invalid, undefined));
+  }
+  assert.throws(() =>
+    selectedDevelopmentPermissions(
+      'resident_experience.publish',
+      'FULL_UAT_OPERATOR',
+    ),
+  );
+});
+
 test('F036 scope inputs require explicit validated hierarchy identifiers without authority extras', () => {
   const scope = {
     departmentId: '20000000-0000-4000-8000-000000000001',
