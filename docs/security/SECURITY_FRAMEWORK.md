@@ -113,6 +113,8 @@ Committed repository code implements Organization-scoped, fail-closed administra
 - **Governed concurrency.** One command occupies one transaction with Organization-first locking, an expected-revision check taken after the lock, in-transaction actor re-resolution, and no automatic retry or idempotency key for consequential access mutations.
 - **Externally and provisioning-owned access is read-only** to Access & Permissions, as is Department and Division membership.
 
+The accepted architecture for production bootstrap and recovery is recorded in [ADR-027](../architecture/decisions/ADR-027-platform-operator-bootstrap-recovery.md): no bootstrap token, authority derived from existing infrastructure/deployment authority through a production-mode operator CLI, platform operator kept separate from Organization-bound tenant staff, control-plane authority that does not grant tenant data-plane access, recovery bounded to re-binding a trusted identity to already-authorized authority, and no local authentication fallback. **Acceptance of that architecture authorizes no implementation**; the controlled provisioning command remains restricted to a development profile and an approved local database, and ADR-023's statement that emergency break-glass is not implemented remains factually true.
+
 **Planned/future for this area:** production bootstrap and recovery, endpoint-specific abuse controls for access mutation, Organization-wide audit retrieval, access-read auditing, and staff lifecycle/deprovisioning administration. See the [F057.4 refresh](../features/F057-4-access-administration-architecture-refresh.md) for the recorded gaps; none of that future work is approved for implementation.
 
 ## Public/citizen versus staff access
