@@ -7,6 +7,7 @@ import { AdminResidentExperienceService } from './resident-experience.admin.serv
 import { AdminResidentExperienceController } from './resident-experience.admin.controller.js';
 import { AdminResidentReviewController } from './resident-experience.review.controller.js';
 import { AdminResidentReviewService } from './resident-experience.review.service.js';
+import { ResidentPublicationService } from './resident-experience.publication.service.js';
 
 @Module({
   controllers: [
@@ -24,6 +25,7 @@ import { AdminResidentReviewService } from './resident-experience.review.service
     PublicResidentExperienceService,
     AdminResidentExperienceService,
     AdminResidentReviewService,
+    ResidentPublicationService,
   ],
 })
 export class ResidentExperienceModule {}

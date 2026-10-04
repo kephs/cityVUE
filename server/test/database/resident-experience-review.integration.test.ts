@@ -21,6 +21,7 @@ import { ResidentExperienceRepository } from '../../src/resident-experience/resi
 import { AdminResidentExperienceService } from '../../src/resident-experience/resident-experience.admin.service.js';
 import { ResidentReviewRepository } from '../../src/resident-experience/resident-experience.review.repository.js';
 import { AdminResidentReviewService } from '../../src/resident-experience/resident-experience.review.service.js';
+import { ResidentPublicationService } from '../../src/resident-experience/resident-experience.publication.service.js';
 import { residentReviewApi } from '../helpers/resident-experience-review-api.js';
 import { projectPublishedResidentExperience } from '../../src/resident-experience/resident-experience.public.dto.js';
 import {
@@ -88,7 +89,8 @@ test(
       }
       const snapshots = new ResidentExperienceRepository(database),
         drafts = new AdminResidentExperienceService(snapshots),
-        reviews = new ResidentReviewRepository(snapshots);
+        reviews = new ResidentReviewRepository(snapshots),
+        publicationService = new ResidentPublicationService(snapshots);
       const authorPermissions: Permission[] = [
         'admin.configuration.read',
         'resident_experience.write',
@@ -296,6 +298,17 @@ test(
         database
           .transaction()
           .execute((trx) => publication(trx, f, r, d, actorId));
+      const publishWithService = (
+        f: Fixture,
+        r: Request,
+        publisher = f.publisher,
+      ) =>
+        publicationService.publish({
+          publisher: publisher.access,
+          reviewRequestId: r.id,
+          expectedResourceRevision: r.resource_revision,
+          correlationId: randomUUID(),
+        });
       const seed = await fixture();
       await database
         .updateTable('organization_branding')
@@ -360,6 +373,157 @@ test(
           assert.deepEqual(
             await snapshots.getPublished(seed.org),
             seed.snapshot,
+          );
+        },
+      );
+      await t.test(
+        'reviewed publication service advances the exact first-publication pointer atomically',
+        async () => {
+          const f = await fixture(),
+            r = await request(f);
+          await decide(f, r);
+          const result = await publishWithService(f, r);
+          assert.equal(result.targetRevisionId, r.target_revision_id);
+          assert.equal(result.priorPublishedRevisionId, null);
+          assert.equal(result.resourceRevision, r.resource_revision + 1);
+          assert.deepEqual(await snapshots.getPublished(f.org), f.snapshot);
+          const event = await database
+            .selectFrom('resident_experience_event')
+            .selectAll()
+            .where('organization_id', '=', f.org)
+            .where('id', '=', result.publicationEventId)
+            .executeTakeFirstOrThrow();
+          assert.equal(event.review_request_id, r.id);
+          assert.equal(event.review_decision_id, result.reviewDecisionId);
+        },
+      );
+      await t.test(
+        'publisher cannot consume approval they reviewed',
+        async () => {
+          const f = await fixture(),
+            r = await request(f);
+          await decide(f, r, 'approved', f.publisher.access);
+          await assert.rejects(
+            publishWithService(f, r, f.publisher),
+            (error: unknown) =>
+              error instanceof ConflictException &&
+              /independent publisher/i.test(error.message),
+          );
+          assert.equal(
+            (await snapshots.getResource(f.org))?.published_revision_id,
+            null,
+          );
+          assert.equal(
+            (
+              await database
+                .selectFrom('resident_experience_event')
+                .select('id')
+                .where('organization_id', '=', f.org)
+                .where('operation', '=', 'published')
+                .execute()
+            ).length,
+            0,
+          );
+        },
+      );
+      await t.test(
+        'stale expected resource revision leaves the prior pointer unchanged',
+        async () => {
+          const f = await fixture(),
+            r = await request(f);
+          await decide(f, r);
+          await assert.rejects(
+            publicationService.publish({
+              publisher: f.publisher.access,
+              reviewRequestId: r.id,
+              expectedResourceRevision: r.resource_revision + 1,
+              correlationId: randomUUID(),
+            }),
+            /changed|stale/i,
+          );
+          assert.equal(
+            (await snapshots.getResource(f.org))?.published_revision_id,
+            null,
+          );
+        },
+      );
+      await t.test(
+        'two publication attempts consume one approval only once',
+        async () => {
+          const f = await fixture(),
+            r = await request(f);
+          await decide(f, r);
+          const outcomes = await Promise.allSettled([
+            publishWithService(f, r),
+            publishWithService(f, r),
+          ]);
+          assert.equal(
+            outcomes.filter((o) => o.status === 'fulfilled').length,
+            1,
+          );
+          assert.equal(
+            outcomes.filter((o) => o.status === 'rejected').length,
+            1,
+          );
+          assert.equal(
+            (
+              await database
+                .selectFrom('resident_experience_event')
+                .select('id')
+                .where('organization_id', '=', f.org)
+                .where('operation', '=', 'published')
+                .execute()
+            ).length,
+            1,
+          );
+        },
+      );
+      await t.test(
+        'historical republication uses a fresh approval and creates a new event',
+        async () => {
+          const f = await fixture(),
+            firstRequest = await request(f);
+          await decide(f, firstRequest);
+          await publishWithService(f, firstRequest);
+          const next = structuredClone(f.snapshot);
+          next.presentation.branding.applicationName = 'Forward publication';
+          await drafts.save(
+            f.author.access,
+            {
+              expectedRevision: firstRequest.resource_revision + 1,
+              snapshot: next,
+            },
+            randomUUID(),
+          );
+          const forwardRequest = await request(f);
+          await decide(f, forwardRequest);
+          await publishWithService(f, forwardRequest);
+          const historicalRequest = await request(f, {
+            ...(await binding(f)),
+            targetRevisionId: firstRequest.target_revision_id,
+            purpose: 'historical',
+          });
+          assert.equal(
+            historicalRequest.baseline_revision_id,
+            forwardRequest.target_revision_id,
+          );
+          await decide(f, historicalRequest);
+          const result = await publishWithService(f, historicalRequest);
+          assert.equal(
+            result.priorPublishedRevisionId,
+            forwardRequest.target_revision_id,
+          );
+          assert.deepEqual(await snapshots.getPublished(f.org), f.snapshot);
+          assert.equal(
+            (
+              await database
+                .selectFrom('resident_experience_event')
+                .select('id')
+                .where('organization_id', '=', f.org)
+                .where('operation', '=', 'published')
+                .execute()
+            ).length,
+            3,
           );
         },
       );
