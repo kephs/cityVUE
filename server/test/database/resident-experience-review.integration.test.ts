@@ -1586,19 +1586,31 @@ test(
         '4B protected HTTP lifecycle uses actual service/database authority, errors and no-store',
         async (apiTest) => {
           const f = await fixture(),
-            other = await fixture();
+            other = await fixture(),
+            same = await fixture();
           const reader = await actor(f.org, ['admin.configuration.read']);
           const limited = await actor(f.org, [
             'admin.configuration.read',
             'resident_experience.publish',
           ]);
-          const app = await residentReviewApi(lifecycle, {
-            author: f.author.access,
-            reviewer: f.reviewer.access,
-            reader: reader.access,
-            limited: limited.access,
-            other: other.reviewer.access,
-          });
+          const writeOnly = await actor(f.org, [
+            'admin.configuration.read',
+            'resident_experience.write',
+          ]);
+          const app = await residentReviewApi(
+            lifecycle,
+            {
+              author: f.author.access,
+              reviewer: f.reviewer.access,
+              reader: reader.access,
+              limited: limited.access,
+              writeOnly: writeOnly.access,
+              publisher: f.publisher.access,
+              samePublisher: same.publisher.access,
+              other: other.reviewer.access,
+            },
+            publicationService,
+          );
           const base = '/api/v1/admin/resident-experience';
           const input = await lifecycleInput(f);
           const targetId = input.targetRevisionId;
@@ -1698,20 +1710,78 @@ test(
               },
             );
             await apiTest.test(
+              'publication enforces publisher authority, bounded output, no-store and exact target',
+              async () => {
+                for (const token of ['reader', 'writeOnly'])
+                  await post('/publications', token, {
+                    reviewRequestId: r.id,
+                    expectedResourceRevision: 2,
+                  }).expect(403);
+                await post('/publications', 'limited', {
+                  reviewRequestId: r.id,
+                  expectedResourceRevision: 2,
+                }).expect(403);
+                const otherRequest = await request(other);
+                const otherRequestBinding = otherRequest as {
+                  id: string;
+                  resource_revision: number;
+                };
+                await post('/publications', 'publisher', {
+                  reviewRequestId: otherRequestBinding.id,
+                  expectedResourceRevision:
+                    otherRequestBinding.resource_revision,
+                }).expect(404);
+                const published = await post('/publications', 'publisher', {
+                  reviewRequestId: r.id,
+                  expectedResourceRevision: 2,
+                }).expect(201);
+                assert.equal(published.headers['cache-control'], 'no-store');
+                const publishedBody = published.body as {
+                  targetRevisionId: string;
+                  resourceRevision: number;
+                };
+                assert.deepEqual(
+                  Object.keys(published.body).sort(),
+                  [
+                    'consequential',
+                    'priorPublishedRevisionId',
+                    'publicationEventId',
+                    'resourceRevision',
+                    'reviewDecisionId',
+                    'reviewRequestId',
+                    'targetRevisionId',
+                  ].sort(),
+                );
+                assert.equal(publishedBody.targetRevisionId, targetId);
+                assert.equal(publishedBody.resourceRevision, 3);
+                assert.deepEqual(
+                  await snapshots.getPublished(f.org),
+                  f.snapshot,
+                );
+                await post('/publications', 'publisher', {
+                  reviewRequestId: r.id,
+                  expectedResourceRevision: 2,
+                }).expect(409);
+                const sameRequest = await request(same);
+                await decide(
+                  same,
+                  sameRequest,
+                  'approved',
+                  same.publisher.access,
+                );
+                await post('/publications', 'samePublisher', {
+                  reviewRequestId: sameRequest.id,
+                  expectedResourceRevision: sameRequest.resource_revision,
+                }).expect(409);
+                assert.deepEqual(
+                  await snapshots.getPublished(f.org),
+                  f.snapshot,
+                );
+              },
+            );
+            await apiTest.test(
               'ordinary exact review needs publish but neither contact nor write',
               async () => {
-                // Set up a published baseline using only the existing 4A disposable test helper.
-                const stored = await database
-                  .selectFrom('resident_experience_review_request')
-                  .selectAll()
-                  .where('id', '=', r.id)
-                  .executeTakeFirstOrThrow();
-                const decision = await database
-                  .selectFrom('resident_experience_review_decision')
-                  .selectAll()
-                  .where('request_id', '=', r.id)
-                  .executeTakeFirstOrThrow();
-                await publish(f, stored, decision);
                 const changed = structuredClone(f.snapshot);
                 changed.presentation.metadata.title = 'Ordinary wording';
                 await drafts.save(

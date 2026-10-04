@@ -10,6 +10,8 @@ import { StaffAuthorizationService } from '../../src/auth/staff-authorization.se
 import { DatabaseService } from '../../src/database/database.service.js';
 import { AdminResidentReviewController } from '../../src/resident-experience/resident-experience.review.controller.js';
 import { AdminResidentReviewService } from '../../src/resident-experience/resident-experience.review.service.js';
+import { AdminResidentPublicationController } from '../../src/resident-experience/resident-experience.publication.controller.js';
+import { ResidentPublicationService } from '../../src/resident-experience/resident-experience.publication.service.js';
 
 /** Synthetic verified principals only. Database tests supply the real review service. */
 export async function residentReviewApi(
@@ -18,9 +20,13 @@ export async function residentReviewApi(
     'context' | 'revision' | 'get' | 'create' | 'decide'
   >,
   accounts: Record<string, StaffAccess>,
+  publication?: Pick<ResidentPublicationService, 'publish'>,
 ) {
   const module = await Test.createTestingModule({
-    controllers: [AdminResidentReviewController],
+    controllers: [
+      AdminResidentReviewController,
+      ...(publication ? [AdminResidentPublicationController] : []),
+    ],
     providers: [
       StaffAccessGuard,
       Reflector,
@@ -49,6 +55,9 @@ export async function residentReviewApi(
         },
       },
       { provide: AdminResidentReviewService, useValue: service },
+      ...(publication
+        ? [{ provide: ResidentPublicationService, useValue: publication }]
+        : []),
     ],
   }).compile();
   const app = module.createNestApplication({ logger: false });
