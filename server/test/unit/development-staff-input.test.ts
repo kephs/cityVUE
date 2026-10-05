@@ -217,3 +217,29 @@ test('F036 scope inputs require explicit validated hierarchy identifiers without
   ])
     assert.throws(() => selectedDevelopmentScopes(invalid));
 });
+
+test('review permission is explicit development provisioning only, independent from publish', () => {
+  assert.deepEqual(
+    selectedDevelopmentPermissions(
+      'admin.configuration.read,resident_experience.review,resident_experience.contact.manage',
+      undefined,
+    ),
+    [
+      'admin.configuration.read',
+      'resident_experience.review',
+      'resident_experience.contact.manage',
+    ],
+  );
+  assert.equal(
+    selectedDevelopmentPermissions(undefined, 'FULL_UAT_OPERATOR').includes(
+      'resident_experience.review',
+    ),
+    false,
+  );
+  for (const invalid of [
+    'resident_experience.*',
+    'resident_experience.reviews',
+    'resident_experience.review,*',
+  ])
+    assert.throws(() => selectedDevelopmentPermissions(invalid, undefined));
+});

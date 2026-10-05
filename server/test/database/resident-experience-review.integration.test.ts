@@ -32,6 +32,10 @@ import {
   up,
   down,
 } from '../../migrations/20261013000000-resident-experience-review-foundation.js';
+import {
+  up as up44,
+  down as down44,
+} from '../../migrations/20261014000000-separate-resident-review-authority.js';
 
 test(
   'Slice 4A disposable review/publication database invariants',
@@ -95,8 +99,8 @@ test(
         'admin.configuration.read',
         'resident_experience.write',
         'resident_experience.contact.manage',
-        'resident_experience.publish',
       ];
+      let policyVersion: 1 | 2 = 1;
       async function actor(
         org: string,
         permissions: Permission[] = authorPermissions,
@@ -161,7 +165,7 @@ test(
           tenantId: tenant,
           objectId: object,
           displayName: 'Synthetic',
-          permissions,
+          permissions: [...permissions],
           scopes: [],
           departmentIds: [],
           divisionIds: [],
@@ -185,10 +189,16 @@ test(
         const author = await actor(org),
           reviewer = await actor(org, [
             'admin.configuration.read',
-            'resident_experience.publish',
+            policyVersion === 1
+              ? 'resident_experience.publish'
+              : 'resident_experience.review',
             'resident_experience.contact.manage',
           ]),
-          publisher = await actor(org);
+          publisher = await actor(org, [
+            'admin.configuration.read',
+            'resident_experience.publish',
+            'resident_experience.contact.manage',
+          ]);
         const snapshot = phoneFixture();
         await drafts.save(
           author.access,
@@ -214,7 +224,7 @@ test(
           resourceRevision: resource.revision,
           authorizationRevision: auth.authorization_revision,
           purpose: 'draft',
-          policyVersion: 1,
+          policyVersion,
           classifierVersion: 1,
         };
       }
@@ -309,6 +319,52 @@ test(
           expectedResourceRevision: r.resource_revision,
           correlationId: randomUUID(),
         });
+      async function grant(
+        actor: Awaited<ReturnType<typeof fixture>>['author'],
+        ...keys: Permission[]
+      ) {
+        await database.transaction().execute(async (trx) => {
+          await trx
+            .selectFrom('organization')
+            .select('id')
+            .where('id', '=', actor.access.organizationId)
+            .forUpdate()
+            .execute();
+          await trx
+            .selectFrom('organization_access_state')
+            .select('organization_id')
+            .where('organization_id', '=', actor.access.organizationId)
+            .forUpdate()
+            .execute();
+          for (const permission_key of keys)
+            await trx
+              .insertInto('role_permission')
+              .values({
+                organization_id: actor.access.organizationId,
+                role_id: actor.role,
+                permission_key,
+              })
+              .execute();
+        });
+        actor.access.permissions.push(...keys);
+      }
+      async function rawDecision(
+        f: Fixture,
+        r: Request,
+        reviewer = f.reviewer.access,
+      ) {
+        return database
+          .insertInto('resident_experience_review_decision')
+          .values({
+            id: randomUUID(),
+            organization_id: f.org,
+            request_id: r.id,
+            reviewer_id: reviewer.staffIdentityId,
+            outcome: 'approved',
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+      }
       const seed = await fixture();
       await database
         .updateTable('organization_branding')
@@ -348,6 +404,294 @@ test(
           assert.equal(
             (await snapshots.getResource(seed.org))?.published_revision_id,
             null,
+          );
+        },
+      );
+      await t.test(
+        '44 apply / rollback / reapply preserves v1 evidence and creates zero grants',
+        async () => {
+          const historical = await fixture(),
+            pending = await fixture(),
+            approved = await fixture();
+          const historicalRequest = await request(historical),
+            historicalDecision = await rawDecision(
+              historical,
+              historicalRequest,
+            );
+          await publish(historical, historicalRequest, historicalDecision);
+          const pendingRequest = await request(pending),
+            approvedRequest = await request(approved),
+            approvedDecision = await rawDecision(approved, approvedRequest);
+          const retained = await preserved();
+          const evidence = async () => ({
+            requests: await database
+              .selectFrom('resident_experience_review_request')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+            decisions: await database
+              .selectFrom('resident_experience_review_decision')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+            events: await database
+              .selectFrom('resident_experience_event')
+              .selectAll()
+              .orderBy('id')
+              .execute(),
+          });
+          const oldEvidence = await evidence();
+          const currentLegacy = async () =>
+            (
+              await sql<{
+                valid: boolean;
+              }>`select resident_review_context_valid(q) valid from resident_experience_review_request q where id=${pendingRequest.id}::uuid`.execute(
+                database,
+              )
+            ).rows[0]?.valid;
+          assert.equal(await currentLegacy(), true);
+          await database.transaction().execute(up44);
+          assert.equal(await currentLegacy(), false);
+          assert.equal(
+            (
+              await database
+                .selectFrom('organization_access_state')
+                .select('authorization_revision')
+                .where('organization_id', '=', pending.org)
+                .executeTakeFirstOrThrow()
+            ).authorization_revision,
+            pendingRequest.authorization_revision,
+          );
+          assert.equal(
+            (
+              await database
+                .selectFrom('role_permission')
+                .selectAll()
+                .where('permission_key', '=', 'resident_experience.review')
+                .execute()
+            ).length,
+            0,
+          );
+          assert.deepEqual(
+            { ...(await preserved()), permission: retained.permission },
+            retained,
+          );
+          assert.deepEqual(await evidence(), oldEvidence);
+          await database.transaction().execute(down44);
+          assert.deepEqual(await preserved(), retained);
+          assert.deepEqual(await evidence(), oldEvidence);
+          await database.transaction().execute(up44);
+          policyVersion = 2;
+          await grant(seed.reviewer, 'resident_experience.review');
+          await grant(pending.reviewer, 'resident_experience.review');
+          await grant(approved.reviewer, 'resident_experience.review');
+          const lifecycle = new AdminResidentReviewService(snapshots);
+          assert.equal(
+            (await lifecycle.get(pending.reviewer.access, pendingRequest.id))
+              .canReview,
+            false,
+          );
+          assert.equal(
+            (await lifecycle.get(approved.publisher.access, approvedRequest.id))
+              .canPublish,
+            false,
+          );
+          assert.equal(
+            (await lifecycle.get(approved.publisher.access, approvedRequest.id))
+              .usability.reason,
+            'stale',
+          );
+          await assert.rejects(
+            rawDecision(pending, pendingRequest),
+            /unavailable/,
+          );
+          await assert.rejects(
+            publish(approved, approvedRequest, approvedDecision),
+            /unavailable/,
+          );
+          await assert.rejects(
+            lifecycle.decide(pending.reviewer.access, pendingRequest.id, {
+              expectedRevision: 2,
+              outcome: 'approved',
+            }),
+            ConflictException,
+          );
+          await assert.rejects(
+            publishWithService(approved, approvedRequest),
+            ConflictException,
+          );
+          await assert.rejects(
+            request(seed, { ...(await binding(seed)), policyVersion: 1 }),
+            /Current resident review policy/,
+          );
+          await assert.rejects(
+            sql`update resident_experience_review_request set policy_version=2 where id=${pendingRequest.id}::uuid`.execute(
+              database,
+            ),
+            /immutable/,
+          );
+          await assert.rejects(
+            sql`delete from resident_experience_review_decision where id=${approvedDecision.id}::uuid`.execute(
+              database,
+            ),
+            /immutable/,
+          );
+          assert.deepEqual(await evidence(), oldEvidence);
+          assert.deepEqual(
+            await snapshots.getPublished(historical.org),
+            historical.snapshot,
+          );
+          const replacement = await lifecycle.create(approved.author.access, {
+            targetRevisionId: approvedRequest.target_revision_id,
+            expectedRevision: approvedRequest.resource_revision,
+            purpose: 'draft',
+            supersedesRequestId: approvedRequest.id,
+          });
+          assert.equal(replacement.policyVersion, 2);
+          await lifecycle.decide(approved.reviewer.access, replacement.id, {
+            expectedRevision: replacement.resourceRevision,
+            outcome: 'approved',
+          });
+          await publicationService.publish({
+            publisher: approved.publisher.access,
+            reviewRequestId: replacement.id,
+            expectedResourceRevision: replacement.resourceRevision,
+            correlationId: randomUUID(),
+          });
+          assert.deepEqual(
+            await snapshots.getPublished(approved.org),
+            approved.snapshot,
+          );
+          assert.deepEqual(
+            await database
+              .selectFrom('resident_experience_review_request')
+              .selectAll()
+              .where('id', '=', approvedRequest.id)
+              .executeTakeFirstOrThrow(),
+            approvedRequest,
+          );
+          assert.deepEqual(
+            await database
+              .selectFrom('resident_experience_review_decision')
+              .selectAll()
+              .where('id', '=', approvedDecision.id)
+              .executeTakeFirstOrThrow(),
+            approvedDecision,
+          );
+        },
+      );
+      await t.test(
+        'policy 2 has independent review-only and publish-only authority in service and database',
+        async () => {
+          const f = await fixture(),
+            r = await request(f);
+          const lifecycle = new AdminResidentReviewService(snapshots);
+          assert.equal(
+            (await lifecycle.get(f.reviewer.access, r.id)).canReview,
+            true,
+          );
+          assert.equal(
+            (await lifecycle.get(f.publisher.access, r.id)).canReview,
+            false,
+          );
+          await assert.rejects(
+            decide(f, r, 'approved', f.publisher.access),
+            ForbiddenException,
+          );
+          await assert.rejects(
+            rawDecision(f, r, f.publisher.access),
+            /Independent resident reviewer/,
+          );
+          const d = await decide(f, r);
+          assert.equal(
+            (await lifecycle.get(f.publisher.access, r.id)).canPublish,
+            true,
+          );
+          assert.equal(
+            (await lifecycle.get(f.reviewer.access, r.id)).canPublish,
+            false,
+          );
+          await assert.rejects(
+            publishWithService(f, r, f.reviewer),
+            ForbiddenException,
+          );
+          const secondReviewer = await actor(f.org, [
+            'admin.configuration.read',
+            'resident_experience.review',
+            'resident_experience.contact.manage',
+          ]);
+          const fresh = await request(f),
+            decision = await decide(f, fresh);
+          await assert.rejects(
+            publish(f, fresh, decision, secondReviewer.access.staffIdentityId),
+            /Independent resident publication/,
+          );
+          await publishWithService(f, fresh);
+          assert.deepEqual(await snapshots.getPublished(f.org), f.snapshot);
+          assert.ok(d.id);
+        },
+      );
+      await t.test(
+        'review and publication independently enforce consequential contact authority in PostgreSQL',
+        async () => {
+          const f = await fixture();
+          const limitedReviewer = await actor(f.org, [
+            'admin.configuration.read',
+            'resident_experience.review',
+          ]);
+          const limitedPublisher = await actor(f.org, [
+            'admin.configuration.read',
+            'resident_experience.publish',
+          ]);
+          const r = await request(f);
+          await assert.rejects(
+            decide(f, r, 'approved', limitedReviewer.access),
+            ForbiddenException,
+          );
+          await assert.rejects(
+            rawDecision(f, r, limitedReviewer.access),
+            /Independent resident reviewer/,
+          );
+          const d = await decide(f, r);
+          await assert.rejects(
+            publishWithService(f, r, limitedPublisher),
+            ForbiddenException,
+          );
+          await assert.rejects(
+            publish(f, r, d, limitedPublisher.access.staffIdentityId),
+            /Independent resident publication/,
+          );
+          assert.equal(await snapshots.getPublished(f.org), null);
+          assert.equal(
+            (
+              await database
+                .selectFrom('resident_experience_event')
+                .select('id')
+                .where('organization_id', '=', f.org)
+                .where('operation', '=', 'published')
+                .execute()
+            ).length,
+            0,
+          );
+        },
+      );
+      await t.test(
+        '44 rollback refuses retained version-2 evidence even without review grants',
+        async () => {
+          const f = await fixture();
+          await request(f);
+          await assert.rejects(
+            database.transaction().execute(async (trx) => {
+              await sql`lock table organization,organization_access_state in access exclusive mode`.execute(
+                trx,
+              );
+              await trx
+                .deleteFrom('role_permission')
+                .where('permission_key', '=', 'resident_experience.review')
+                .execute();
+              await down44(trx);
+            }),
+            /Retained resident review policy 2 evidence/,
           );
         },
       );
@@ -400,8 +744,9 @@ test(
       await t.test(
         'publisher cannot consume approval they reviewed',
         async () => {
-          const f = await fixture(),
-            r = await request(f);
+          const f = await fixture();
+          await grant(f.publisher, 'resident_experience.review');
+          const r = await request(f);
           await decide(f, r, 'approved', f.publisher.access);
           await assert.rejects(
             publishWithService(f, r, f.publisher),
@@ -543,7 +888,7 @@ test(
           );
           const reviewer = await actor(f.org, [
             'admin.configuration.read',
-            'resident_experience.publish',
+            'resident_experience.review',
           ]);
           const publisher = await actor(f.org, [
             'admin.configuration.read',
@@ -678,11 +1023,14 @@ test(
               request(f, changed),
               /changed|Stale resident review/,
             );
-          for (const changed of [
-            { ...b, policyVersion: 2 },
-            { ...b, classifierVersion: 2 },
-          ])
-            await assert.rejects(request(f, changed), /check constraint/);
+          await assert.rejects(
+            request(f, { ...b, policyVersion: 1 }),
+            /Current resident review policy/,
+          );
+          await assert.rejects(
+            request(f, { ...b, classifierVersion: 2 }),
+            /check constraint/,
+          );
         },
       );
       await t.test(
@@ -814,14 +1162,14 @@ test(
             await trx
               .deleteFrom('role_permission')
               .where('role_id', '=', f.reviewer.role)
-              .where('permission_key', '=', 'resident_experience.publish')
+              .where('permission_key', '=', 'resident_experience.review')
               .execute();
             await trx
               .insertInto('role_permission')
               .values({
                 organization_id: f.org,
                 role_id: f.reviewer.role,
-                permission_key: 'resident_experience.publish',
+                permission_key: 'resident_experience.review',
               })
               .execute();
           });
@@ -832,6 +1180,7 @@ test(
         'saver cannot review; reviewer cannot publish; consequential review and publication need contact authority',
         async () => {
           const f = await fixture();
+          await grant(f.author, 'resident_experience.review');
           const limited = await actor(f.org, [
             'admin.configuration.read',
             'resident_experience.publish',
@@ -860,10 +1209,12 @@ test(
         'cosmetic successor cannot launder consequential contributor identity',
         async () => {
           const f = await fixture();
+          await grant(f.author, 'resident_experience.review');
+          const cosmeticAuthor = await actor(f.org);
           const next = structuredClone(f.snapshot);
           next.presentation.branding.applicationName = 'Cosmetic';
           await drafts.save(
-            f.publisher.access,
+            cosmeticAuthor.access,
             { expectedRevision: 2, snapshot: next },
             randomUUID(),
           );
@@ -881,7 +1232,7 @@ test(
             contributors,
             [
               f.author.access.staffIdentityId,
-              f.publisher.access.staffIdentityId,
+              cosmeticAuthor.access.staffIdentityId,
             ].sort(),
           );
         },
@@ -1150,8 +1501,13 @@ test(
       await t.test(
         'historical review excludes the author of consequential changes being undone',
         async () => {
-          const f = await fixture(),
-            r1 = await request(f),
+          const f = await fixture();
+          await grant(
+            f.publisher,
+            'resident_experience.write',
+            'resident_experience.review',
+          );
+          const r1 = await request(f),
             d1 = await decide(f, r1);
           await publish(f, r1, d1);
           const changed = structuredClone(f.snapshot);
@@ -1209,6 +1565,212 @@ test(
           supersedesRequestId: context.latestRequestId,
         };
       }
+      await t.test(
+        '4B review context projects current draft request eligibility without exposing permissions',
+        async () => {
+          const f = await fixture();
+          const reviewerOnly = f.reviewer.access;
+          const publisherOnly = (
+            await actor(f.org, [
+              'admin.configuration.read',
+              'resident_experience.publish',
+              'resident_experience.contact.manage',
+            ])
+          ).access;
+          const writerWithoutContact = (
+            await actor(f.org, [
+              'admin.configuration.read',
+              'resident_experience.write',
+            ])
+          ).access;
+          assert.equal(
+            (await lifecycle.context(f.author.access)).canRequestReview,
+            true,
+          );
+          assert.equal(
+            (await lifecycle.context(reviewerOnly)).canRequestReview,
+            false,
+          );
+          assert.equal(
+            (await lifecycle.context(publisherOnly)).canRequestReview,
+            false,
+          );
+          assert.equal(
+            (await lifecycle.context(writerWithoutContact)).canRequestReview,
+            false,
+          );
+          const pending = await lifecycle.create(
+            f.author.access,
+            await lifecycleInput(f),
+          );
+          assert.equal(
+            (await lifecycle.context(f.author.access)).canRequestReview,
+            false,
+          );
+          await lifecycle.decide(f.reviewer.access, pending.id, {
+            expectedRevision: 2,
+            outcome: 'approved',
+          });
+          assert.equal(
+            (await lifecycle.context(f.author.access)).canRequestReview,
+            false,
+          );
+          const next = structuredClone(f.snapshot);
+          next.presentation.metadata.title = 'A newer saved draft';
+          await drafts.save(
+            f.author.access,
+            { expectedRevision: 2, snapshot: next },
+            randomUUID(),
+          );
+          assert.equal(
+            (await lifecycle.context(f.author.access)).canRequestReview,
+            true,
+          );
+        },
+      );
+      await t.test(
+        'approved revision 6 allows an eligible author to request revision 8 with exact supersession',
+        async () => {
+          const f = await fixture();
+          const author = (
+            await actor(f.org, [
+              'admin.configuration.read',
+              'resident_experience.write',
+              'resident_experience.contact.manage',
+            ])
+          ).access;
+          const publisher = (
+            await actor(f.org, [
+              'admin.configuration.read',
+              'resident_experience.publish',
+              'resident_experience.contact.manage',
+            ])
+          ).access;
+          async function saveNext(expectedRevision: number) {
+            const snapshot = structuredClone(f.snapshot);
+            snapshot.presentation.metadata.title = `Saved revision ${String(expectedRevision + 1)}`;
+            await drafts.save(
+              author,
+              { expectedRevision, snapshot },
+              randomUUID(),
+            );
+          }
+          for (let revision = 2; revision < 6; revision++)
+            await saveNext(revision);
+          const oldInput = await lifecycleInput(f);
+          const old = await lifecycle.create(author, oldInput);
+          await assert.rejects(
+            lifecycle.create(author, {
+              ...oldInput,
+              supersedesRequestId: old.id,
+            }),
+            ConflictException,
+          );
+          await lifecycle.decide(f.reviewer.access, old.id, {
+            expectedRevision: 6,
+            outcome: 'approved',
+          });
+          assert.equal(
+            (await lifecycle.context(author)).canRequestReview,
+            false,
+          );
+          await assert.rejects(
+            lifecycle.create(author, {
+              ...oldInput,
+              supersedesRequestId: old.id,
+            }),
+            ConflictException,
+          );
+          await saveNext(6);
+          await saveNext(7);
+          assert.equal(
+            (await lifecycle.get(author, old.id)).usability.reason,
+            'stale',
+          );
+          const context = await lifecycle.context(author);
+          assert.equal(context.resourceRevision, 8);
+          assert.equal(context.canRequestReview, true);
+          for (const actor of [f.reviewer.access, publisher]) {
+            assert.equal(
+              (await lifecycle.context(actor)).canRequestReview,
+              false,
+            );
+            const stale = await lifecycle.get(actor, old.id);
+            assert.equal(stale.canReview, false);
+            assert.equal(stale.canPublish, false);
+          }
+          const input = await lifecycleInput(f);
+          await assert.rejects(
+            lifecycle.create(author, {
+              ...input,
+              supersedesRequestId: null,
+            }),
+            ConflictException,
+          );
+          const fresh = await lifecycle.create(author, input);
+          assert.equal(fresh.supersedesRequestId, old.id);
+          assert.equal(fresh.targetRevisionId, context.draftRevisionId);
+          assert.equal(fresh.resourceRevision, 8);
+          assert.equal(
+            (await lifecycle.context(author)).canRequestReview,
+            false,
+          );
+          assert.equal(
+            (await lifecycle.get(f.reviewer.access, fresh.id)).canReview,
+            true,
+          );
+          assert.equal(
+            (await lifecycle.get(publisher, fresh.id)).canPublish,
+            false,
+          );
+          assert.equal(await snapshots.getPublished(f.org), null);
+        },
+      );
+      await t.test(
+        'consumed review permits a fresh draft review only after a newer draft is saved',
+        async () => {
+          const f = await fixture();
+          const r = await lifecycle.create(
+            f.author.access,
+            await lifecycleInput(f),
+          );
+          await lifecycle.decide(f.reviewer.access, r.id, {
+            expectedRevision: 2,
+            outcome: 'approved',
+          });
+          await publicationService.publish({
+            publisher: f.publisher.access,
+            reviewRequestId: r.id,
+            expectedResourceRevision: 2,
+            correlationId: randomUUID(),
+          });
+          assert.equal(
+            (await lifecycle.context(f.author.access)).canRequestReview,
+            false,
+          );
+          const next = structuredClone(f.snapshot);
+          next.presentation.metadata.title = 'After publication';
+          await drafts.save(
+            f.author.access,
+            { expectedRevision: 3, snapshot: next },
+            randomUUID(),
+          );
+          assert.equal(
+            (await lifecycle.context(f.author.access)).canRequestReview,
+            true,
+          );
+          const fresh = await lifecycle.create(
+            f.author.access,
+            await lifecycleInput(f),
+          );
+          assert.equal(fresh.supersedesRequestId, r.id);
+          assert.equal(
+            (await lifecycle.context(f.author.access)).canRequestReview,
+            false,
+          );
+          assert.deepEqual(await snapshots.getPublished(f.org), f.snapshot);
+        },
+      );
       await t.test(
         '4B exact read is immutable, scoped and projects review values separately from public presentation',
         async () => {
@@ -1306,6 +1868,11 @@ test(
             });
             assert.equal(d.decision?.outcome, outcome);
             assert.equal(d.usability.usable, outcome === 'approved');
+            assert.equal(d.canPublish, false);
+            assert.equal(
+              (await lifecycle.get(f.publisher.access, r.id)).canPublish,
+              outcome === 'approved',
+            );
             assert.equal(d.independentPublisherRequired, true);
             assert.ok(d.decision);
             assert.equal(
@@ -1357,8 +1924,13 @@ test(
       await t.test(
         '4B concurrent requests and decisions have one winner; supersession is explicit',
         async () => {
-          const f = await fixture(),
-            input = await lifecycleInput(f);
+          const f = await fixture();
+          const secondReviewer = await actor(f.org, [
+            'admin.configuration.read',
+            'resident_experience.review',
+            'resident_experience.contact.manage',
+          ]);
+          const input = await lifecycleInput(f);
           const results = await Promise.allSettled([
             lifecycle.create(f.author.access, input),
             lifecycle.create(f.author.access, input),
@@ -1380,7 +1952,7 @@ test(
               expectedRevision: 2,
               outcome: 'approved',
             }),
-            lifecycle.decide(f.publisher.access, r.id, {
+            lifecycle.decide(secondReviewer.access, r.id, {
               expectedRevision: 2,
               outcome: 'rejected',
             }),
@@ -1396,14 +1968,26 @@ test(
                 d.reason instanceof ConflictException,
             ),
           );
-          const replacement = await lifecycle.create(f.author.access, {
-            ...input,
-            supersedesRequestId: r.id,
-          });
+          const next = structuredClone(f.snapshot);
+          next.presentation.metadata.title =
+            'New context for replacement review';
+          await drafts.save(
+            f.author.access,
+            { expectedRevision: 2, snapshot: next },
+            randomUUID(),
+          );
+          const replacement = await lifecycle.create(
+            f.author.access,
+            await lifecycleInput(f),
+          );
           assert.equal(replacement.supersedesRequestId, r.id);
           assert.equal(
             (await lifecycle.get(f.reviewer.access, r.id)).usability.reason,
-            'superseded',
+            'stale',
+          );
+          assert.equal(
+            (await lifecycle.get(f.publisher.access, r.id)).canPublish,
+            false,
           );
           await assert.rejects(
             lifecycle.decide(f.reviewer.access, r.id, {
@@ -1425,6 +2009,12 @@ test(
         '4B consequential lineage excludes both the contact author and final cosmetic saver',
         async () => {
           const f = await fixture();
+          await grant(f.author, 'resident_experience.review');
+          await grant(
+            f.publisher,
+            'resident_experience.write',
+            'resident_experience.review',
+          );
           const original = await request(f),
             approved = await decide(f, original);
           await publish(f, original, approved); // test-only accepted 4A fixture establishes prior publication
@@ -1514,7 +2104,7 @@ test(
                   await trx
                     .deleteFrom('role_permission')
                     .where('role_id', '=', f.reviewer.role)
-                    .where('permission_key', '=', 'resident_experience.publish')
+                    .where('permission_key', '=', 'resident_experience.review')
                     .execute();
                 else
                   await trx
@@ -1588,8 +2178,13 @@ test(
           const f = await fixture(),
             other = await fixture(),
             same = await fixture();
+          await grant(same.publisher, 'resident_experience.review');
           const reader = await actor(f.org, ['admin.configuration.read']);
           const limited = await actor(f.org, [
+            'admin.configuration.read',
+            'resident_experience.review',
+          ]);
+          const ordinaryPublisher = await actor(f.org, [
             'admin.configuration.read',
             'resident_experience.publish',
           ]);
@@ -1604,6 +2199,7 @@ test(
               reviewer: f.reviewer.access,
               reader: reader.access,
               limited: limited.access,
+              ordinaryPublisher: ordinaryPublisher.access,
               writeOnly: writeOnly.access,
               publisher: f.publisher.access,
               samePublisher: same.publisher.access,
@@ -1624,6 +2220,10 @@ test(
             httpRequest(app.getHttpServer())
               .get(base + suffix)
               .set('Authorization', `Bearer ${token}`);
+          const responseCanPublish = (response: httpRequest.Response) =>
+            (response.body as { canPublish: boolean }).canPublish;
+          const responseCanRequest = (response: httpRequest.Response) =>
+            (response.body as { canRequestReview: boolean }).canRequestReview;
           try {
             await apiTest.test(
               'anonymous and missing request authority denied; errors are no-store',
@@ -1633,6 +2233,30 @@ test(
                   .expect(401);
                 assert.equal(denied.headers['cache-control'], 'no-store');
                 await post('/review-requests', 'reader', input).expect(403);
+                await post('/review-requests', 'reviewer', input).expect(403);
+                await post('/review-requests', 'writeOnly', input).expect(403);
+                await post(
+                  '/review-requests',
+                  'ordinaryPublisher',
+                  input,
+                ).expect(403);
+                assert.equal(
+                  responseCanRequest(
+                    await get('/review-context', 'author').expect(200),
+                  ),
+                  true,
+                );
+                for (const token of [
+                  'reviewer',
+                  'ordinaryPublisher',
+                  'writeOnly',
+                ])
+                  assert.equal(
+                    responseCanRequest(
+                      await get('/review-context', token).expect(200),
+                    ),
+                    false,
+                  );
               },
             );
             await apiTest.test(
@@ -1667,10 +2291,21 @@ test(
             ).expect(201);
             const r = response.body as { id: string };
             assert.equal(response.headers['cache-control'], 'no-store');
+            assert.equal(
+              responseCanRequest(
+                await get('/review-context', 'author').expect(200),
+              ),
+              false,
+            );
             await apiTest.test(
-              'decision checks publish/contact authority, saver separation and tenant before mutation',
+              'decision checks review/contact authority, saver separation and tenant before mutation',
               async () => {
-                for (const token of ['reader', 'limited', 'author'])
+                for (const token of [
+                  'reader',
+                  'limited',
+                  'author',
+                  'publisher',
+                ])
                   await post('/review-requests/' + r.id + '/decision', token, {
                     expectedRevision: 2,
                     outcome: 'approved',
@@ -1700,6 +2335,30 @@ test(
                   { expectedRevision: 2, outcome: 'approved' },
                 ).expect(201);
                 assert.equal(decision.headers['cache-control'], 'no-store');
+                assert.equal(
+                  (decision.body as { canPublish: boolean }).canPublish,
+                  false,
+                );
+                for (const token of [
+                  'reader',
+                  'limited',
+                  'writeOnly',
+                  'reviewer',
+                ])
+                  assert.equal(
+                    responseCanPublish(
+                      await get('/review-requests/' + r.id, token).expect(200),
+                    ),
+                    false,
+                  );
+                assert.equal(
+                  responseCanPublish(
+                    await get('/review-requests/' + r.id, 'publisher').expect(
+                      200,
+                    ),
+                  ),
+                  true,
+                );
                 await post(
                   '/review-requests/' + r.id + '/decision',
                   'reviewer',
@@ -1712,7 +2371,12 @@ test(
             await apiTest.test(
               'publication enforces publisher authority, bounded output, no-store and exact target',
               async () => {
-                for (const token of ['reader', 'writeOnly'])
+                for (const token of [
+                  'reader',
+                  'writeOnly',
+                  'reviewer',
+                  'ordinaryPublisher',
+                ])
                   await post('/publications', token, {
                     reviewRequestId: r.id,
                     expectedResourceRevision: 2,
@@ -1754,6 +2418,14 @@ test(
                 );
                 assert.equal(publishedBody.targetRevisionId, targetId);
                 assert.equal(publishedBody.resourceRevision, 3);
+                assert.equal(
+                  responseCanPublish(
+                    await get('/review-requests/' + r.id, 'publisher').expect(
+                      200,
+                    ),
+                  ),
+                  false,
+                );
                 assert.deepEqual(
                   await snapshots.getPublished(f.org),
                   f.snapshot,
@@ -1780,7 +2452,7 @@ test(
               },
             );
             await apiTest.test(
-              'ordinary exact review needs publish but neither contact nor write',
+              'ordinary exact review needs review but neither publish, contact nor write',
               async () => {
                 const changed = structuredClone(f.snapshot);
                 changed.presentation.metadata.title = 'Ordinary wording';
@@ -1799,6 +2471,27 @@ test(
                   expectedRevision: 4,
                   outcome: 'approved',
                 }).expect(201);
+                assert.equal(
+                  responseCanPublish(
+                    await get('/review-requests/' + id, 'limited').expect(200),
+                  ),
+                  false,
+                );
+                assert.equal(
+                  responseCanPublish(
+                    await get('/review-requests/' + id, 'reader').expect(200),
+                  ),
+                  false,
+                );
+                assert.equal(
+                  responseCanPublish(
+                    await get(
+                      '/review-requests/' + id,
+                      'ordinaryPublisher',
+                    ).expect(200),
+                  ),
+                  true,
+                );
                 assert.deepEqual(
                   await snapshots.getPublished(f.org),
                   f.snapshot,

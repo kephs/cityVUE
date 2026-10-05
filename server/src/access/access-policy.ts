@@ -54,13 +54,22 @@ export const accessPermissionMetadata = {
     'Explicit provisioning only; saving never publishes.',
     'provisioning-only',
   ),
-  'resident_experience.publish': definition(
-    'Publish resident experience',
-    'Reserved publication authority; no publish operation is implemented.',
+  'resident_experience.review': definition(
+    'Review resident experience',
+    'Independently approve or reject an exact saved resident experience revision.',
     'Administrative Configuration',
     ['admin.configuration.read'],
     true,
-    'Reserved; explicit provisioning only.',
+    'Explicit provisioning only; review never publishes.',
+    'provisioning-only',
+  ),
+  'resident_experience.publish': definition(
+    'Publish resident experience',
+    'Publish an exact independently reviewed resident experience revision.',
+    'Administrative Configuration',
+    ['admin.configuration.read'],
+    true,
+    'Explicit provisioning only; publication does not grant review authority.',
     'provisioning-only',
   ),
   'resident_experience.contact.manage': definition(

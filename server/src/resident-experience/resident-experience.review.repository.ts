@@ -10,7 +10,7 @@ import type { StaffAccess } from '../auth/auth.types.js';
 import { authorizeRequestTransaction } from '../service-request/request-authorization.js';
 import type { ResidentExperienceRepository } from './resident-experience.repository.js';
 import {
-  assertResidentPublicationAuthority,
+  assertResidentReviewAuthority,
   classifyResidentPublication,
   type ResidentReviewBinding,
   type ReviewOutcome,
@@ -86,7 +86,7 @@ export class ResidentReviewRepository {
         resource_revision: binding.resourceRevision,
         authorization_revision: binding.authorizationRevision,
         purpose: binding.purpose,
-        policy_version: binding.policyVersion as 1,
+        policy_version: binding.policyVersion as 1 | 2,
         classifier_version: binding.classifierVersion as 1,
         requested_by: access.staffIdentityId,
         supersedes_request_id: supersedesRequestId,
@@ -113,7 +113,7 @@ export class ResidentReviewRepository {
       .where('id', '=', requestId)
       .executeTakeFirst();
     if (!request) throw new NotFoundException();
-    assertResidentPublicationAuthority(access, request.consequential);
+    assertResidentReviewAuthority(access, request.consequential);
     return trx
       .insertInto('resident_experience_review_decision')
       .values({

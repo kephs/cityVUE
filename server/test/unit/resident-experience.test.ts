@@ -535,7 +535,7 @@ test('F059.2 cosmetic-only and no-op diffs are distinct; output contains bounded
     },
   );
 });
-test('F059.2 assets and Migration 41 remain unchanged; Slice 3 recognizes exactly the approved keys', () => {
+test('F059.2 assets and Migration 41 remain unchanged; recognized vocabulary includes the separately registered review authority', () => {
   const root = path.resolve(__dirname, '../../../..');
   for (const asset of Object.values(residentAssets))
     assert.ok(
@@ -560,6 +560,7 @@ test('F059.2 assets and Migration 41 remain unchanged; Slice 3 recognizes exactl
     [
       'resident_experience.contact.manage',
       'resident_experience.publish',
+      'resident_experience.review',
       'resident_experience.write',
     ],
   );

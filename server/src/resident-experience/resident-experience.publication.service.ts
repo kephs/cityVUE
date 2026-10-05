@@ -219,7 +219,7 @@ export class ResidentPublicationService {
         `.execute(trx);
           const clock = await sql<{ now: Date; authorized: boolean }>`
           select clock_timestamp() as now,
-            resident_publication_authorized(
+            resident_review_authorized(
               ${publisher.organizationId}::uuid,
               ${decision.reviewer_id}::uuid,
               ${changes.consequential}

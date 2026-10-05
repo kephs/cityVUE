@@ -21,7 +21,7 @@ export interface ResidentExperienceTables {
     resource_revision: number;
     authorization_revision: string;
     purpose: ReviewPurpose;
-    policy_version: 1;
+    policy_version: 1 | 2;
     classifier_version: 1;
     consequential: boolean;
     changed_fields: string[];

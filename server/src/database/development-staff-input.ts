@@ -33,6 +33,7 @@ export const developmentStaffPermissions = [
   'admin.intake_settings.write',
   'admin.configuration.read',
   'resident_experience.write',
+  'resident_experience.review',
   'resident_experience.publish',
   'resident_experience.contact.manage',
   'analytics.service_participation.read',

@@ -17,9 +17,13 @@ import {
   residentReviewId,
 } from './resident-experience.review.input.js';
 import {
-  assertResidentPublicationAuthority,
+  assertResidentReviewAuthority,
+  hasResidentReviewAuthority,
+  canPublishResidentReview,
   classifyResidentPublication,
   evaluateResidentApproval,
+  hasResidentReviewRequestAuthority,
+  residentReviewAllowsReplacement,
   residentPublicationClassifierVersion,
   residentReviewPolicyVersion,
   type ResidentReviewBinding,
@@ -116,7 +120,7 @@ export class AdminResidentReviewService {
   private latest(trx: Trx, org: string) {
     return trx
       .selectFrom('resident_experience_review_request')
-      .select('id')
+      .selectAll()
       .where('organization_id', '=', org)
       .orderBy('review_sequence', 'desc')
       .limit(1)
@@ -172,6 +176,46 @@ export class AdminResidentReviewService {
       .limit(1)
       .executeTakeFirst());
   }
+  private async changes(
+    trx: Trx,
+    resource: Resource,
+    targetRevisionId: string,
+  ) {
+    const target = await this.snapshots.loadRevision(
+      trx,
+      resource.organization_id,
+      targetRevisionId,
+    );
+    const baseline = resource.published_revision_id
+      ? await this.snapshots.loadRevision(
+          trx,
+          resource.organization_id,
+          resource.published_revision_id,
+        )
+      : null;
+    return classifyResidentPublication(baseline, target);
+  }
+  private async canRequestCurrentDraft(
+    trx: Trx,
+    fresh: StaffAccess,
+    resource: Resource,
+    latest: RequestRow | undefined,
+  ) {
+    const target = resource.draft_revision_id;
+    if (
+      !target ||
+      !(await this.eligible(trx, resource, target, 'draft')) ||
+      !hasResidentReviewRequestAuthority(
+        fresh,
+        'draft',
+        (await this.changes(trx, resource, target)).consequential,
+      )
+    )
+      return false;
+    return residentReviewAllowsReplacement(
+      latest ? (await this.evidence(trx, resource, latest)).usability : null,
+    );
+  }
   private async evidence(trx: Trx, resource: Resource, row: RequestRow) {
     const model = requestModel(row);
     const current = await this.binding(
@@ -205,7 +249,7 @@ export class AdminResidentReviewService {
       now: Date;
       authorized: boolean;
     }>`select clock_timestamp() as now,
-      resident_publication_authorized(${resource.organization_id}::uuid, ${decision?.reviewer_id ?? null}::uuid, ${row.consequential}) as authorized`.execute(
+      resident_review_authorized(${resource.organization_id}::uuid, ${decision?.reviewer_id ?? null}::uuid, ${row.consequential}) as authorized`.execute(
       trx,
     );
     const facts = clock.rows[0];
@@ -244,10 +288,7 @@ export class AdminResidentReviewService {
   ) {
     const evidence = await this.evidence(trx, resource, row);
     const { model, decision, state, usability } = evidence;
-    const authorized =
-      fresh.permissions.includes('resident_experience.publish') &&
-      (!row.consequential ||
-        fresh.permissions.includes('resident_experience.contact.manage'));
+    const authorized = hasResidentReviewAuthority(fresh, row.consequential);
     return {
       id: model.id,
       targetRevisionId: model.targetRevisionId,
@@ -276,18 +317,32 @@ export class AdminResidentReviewService {
         usability.reason === 'pending' &&
         authorized &&
         !state.excludedReviewers.includes(fresh.staffIdentityId),
+      canPublish: canPublishResidentReview(
+        fresh,
+        model,
+        decision ? decisionModel(decision) : null,
+        usability,
+      ),
       independentPublisherRequired: true,
     };
   }
 
   context(access: StaffAccess) {
-    return this.transaction(access, false, async (trx, fresh, resource) => ({
-      resourceRevision: resource.revision,
-      draftRevisionId: resource.draft_revision_id,
-      publishedRevisionId: resource.published_revision_id,
-      latestRequestId:
-        (await this.latest(trx, fresh.organizationId))?.id ?? null,
-    }));
+    return this.transaction(access, false, async (trx, fresh, resource) => {
+      const latest = await this.latest(trx, fresh.organizationId);
+      return {
+        resourceRevision: resource.revision,
+        draftRevisionId: resource.draft_revision_id,
+        publishedRevisionId: resource.published_revision_id,
+        latestRequestId: latest?.id ?? null,
+        canRequestReview: await this.canRequestCurrentDraft(
+          trx,
+          fresh,
+          resource,
+          latest,
+        ),
+      };
+    });
   }
   revision(access: StaffAccess, revisionId: string) {
     const id = residentReviewId(revisionId);
@@ -366,6 +421,22 @@ export class AdminResidentReviewService {
         throw new ConflictException(
           'Resident review changed; reload before requesting review',
         );
+      const changes = await this.changes(trx, resource, value.targetRevisionId);
+      if (
+        !hasResidentReviewRequestAuthority(
+          fresh,
+          value.purpose,
+          changes.consequential,
+        )
+      )
+        throw new ForbiddenException('Access denied');
+      if (
+        value.purpose === 'draft' &&
+        !(await this.canRequestCurrentDraft(trx, fresh, resource, latest))
+      )
+        throw new ConflictException(
+          'Resident review changed; reload before requesting review',
+        );
       const row = await this.reviews.insertRequest(
         trx,
         fresh,
@@ -385,7 +456,7 @@ export class AdminResidentReviewService {
       value = parseResidentReviewDecision(input);
     return this.transaction(access, true, async (trx, fresh, resource) => {
       const row = await this.findRequest(trx, fresh.organizationId, id);
-      assertResidentPublicationAuthority(fresh, row.consequential);
+      assertResidentReviewAuthority(fresh, row.consequential);
       const evidence = await this.evidence(trx, resource, row);
       if (
         resource.revision !== value.expectedRevision ||

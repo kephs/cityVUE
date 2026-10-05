@@ -7,7 +7,7 @@ import {
   type ResidentSnapshot,
 } from './resident-experience.domain.js';
 
-export const residentReviewPolicyVersion = 1 as const;
+export const residentReviewPolicyVersion = 2 as const;
 export const residentPublicationClassifierVersion = 1 as const;
 export const residentApprovalLifetimeMs = 24 * 60 * 60 * 1000;
 export type ReviewPurpose = 'draft' | 'historical';
@@ -61,18 +61,66 @@ export function classifyResidentPublication(
       };
 }
 
+/** Review authority is independent of publication and editing authority. */
+export function hasResidentReviewAuthority(
+  access: StaffAccess,
+  consequential: boolean,
+): boolean {
+  return (
+    access.permissions.includes('admin.configuration.read') &&
+    access.permissions.includes('resident_experience.review') &&
+    (!consequential ||
+      access.permissions.includes('resident_experience.contact.manage'))
+  );
+}
+export function assertResidentReviewAuthority(
+  access: StaffAccess,
+  consequential: boolean,
+): void {
+  assertConfigurationRead(access);
+  if (!hasResidentReviewAuthority(access, consequential))
+    throw new ForbiddenException('Access denied');
+}
+
 export function assertResidentPublicationAuthority(
   access: StaffAccess,
   consequential: boolean,
 ) {
   assertConfigurationRead(access);
-  if (
-    !access.permissions.includes('resident_experience.publish') ||
-    (consequential &&
-      !access.permissions.includes('resident_experience.contact.manage'))
-  ) {
+  if (!hasResidentPublicationAuthority(access, consequential)) {
     throw new ForbiddenException('Access denied');
   }
+}
+
+export function hasResidentPublicationAuthority(
+  access: StaffAccess,
+  consequential: boolean,
+): boolean {
+  return (
+    access.permissions.includes('admin.configuration.read') &&
+    access.permissions.includes('resident_experience.publish') &&
+    (!consequential ||
+      access.permissions.includes('resident_experience.contact.manage'))
+  );
+}
+
+/** Advisory request authority. Request creation revalidates this under lock. */
+export function hasResidentReviewRequestAuthority(
+  access: StaffAccess,
+  purpose: ReviewPurpose,
+  consequential: boolean,
+): boolean {
+  if (!access.permissions.includes('admin.configuration.read')) return false;
+  if (purpose === 'historical')
+    return (
+      access.permissions.includes('resident_experience.write') ||
+      access.permissions.includes('resident_experience.publish')
+    );
+  return (
+    access.permissions.includes('resident_experience.write') &&
+    (!consequential ||
+      access.permissions.includes('resident_experience.contact.manage'))
+  );
 }
 
 export interface ResidentLineageEntry {
@@ -192,6 +240,30 @@ export function evaluateResidentApproval(
   )
     return { usable: false, reason: 'separation' };
   return { usable: true, reason: null };
+}
+
+/** Current pending/usable evidence blocks a duplicate; historical evidence does not. */
+export function residentReviewAllowsReplacement(
+  usability: ReturnType<typeof evaluateResidentApproval> | null,
+): boolean {
+  return !usability || (!usability.usable && usability.reason !== 'pending');
+}
+
+/** Advisory protected projection only. Publication revalidates under lock. */
+export function canPublishResidentReview(
+  access: StaffAccess,
+  request: ResidentReviewRequest,
+  decision: ResidentReviewDecision | null,
+  usability: ReturnType<typeof evaluateResidentApproval>,
+): boolean {
+  return (
+    decision?.outcome === 'approved' &&
+    usability.usable &&
+    access.organizationId === request.organizationId &&
+    decision.organizationId === request.organizationId &&
+    decision.reviewerId !== access.staffIdentityId &&
+    hasResidentPublicationAuthority(access, request.changes.consequential)
+  );
 }
 
 /** Assertion form of the same evaluation; callers must resolve all current facts. */

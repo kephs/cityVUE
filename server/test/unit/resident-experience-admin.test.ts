@@ -11,7 +11,10 @@ import {
   manageablePermissions,
 } from '../../src/access/access-policy.js';
 import { residentPermissionKeys } from '../../migrations/20261012000000-register-resident-experience-permissions.js';
-import { developmentStaffPermissions } from '../../src/database/development-staff-input.js';
+import {
+  developmentStaffPermissions,
+  developmentStaffBundles,
+} from '../../src/database/development-staff-input.js';
 const access: StaffAccess = {
   organizationId: '00000000-0000-4000-8000-000000000059',
   staffIdentityId: '00000000-0000-4000-8000-000000000058',
@@ -25,15 +28,18 @@ const access: StaffAccess = {
   development: false,
 };
 test('resident draft permission registrations do not change runtime delegation or provisioning bundles', () => {
-  for (const key of residentPermissionKeys) {
+  for (const key of [
+    ...residentPermissionKeys,
+    'resident_experience.review',
+  ] as const) {
     assert.equal(
       accessPermissionMetadata[key].classification,
       'provisioning-only',
     );
     assert.ok(!manageablePermissions.includes(key));
-    assert.ok(
-      !(developmentStaffPermissions as readonly string[]).includes(key),
-    );
+    assert.ok((developmentStaffPermissions as readonly string[]).includes(key));
+    for (const bundle of Object.values(developmentStaffBundles))
+      assert.ok(!(bundle as readonly string[]).includes(key));
   }
   assert.equal(manageablePermissions.length, 27);
 });

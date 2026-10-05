@@ -29,7 +29,7 @@ const access: StaffAccess = {
   divisionIds: [],
 };
 test('F057 permission classification is exhaustive and frozen database parity holds', () => {
-  assert.equal(permissions.length, 35);
+  assert.equal(permissions.length, 36);
   assert.equal(manageablePermissions.length, 27);
   assert.equal(
     developmentStaffPermissions.some(
