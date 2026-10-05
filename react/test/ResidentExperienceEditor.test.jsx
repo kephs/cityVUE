@@ -46,17 +46,98 @@ function summary(contact = true) {
     },
   };
 }
+function approvedReview(overrides = {}) {
+  return {
+    id: "11111111-1111-4111-8111-111111111111",
+    targetRevisionId: "22222222-2222-4222-8222-222222222222",
+    baselineRevisionId: "33333333-3333-4333-8333-333333333333",
+    draftRevisionId: "22222222-2222-4222-8222-222222222222",
+    resourceRevision: 2,
+    purpose: "draft",
+    policyVersion: "1",
+    classifierVersion: "1",
+    latestRequestId: "11111111-1111-4111-8111-111111111111",
+    changes: {
+      changedFields: ["hero"],
+      reasons: [],
+      consequential: false,
+    },
+    decision: {
+      id: "44444444-4444-4444-8444-444444444444",
+      outcome: "approved",
+      decidedAt: "2026-10-04T12:00:00.000Z",
+      expiresAt: "2099-10-04T12:00:00.000Z",
+    },
+    usability: { usable: true, reason: "approved" },
+    canReview: true,
+    canPublish: true,
+    ...overrides,
+  };
+}
 function clientFor(value = summary()) {
   return {
-    get: vi.fn(async (path) =>
-      path.endsWith("/preview")
-        ? {
-            revision: value.revision,
-            unpublished: true,
-            presentation: publishedExperienceFixture(),
-          }
-        : value,
-    ),
+    get: vi.fn(async (path) => {
+      if (path.endsWith("/preview"))
+        return {
+          revision: value.revision,
+          unpublished: true,
+          presentation: publishedExperienceFixture(),
+        };
+      if (path.endsWith("/review-context"))
+        return {
+          resourceRevision: value.revision,
+          draftRevisionId: value.review?.targetRevisionId || null,
+          publishedRevisionId: null,
+          latestRequestId: value.review?.id || null,
+          canRequestReview: value.canRequestReview ?? false,
+        };
+      if (path.includes("/review-requests/")) return value.review;
+      return value;
+    }),
+    post: vi.fn(async (path, body) => {
+      if (path.endsWith("/review-requests")) {
+        value.review = approvedReview({
+          decision: null,
+          usability: { usable: false, reason: "pending" },
+          targetRevisionId:
+            value.review?.targetRevisionId ||
+            "22222222-2222-4222-8222-222222222222",
+          resourceRevision: body.expectedRevision,
+          changes: {
+            changedFields: ["hero"],
+            reasons: [],
+            consequential: false,
+          },
+        });
+        return value.review;
+      }
+      if (path.includes("/decision")) {
+        value.review = {
+          ...value.review,
+          decision: {
+            ...value.review.decision,
+            outcome: body.outcome,
+          },
+          usability:
+            body.outcome === "approved"
+              ? { usable: true, reason: null }
+              : { usable: false, reason: "rejected" },
+          canPublish: false,
+        };
+        return value.review;
+      }
+      value.review = value.review
+        ? { ...value.review, usability: { usable: false, reason: "consumed" } }
+        : value.review;
+      return {
+        eventId: "55555555-5555-4555-8555-555555555555",
+        targetRevisionId: value.review?.targetRevisionId,
+        previousPublishedRevisionId: value.review?.baselineRevisionId,
+        resourceRevision: value.revision + 1,
+        publishedAt: "2026-10-04T12:00:00.000Z",
+        consequential: Boolean(value.review?.changes?.consequential),
+      };
+    }),
     put: vi.fn(async (_path, command) => {
       value = {
         ...value,
@@ -239,7 +320,7 @@ test("cross-tab edits persist without requests and global Save submits the compl
   expect(screen.getByRole("tab", { name: "Hero" })).toHaveAccessibleDescription(
     "Unsaved changes",
   );
-  expect(client.get).toHaveBeenCalledTimes(1);
+  expect(client.get).toHaveBeenCalledTimes(2);
   expect(client.put).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("tab", { name: "Benefits" }));
   const save = screen.getByRole("button", { name: "Save complete draft" });
@@ -318,8 +399,340 @@ test("read-only staff can switch every tab without gaining editing controls", as
   expect(
     screen.getByRole("button", { name: "Preview saved draft" }),
   ).toBeEnabled();
-  expect(client.get).toHaveBeenCalledTimes(1);
+  expect(client.get).toHaveBeenCalledTimes(2);
   expect(client.put).not.toHaveBeenCalled();
+});
+test("approved review exposes distinct Publish control and exact confirmation request", async () => {
+  const value = { ...summary(), review: approvedReview() };
+  const client = clientFor(value);
+  render(app(client));
+  await screen.findByRole("button", { name: "Publish reviewed revision" });
+  expect(
+    screen.getByRole("button", { name: "Save complete draft" }),
+  ).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Publish reviewed revision" }),
+  );
+  const dialog = screen.getByRole("dialog", {
+    name: "Publish reviewed revision?",
+  });
+  expect(
+    within(dialog).getByRole("button", { name: "Confirm publication" }),
+  ).toHaveFocus();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(client.post).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Publish reviewed revision" }),
+  );
+  fireEvent.click(
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Confirm publication",
+    }),
+  );
+  await screen.findByText(/published successfully/);
+  expect(client.post).toHaveBeenCalledTimes(1);
+  expect(client.post.mock.calls[0][0]).toBe(base + "/publications");
+  expect(client.post.mock.calls[0][1]).toEqual({
+    reviewRequestId: value.review.id,
+    expectedResourceRevision: 2,
+  });
+});
+test("server-derived canPublish hides publication from the approving reviewer", async () => {
+  const value = {
+    ...summary(),
+    review: approvedReview({ canPublish: false }),
+  };
+  render(app(clientFor(value)));
+  await screen.findByText("Approved and usable");
+  expect(
+    screen.queryByRole("button", { name: "Publish reviewed revision" }),
+  ).toBeNull();
+});
+test("server-derived capabilities expose only role-appropriate review actions", async () => {
+  const staleReviewer = {
+    ...summary(),
+    canRequestReview: false,
+    review: approvedReview({
+      usability: { usable: false, reason: "stale" },
+      canPublish: false,
+    }),
+  };
+  render(app(clientFor(staleReviewer)));
+  await screen.findByText("Approved but no longer usable");
+  expect(
+    screen.getByText(
+      "A new review must be requested before this revision can continue.",
+    ),
+  ).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Request review" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Publish reviewed revision" }),
+  ).toBeNull();
+
+  cleanup();
+  const pendingPublisher = {
+    ...summary(),
+    canRequestReview: false,
+    review: approvedReview({
+      decision: null,
+      usability: { usable: false, reason: "pending" },
+      canReview: false,
+      canPublish: false,
+    }),
+  };
+  render(app(clientFor(pendingPublisher)));
+  await screen.findByText("Pending review", { selector: "dd" });
+  expect(screen.queryByRole("button", { name: "Request review" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
+
+  cleanup();
+  const eligiblePublisher = {
+    ...summary(),
+    canRequestReview: false,
+    review: approvedReview({ canReview: false, canPublish: true }),
+  };
+  render(app(clientFor(eligiblePublisher)));
+  expect(
+    await screen.findByRole("button", { name: "Publish reviewed revision" }),
+  ).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Request review" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Reject" })).toBeNull();
+});
+test("saved draft can request review with server-derived revision context", async () => {
+  const value = { ...summary(), review: undefined };
+  const client = clientFor(value);
+  value.review = undefined;
+  client.get.mockImplementation(async (path) => {
+    if (path.endsWith("/preview"))
+      return {
+        revision: value.revision,
+        unpublished: true,
+        presentation: publishedExperienceFixture(),
+      };
+    if (path.endsWith("/review-context"))
+      return {
+        resourceRevision: value.revision,
+        draftRevisionId: "22222222-2222-4222-8222-222222222222",
+        publishedRevisionId: null,
+        latestRequestId: value.review?.id || null,
+        canRequestReview: true,
+      };
+    if (path.includes("/review-requests/")) return value.review;
+    return value;
+  });
+  render(app(client));
+  const request = await screen.findByRole("button", { name: "Request review" });
+  expect(request).toHaveClass("resident-review-request");
+  expect(request.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+  fireEvent.click(request);
+  await screen.findByText("Pending review");
+  expect(client.post).toHaveBeenCalledWith(
+    base + "/review-requests",
+    {
+      targetRevisionId: "22222222-2222-4222-8222-222222222222",
+      expectedRevision: 2,
+      purpose: "draft",
+      supersedesRequestId: null,
+    },
+    { authenticated: true },
+  );
+});
+test.each(["approved", "pending"])(
+  "saving revision 8 refreshes capabilities and supersedes the stale %s revision 6 review",
+  async (outcome) => {
+    const old = approvedReview({
+      resourceRevision: 6,
+      canReview: false,
+      canPublish: false,
+      ...(outcome === "pending" ? { decision: null } : {}),
+      usability: { usable: false, reason: "stale" },
+    });
+    let value = { ...summary(), revision: 7 };
+    let context = {
+      resourceRevision: 7,
+      draftRevisionId: "77777777-7777-4777-8777-777777777777",
+      latestRequestId: old.id,
+      canRequestReview: true,
+    };
+    let review = old;
+    const client = clientFor(value);
+    client.get.mockImplementation(async (path) => {
+      if (path.endsWith("/review-context")) return context;
+      if (path.includes("/review-requests/")) return review;
+      if (path.includes("/revisions/"))
+        return { revisionId: old.targetRevisionId };
+      return value;
+    });
+    client.put.mockImplementation(async (_path, command) => {
+      value = { ...value, revision: 8, draft: command.snapshot };
+      context = {
+        ...context,
+        resourceRevision: 8,
+        draftRevisionId: "88888888-8888-4888-8888-888888888888",
+      };
+      return { revision: 8, changed: true };
+    });
+    client.post.mockImplementation(async (_path, body) => {
+      review = approvedReview({
+        id: "99999999-9999-4999-8999-999999999999",
+        resourceRevision: 8,
+        targetRevisionId: body.targetRevisionId,
+        decision: null,
+        canReview: false,
+        canPublish: false,
+        usability: { usable: false, reason: "pending" },
+      });
+      context = {
+        ...context,
+        latestRequestId: review.id,
+        canRequestReview: false,
+      };
+      return review;
+    });
+    render(app(client));
+    fireEvent.change(await screen.findByLabelText("Public application name"), {
+      target: { value: "Saved revision eight" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save complete draft" }),
+    );
+    await screen.findByText("Draft saved. Public content is unchanged.");
+    expect(client.post).not.toHaveBeenCalled();
+    const request = await screen.findByRole("button", {
+      name: "Request review",
+    });
+    expect(request).toHaveClass("resident-review-request");
+    fireEvent.click(request);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Request review" }),
+      ).toBeNull(),
+    );
+    expect(client.post).toHaveBeenCalledTimes(1);
+    expect(client.post).toHaveBeenCalledWith(
+      base + "/review-requests",
+      {
+        targetRevisionId: context.draftRevisionId,
+        expectedRevision: 8,
+        purpose: "draft",
+        supersedesRequestId: old.id,
+      },
+      { authenticated: true },
+    );
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Publish reviewed revision" }),
+    ).toBeNull();
+  },
+);
+test("pending review loads the exact revision and supports confirmed approve/reject decisions", async () => {
+  const value = {
+    ...summary(),
+    review: approvedReview({
+      decision: null,
+      usability: { usable: false, reason: "pending" },
+      changes: {
+        changedFields: ["contacts"],
+        reasons: ["contact_changed"],
+        consequential: true,
+      },
+    }),
+  };
+  const client = clientFor(value);
+  render(app(client));
+  await screen.findByText("Exact immutable revision loaded for review.");
+  const approve = screen.getByRole("button", { name: "Approve" });
+  const reject = screen.getByRole("button", { name: "Reject" });
+  expect(approve).toHaveClass("resident-review-approve");
+  expect(reject).toHaveClass("resident-review-reject");
+  expect(approve.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+  expect(reject.querySelector("svg[aria-hidden='true']")).not.toBeNull();
+  fireEvent.click(approve);
+  const dialog = screen.getByRole("dialog", { name: "Approve this review?" });
+  expect(
+    within(dialog).getByText(
+      /you’re approving this saved revision for publication review/i,
+    ),
+  ).toBeVisible();
+  expect(
+    within(dialog).getByText(
+      /ready for a separate publisher to publish later/i,
+    ),
+  ).toBeVisible();
+  expect(
+    within(dialog).getByText(/approving does not publish it now/i),
+  ).toBeVisible();
+  expect(
+    within(dialog).getByText(/Revision 2.*High-impact changes/i),
+  ).toBeVisible();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(client.post).not.toHaveBeenCalled();
+  fireEvent.click(approve);
+  fireEvent.click(
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Confirm approval",
+    }),
+  );
+  await screen.findByText(/Approved · Revision/);
+  expect(
+    screen.queryByRole("button", { name: "Publish reviewed revision" }),
+  ).toBeNull();
+  expect(client.post).toHaveBeenCalledWith(
+    base + "/review-requests/11111111-1111-4111-8111-111111111111/decision",
+    { expectedRevision: 2, outcome: "approved" },
+    { authenticated: true },
+  );
+});
+test("publication confirmation prevents duplicate submits and handles safe conflicts", async () => {
+  const value = { ...summary(), review: approvedReview() };
+  const client = clientFor(value);
+  let resolve;
+  client.post.mockImplementation(() => new Promise((done) => (resolve = done)));
+  render(app(client));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Publish reviewed revision" }),
+  );
+  const confirm = screen.getByRole("button", { name: "Confirm publication" });
+  fireEvent.click(confirm);
+  fireEvent.click(confirm);
+  expect(client.post).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("button", { name: "Publishing…" })).toBeDisabled();
+  await act(async () => resolve({}));
+  await screen.findByText(/published successfully/);
+
+  const conflictValue = { ...summary(), review: approvedReview() };
+  const conflictClient = clientFor(conflictValue);
+  conflictClient.post.mockRejectedValue({ status: 409, message: "private" });
+  cleanup();
+  render(app(conflictClient));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Publish reviewed revision" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Confirm publication" }));
+  expect(
+    await screen.findByText(/no longer current.*fresh review/i),
+  ).toBeVisible();
+  expect(screen.queryByText("private")).toBeNull();
+});
+test.each([
+  [401, /staff session is no longer available/i],
+  [403, /not currently authorized to publish/i],
+  [404, /no longer available/i],
+])("publication status %i uses safe feedback", async (status, message) => {
+  const value = { ...summary(), review: approvedReview() };
+  const client = clientFor(value);
+  client.post.mockRejectedValue({ status, message: "private details" });
+  render(app(client));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Publish reviewed revision" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Confirm publication" }));
+  expect(await screen.findByText(message)).toBeVisible();
+  expect(screen.queryByText("private details")).toBeNull();
 });
 test("409 retains edits for review, prevents retry, and explicit reload discards them", async () => {
   const client = clientFor();

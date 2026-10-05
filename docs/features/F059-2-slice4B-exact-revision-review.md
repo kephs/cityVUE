@@ -36,6 +36,43 @@ the response flag alone is not a browser security control.
 
 ## Requests, decisions and exact binding
 
+### Current uncommitted UAT follow-up: request capability and replacement
+
+The protected review context now includes advisory `canRequestReview` for the
+current saved draft. Draft-purpose requests require Admin read, draft-write and,
+when the server classifies the publication as consequential, contact authority.
+Historical request authority remains unchanged. These follow-ups supersede the
+original draft requester policy described below; they create no grants.
+
+Projection and draft POST use the same current-draft eligibility evaluation.
+A current pending or usable approved review blocks a duplicate request. A stale,
+expired, rejected, superseded or consumed prior review does not prevent a fresh
+request for an otherwise eligible draft. POST still requires the exact expected
+resource revision and latest predecessor in `supersedesRequestId`, under the
+existing locks. No approval evidence is rewritten or reused.
+
+UAT reported draft 8 with an approved but stale review of revision 6 and no Author
+request button. A read-only invocation of the current service against the approved
+development database returned `canRequestReview=true`; all Author authority and
+draft eligibility checks passed. This is service-level evidence, not a captured
+authenticated browser response. Inspection found that Save discarded review
+context, including its capability, and did not reload it. The editor now refreshes
+the protected workflow after Save and sends the predecessor from review-context,
+including when a pending request belongs to an older context. The existing
+`canReview` and `canPublish` controls remain advisory and server-authoritative.
+
+Focused validation for this correction: 11 review-domain units, 48 disposable
+PostgreSQL/protected HTTP tests (zero skipped), and 28 Resident Experience React
+tests passed. Typecheck, test compilation, backend build, changed-backend ESLint,
+React production build, formatting and diff checks passed. The initial test
+compilation failed because the new publication fixture used the wrong argument
+shape; the corrected compilation passed. Initial ESLint found a numeric template
+interpolation in a new test; explicit conversion fixed it and the rerun passed.
+React build retained the existing large-chunk warning. Overlapping React reruns
+are not added together. Broader suites were not rerun for this focused correction;
+previous full-suite failures below remain historical evidence. No development data,
+permissions, migrations or publication transaction were changed for this repair.
+
 Request creation requires Admin read and either draft-write or publication authority,
 matching the accepted Slice 4A requester policy. It is not an approval. The server
 binds the immutable target, Organization, resource revision, current draft pointer,

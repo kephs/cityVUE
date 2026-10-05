@@ -38,6 +38,42 @@ const errorSection = (message) => {
   if (message === "Public application name is required.") return "branding";
   return null;
 };
+async function loadReviewState(client, signal) {
+  const options = { authenticated: true, signal };
+  const reviewContext = await client.get(`${base}/review-context`, options);
+  const review = reviewContext?.latestRequestId
+    ? await client.get(
+        `${base}/review-requests/${reviewContext.latestRequestId}`,
+        options,
+      )
+    : null;
+  const revision = review?.targetRevisionId
+    ? await client.get(`${base}/revisions/${review.targetRevisionId}`, options)
+    : null;
+  return { reviewContext, review, revision };
+}
+function WorkflowIcon({ kind }) {
+  const paths = {
+    review: (
+      <>
+        <path d="M7 5h9M7 10h9M7 15h5" />
+        <path d="M3.5 5h.01M3.5 10h.01M3.5 15h.01" />
+      </>
+    ),
+    approve: <path d="m4 10 4 4 8-9" />,
+    reject: <path d="m5 5 10 10M15 5 5 15" />,
+  };
+  return (
+    <svg
+      aria-hidden="true"
+      className="resident-workflow-icon"
+      viewBox="0 0 20 20"
+      focusable="false"
+    >
+      {paths[kind]}
+    </svg>
+  );
+}
 export default function ResidentExperienceEditor({ client }) {
   const auth = useAuth();
   const context = JSON.stringify([
@@ -50,6 +86,13 @@ export default function ResidentExperienceEditor({ client }) {
   const [state, setState] = useState(null),
     [attempt, setAttempt] = useState(0);
   const [activeTab, setActiveTab] = useState("branding");
+  const [publishDialog, setPublishDialog] = useState(false);
+  const [reviewDialog, setReviewDialog] = useState(null);
+  const publishButton = useRef(null),
+    publishConfirm = useRef(null),
+    reviewConfirm = useRef(null),
+    reviewAction = useRef(null),
+    publicationNotice = useRef(null);
   const tabRefs = useRef({});
   const generation = useRef(0),
     controllers = useRef(new Set());
@@ -63,15 +106,33 @@ export default function ResidentExperienceEditor({ client }) {
     controllers.current.add(controller);
     if (auth.enabled && auth.isAuthenticated)
       client.get(base, { authenticated: true, signal: controller.signal }).then(
-        (summary) => {
+        async (summary) => {
+          let reviewContext = null;
+          let review = null;
+          let revision = null;
+          try {
+            ({ reviewContext, review, revision } = await loadReviewState(
+              client,
+              controller.signal,
+            ));
+          } catch (error) {
+            if (controller.signal.aborted) return;
+            reviewContext = null;
+            review = null;
+          }
           if (generation.current === id && !controller.signal.aborted)
             setState({
               client,
               context,
               summary,
+              reviewContext,
+              review,
+              revision,
               draft: summary.draft || newResidentDraft(),
               busy: false,
+              publicationBusy: false,
               errors: [],
+              message: publicationNotice.current,
             });
         },
         () => {
@@ -85,6 +146,25 @@ export default function ResidentExperienceEditor({ client }) {
       controllers.current.clear();
     };
   }, [client, context, attempt, auth.enabled, auth.isAuthenticated]);
+  useEffect(() => {
+    if (!publishDialog) return undefined;
+    publishConfirm.current?.focus();
+    return undefined;
+  }, [publishDialog]);
+  useEffect(() => {
+    if (!reviewDialog) return undefined;
+    reviewConfirm.current?.focus();
+    return undefined;
+  }, [reviewDialog]);
+  function closePublishDialog() {
+    if (current?.publicationBusy) return;
+    setPublishDialog(false);
+    requestAnimationFrame(() => publishButton.current?.focus());
+  }
+  function closeReviewDialog() {
+    setReviewDialog(null);
+    requestAnimationFrame(() => reviewAction.current?.focus());
+  }
   function change(path, value) {
     setState((old) => {
       const draft = structuredClone(old.draft);
@@ -141,11 +221,13 @@ export default function ResidentExperienceEditor({ client }) {
           authenticated: true,
           signal: controller.signal,
         });
+        const reviewState = await loadReviewState(client, controller.signal);
         if (id === generation.current && !controller.signal.aborted)
           setState({
             client,
             context,
             summary,
+            ...reviewState,
             draft: summary.draft || newResidentDraft(),
             busy: false,
             errors: [],
@@ -177,6 +259,107 @@ export default function ResidentExperienceEditor({ client }) {
       controllers.current.delete(controller);
     }
   }
+  function publicationMessage(error) {
+    if (error?.status === 401)
+      return "Your staff session is no longer available. Sign in again before publishing.";
+    if (error?.status === 403)
+      return "You are not currently authorized to publish this reviewed revision.";
+    if (error?.status === 404)
+      return "The reviewed publication is no longer available. Reload the saved state and review again.";
+    if (error?.status === 409)
+      return "This reviewed publication is no longer current. Reload the saved state and request a fresh review.";
+    return "Publication could not be completed. Reload the saved state and try again.";
+  }
+  async function publish() {
+    if (!current?.review || current.publicationBusy) return;
+    const request = {
+      reviewRequestId: current.review.id,
+      expectedResourceRevision:
+        current.review.resourceRevision ?? current.summary.revision,
+    };
+    setState((s) => ({
+      ...s,
+      publicationBusy: true,
+      errors: [],
+      message: null,
+    }));
+    try {
+      await client.post(`${base}/publications`, request, {
+        authenticated: true,
+      });
+      publicationNotice.current =
+        "Resident Experience published successfully. The public homepage now uses the reviewed revision.";
+      setPublishDialog(false);
+      setAttempt((n) => n + 1);
+    } catch (error) {
+      setPublishDialog(false);
+      setState((s) => ({
+        ...s,
+        publicationBusy: false,
+        errors: [publicationMessage(error)],
+      }));
+    }
+  }
+  function reviewMessage(error) {
+    if (error?.status === 401)
+      return "Your staff session is no longer available. Sign in again before reviewing.";
+    if (error?.status === 403)
+      return "You are not currently authorized to perform this review action.";
+    if (error?.status === 404)
+      return "The review or revision is no longer available. Reload the saved state.";
+    if (error?.status === 409)
+      return "This review is no longer current. Reload the saved state before continuing.";
+    return "The review action could not be completed. Reload the saved state and try again.";
+  }
+  async function requestReview() {
+    if (
+      !current?.reviewContext?.draftRevisionId ||
+      current.reviewContext.canRequestReview !== true ||
+      current.dirty ||
+      current.reviewBusy
+    )
+      return;
+    const request = {
+      targetRevisionId: current.reviewContext.draftRevisionId,
+      expectedRevision: current.reviewContext.resourceRevision,
+      purpose: "draft",
+      supersedesRequestId: current.reviewContext.latestRequestId,
+    };
+    setState((s) => ({ ...s, reviewBusy: true, errors: [], message: null }));
+    try {
+      await client.post(`${base}/review-requests`, request, {
+        authenticated: true,
+      });
+      setAttempt((n) => n + 1);
+    } catch (error) {
+      setState((s) => ({
+        ...s,
+        reviewBusy: false,
+        errors: [reviewMessage(error)],
+      }));
+    }
+  }
+  async function decideReview() {
+    if (!current?.review || current.reviewBusy || !reviewDialog) return;
+    const { outcome } = reviewDialog;
+    setState((s) => ({ ...s, reviewBusy: true, errors: [], message: null }));
+    try {
+      await client.post(
+        `${base}/review-requests/${current.review.id}/decision`,
+        { expectedRevision: current.review.resourceRevision, outcome },
+        { authenticated: true },
+      );
+      setReviewDialog(null);
+      setAttempt((n) => n + 1);
+    } catch (error) {
+      setReviewDialog(null);
+      setState((s) => ({
+        ...s,
+        reviewBusy: false,
+        errors: [reviewMessage(error)],
+      }));
+    }
+  }
   if (!auth.enabled || !auth.isAuthenticated || current?.denied)
     return (
       <p role="alert">
@@ -185,12 +368,24 @@ export default function ResidentExperienceEditor({ client }) {
       </p>
     );
   if (!current?.draft) return <p role="status">Loading resident experience…</p>;
-  const { draft, summary, busy } = current;
+  const { draft, summary, busy, review, revision } = current;
   const write = summary.capabilities.canWrite,
     contact = summary.capabilities.canManageContacts;
   const p = draft.presentation,
     registry = summary.registry;
   const savedDraft = summary.draft || newResidentDraft();
+  const approvedReview = review?.decision?.outcome === "approved";
+  const reviewUsable = review?.usability?.usable === true;
+  const publishAvailable =
+    approvedReview && reviewUsable && review?.canPublish === true;
+  const reviewPending =
+    review && !review.decision && review.usability?.reason === "pending";
+  const reviewCanRequest =
+    current.reviewContext?.canRequestReview === true && !current.dirty;
+  const reviewNeedsRequest =
+    Boolean(summary.draft && current.reviewContext?.draftRevisionId) &&
+    !reviewPending &&
+    !reviewUsable;
   function panelProps(id) {
     return {
       id: `resident-editor-${id}`,
@@ -322,6 +517,34 @@ export default function ResidentExperienceEditor({ client }) {
                   : "Not saved yet"}
           </dd>
         </div>
+        <div>
+          <dt>Review</dt>
+          <dd>
+            {!review
+              ? "No review available"
+              : !review.decision
+                ? reviewPending
+                  ? "Pending review"
+                  : "Review no longer current"
+                : review.decision.outcome === "approved"
+                  ? reviewUsable
+                    ? "Approved and usable"
+                    : "Approved but no longer usable"
+                  : review.decision.outcome === "rejected"
+                    ? "Rejected"
+                    : "Review pending"}
+          </dd>
+          {review?.decision?.outcome === "approved" && (
+            <small className="resident-editor-summary-detail">
+              {review.changes?.consequential
+                ? "High-impact review"
+                : "Ordinary review"}
+              {review.decision.expiresAt
+                ? ` · Expires ${new Date(review.decision.expiresAt).toLocaleString()}`
+                : ""}
+            </small>
+          )}
+        </div>
       </dl>
       {!contact && (
         <p>
@@ -382,6 +605,128 @@ export default function ResidentExperienceEditor({ client }) {
                 ? "Preview shows the saved draft. Save changes to include your edits."
                 : "Preview shows the saved draft. Reload discards unsaved edits."}
         </p>
+        {review &&
+          review.decision?.outcome === "approved" &&
+          review.canPublish && (
+            <div
+              className="resident-editor-publication"
+              role="group"
+              aria-label="Reviewed publication"
+            >
+              <div>
+                <strong>Reviewed publication</strong>
+                <p className="resident-editor-help">
+                  {publishAvailable
+                    ? "An independent review is ready for publication."
+                    : current.dirty
+                      ? "Save changes before publishing the reviewed revision."
+                      : "This review is no longer usable. Reload and request a fresh review."}
+                </p>
+              </div>
+              <button
+                ref={publishButton}
+                type="button"
+                className="btn btn-success"
+                disabled={
+                  !publishAvailable ||
+                  current.dirty ||
+                  busy ||
+                  current.publicationBusy
+                }
+                onClick={() => setPublishDialog(true)}
+              >
+                Publish reviewed revision
+              </button>
+            </div>
+          )}
+        <div className="resident-review-workflow" aria-live="polite">
+          <div>
+            <strong>Review workflow</strong>
+            {review ? (
+              <p className="resident-editor-help">
+                {reviewPending
+                  ? "Pending review"
+                  : review.decision?.outcome === "rejected"
+                    ? "Rejected"
+                    : reviewUsable
+                      ? "Approved"
+                      : review.usability?.reason === "expired"
+                        ? "Expired"
+                        : review.usability?.reason === "consumed"
+                          ? "Consumed"
+                          : review.usability?.reason === "superseded"
+                            ? "Superseded"
+                            : "Review unavailable"}
+                {review.resourceRevision
+                  ? ` · Revision ${review.resourceRevision} under review`
+                  : ""}
+              </p>
+            ) : (
+              <p className="resident-editor-help">No review available</p>
+            )}
+            {review?.changes && (
+              <p className="resident-editor-help">
+                {review.changes.consequential
+                  ? "High-impact changes"
+                  : "Ordinary changes"}
+                {review.changes.changedFields?.length
+                  ? ` · ${review.changes.changedFields.length} configured area${review.changes.changedFields.length === 1 ? "" : "s"} changed`
+                  : ""}
+              </p>
+            )}
+            {revision && reviewPending && (
+              <p className="resident-editor-help">
+                Exact immutable revision loaded for review.
+              </p>
+            )}
+          </div>
+          {reviewCanRequest && (
+            <button
+              ref={!review ? reviewAction : undefined}
+              type="button"
+              className="btn resident-review-request"
+              disabled={busy || current.reviewBusy}
+              onClick={requestReview}
+            >
+              <WorkflowIcon kind="review" />
+              {current.reviewBusy ? "Requesting review…" : "Request review"}
+            </button>
+          )}
+          {reviewNeedsRequest &&
+            current.reviewContext?.canRequestReview === false && (
+              <p className="resident-editor-help">
+                A new review must be requested before this revision can
+                continue.
+              </p>
+            )}
+          {reviewPending && review.canReview && (
+            <div
+              className="resident-review-actions"
+              role="group"
+              aria-label="Review decision"
+            >
+              <button
+                ref={reviewAction}
+                type="button"
+                className="btn resident-review-approve"
+                disabled={busy || current.reviewBusy}
+                onClick={() => setReviewDialog({ outcome: "approved" })}
+              >
+                <WorkflowIcon kind="approve" />
+                Approve
+              </button>
+              <button
+                type="button"
+                className="btn resident-review-reject"
+                disabled={busy || current.reviewBusy}
+                onClick={() => setReviewDialog({ outcome: "rejected" })}
+              >
+                <WorkflowIcon kind="reject" />
+                Reject
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       <div
         className="resident-editor-tabs"
@@ -777,6 +1122,133 @@ export default function ResidentExperienceEditor({ client }) {
           presentation={current.preview}
           onClose={() => setState((s) => ({ ...s, preview: null }))}
         />
+      )}
+      {publishDialog && review && (
+        <div
+          className="resident-publication-modal"
+          role="presentation"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closePublishDialog();
+            }
+          }}
+        >
+          <div
+            className="resident-publication-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="resident-publication-title"
+          >
+            <h2 id="resident-publication-title">Publish reviewed revision?</h2>
+            <p>
+              This reviewed revision will become resident-facing. Publishing is
+              separate from saving and will replace the current public content.
+            </p>
+            <p className="resident-editor-help">
+              The exact approved revision and review shown in this editor will
+              be used. Draft edits are not included.
+            </p>
+            <div className="resident-publication-dialog-actions">
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                disabled={current.publicationBusy}
+                onClick={closePublishDialog}
+              >
+                Cancel
+              </button>
+              <button
+                ref={publishConfirm}
+                type="button"
+                className="btn btn-success"
+                disabled={current.publicationBusy}
+                onClick={publish}
+              >
+                {current.publicationBusy
+                  ? "Publishing…"
+                  : "Confirm publication"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {reviewDialog && review && (
+        <div
+          className="resident-publication-modal"
+          role="presentation"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeReviewDialog();
+            }
+          }}
+        >
+          <div
+            className="resident-publication-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="resident-review-title"
+          >
+            <h2 id="resident-review-title">
+              {reviewDialog.outcome === "approved"
+                ? "Approve this review?"
+                : "Reject this review?"}
+            </h2>
+            {reviewDialog.outcome === "approved" ? (
+              <p>
+                You’re approving this saved revision for publication review.
+                <br />
+                It will be ready for a separate publisher to publish later.
+                <br />
+                Approving does not publish it now.
+              </p>
+            ) : (
+              <p>
+                This review will be marked rejected. A new review can be
+                requested later.
+              </p>
+            )}
+            <p className="resident-editor-help">
+              Revision {review.resourceRevision} ·{" "}
+              {review.changes?.consequential
+                ? "High-impact changes"
+                : "Ordinary changes"}
+            </p>
+            <div className="resident-publication-dialog-actions">
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                disabled={current.reviewBusy}
+                onClick={closeReviewDialog}
+              >
+                Cancel
+              </button>
+              <button
+                ref={reviewConfirm}
+                type="button"
+                className={`btn ${
+                  reviewDialog.outcome === "approved"
+                    ? "resident-review-approve"
+                    : "resident-review-reject"
+                }`}
+                disabled={current.reviewBusy}
+                onClick={decideReview}
+              >
+                <WorkflowIcon
+                  kind={
+                    reviewDialog.outcome === "approved" ? "approve" : "reject"
+                  }
+                />
+                {current.reviewBusy
+                  ? "Saving decision…"
+                  : reviewDialog.outcome === "approved"
+                    ? "Confirm approval"
+                    : "Confirm rejection"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
