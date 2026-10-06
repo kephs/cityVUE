@@ -465,11 +465,54 @@ interface TenantDomainTable {
   verification_method: TenantDomainVerificationMethod | null;
   verification_challenge: string | null;
   verification_requested_at: Timestamp | null;
+  /** Challenge window end. The database re-anchors the request instant to its
+   * own clock and bounds this against it, so it cannot be widened. */
+  verification_expires_at: ColumnType<Date | null, Date | null, Date | null>;
+  verification_token_id: string | null;
   verified_at: Timestamp | null;
   verification_evidence: JsonValue | null;
   revision: Generated<number>;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
+}
+/** ADR-025 append-only evidence for every verification attempt, including
+ * failures that change no registry state. These cannot live in
+ * `tenant_domain_audit`, which is keyed by binding revision and must mirror
+ * committed state. */
+interface TenantDomainVerificationAttemptTable {
+  id: Generated<string>;
+  organization_id: string;
+  tenant_domain_id: string;
+  hostname: string;
+  record_name: string;
+  token_id: string;
+  binding_revision: number;
+  expected_challenge_hash: string;
+  observed_value_hash: string | null;
+  observed_value_count: number;
+  result:
+    | 'verified'
+    | 'no_record'
+    | 'value_mismatch'
+    | 'challenge_expired'
+    | 'disagreement'
+    | 'insufficient_quorum'
+    | 'unreachable'
+    | 'timeout'
+    | 'nxdomain'
+    | 'servfail'
+    | 'zone_undetermined';
+  resolver_mode: 'authoritative';
+  name_servers: string[];
+  agreement_count: number;
+  degraded_single_ns: Generated<boolean>;
+  ttl_seconds: number | null;
+  dnssec: JsonValue;
+  actor: string;
+  correlation_id: string;
+  policy_version: number;
+  observed_at: Generated<Timestamp>;
+  mutation_txid: Generated<string>;
 }
 interface TenantDomainAuditTable {
   id: Generated<string>;
@@ -501,6 +544,7 @@ interface TenantDomainAuditTable {
 export interface DatabaseSchema extends ResidentExperienceTables {
   tenant_domain: TenantDomainTable;
   tenant_domain_audit: TenantDomainAuditTable;
+  tenant_domain_verification_attempt: TenantDomainVerificationAttemptTable;
   organization_access_state: {
     organization_id: string;
     authorization_revision: Generated<string>;

@@ -99,6 +99,18 @@ Domain ownership must be **verified before activation**, with DNS `TXT` verifica
 
 Where domain verification would fetch a customer-supplied URL, the existing validation discipline and the residual risks recorded in [ADR-019](ADR-019-issue-availability-governed-handoff.md) apply; preferring DNS `TXT` avoids that outbound-fetch surface entirely.
 
+#### Accepted clarifications
+
+Added at security review of the ownership-verification design, and implemented by [F060.2](../../features/F060-2-tenant-domain-ownership-verification.md). These refine how the requirement above is met; they change no decision recorded elsewhere in this record.
+
+**What a DNS `TXT` check proves, and what it does not.** Verification proves **current DNS control** of the name, not legal or organizational ownership of the domain. It also **cannot distinguish legitimate DNS control from a compromised DNS administrative account**: to the platform, both look identical. These are properties of the method rather than defects in any implementation of it, and they bound what the registry can be said to attest.
+
+**Verification and activation are separate controls.** A successful check moves a binding to verified and **inactive**. Making a hostname resolvable is a distinct, separately attributed operator decision. Verification establishes ownership; activation decides that residents should now be served from that address, and the two are not the same judgement — a verified domain routinely waits on certificate issuance, DNS transition or content readiness before it should serve anyone.
+
+**Customer domains verify by DNS `TXT`.** Verification of platform-owned fallback hostnames under a Reqro-controlled zone is **deferred**: a `TXT` challenge against Reqro's own zone would prove only that Reqro controls its own DNS, so a distinct infrastructure-issued binding method is required and is not yet decided. Every fallback hostname nevertheless remains an explicit registry row; no wildcard matching is introduced.
+
+**Automated periodic re-verification and automatic deactivation are deferred.** Re-confirming ownership on a schedule, and deactivating a binding whose record has disappeared, are desirable and address the stale-mapping risk recorded under "Security and privacy". Both are withheld pending a scheduler — none exists in the platform — and a separate review of unattended availability-affecting actions. Until then, re-verification is an operator-initiated action.
+
 ### Trusted proxy boundary
 
 Future policy, not implemented here:
