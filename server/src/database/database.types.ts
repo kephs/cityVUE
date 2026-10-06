@@ -2,6 +2,11 @@ import type { RequestActivityType } from '../service-request/request-activity.do
 import type { ColumnType, Generated, Insertable, Selectable } from 'kysely';
 import type { AlertType, AlertSeverity } from '../alerts/alert.dto.js';
 import type { ResidentExperienceTables } from '../resident-experience/resident-experience.database.js';
+import type {
+  TenantDomainRole,
+  TenantDomainVerificationMethod,
+  TenantDomainVerificationState,
+} from '../tenancy/tenant-domain.js';
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type JsonValue = ColumnType<unknown, unknown, unknown>;
@@ -447,7 +452,55 @@ export interface RequestCommunicationTable {
   delivery_state: Generated<'recorded'>;
 }
 
+/** ADR-025 tenant-domain registry. Every state transition is database
+ * guarded and must carry matching operator audit evidence, so these shapes
+ * describe what can be read rather than what a caller may freely write. */
+interface TenantDomainTable {
+  id: Generated<string>;
+  organization_id: string;
+  hostname: string;
+  role: TenantDomainRole;
+  verification_state: Generated<TenantDomainVerificationState>;
+  active: Generated<boolean>;
+  verification_method: TenantDomainVerificationMethod | null;
+  verification_challenge: string | null;
+  verification_requested_at: Timestamp | null;
+  verified_at: Timestamp | null;
+  verification_evidence: JsonValue | null;
+  revision: Generated<number>;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+interface TenantDomainAuditTable {
+  id: Generated<string>;
+  organization_id: string;
+  tenant_domain_id: string;
+  hostname: string;
+  action:
+    | 'registered'
+    | 'verification_requested'
+    | 'verified'
+    | 'verification_revoked'
+    | 'activated'
+    | 'deactivated'
+    | 'role_changed';
+  actor: string;
+  prior_revision: number | null;
+  revision: number;
+  prior_role: TenantDomainRole | null;
+  role: TenantDomainRole;
+  prior_verification_state: TenantDomainVerificationState | null;
+  verification_state: TenantDomainVerificationState;
+  prior_active: boolean | null;
+  active: boolean;
+  evidence: JsonValue | null;
+  occurred_at: Generated<Timestamp>;
+  mutation_txid: Generated<string>;
+}
+
 export interface DatabaseSchema extends ResidentExperienceTables {
+  tenant_domain: TenantDomainTable;
+  tenant_domain_audit: TenantDomainAuditTable;
   organization_access_state: {
     organization_id: string;
     authorization_revision: Generated<string>;

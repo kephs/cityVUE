@@ -13,6 +13,7 @@
     "dev:branding": "tsx src/database/development-branding-cli.ts",
     "dev:participation": "tsx src/database/development-participation-cli.ts",
     "dev:requester": "tsx src/database/development-requester-cli.ts",
+    "dev:tenant-domain": "tsx src/database/tenant-domain-cli.ts",
     "start": "node dist/main.js",
     "dev": "node scripts/dev.mjs",
     "build": "tsc -p tsconfig.build.json",
