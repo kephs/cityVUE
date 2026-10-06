@@ -95,6 +95,29 @@ The unnumbered stakeholder requirements table and the post-F044 candidate list a
 - **Migration numbering is a global ordering constraint.** Migration-bearing work must be serialized against all other migration-bearing work.
 - **F057.5 and F057.6 share files** and must be serialized rather than parallelized.
 
+### TEST-MAINT — Serialize disposable PostgreSQL test execution
+
+- **Status:** Backlog
+- **Priority:** Medium
+- **Type:** Test infrastructure / reliability
+
+The `server:test:db` suite currently runs with Node's default parallel test-file execution while all database integration tests share the same disposable PostgreSQL database (`reqro_f0592_test`).
+
+This can cause cross-suite schema interference. During October 2026 validation:
+
+- Parallel run: 664 tests — 661 passed / 3 failed
+- Affected tests passed 16/16 when isolated
+- Serial full run: 664/664 passed
+- Failures occurred in unchanged test files and involved schemas created by other concurrently running test suites
+
+**Candidate remediation:**
+
+Align database-test execution with the existing E2E test strategy by evaluating:
+
+`node --test --test-concurrency=1`
+
+Do not implement as part of tenant-resolution or Resident Experience feature work. Validate the test-runner change independently before adoption.
+
 ## 6. Production readiness gaps
 
 None of the following is established by local feature work, and each is a separate authorization gate.
