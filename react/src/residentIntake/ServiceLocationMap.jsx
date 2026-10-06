@@ -7,15 +7,67 @@ import { useTheme } from "../theme/useTheme.js";
 export default function ServiceLocationMap({ boundary, point, onSelect }) {
   const host = useRef(null),
     mapRef = useRef(null),
-    marker = useRef(null),
+    pointRef = useRef(point),
     selectRef = useRef(onSelect);
   const [state, setState] = useState("loading");
+  const [attempt, setAttempt] = useState(0);
+  pointRef.current = point;
   const { theme } = useTheme();
   selectRef.current = onSelect;
   useEffect(() => {
-    let map, observer;
-    const timeout = setTimeout(() => setState("error"), 8000);
-    setState("loading");
+    let map, observer, timeout, frame;
+    let disposed = false,
+      ready = false,
+      contextLost = false,
+      selectedMarker;
+    const current = () => !disposed;
+    const fail = () => {
+      if (!current()) return;
+      clearTimeout(timeout);
+      ready = false;
+      setState("error");
+    };
+    const syncPoint = () => {
+      if (!current() || !ready) return;
+      selectedMarker?.remove();
+      selectedMarker = null;
+      const selected = pointRef.current;
+      if (selected) {
+        selectedMarker = new maplibregl.Marker()
+          .setLngLat([selected.longitude, selected.latitude])
+          .addTo(map);
+        map.easeTo({
+          center: [selected.longitude, selected.latitude],
+          duration: 0,
+        });
+      }
+    };
+    const resize = () => {
+      if (!current() || !map) return;
+      try {
+        map.resize();
+      } catch {
+        fail();
+      }
+    };
+    const loaded = () => {
+      if (!current() || ready || contextLost) return;
+      clearTimeout(timeout);
+      ready = true;
+      resize();
+      if (ready) {
+        syncPoint();
+        setState("ready");
+      }
+    };
+    const loading = () => {
+      if (!current()) return;
+      ready = false;
+      setState("loading");
+      clearTimeout(timeout);
+      timeout = setTimeout(fail, 8000);
+    };
+    loading();
     try {
       maplibregl.setWorkerUrl(workerUrl);
       const dark = theme === "dark";
@@ -57,52 +109,61 @@ export default function ServiceLocationMap({ boundary, point, onSelect }) {
           ],
         },
       });
-      mapRef.current = map;
+      const instance = { map, syncPoint };
+      mapRef.current = instance;
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
-      map.on("load", () => {
-        clearTimeout(timeout);
-        setState("ready");
+      map.on("load", loaded);
+      map.on("error", fail);
+      // A recoverable source error or delayed load must not leave a healthy map
+      // permanently marked unavailable. Only MapLibre's loaded state clears it.
+      map.on("idle", () => {
+        if (current() && map.loaded()) loaded();
       });
-      map.on("error", () => {
-        clearTimeout(timeout);
-        setState("error");
+      map.on("webglcontextlost", () => {
+        if (!current()) return;
+        contextLost = true;
+        fail();
       });
-      map.on("click", (event) =>
-        selectRef.current({
-          longitude: event.lngLat.lng,
-          latitude: event.lngLat.lat,
-        }),
+      map.on("webglcontextrestored", () => {
+        if (!current()) return;
+        contextLost = false;
+        loading();
+        resize();
+      });
+      map.on(
+        "click",
+        (event) =>
+          current() &&
+          selectRef.current({
+            longitude: event.lngLat.lng,
+            latitude: event.lngLat.lat,
+          }),
       );
       if (typeof ResizeObserver !== "undefined") {
-        observer = new ResizeObserver(() => map.resize());
+        observer = new ResizeObserver(resize);
         observer.observe(host.current);
       }
+      frame = requestAnimationFrame(resize);
+      window.addEventListener("resize", resize);
+      document.addEventListener("visibilitychange", resize);
     } catch {
-      clearTimeout(timeout);
-      setState("error");
+      fail();
     }
     return () => {
+      disposed = true;
       clearTimeout(timeout);
+      cancelAnimationFrame(frame);
       observer?.disconnect();
-      marker.current?.remove();
-      marker.current = null;
+      window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", resize);
+      selectedMarker?.remove();
       map?.remove();
-      mapRef.current = null;
+      if (mapRef.current?.map === map) mapRef.current = null;
     };
-  }, [boundary, theme]);
+  }, [boundary, theme, attempt]);
   useEffect(() => {
-    marker.current?.remove();
-    marker.current = null;
-    if (point && mapRef.current && state === "ready") {
-      marker.current = new maplibregl.Marker()
-        .setLngLat([point.longitude, point.latitude])
-        .addTo(mapRef.current);
-      mapRef.current.easeTo({
-        center: [point.longitude, point.latitude],
-        duration: 0,
-      });
-    }
-  }, [point, state, theme]);
+    mapRef.current?.syncPoint();
+  }, [point]);
   return (
     <div className="service-location-map">
       <div
@@ -112,10 +173,19 @@ export default function ServiceLocationMap({ boundary, point, onSelect }) {
       />
       {state === "loading" && <p role="status">Loading map…</p>}
       {state === "error" && (
-        <p role="alert">
-          The map is unavailable. Use search or the manual location fields
-          below.
-        </p>
+        <div>
+          <p role="alert">
+            The map is unavailable. Use search or the manual location fields
+            below.
+          </p>
+          <button
+            type="button"
+            className="btn btn-outline-secondary"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            Try map again
+          </button>
+        </div>
       )}
     </div>
   );

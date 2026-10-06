@@ -40,6 +40,8 @@
   height: 44px;
 }
 .service-location-canvas {
+  width: 100%;
+  min-height: 220px;
   height: clamp(220px, 34vw, 360px);
   border-radius: 0.75rem;
   border: 1px solid var(--bs-border-color);

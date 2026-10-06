@@ -522,3 +522,41 @@ test("Configure changes Availability only on Save and preserves current Urgent w
   expect(client.patch.mock.calls[0][1]).not.toHaveProperty("handling");
   expect(client.patch.mock.calls[0][1]).not.toHaveProperty("defaultPriority");
 });
+
+test("accepted requester policies remain editable with authoritative revisions; unsupported location edits are not fabricated", async () => {
+  const { user, client } = setup();
+  await screen.findByText(sample.name);
+  for (const [label, policy] of [
+    ["Anonymous requests allowed", "ANONYMOUS_ALLOWED"],
+    ["Identification required", "IDENTIFIED_REQUIRED"],
+  ]) {
+    await action(user, "Configure");
+    await screen.findByLabelText("Issue name");
+    expect(
+      screen.getByLabelText(
+        policy === "ANONYMOUS_ALLOWED"
+          ? "Identification required"
+          : "Anonymous requests allowed",
+      ),
+    ).toBeChecked();
+    expect(
+      screen.queryByRole("group", { name: "Service Location", exact: true }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", {
+        name: "Geographic Eligibility",
+        exact: true,
+      }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText(label));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    const payload = client.patch.mock.calls.at(-1)[1];
+    expect(payload.requesterPolicy).toBe(policy);
+    expect(payload).toHaveProperty("expectedPolicyRevision", 3);
+    expect(payload).not.toHaveProperty("locationPolicy");
+    expect(payload).not.toHaveProperty("geographicEligibilityMode");
+  }
+});

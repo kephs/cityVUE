@@ -1,4 +1,5 @@
-import { act, render, screen } from "@testing-library/react";
+import { StrictMode } from "react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import ServiceLocationMap from "../src/residentIntake/ServiceLocationMap.jsx";
 import { ThemeProvider } from "../src/theme/ThemeProvider.jsx";
@@ -14,6 +15,7 @@ vi.mock("maplibre-gl", () => ({
       this.remove = vi.fn();
       this.resize = vi.fn();
       this.easeTo = vi.fn();
+      this.loaded = vi.fn(() => true);
       mock.maps.push(this);
     }
     on(event, handler) {
@@ -59,6 +61,7 @@ afterEach(() => {
   mock.markers = [];
   mock.fail = false;
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 test("map uses local GeoJSON, emits neutral selections and updates marker without recreating map", () => {
   const onSelect = vi.fn();
@@ -113,3 +116,94 @@ test.each(["constructor", "runtime", "timeout"])(
     );
   },
 );
+
+function MapView({ point = { latitude: 0.2, longitude: 0.3 } }) {
+  return (
+    <StrictMode>
+      <ThemeProvider>
+        <ServiceLocationMap
+          boundary={boundary}
+          point={point}
+          onSelect={vi.fn()}
+        />
+      </ThemeProvider>
+    </StrictMode>
+  );
+}
+test("StrictMode cleanup and stale callbacks cannot change the new map; resize follows layout and visibility", () => {
+  const observers = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback) {
+        this.callback = callback;
+        this.observe = vi.fn();
+        this.disconnect = vi.fn();
+        observers.push(this);
+      }
+    },
+  );
+  const view = render(<MapView />, { reactStrictMode: true });
+  const old = mock.maps[0],
+    map = mock.maps.at(-1);
+  expect(old.remove).toHaveBeenCalledOnce();
+  act(() => map.events.load());
+  const count = map.resize.mock.calls.length;
+  act(() => {
+    observers.at(-1).callback();
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("resize"));
+  });
+  expect(map.resize.mock.calls.length).toBe(count + 3);
+  act(() => {
+    old.events.error();
+    old.events.load();
+    observers[0].callback();
+  });
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(map.remove).not.toHaveBeenCalled();
+  expect(mock.markers.at(-1).point).toEqual([0.3, 0.2]);
+  view.unmount();
+  expect(map.remove).toHaveBeenCalledOnce();
+  expect(observers.at(-1).disconnect).toHaveBeenCalledOnce();
+  render(<MapView />, { reactStrictMode: true });
+  act(() => mock.maps.at(-1).events.load());
+  expect(mock.markers.at(-1).point).toEqual([0.3, 0.2]);
+});
+test("renderer retry retains selected coordinates and ignores failed-instance events", () => {
+  render(<MapView />, { reactStrictMode: true });
+  const failed = mock.maps.at(-1);
+  act(() => failed.events.load());
+  act(() => failed.events.error());
+  fireEvent.click(screen.getByRole("button", { name: "Try map again" }));
+  const restarted = mock.maps.at(-1);
+  expect(restarted).not.toBe(failed);
+  expect(failed.remove).toHaveBeenCalledOnce();
+  act(() => restarted.events.load());
+  act(() => failed.events.error());
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(mock.markers.at(-1).point).toEqual([0.3, 0.2]);
+});
+test("a genuine context loss shows fallback and restoration recovers only when loaded", () => {
+  render(<MapView />, { reactStrictMode: true });
+  const map = mock.maps.at(-1);
+  act(() => map.events.load());
+  act(() => map.events.webglcontextlost());
+  expect(screen.getByRole("alert")).toBeInTheDocument();
+  act(() => map.events.webglcontextrestored());
+  map.loaded.mockReturnValue(false);
+  act(() => map.events.idle());
+  expect(screen.getByRole("status")).toBeInTheDocument();
+  map.loaded.mockReturnValue(true);
+  act(() => map.events.idle());
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(mock.markers.at(-1).point).toEqual([0.3, 0.2]);
+});
+test("a late successful load recovers the timeout fallback", () => {
+  vi.useFakeTimers();
+  render(<MapView />, { reactStrictMode: true });
+  act(() => vi.advanceTimersByTime(8000));
+  expect(screen.getByRole("alert")).toBeInTheDocument();
+  act(() => mock.maps.at(-1).events.load());
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});

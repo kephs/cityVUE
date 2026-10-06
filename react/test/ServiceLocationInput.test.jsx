@@ -53,7 +53,11 @@ const FakeMap = ({ onSelect }) => (
     Select fictional map point
   </button>
 );
-function Harness({ repository = provider, onChange = vi.fn() }) {
+function Harness({
+  repository = provider,
+  onChange = vi.fn(),
+  MapComponent = FakeMap,
+}) {
   const [location, setLocation] = useState({ text: "", point: null });
   return (
     <ServiceLocationInput
@@ -64,7 +68,7 @@ function Harness({ repository = provider, onChange = vi.fn() }) {
         onChange(text, point);
         setLocation({ text, point });
       }}
-      MapComponent={FakeMap}
+      MapComponent={MapComponent}
     />
   );
 }
@@ -333,4 +337,70 @@ test("F056.3 search text is not committed; selected location replaces duplicate 
     latitude: 0,
     longitude: 0,
   });
+});
+
+test("map is visible between device action and selected location, outside manual disclosures", async () => {
+  render(<Harness />);
+  const map = await screen.findByRole("button", {
+    name: "Select fictional map point",
+  });
+  expect(map.closest("details")).toBeNull();
+  expect(map).toBeVisible();
+  expect(
+    screen
+      .getByRole("button", { name: "Use My Current Location" })
+      .compareDocumentPosition(map) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  fireEvent.click(map);
+  expect(
+    map.compareDocumentPosition(screen.getByText("Selected Location")) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});
+test("renderer failure preserves search, manual entry and independent geolocation; retry retains coordinates", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  let fail = true;
+  function Renderer({ point }) {
+    if (fail) throw new Error("Synthetic renderer failure");
+    return (
+      <p>
+        Recovered map {point?.latitude}, {point?.longitude}
+      </p>
+    );
+  }
+  vi.stubGlobal("navigator", {
+    geolocation: {
+      getCurrentPosition: vi.fn((success) =>
+        success({ coords: { latitude: 0.2, longitude: 0.3 } }),
+      ),
+    },
+  });
+  const user = userEvent.setup();
+  render(<Harness MapComponent={Renderer} />);
+  await screen.findByText(
+    "The map is unavailable. Use search or manual entry.",
+  );
+  await user.type(
+    screen.getByLabelText("Search address or location"),
+    "Fictional",
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Fictional Square" }),
+  );
+  expect(screen.getByText("Latitude 0, longitude 0")).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Use My Current Location" }),
+  );
+  expect(screen.getByText("Latitude 0.2, longitude 0.3")).toBeInTheDocument();
+  await user.click(screen.getByText("Edit location description manually"));
+  await user.type(
+    screen.getByLabelText("Service Location (optional)"),
+    " near the sign",
+  );
+  fail = false;
+  await user.click(screen.getByRole("button", { name: "Try map again" }));
+  expect(await screen.findByText("Recovered map 0.2, 0.3")).toBeInTheDocument();
+  expect(screen.getByLabelText("Service Location (optional)")).toHaveValue(
+    "Selected Service Location near the sign",
+  );
 });

@@ -19,8 +19,7 @@ export default function IssueCreationSource({
       draft.templateId ||
       draft.questions.length ||
       draft.defaultPriority ||
-      draft.locationPolicy ||
-      draft.geographicEligibilityMode
+      draft.locationPolicy
     ) {
       setConfirmation({
         action: () => applySource(item),
@@ -95,7 +94,7 @@ export default function IssueCreationSource({
       defaultPriority: d.templateId ? "" : d.defaultPriority,
       locationPolicy: d.templateId ? "" : d.locationPolicy,
       geographicEligibilityMode: d.templateId
-        ? ""
+        ? "no_geographic_restriction"
         : d.geographicEligibilityMode,
     }));
   }

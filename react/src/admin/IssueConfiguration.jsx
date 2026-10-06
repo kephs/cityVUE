@@ -49,7 +49,7 @@ const fields = (issue) => ({
   category: null,
   defaultPriority: issue?.defaultPriority ?? "",
   locationPolicy: "",
-  geographicEligibilityMode: "",
+  geographicEligibilityMode: "no_geographic_restriction",
 });
 export default function IssueConfiguration({ client, onDenied }) {
   const [params, setParams] = useSearchParams();
@@ -796,7 +796,7 @@ export default function IssueConfiguration({ client, onDenied }) {
                                   ? ""
                                   : d.locationPolicy,
                                 geographicEligibilityMode: d.templateId
-                                  ? ""
+                                  ? "no_geographic_restriction"
                                   : d.geographicEligibilityMode,
                                 actionType: "internal_intake",
                                 destination: "",

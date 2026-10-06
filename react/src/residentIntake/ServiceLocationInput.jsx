@@ -8,7 +8,7 @@ import {
   normalizeLocationResult,
 } from "./locationSearch.js";
 import "./serviceLocation.css";
-const LocationMap = lazy(() => import("./ServiceLocationMap.jsx"));
+const createLocationMap = () => lazy(() => import("./ServiceLocationMap.jsx"));
 class MapFallback extends Component {
   state = { failed: false };
   static getDerivedStateFromError() {
@@ -16,7 +16,16 @@ class MapFallback extends Component {
   }
   render() {
     return this.state.failed ? (
-      <p role="alert">The map is unavailable. Use search or manual entry.</p>
+      <div>
+        <p role="alert">The map is unavailable. Use search or manual entry.</p>
+        <button
+          type="button"
+          className="btn btn-outline-secondary"
+          onClick={this.props.onRetry}
+        >
+          Try map again
+        </button>
+      </div>
     ) : (
       this.props.children
     );
@@ -31,8 +40,11 @@ export default function ServiceLocationInput({
   required,
   geographicPolicy,
   error,
-  MapComponent = LocationMap,
+  MapComponent,
 }) {
+  const [LocationMap, setLocationMap] = useState(createLocationMap);
+  const [mapAttempt, setMapAttempt] = useState(0);
+  const Renderer = MapComponent || LocationMap;
   const [config, setConfig] = useState(null),
     [query, setQuery] = useState(""),
     [results, setResults] = useState([]),
@@ -260,9 +272,15 @@ export default function ServiceLocationInput({
       {config?.boundary && (
         <>
           <p>Click or tap the map to choose or correct the issue location.</p>
-          <MapFallback>
+          <MapFallback
+            key={mapAttempt}
+            onRetry={() => {
+              setLocationMap(() => createLocationMap());
+              setMapAttempt((value) => value + 1);
+            }}
+          >
             <Suspense fallback={<p role="status">Loading map…</p>}>
-              <MapComponent
+              <Renderer
                 boundary={config.boundary}
                 point={point}
                 onSelect={choose}

@@ -80,11 +80,11 @@ async function complete(ctx) {
     ctx.dialog.getByLabelText("Default Priority"),
     "high",
   );
-  for (const name of ["External only", "Required", "No Geographic Restriction"])
+  for (const name of ["External only", "Required"])
     await ctx.user.click(ctx.dialog.getByRole("radio", { name, exact: true }));
 }
 
-test("F056.5 Add starts with Category, no priority/location/geographic assumptions and optional source hidden", async () => {
+test("F056.5 Add starts with Category, no priority/location assumptions and sole geography default and optional source hidden", async () => {
   const c = await setup();
   expect(
     c.dialog
@@ -99,12 +99,7 @@ test("F056.5 Add starts with Category, no priority/location/geographic assumptio
   expect(
     c.dialog.queryByRole("combobox", { name: "Search existing Issues" }),
   ).not.toBeInTheDocument();
-  for (const name of [
-    "Required",
-    "Optional",
-    "Not Used",
-    "No Geographic Restriction",
-  ])
+  for (const name of ["Required", "Optional", "Not Used"])
     expect(
       c.dialog.getByRole("radio", { name, exact: true }),
     ).not.toBeChecked();
@@ -436,7 +431,7 @@ test("Incomplete Create lists actual failures and focuses the first invalid cont
   expect(c.dialog.getByRole("alert")).toHaveTextContent(
     "Select a Default Priority",
   );
-  expect(c.dialog.getByRole("alert")).toHaveTextContent(
+  expect(c.dialog.getByRole("alert")).not.toHaveTextContent(
     "Select Geographic Eligibility",
   );
   await waitFor(() =>
@@ -451,34 +446,62 @@ test("Incomplete Create lists actual failures and focuses the first invalid cont
   expect(c.dialog.getByRole("alert")).not.toHaveTextContent("destination");
   expect(c.dialog.getByRole("alert")).not.toHaveTextContent("source Issue");
 });
-test("A nearly complete draft identifies Geographic Eligibility instead of silently disabling Create", async () => {
-  const c = await setup();
-  await chooseCategory(c);
-  await c.user.type(
-    c.dialog.getByLabelText("Issue name"),
-    "Fictional validation",
-  );
-  await c.user.selectOptions(
-    c.dialog.getByLabelText("Default Priority"),
-    "low",
-  );
-  await c.user.click(
-    c.dialog.getByRole("radio", { name: "Internal only", exact: true }),
-  );
-  await c.user.click(
-    c.dialog.getByRole("radio", { name: "Optional", exact: true }),
-  );
-  await c.user.click(c.dialog.getByRole("button", { name: "Create Issue" }));
-  expect(c.client.post).not.toHaveBeenCalled();
-  expect(c.dialog.getByRole("alert")).toHaveTextContent(
-    "Select Geographic Eligibility",
-  );
-  await waitFor(() =>
+test.each([
+  ["Required", "required"],
+  ["Optional", "optional"],
+  ["Not Used", "not_applicable"],
+])(
+  "blank creation saves %s with the sole supported geographic default",
+  async (label, policy) => {
+    const c = await setup();
+    await complete(c);
+    await c.user.click(
+      c.dialog.getByRole("radio", { name: label, exact: true }),
+    );
     expect(
       c.dialog.getByRole("radio", { name: "No Geographic Restriction" }),
-    ).toHaveFocus(),
+    ).toBeChecked();
+    await c.user.click(c.dialog.getByRole("button", { name: "Create Issue" }));
+    await waitFor(() => expect(c.client.post).toHaveBeenCalledOnce());
+    expect(c.client.post.mock.calls[0][1]).toMatchObject({
+      locationPolicy: policy,
+      geographicEligibilityMode: "no_geographic_restriction",
+    });
+  },
+);
+
+test("a restricted source still requires deliberate supported-policy review", async () => {
+  const c = await setup({
+    sourceOverride: {
+      ...source,
+      supportedGeography: false,
+      geographicEligibilityMode: "city_boundary",
+    },
+  });
+  await complete(c);
+  await c.user.click(
+    c.dialog.getByRole("radio", { name: "Yes, copy an existing Issue" }),
   );
+  await c.user.click(
+    c.dialog.getByRole("combobox", { name: "Search existing Issues" }),
+  );
+  await c.user.click(await c.dialog.findByRole("option", { name: /Source A/ }));
+  await c.user.click(
+    screen.getByRole("button", { name: "Replace Configuration" }),
+  );
+  await c.dialog.findByText(/The source geographic policy is not supported/);
+  expect(
+    c.dialog.getByRole("radio", { name: "No Geographic Restriction" }),
+  ).not.toBeChecked();
+  await c.user.click(c.dialog.getByRole("button", { name: "Create Issue" }));
+  expect(c.client.post).not.toHaveBeenCalled();
+  await c.user.click(
+    c.dialog.getByRole("radio", { name: "No Geographic Restriction" }),
+  );
+  await c.user.click(c.dialog.getByRole("button", { name: "Create Issue" }));
+  await waitFor(() => expect(c.client.post).toHaveBeenCalledOnce());
 });
+
 test("Urgent is absent from new priority choices", async () => {
   const c = await setup();
   expect(
