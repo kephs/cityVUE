@@ -1,4 +1,5 @@
 import type { TenantResolutionStrategy } from './environment.js';
+import type { TenantHostSource } from '../tenancy/tenant-host-source.js';
 
 export interface AppConfiguration {
   participation?: { suppressionThreshold: number };
@@ -34,7 +35,13 @@ export interface AppConfiguration {
     serviceName: string;
     otlpEndpoint?: string;
   };
-  tenancy: { resolutionStrategy: TenantResolutionStrategy };
+  tenancy: {
+    resolutionStrategy: TenantResolutionStrategy;
+    /** ADR-025 trusted request-host selection. `direct` reads only the
+     * literal Host; `forwarded` additionally requires a trusted peer. */
+    hostSource: TenantHostSource;
+    trustedProxyCidrs: string;
+  };
   /** Populated only under the ADR-025 development strategy. Validated
    * environment guarantees an explicit UUID there; it is empty under the
    * registry strategy, which the API refuses to serve. */
@@ -113,6 +120,9 @@ export function configuration(): AppConfiguration {
     tenancy: {
       resolutionStrategy: (process.env.TENANT_RESOLUTION_STRATEGY ??
         'development') as TenantResolutionStrategy,
+      hostSource: (process.env.TENANT_HOST_SOURCE ??
+        'direct') as TenantHostSource,
+      trustedProxyCidrs: process.env.TENANT_TRUSTED_PROXY_CIDRS ?? '',
     },
     // No fixture fallback. An absent value cannot match any Organization row,
     // so a misconfigured process fails instead of serving a known tenant.

@@ -1,5 +1,9 @@
 import Joi from 'joi';
 import { databaseConnectionOptions } from './database-tls.js';
+import {
+  parseTrustedProxyCidrs,
+  type TenantHostSource,
+} from '../tenancy/tenant-host-source.js';
 
 export type NodeEnvironment = 'development' | 'test' | 'production';
 export type DatabaseSslMode = 'disable' | 'require' | 'verify-full';
@@ -33,6 +37,8 @@ export interface EnvironmentVariables {
   RATE_LIMIT_MAX: number;
   OTEL_SERVICE_NAME: string;
   TENANT_RESOLUTION_STRATEGY: TenantResolutionStrategy;
+  TENANT_HOST_SOURCE: TenantHostSource;
+  TENANT_TRUSTED_PROXY_CIDRS: string;
   DEVELOPMENT_ORGANIZATION_ID?: string;
   ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS: boolean;
   ENABLE_DEVELOPMENT_STAFF_ACTIONS: boolean;
@@ -120,6 +126,12 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
   TENANT_RESOLUTION_STRATEGY: Joi.string()
     .valid('development', 'registry')
     .default('development'),
+  // Default-deny forwarded-host trust: only the literal Host is read unless
+  // an operator explicitly declares trusted edge infrastructure.
+  TENANT_HOST_SOURCE: Joi.string()
+    .valid('direct', 'forwarded')
+    .default('direct'),
+  TENANT_TRUSTED_PROXY_CIDRS: Joi.string().allow('').default(''),
   // No default. A repository-known fixture Organization must never be selected
   // implicitly; the development strategy requires an explicit value below.
   DEVELOPMENT_ORGANIZATION_ID: Joi.string()
@@ -301,6 +313,27 @@ export function validateEnvironment(
   } else if (environment.DEVELOPMENT_ORGANIZATION_ID) {
     throw new Error(
       'Invalid server configuration: registry tenant resolution cannot be combined with DEVELOPMENT_ORGANIZATION_ID',
+    );
+  }
+  // A forwarded host is trusted only behind explicitly declared
+  // infrastructure, and a declared allowlist that cannot be parsed stops the
+  // process rather than silently trusting nothing.
+  const trustedProxyCidrs = environment.TENANT_TRUSTED_PROXY_CIDRS.trim();
+  if (environment.TENANT_HOST_SOURCE === 'forwarded') {
+    if (!trustedProxyCidrs)
+      throw new Error(
+        'Invalid server configuration: forwarded tenant host source requires TENANT_TRUSTED_PROXY_CIDRS',
+      );
+    try {
+      parseTrustedProxyCidrs(trustedProxyCidrs);
+    } catch {
+      throw new Error(
+        'Invalid server configuration: TENANT_TRUSTED_PROXY_CIDRS must be a comma-separated list of IPv4/IPv6 addresses or CIDR ranges',
+      );
+    }
+  } else if (trustedProxyCidrs) {
+    throw new Error(
+      'Invalid server configuration: TENANT_TRUSTED_PROXY_CIDRS requires TENANT_HOST_SOURCE=forwarded',
     );
   }
 

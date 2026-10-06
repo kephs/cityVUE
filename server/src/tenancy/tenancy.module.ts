@@ -1,14 +1,24 @@
 import { Module } from '@nestjs/common';
 import { TenantDomainRepository } from './tenant-domain.repository.js';
 import { TenantResolverService } from './tenant-resolver.service.js';
+import { TenantResolutionMiddleware } from './tenant-resolution.middleware.js';
 
-/** ADR-025 Slice 1a foundation.
+/** ADR-025 request tenancy.
  *
- * Intentionally not imported by `AppModule`. Request wiring, TenantContext and
- * registry activation are Slice 1b, and importing this module earlier would
- * make an unwired resolver look servable. */
+ * Imported by `AppModule` so the resolution middleware can be applied, but
+ * nothing yet consumes the context it attaches, and `bootstrap.ts` still
+ * refuses to serve under the registry strategy. Request wiring of actual
+ * Organization consumers is a later slice. */
 @Module({
-  providers: [TenantDomainRepository, TenantResolverService],
-  exports: [TenantDomainRepository, TenantResolverService],
+  providers: [
+    TenantDomainRepository,
+    TenantResolverService,
+    TenantResolutionMiddleware,
+  ],
+  exports: [
+    TenantDomainRepository,
+    TenantResolverService,
+    TenantResolutionMiddleware,
+  ],
 })
 export class TenancyModule {}

@@ -21,6 +21,8 @@ import { GeospatialModule } from './geospatial/geospatial.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { ResidentExperienceModule } from './resident-experience/resident-experience.module.js';
+import { TenancyModule } from './tenancy/tenancy.module.js';
+import { TenantResolutionMiddleware } from './tenancy/tenant-resolution.middleware.js';
 
 @Module({
   imports: [
@@ -41,6 +43,7 @@ import { ResidentExperienceModule } from './resident-experience/resident-experie
       ],
     }),
     DatabaseModule,
+    TenancyModule,
     AuthModule,
     AiModule,
     GeospatialModule,
@@ -57,6 +60,12 @@ import { ResidentExperienceModule } from './resident-experience/resident-experie
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestLoggingMiddleware).forRoutes('*');
+    // Order matters: request logging assigns the server-owned correlation id
+    // that tenant resolution records against. Tenant resolution only attaches
+    // state and never terminates a request, so staff and admin routes are
+    // unaffected and keep deriving Organization from verified identity.
+    consumer
+      .apply(RequestLoggingMiddleware, TenantResolutionMiddleware)
+      .forRoutes('*');
   }
 }
