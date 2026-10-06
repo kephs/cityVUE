@@ -13,6 +13,7 @@ import {
 } from '../../src/geospatial/synthetic-geospatial.repository.js';
 import { DevelopmentLocationEligibilityProvider } from '../../src/location-eligibility/development-location-eligibility.provider.js';
 import { IntakeLocationController } from '../../src/location-eligibility/intake-location.controller.js';
+import type { TenantContext } from '../../src/tenancy/tenant-context.js';
 
 test('F045 coordinates are numeric, paired, finite and bounded', async () => {
   for (const [lat, lon] of [
@@ -103,6 +104,13 @@ test('F045 coordinate eligibility cannot be bypassed by a provider label or anot
   );
 });
 
+/** ADR-025: the intake endpoint now reads the resolved resident tenant. */
+const residentTenant = (organizationId: string): TenantContext => ({
+  source: 'development',
+  organizationId,
+  correlationId: '7f7f7f7f-7f7f-4f7f-8f7f-7f7f7f7f7f7f',
+});
+
 test('F045 public configuration is minimized and disabled outside development', async () => {
   let calls = 0;
   const query = {
@@ -126,16 +134,19 @@ test('F045 public configuration is minimized and disabled outside development', 
     config('production') as never,
     db as never,
   );
-  assert.deepEqual(await production.configuration(), {
-    mode: 'unavailable',
-    boundary: null,
-    locations: [],
-  });
+  assert.deepEqual(
+    await production.configuration(residentTenant(SYNTHETIC_ORGANIZATION_A)),
+    {
+      mode: 'unavailable',
+      boundary: null,
+      locations: [],
+    },
+  );
   assert.equal(calls, 0);
   const safe = await new IntakeLocationController(
     config('development') as never,
     db as never,
-  ).configuration();
+  ).configuration(residentTenant(SYNTHETIC_ORGANIZATION_A));
   assert.deepEqual(Object.keys(safe).sort(), ['boundary', 'locations', 'mode']);
   assert.equal(safe.locations.length, 3);
   assert.equal(JSON.stringify(safe).includes('organizationId'), false);
@@ -145,7 +156,7 @@ test('F045 public configuration is minimized and disabled outside development', 
       await new IntakeLocationController(
         config('development', 'missing') as never,
         db as never,
-      ).configuration()
+      ).configuration(residentTenant('missing'))
     ).mode,
     'unavailable',
   );

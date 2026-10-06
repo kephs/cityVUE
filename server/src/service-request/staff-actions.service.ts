@@ -40,8 +40,6 @@ const uuidV4 =
 
 @Injectable()
 export class StaffActionsService {
-  private readonly organizationId: string;
-  private readonly actorId: string;
   private readonly enabled: boolean;
   constructor(
     config: ConfigService<AppConfiguration, true>,
@@ -50,12 +48,6 @@ export class StaffActionsService {
       database,
     ),
   ) {
-    this.organizationId = config.get('catalog.developmentOrganizationId', {
-      infer: true,
-    });
-    this.actorId = config.get('staffActions.developmentActorId', {
-      infer: true,
-    });
     this.enabled = config.get('staffActions.developmentEnabled', {
       infer: true,
     });
@@ -144,22 +136,24 @@ export class StaffActionsService {
     };
   }
 
+  /** ADR-025. Staff Organization is identity-derived and mandatory; a
+   * request hostname can neither supply nor widen it. */
   async assign(
     id: string,
     input: AssignmentActionDto,
-    access?: StaffAccess,
+    access: StaffAccess,
   ): Promise<StaffMutationResponseDto> {
-    if (!access) this.assertEnabled();
+    if (access.development) this.assertEnabled();
     this.assertRequestId(id);
-    const organizationId = access?.organizationId ?? this.organizationId;
-    const actorId = access?.staffIdentityId ?? this.actorId;
+    const organizationId = access.organizationId;
+    const actorId = access.staffIdentityId;
     const needsTarget = input.assignmentType !== 'unassigned';
     if (needsTarget !== Boolean(input.targetId))
       throw new BadRequestException(
         'Assignment target does not match assignment type',
       );
     return this.database.client.transaction().execute(async (trx) => {
-      if (access && !access.development)
+      if (!access.development)
         access = await authorizeRequestTransaction(trx, access, [
           'service_request.assign',
         ]);
@@ -286,9 +280,9 @@ export class StaffActionsService {
   async workflow(
     id: string,
     input: WorkflowActionDto,
-    access?: StaffAccess,
+    access: StaffAccess,
   ): Promise<StaffMutationResponseDto> {
-    if (access && !access.development) {
+    if (!access.development) {
       this.assertRequestId(id);
       const result = await this.mutations.workflow(id, input, access, 'public');
       if (result.referenceNumber === undefined)
@@ -301,10 +295,10 @@ export class StaffActionsService {
         updatedAt: result.updatedAt as unknown as Date | string,
       };
     }
-    if (!access) this.assertEnabled();
+    this.assertEnabled();
     this.assertRequestId(id);
-    const organizationId = access?.organizationId ?? this.organizationId;
-    const actorId = access?.staffIdentityId ?? this.actorId;
+    const organizationId = access.organizationId;
+    const actorId = access.staffIdentityId;
     validateWorkflowInput(input.action, input.reason, input.resolutionSummary);
     return this.database.client.transaction().execute(async (trx) => {
       // Authenticated workforce mutations return through the aligned service above.

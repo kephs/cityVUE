@@ -6,9 +6,23 @@ import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
 import { GetServiceRequestDetailsService } from '../../src/service-request/get-service-request-details.service.js';
 import type { ServiceRequestRepository } from '../../src/service-request/service-request.repository.js';
+import type { StaffAccess } from '../../src/auth/auth.types.js';
 
 const id = '80000000-0000-4000-8000-000000000001';
 const organizationId = '10000000-0000-4000-8000-000000000001';
+/** ADR-025: staff Organization is identity-derived, so the caller states it. */
+const developmentAccess: StaffAccess = {
+  tenantId: null,
+  objectId: null,
+  staffIdentityId: '90000000-0000-4000-8000-000000000001',
+  organizationId,
+  displayName: 'Development staff',
+  scopes: [],
+  permissions: ['service_request.view'],
+  departmentIds: [],
+  divisionIds: [],
+  development: true,
+};
 const record = {
   request: {
     id,
@@ -100,7 +114,7 @@ function service(enabled = true, result: unknown = record) {
 }
 
 test('details service assembles snapshots, typed values, requester, location, and safe activity', async () => {
-  const details = await service().execute(id);
+  const details = await service().execute(id, developmentAccess);
   assert.equal(details.classification.department.name, 'Public Works');
   assert.equal('answers' in details, false);
   assert.equal(details.canReadAnswers, false);
@@ -117,7 +131,16 @@ test('details service assembles snapshots, typed values, requester, location, an
 });
 
 test('details service fails closed when disabled, malformed, or unavailable', async () => {
-  await assert.rejects(service(false).execute(id), NotFoundException);
-  await assert.rejects(service().execute('bad'), NotFoundException);
-  await assert.rejects(service(true, null).execute(id), NotFoundException);
+  await assert.rejects(
+    service(false).execute(id, developmentAccess),
+    NotFoundException,
+  );
+  await assert.rejects(
+    service().execute('bad', developmentAccess),
+    NotFoundException,
+  );
+  await assert.rejects(
+    service(true, null).execute(id, developmentAccess),
+    NotFoundException,
+  );
 });

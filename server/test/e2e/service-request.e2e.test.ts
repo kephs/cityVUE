@@ -62,8 +62,12 @@ before(async () => {
     import('../../src/app.module.js'),
     import('../../src/bootstrap.js'),
   ]);
+  // ADR-025: resident creation receives the TenantContext Organization
+  // first; staff reads receive their identity-derived access.
+  const createOrganizations: string[] = [];
   const create = {
-    execute: async (input: CreateServiceRequestDto) => {
+    execute: async (organizationId: string, input: CreateServiceRequestDto) => {
+      createOrganizations.push(organizationId);
       if (input.serviceDefinitionVersionId.endsWith('99'))
         throw new NotFoundException(
           'Published service definition version not found',
@@ -140,7 +144,8 @@ before(async () => {
     .useValue(create)
     .overrideProvider(GetServiceRequestDetailsService)
     .useValue({
-      execute: async (id: string) => {
+      execute: async (id: string, _access: unknown) => {
+        void _access;
         if (id !== '80000000-0000-4000-8000-000000000001')
           throw new NotFoundException();
         return {

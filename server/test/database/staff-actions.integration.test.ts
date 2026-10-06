@@ -20,6 +20,7 @@ import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import { StaffActionsService } from '../../src/service-request/staff-actions.service.js';
+import type { StaffAccess } from '../../src/auth/auth.types.js';
 import { StaffAuthorizationService } from '../../src/auth/staff-authorization.service.js';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -425,9 +426,34 @@ test(
               ? actor
               : true,
       } as unknown as ConfigService<AppConfiguration, true>;
-      const service = new StaffActionsService(config, {
+      const staffActions = new StaffActionsService(config, {
         client: db,
       } as DatabaseService);
+      // ADR-025: the development actor states its Organization explicitly
+      // instead of the service reading it from configuration. Behaviour is
+      // otherwise identical, so every assertion below is unchanged.
+      const developmentAccess = {
+        tenantId: null,
+        objectId: null,
+        staffIdentityId: actor,
+        organizationId: orgA,
+        displayName: 'Development staff',
+        scopes: [],
+        permissions: [],
+        departmentIds: [],
+        divisionIds: [],
+        development: true,
+      } as unknown as StaffAccess;
+      const service = {
+        assign: (
+          id: string,
+          input: Parameters<StaffActionsService['assign']>[1],
+        ) => staffActions.assign(id, input, developmentAccess),
+        workflow: (
+          id: string,
+          input: Parameters<StaffActionsService['workflow']>[1],
+        ) => staffActions.workflow(id, input, developmentAccess),
+      };
       await assert.rejects(
         service.assign(requestId, {
           expectedRevision: 1,

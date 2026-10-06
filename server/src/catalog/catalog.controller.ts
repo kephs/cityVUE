@@ -13,6 +13,8 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import { ResidentTenant } from '../tenancy/resident-tenant.decorator.js';
+import type { TenantContext } from '../tenancy/tenant-context.js';
 import { CatalogService } from './catalog.service.js';
 import { CategoryDto, IssueDetailDto, IssueSummaryDto } from './catalog.dto.js';
 
@@ -25,8 +27,11 @@ export class CatalogController {
   @ApiOperation({ summary: 'List active resident catalog categories' })
   @ApiQuery({ name: 'search', required: false })
   @ApiOkResponse({ type: [CategoryDto] })
-  listCategories(@Query('search') search?: string) {
-    return this.catalog.listCategories(search);
+  listCategories(
+    @ResidentTenant() tenant: TenantContext,
+    @Query('search') search?: string,
+  ) {
+    return this.catalog.listCategories(tenant.organizationId, search);
   }
 
   @Get('categories/:categoryId/issues')
@@ -36,11 +41,12 @@ export class CatalogController {
   @ApiQuery({ name: 'search', required: false })
   @ApiOkResponse({ type: [IssueSummaryDto] })
   listIssues(
+    @ResidentTenant() tenant: TenantContext,
     @Param('categoryId', new ParseUUIDPipe({ version: '4' }))
     categoryId: string,
     @Query('search') search?: string,
   ) {
-    return this.catalog.listIssues(categoryId, search);
+    return this.catalog.listIssues(tenant.organizationId, categoryId, search);
   }
 
   @Get('issues/:serviceDefinitionId')
@@ -49,9 +55,10 @@ export class CatalogController {
   @ApiParam({ name: 'serviceDefinitionId', format: 'uuid' })
   @ApiOkResponse({ type: IssueDetailDto })
   getIssue(
+    @ResidentTenant() tenant: TenantContext,
     @Param('serviceDefinitionId', new ParseUUIDPipe({ version: '4' }))
     id: string,
   ) {
-    return this.catalog.getIssue(id);
+    return this.catalog.getIssueForOrganization(tenant.organizationId, id);
   }
 }

@@ -8,6 +8,8 @@ import {
 import { StaffAccessGuard } from '../auth/staff-access.guard.js';
 import type { StaffAccess } from '../auth/auth.types.js';
 import { assertStaffRequestPermission } from './staff-request-scope.js';
+import { ResidentTenant } from '../tenancy/resident-tenant.decorator.js';
+import type { TenantContext } from '../tenancy/tenant-context.js';
 import { ParticipationService } from './participation.service.js';
 
 export class ParticipationPeriodDto {
@@ -19,8 +21,8 @@ export class ParticipationAreaController {
   constructor(private readonly service: ParticipationService) {}
   @Get()
   @Header('Cache-Control', 'no-store')
-  areas() {
-    return this.service.areas();
+  areas(@ResidentTenant() tenant: TenantContext) {
+    return this.service.areas(tenant.organizationId);
   }
 }
 @RequireEntra()

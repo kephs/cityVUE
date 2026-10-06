@@ -11,25 +11,24 @@ import type { StaffAccess } from '../auth/auth.types.js';
 
 @Injectable()
 export class ListServiceRequestsService {
-  private readonly organizationId: string;
   private readonly enabled: boolean;
   constructor(
     config: ConfigService<AppConfiguration, true>,
     private readonly database: DatabaseService,
     private readonly repository: ServiceRequestRepository,
   ) {
-    this.organizationId = config.get('catalog.developmentOrganizationId', {
-      infer: true,
-    });
     this.enabled = config.get('serviceRequestReads.developmentEnabled', {
       infer: true,
     });
   }
+  /** ADR-025. Staff Organization is identity-derived and mandatory. A request
+   * hostname can neither supply nor widen it, and the former configuration
+   * fallback is removed. */
   async execute(
     query: ListServiceRequestsQueryDto,
-    access?: StaffAccess,
+    access: StaffAccess,
   ): Promise<ServiceRequestListResponseDto> {
-    if (!access && !this.enabled) throw new NotFoundException();
+    if (!this.enabled && access.development) throw new NotFoundException();
     const normalizedSearch = query.search?.trim();
     const options = {
       ...(query.status ? { status: query.status } : {}),
@@ -44,10 +43,10 @@ export class ListServiceRequestsService {
     };
     const result = await this.repository.listForOrganization(
       this.database.client,
-      access?.organizationId ?? this.organizationId,
+      access.organizationId,
       {
         ...options,
-        ...(access && !access.development
+        ...(!access.development
           ? {
               allowedDepartmentIds: access.departmentIds,
               allowedDivisionIds: access.divisionIds,

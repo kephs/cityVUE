@@ -5,6 +5,21 @@ import type { ConfigService } from '@nestjs/config';
 import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
 import { StaffActionsService } from '../../src/service-request/staff-actions.service.js';
+import type { StaffAccess } from '../../src/auth/auth.types.js';
+
+/** ADR-025: staff Organization is identity-derived, so the caller states it. */
+const developmentAccess = {
+  tenantId: null,
+  objectId: null,
+  staffIdentityId: '90000000-0000-4000-8000-000000000001',
+  organizationId: '10000000-0000-4000-8000-000000000001',
+  displayName: 'Development staff',
+  scopes: [],
+  permissions: [],
+  departmentIds: [],
+  divisionIds: [],
+  development: true,
+} as unknown as StaffAccess;
 
 function service(enabled: boolean) {
   const config = {
@@ -15,7 +30,15 @@ function service(enabled: boolean) {
           ? '90000000-0000-4000-8000-000000000001'
           : enabled,
   } as unknown as ConfigService<AppConfiguration, true>;
-  return new StaffActionsService(config, {} as DatabaseService);
+  const actions = new StaffActionsService(config, {} as DatabaseService);
+  return {
+    assign: (id: string, input: Parameters<StaffActionsService['assign']>[1]) =>
+      actions.assign(id, input, developmentAccess),
+    workflow: (
+      id: string,
+      input: Parameters<StaffActionsService['workflow']>[1],
+    ) => actions.workflow(id, input, developmentAccess),
+  };
 }
 
 test('development staff actions fail closed before database access', async () => {

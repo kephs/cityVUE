@@ -630,7 +630,7 @@ test(
               answers: [],
             } satisfies CreateServiceRequestDto;
             if (availability === 'INTERNAL_ONLY') {
-              await assert.rejects(creator.execute(input));
+              await assert.rejects(creator.execute(org, input));
               await assert.rejects(
                 creator.executeStaff(
                   { ...input, audience: 'public', intakeChannel: 'api' },
@@ -638,7 +638,7 @@ test(
                 ),
               );
             } else {
-              await creator.execute(input);
+              await creator.execute(org, input);
               await creator.executeStaff(
                 { ...input, audience: 'public', intakeChannel: 'api' },
                 creatorAccess,
@@ -664,7 +664,7 @@ test(
           const redirect = (await service.detail(access, id)).issue;
           assert.ok(redirect.catalogVersionId);
           await assert.rejects(
-            creator.execute({
+            creator.execute(org, {
               serviceDefinitionId: id,
               serviceDefinitionVersionId: redirect.catalogVersionId,
               description: 'Cannot submit redirect',
@@ -753,7 +753,7 @@ test(
             reportingIdentity: 'anonymous' as const,
             answers: [],
           };
-          const creating = creator.execute(requestInput);
+          const creating = creator.execute(org, requestInput);
           await Promise.race([
             entered,
             creating.then(() => {
@@ -768,7 +768,7 @@ test(
           resume();
           await assert.rejects(creating);
           assert.equal(changed.revision, 2);
-          await assert.rejects(creator.execute(requestInput));
+          await assert.rejects(creator.execute(org, requestInput));
         },
       );
       await governedAvailabilityChecks(

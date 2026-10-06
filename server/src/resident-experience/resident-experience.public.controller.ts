@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { ResidentTenant } from '../tenancy/resident-tenant.decorator.js';
+import type { TenantContext } from '../tenancy/tenant-context.js';
 import { PublicResidentExperienceService } from './resident-experience.public.service.js';
 
 @ApiTags('resident-experience')
@@ -21,6 +23,7 @@ export class PublicResidentExperienceController {
       'Read the published resident experience; no publication returns a null configuration',
   })
   getPublished(
+    @ResidentTenant() tenant: TenantContext,
     @Query() query: Record<string, unknown>,
     @Req() request: Request,
   ) {
@@ -34,6 +37,6 @@ export class PublicResidentExperienceController {
         'Resident experience does not accept selectors',
       );
     }
-    return this.experience.getPublished();
+    return this.experience.getPublished(tenant.organizationId);
   }
 }

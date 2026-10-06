@@ -23,15 +23,16 @@ export class ParticipationService {
     private readonly database: DatabaseService,
     private readonly config: ConfigService<AppConfiguration, true>,
   ) {}
-  async areas(organizationId?: string) {
-    const org =
-      organizationId ??
-      this.config.get('catalog.developmentOrganizationId', { infer: true });
-    if (!org) return { collectionEnabled: false, items: [] };
+  /** ADR-025. Organization is mandatory and comes from the caller's authority
+   * source — the resolved resident TenantContext on the intake route, staff
+   * identity on the staff route. The former optional configuration fallback is
+   * removed. */
+  async areas(organizationId: string) {
+    if (!organizationId) return { collectionEnabled: false, items: [] };
     const organization = await this.database.client
       .selectFrom('organization')
       .select('service_participation_collection_enabled')
-      .where('id', '=', org)
+      .where('id', '=', organizationId)
       .where('status', '=', 'active')
       .executeTakeFirst();
     if (!organization?.service_participation_collection_enabled)
@@ -42,7 +43,7 @@ export class ParticipationService {
         .selectFrom('participation_area as area')
         .innerJoin('organization', 'organization.id', 'area.organization_id')
         .select(['area.id', 'area.display_name as label'])
-        .where('area.organization_id', '=', org)
+        .where('area.organization_id', '=', organizationId)
         .where('organization.status', '=', 'active')
         .where('area.active', '=', true)
         .orderBy('area.display_order')

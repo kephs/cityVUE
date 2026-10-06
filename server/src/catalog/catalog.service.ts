@@ -1,8 +1,6 @@
 import { issueActionProjection } from './issue-action.domain.js';
 import type { IntakeContext } from './issue-availability.js';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type { AppConfiguration } from '../config/configuration.js';
 import { CatalogRepository } from './catalog.repository.js';
 import type {
   CategoryDto,
@@ -13,20 +11,18 @@ import type {
 
 @Injectable()
 export class CatalogService {
-  private readonly organizationId: string;
-  constructor(
-    config: ConfigService<AppConfiguration, true>,
-    private readonly repository: CatalogRepository,
-  ) {
-    this.organizationId = config.get('catalog.developmentOrganizationId', {
-      infer: true,
-    });
-  }
-  async listCategories(search?: string): Promise<CategoryDto[]> {
+  constructor(private readonly repository: CatalogRepository) {}
+  /** ADR-025. Every entry point takes Organization explicitly: resident routes
+   * supply the resolved TenantContext Organization, staff routes supply the
+   * identity-derived one. No configuration fallback remains. */
+  async listCategories(
+    organizationId: string,
+    search?: string,
+  ): Promise<CategoryDto[]> {
     const normalizedSearch = search?.trim();
     return (
       await this.repository.listActiveCategories(
-        this.organizationId,
+        organizationId,
         normalizedSearch === '' ? undefined : normalizedSearch,
       )
     ).map((row) => ({
@@ -41,13 +37,14 @@ export class CatalogService {
     }));
   }
   async listIssues(
+    organizationId: string,
     categoryId: string,
     search?: string,
   ): Promise<IssueSummaryDto[]> {
     const normalizedSearch = search?.trim();
     return (
       await this.repository.listPublishedIssues(
-        this.organizationId,
+        organizationId,
         categoryId,
         normalizedSearch === '' ? undefined : normalizedSearch,
       )
@@ -58,9 +55,6 @@ export class CatalogService {
       ...issueActionProjection(row),
       iconKey: row.icon_key,
     }));
-  }
-  async getIssue(id: string): Promise<IssueDetailDto> {
-    return this.getIssueForOrganization(this.organizationId, id);
   }
   async getIssueForOrganization(
     organizationId: string,

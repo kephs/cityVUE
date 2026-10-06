@@ -35,40 +35,33 @@ function timestamp(value: unknown): Date | string {
 
 @Injectable()
 export class GetServiceRequestDetailsService {
-  private readonly organizationId: string;
   private readonly enabled: boolean;
   constructor(
     config: ConfigService<AppConfiguration, true>,
     private readonly database: DatabaseService,
     private readonly repository: ServiceRequestRepository,
   ) {
-    this.organizationId = config.get('catalog.developmentOrganizationId', {
-      infer: true,
-    });
     this.enabled = config.get('serviceRequestReads.developmentEnabled', {
       infer: true,
     });
   }
 
+  /** ADR-025. Staff Organization is identity-derived and mandatory; a request
+   * hostname cannot supply or widen it. */
   async execute(
     id: string,
-    access?: StaffAccess,
+    access: StaffAccess,
   ): Promise<ServiceRequestDetailsResponseDto> {
-    if ((!access && !this.enabled) || !uuidV4.test(id))
+    if ((!this.enabled && access.development) || !uuidV4.test(id))
       throw new NotFoundException();
     const details = await this.database.client
       .transaction()
       .execute((trx) =>
-        this.repository.loadDetails(
-          trx,
-          access?.organizationId ?? this.organizationId,
-          id,
-        ),
+        this.repository.loadDetails(trx, access.organizationId, id),
       );
     if (!details) throw new NotFoundException();
     const { request, location, activity, assignments } = details;
     if (
-      access &&
       !access.development &&
       (!access.departmentIds.includes(request.department_id) ||
         (request.division_id !== null &&
@@ -105,11 +98,9 @@ export class GetServiceRequestDetailsService {
       (entry) => !('endedAt' in entry),
     );
     return {
-      canReadAnswers: Boolean(
-        access &&
+      canReadAnswers:
         !access.development &&
         access.permissions.includes('service_request.answers.read'),
-      ),
       serviceRequest: {
         id: request.id,
         referenceNumber: request.reference_number,

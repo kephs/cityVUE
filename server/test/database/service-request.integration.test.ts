@@ -38,6 +38,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
+import type { StaffAccess } from '../../src/auth/auth.types.js';
 import { CreateServiceRequestService } from '../../src/service-request/create-service-request.service.js';
 import { GetServiceRequestDetailsService } from '../../src/service-request/get-service-request-details.service.js';
 import { ListServiceRequestsService } from '../../src/service-request/list-service-requests.service.js';
@@ -45,6 +46,20 @@ import { ServiceRequestRepository } from '../../src/service-request/service-requ
 
 const url = process.env.TEST_DATABASE_URL;
 const org = '10000000-0000-4000-8000-000000000001';
+/** ADR-025: staff reads state their identity-derived Organization; the
+ * services no longer fall back to configuration. */
+const developmentAccess = {
+  tenantId: null,
+  objectId: null,
+  staffIdentityId: '90000000-0000-4000-8000-000000000001',
+  organizationId: org,
+  displayName: 'Development staff',
+  scopes: [],
+  permissions: ['service_request.view'],
+  departmentIds: [],
+  divisionIds: [],
+  development: true,
+} as StaffAccess;
 const category = '30000000-0000-4000-8000-000000000001';
 const serviceId = '40000000-0000-4000-8000-000000000001';
 const version = '50000000-0000-4000-8000-000000000001';
@@ -327,19 +342,21 @@ test(
       };
 
       const september = await creator.execute(
+        org,
         payload,
         new Date('2026-10-01T03:59:59Z'),
       );
       assert.equal(september.referenceNumber, 'SR-202609-000001');
       assert.equal(september.status, 'open');
       const october = await creator.execute(
+        org,
         payload,
         new Date('2026-10-01T04:00:00Z'),
       );
       assert.equal(october.referenceNumber, 'SR-202610-000001');
       const concurrent = await Promise.all(
         Array.from({ length: 12 }, () =>
-          creator.execute(payload, new Date('2026-10-15T12:00:00Z')),
+          creator.execute(org, payload, new Date('2026-10-15T12:00:00Z')),
         ),
       );
       assert.equal(
@@ -410,7 +427,7 @@ test(
             repository.findByReference(org, september.referenceNumber, trx),
           ),
       );
-      const readModel = await reader.execute(september.id);
+      const readModel = await reader.execute(september.id, developmentAccess);
       assert.equal(readModel.classification.issueName, 'Pothole');
       assert.equal(readModel.classification.department.name, 'Works');
       assert.equal(readModel.classification.category.name, 'Roads');
@@ -451,10 +468,11 @@ test(
           ),
         undefined,
       );
-      await assert.rejects(reader.execute('malformed'));
-      await assert.rejects(reader.execute(randomUUID()));
+      await assert.rejects(reader.execute('malformed', developmentAccess));
+      await assert.rejects(reader.execute(randomUUID(), developmentAccess));
 
       const identified = await creator.execute(
+        org,
         {
           ...payload,
           reportingIdentity: 'identified',
@@ -472,23 +490,29 @@ test(
         ).email,
         'resident@example.test',
       );
-      const identifiedReadModel = await reader.execute(identified.id);
+      const identifiedReadModel = await reader.execute(
+        identified.id,
+        developmentAccess,
+      );
       assert.deepEqual(identifiedReadModel.requester, {
         anonymous: false,
       });
       assert.ok(
         !JSON.stringify(identifiedReadModel).includes('resident@example.test'),
       );
-      const listed = await listReader.execute({
-        search: 'pOtHoLe',
-        department,
-        category,
-        status: 'open',
-        priority: 'high',
-        sort: 'reference_desc',
-        page: 1,
-        pageSize: 5,
-      });
+      const listed = await listReader.execute(
+        {
+          search: 'pOtHoLe',
+          department,
+          category,
+          status: 'open',
+          priority: 'high',
+          sort: 'reference_desc',
+          page: 1,
+          pageSize: 5,
+        },
+        developmentAccess,
+      );
       assert.equal(listed.total, 15);
       assert.equal(listed.items.length, 5);
       assert.equal(listed.hasNextPage, true);
@@ -500,7 +524,12 @@ test(
       );
       assert.equal(Object.hasOwn(listed.items[0] ?? {}, 'description'), false);
       assert.equal(
-        (await listReader.execute({ search: september.referenceNumber })).total,
+        (
+          await listReader.execute(
+            { search: september.referenceNumber },
+            developmentAccess,
+          )
+        ).total,
         1,
       );
       assert.equal(
@@ -520,6 +549,7 @@ test(
         .executeTakeFirstOrThrow();
       await assert.rejects(
         creator.execute(
+          org,
           { ...payload, location: { enteredAddress: 'DEV-INELIGIBLE' } },
           new Date('2026-10-15T12:00:00Z'),
         ),
@@ -530,6 +560,7 @@ test(
       );
       await assert.rejects(
         creator.execute(
+          org,
           { ...payload, location: { enteredAddress: 'DEV-UNABLE' } },
           new Date('2026-10-15T12:00:00Z'),
         ),
@@ -540,6 +571,7 @@ test(
       );
       await assert.rejects(
         creator.execute(
+          org,
           {
             ...payload,
             answers: [
@@ -553,6 +585,7 @@ test(
       );
       await assert.rejects(
         creator.execute(
+          org,
           {
             ...payload,
             answers: [
@@ -565,6 +598,7 @@ test(
       );
       await assert.rejects(
         creator.execute(
+          org,
           {
             ...payload,
             answers: [
@@ -577,6 +611,7 @@ test(
       );
       await assert.rejects(
         creator.execute(
+          org,
           {
             serviceDefinitionId: serviceId,
             serviceDefinitionVersionId: version,
@@ -589,6 +624,7 @@ test(
       );
       await assert.rejects(
         creator.execute(
+          org,
           { ...payload, serviceDefinitionVersionId: draftVersion },
           new Date('2026-10-15T12:00:00Z'),
         ),
@@ -638,6 +674,7 @@ test(
           longitude: 0.023456,
         };
         const createdLocation = await creator.execute(
+          org,
           { ...payload, location },
           new Date('2026-10-15T12:00:00Z'),
         );
@@ -649,7 +686,10 @@ test(
         assert.equal(persisted.entered_address, location.enteredAddress);
         assert.equal(Number(persisted.latitude), location.latitude);
         assert.equal(Number(persisted.longitude), location.longitude);
-        const locationRead = await reader.execute(createdLocation.id);
+        const locationRead = await reader.execute(
+          createdLocation.id,
+          developmentAccess,
+        );
         assert.equal(locationRead.location?.latitude, location.latitude);
         assert.equal(locationRead.location.longitude, location.longitude);
         assert.equal(persisted.organization_id, org);
@@ -700,7 +740,7 @@ test(
         { latitude: 0 },
       ]) {
         await assert.rejects(
-          creator.execute({
+          creator.execute(org, {
             ...payload,
             location: {
               enteredAddress: 'Fictional invalid point',
@@ -740,16 +780,16 @@ test(
           longitude: 0,
         },
       };
-      await assert.rejects(coordinateCreator.execute(coordinatePayload));
+      await assert.rejects(coordinateCreator.execute(org, coordinatePayload));
       await db
         .updateTable('service_definition')
         .set({ current_published_version_id: draftVersion })
         .where('id', '=', serviceId)
         .execute();
-      await coordinateCreator.execute(coordinatePayload);
+      await coordinateCreator.execute(org, coordinatePayload);
       const beforeBoundaryFailure = await snapshot();
       await assert.rejects(
-        coordinateCreator.execute({
+        coordinateCreator.execute(org, {
           ...coordinatePayload,
           location: { ...coordinatePayload.location, longitude: 1 },
         }),
@@ -760,7 +800,7 @@ test(
       );
       assert.equal(await snapshot(), beforeBoundaryFailure);
       await assert.rejects(
-        coordinateCreator.execute({
+        coordinateCreator.execute(org, {
           ...coordinatePayload,
           location: { enteredAddress: 'Fictional unknown' },
         }),
@@ -783,7 +823,7 @@ test(
         'Fictional manual',
       ])
         await assert.rejects(
-          coordinateCreator.execute({
+          coordinateCreator.execute(org, {
             ...coordinatePayload,
             location: { ...coordinatePayload.location, enteredAddress: label },
           }),

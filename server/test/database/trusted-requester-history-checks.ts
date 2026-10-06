@@ -244,7 +244,7 @@ export async function checkTrustedRequesterHistory(
         { ...input, contact: sharedContact },
         second,
       );
-      const two = await create.execute(input);
+      const two = await create.execute(org, input);
       const rows = await db
         .selectFrom('service_request')
         .select(['id', 'requester_id'])
@@ -751,7 +751,7 @@ export async function checkTrustedRequesterHistory(
           results[0],
         );
         await assert.rejects(create.executeTrusted(submission, second));
-        await assert.rejects(create.execute(submission));
+        await assert.rejects(create.execute(org, submission));
         assert.deepEqual(await snapshot(), before);
         assert.equal(
           required(before.requests.find((row) => row.id === createdId))

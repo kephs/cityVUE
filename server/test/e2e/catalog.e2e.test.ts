@@ -23,8 +23,12 @@ before(async () => {
     import('../../src/app.module.js'),
     import('../../src/bootstrap.js'),
   ]);
+  // ADR-025: every catalog entry point now receives the resident
+  // TenantContext Organization as its first argument.
+  const seenOrganizations: string[] = [];
   const catalog = {
-    listCategories: async (search?: string) =>
+    listCategories: async (organizationId: string, search?: string) => (
+      seenOrganizations.push(organizationId),
       search?.trim().toLowerCase() === 'roads'
         ? [
             {
@@ -34,8 +38,10 @@ before(async () => {
               iconKey: 'signpost-split',
             },
           ]
-        : [],
-    listIssues: async (id: string) =>
+        : []
+    ),
+    listIssues: async (organizationId: string, id: string) => (
+      seenOrganizations.push(organizationId),
       id === categoryId
         ? [
             {
@@ -45,8 +51,10 @@ before(async () => {
               iconKey: 'cone-striped',
             },
           ]
-        : [],
-    getIssue: async (id: string) => {
+        : []
+    ),
+    getIssueForOrganization: async (organizationId: string, id: string) => {
+      seenOrganizations.push(organizationId);
       if (id !== issueId) throw new NotFoundException('Issue not found');
       return {
         id: issueId,

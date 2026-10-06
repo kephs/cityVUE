@@ -2,6 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NotFoundException } from '@nestjs/common';
 import { ListServiceRequestsService } from '../../src/service-request/list-service-requests.service.js';
+import type { StaffAccess } from '../../src/auth/auth.types.js';
+
+const ORGANIZATION = '10000000-0000-4000-8000-000000000001';
+/** ADR-025: staff Organization is identity-derived, so the caller now states
+ * it explicitly rather than the service reading configuration. */
+const developmentAccess: StaffAccess = {
+  tenantId: null,
+  objectId: null,
+  staffIdentityId: '90000000-0000-4000-8000-000000000001',
+  organizationId: ORGANIZATION,
+  displayName: 'Development staff',
+  scopes: [],
+  permissions: ['service_request.view'],
+  departmentIds: [],
+  divisionIds: [],
+  development: true,
+};
 
 const row = {
   id: '80000000-0000-4000-8000-000000000001',
@@ -44,13 +61,16 @@ function service(enabled = true) {
 }
 test('normalizes list options, scopes by backend Organization, and maps only safe row fields', async () => {
   const { subject, calls } = service();
-  const result = await subject.execute({ search: '  pothole  ' });
+  const result = await subject.execute(
+    { search: '  pothole  ' },
+    developmentAccess,
+  );
   assert.equal(result.total, 1);
   assert.equal(result.items[0]?.issueName, 'Pothole');
   assert.equal('description' in (result.items[0] as object), false);
   assert.equal('requester' in (result.items[0] as object), false);
   const args = calls[0] as unknown[];
-  assert.equal(args[1], '10000000-0000-4000-8000-000000000001');
+  assert.equal(args[1], ORGANIZATION);
   assert.deepEqual(args[2], {
     search: 'pothole',
     sort: 'newest',
@@ -60,5 +80,8 @@ test('normalizes list options, scopes by backend Organization, and maps only saf
 });
 test('fails closed while development reads are disabled', async () => {
   const { subject } = service(false);
-  await assert.rejects(() => subject.execute({}), NotFoundException);
+  await assert.rejects(
+    () => subject.execute({}, developmentAccess),
+    NotFoundException,
+  );
 });

@@ -77,7 +77,6 @@ const supportedQuestionTypes = new Set<SupportedQuestionType>([
 
 @Injectable()
 export class CreateServiceRequestService {
-  private readonly organizationId: string;
   private readonly trustedDevelopment: boolean;
   constructor(
     config: ConfigService<AppConfiguration, true>,
@@ -86,9 +85,6 @@ export class CreateServiceRequestService {
     private readonly eligibility: EvaluateLocationEligibilityService,
     @Optional() private readonly attachments?: AttachmentService,
   ) {
-    this.organizationId = config.get('catalog.developmentOrganizationId', {
-      infer: true,
-    });
     this.trustedDevelopment =
       ['development', 'test'].includes(
         config.get('app.environment', { infer: true }),
@@ -117,14 +113,18 @@ export class CreateServiceRequestService {
     );
   }
 
+  /** ADR-025. The anonymous intake write path. Organization comes from the
+   * resolved resident TenantContext and is never taken from the request body,
+   * so a forged Organization field cannot redirect a created request. */
   async execute(
+    organizationId: string,
     input: CreateServiceRequestDto,
     now = new Date(),
   ): Promise<CreateServiceRequestResponseDto> {
     return this.create(
       input,
       {
-        organizationId: this.organizationId,
+        organizationId,
         audience: 'public',
         intakeChannel: 'web',
         staffId: null,

@@ -2,6 +2,8 @@ import { Controller, Get, Header } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AppConfiguration } from '../config/configuration.js';
 import { DatabaseService } from '../database/database.service.js';
+import { ResidentTenant } from '../tenancy/resident-tenant.decorator.js';
+import type { TenantContext } from '../tenancy/tenant-context.js';
 import { syntheticServiceBoundary } from '../geospatial/synthetic-geospatial.repository.js';
 
 @Controller('intake/location')
@@ -14,17 +16,16 @@ export class IntakeLocationController {
   @Get()
   @Header('Cache-Control', 'no-store')
   @Header('Referrer-Policy', 'no-referrer')
-  async configuration() {
+  async configuration(@ResidentTenant() tenant: TenantContext) {
     const unavailable = { mode: 'unavailable', boundary: null, locations: [] };
     if (
       this.config.get('app.environment', { infer: true }) !== 'development' ||
       this.config.get('deployment.profile', { infer: true }) !== 'development'
     )
       return unavailable;
-    const organizationId = this.config.get(
-      'catalog.developmentOrganizationId',
-      { infer: true },
-    );
+    // ADR-025: the resolved resident TenantContext, not a configuration read.
+    // The development gate above is unchanged and still bounds this endpoint.
+    const organizationId = tenant.organizationId;
     const active = await this.database.client
       .selectFrom('organization')
       .select('id')

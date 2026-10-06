@@ -283,6 +283,7 @@ export async function checkParticipation(
       const anonymous = { ...input };
       delete anonymous.contact;
       const r = await create.execute(
+        org,
         {
           ...anonymous,
           reportingIdentity: 'anonymous',
@@ -310,6 +311,7 @@ export async function checkParticipation(
         0,
       );
       const second = await create.execute(
+        org,
         { ...input, participation: { state: 'PROVIDED', areaId: b } },
         date,
       );
@@ -436,21 +438,25 @@ export async function checkParticipation(
       // Isolated historical period: A starts with 2 and B with 2.
       for (let i = 0; i < 4; i++)
         await create.execute(
+          org,
           { ...input, participation: { state: 'PROVIDED', areaId: a } },
           date,
         );
       await create.execute(
+        org,
         { ...input, participation: { state: 'PROVIDED', areaId: b } },
         date,
       );
       for (let i = 0; i < 5; i++)
         await create.execute(
+          org,
           { ...input, participation: { state: 'DECLINED' } },
           date,
         );
-      await create.execute(input, date);
+      await create.execute(org, input, date);
       for (let i = 0; i < 2; i++) {
         const hidden = await create.execute(
+          org,
           { ...input, participation: { state: 'PROVIDED', areaId: b } },
           date,
         );
@@ -710,8 +716,8 @@ export async function checkParticipation(
           participation: { state: 'PROVIDED' as const, areaId: a },
         };
         const results = await Promise.all([
-          create.execute(submission),
-          create.execute(submission),
+          create.execute(org, submission),
+          create.execute(org, submission),
         ]);
         assert.deepEqual(results[0], results[1]);
         await db
@@ -720,16 +726,16 @@ export async function checkParticipation(
           .where('id', '=', a)
           .execute();
         const before = await snapshot();
-        assert.deepEqual(await create.execute(submission), results[0]);
+        assert.deepEqual(await create.execute(org, submission), results[0]);
         assert.deepEqual(await snapshot(), before);
         await assert.rejects(
-          create.execute({
+          create.execute(org, {
             ...input,
             participation: { state: 'PROVIDED', areaId: a },
           }),
         );
         await assert.rejects(
-          create.execute({
+          create.execute(org, {
             ...submission,
             participation: { state: 'PROVIDED', areaId: b },
           }),
@@ -750,7 +756,7 @@ export async function checkParticipation(
           originalname: 'fictional.jpg',
           mimetype: 'image/jpeg',
         });
-        const noSelection = await create.execute({
+        const noSelection = await create.execute(org, {
           ...input,
           attachments: claim2,
         });
@@ -770,7 +776,7 @@ export async function checkParticipation(
         const beforeFailure = await snapshot();
         try {
           await assert.rejects(
-            create.execute({
+            create.execute(org, {
               ...input,
               participation: { state: 'PROVIDED', areaId: b },
             }),
@@ -956,7 +962,7 @@ export async function checkParticipation(
         );
       }
       assert.deepEqual(await snapshot(), beforeInvalid);
-      const skipped = await create.execute(anonymous);
+      const skipped = await create.execute(org, anonymous);
       const skippedRow = await db
         .selectFrom('service_request')
         .selectAll()
@@ -981,7 +987,7 @@ export async function checkParticipation(
         .where('id', '=', org)
         .execute();
       assert.equal((await analytics.areas(org)).collectionEnabled, true);
-      const declined = await create.execute({
+      const declined = await create.execute(org, {
         ...anonymous,
         participation: { state: 'DECLINED' },
       });
@@ -1008,8 +1014,10 @@ export async function checkParticipation(
         { state: 'PROVIDED' as const, areaId: b },
         { state: 'DECLINED' as const },
       ])
-        await assert.rejects(create.execute({ ...anonymous, participation }));
-      const incomplete = await create.execute(anonymous);
+        await assert.rejects(
+          create.execute(org, { ...anonymous, participation }),
+        );
+      const incomplete = await create.execute(org, anonymous);
       assert.equal(
         (
           await db

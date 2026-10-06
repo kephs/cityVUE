@@ -178,9 +178,15 @@ export async function checkPublicRequestContact(
         action: 'contact_viewed',
         correlationId: correlation,
       });
-      const logs = c.logs
+      const correlatedLines = c.logs
         .map((line) => JSON.parse(line) as Record<string, unknown>)
         .filter((line) => line.requestId === correlation);
+      assertPrivate(correlatedLines);
+      // ADR-025: one sanitized tenant-resolution record now shares this
+      // correlation id. The HTTP completion record is still exactly one.
+      const logs = correlatedLines.filter(
+        (line) => line.tenantResolution === undefined,
+      );
       assert.equal(logs.length, 1);
       const log = logs[0];
       assert.ok(log);

@@ -477,9 +477,14 @@ export async function checkRequestNotes(
         noteId: first.id,
         correlationId: correlation,
       });
-      const correlated = c.logs
+      const correlatedLines = c.logs
         .map((line) => JSON.parse(line) as Record<string, unknown>)
         .filter((line) => line.requestId === correlation);
+      // ADR-025: one sanitized tenant-resolution record now shares this
+      // correlation id. The HTTP completion record is still exactly one.
+      const correlated = correlatedLines.filter(
+        (line) => line.tenantResolution === undefined,
+      );
       assert.equal(correlated.length, 1);
       const log = correlated[0];
       assert.ok(log);

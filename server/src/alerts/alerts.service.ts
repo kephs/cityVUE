@@ -1,26 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type { AppConfiguration } from '../config/configuration.js';
 import { AlertsRepository } from './alerts.repository.js';
 import { validateAlertInput } from './alert.domain.js';
 import type { PublicAlertDto } from './alert.dto.js';
 
 @Injectable()
 export class AlertsService {
-  private readonly organizationId: string;
-  constructor(
-    config: ConfigService<AppConfiguration, true>,
-    private readonly repository: AlertsRepository,
-  ) {
-    this.organizationId = config.get('catalog.developmentOrganizationId', {
-      infer: true,
-    });
-  }
-  async listActive(): Promise<PublicAlertDto[]> {
-    const rows = await this.repository.listActive(
-      this.organizationId,
-      new Date(),
-    );
+  constructor(private readonly repository: AlertsRepository) {}
+  /** ADR-025. Organization is supplied by the caller from the resolved
+   * resident TenantContext; this service holds no Organization of its own and
+   * has no configuration fallback. */
+  async listActive(organizationId: string): Promise<PublicAlertDto[]> {
+    const rows = await this.repository.listActive(organizationId, new Date());
     return rows.flatMap((row) => {
       // Fail closed for invalid stored content; never return raw rows or audit actors.
       try {

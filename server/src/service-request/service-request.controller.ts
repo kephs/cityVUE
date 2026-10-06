@@ -23,6 +23,10 @@ import {
 import { CurrentStaff, RequirePermission } from '../auth/auth.decorators.js';
 import { StaffAccessGuard } from '../auth/staff-access.guard.js';
 import type { Permission, StaffAccess } from '../auth/auth.types.js';
+// Resident intake takes Organization from the trusted host; every guarded
+// route below takes it from verified staff identity. The two never mix.
+import { ResidentTenant } from '../tenancy/resident-tenant.decorator.js';
+import type { TenantContext } from '../tenancy/tenant-context.js';
 import { CreateServiceRequestService } from './create-service-request.service.js';
 import { GetServiceRequestDetailsService } from './get-service-request-details.service.js';
 import { ListServiceRequestsService } from './list-service-requests.service.js';
@@ -61,8 +65,11 @@ export class ServiceRequestController {
   @ApiConflictResponse({
     description: 'Reference or concurrent persistence conflict',
   })
-  create(@Body() input: CreateServiceRequestDto) {
-    return this.createRequest.execute(input);
+  create(
+    @ResidentTenant() tenant: TenantContext,
+    @Body() input: CreateServiceRequestDto,
+  ) {
+    return this.createRequest.execute(tenant.organizationId, input);
   }
   @Get()
   @UseGuards(StaffAccessGuard)

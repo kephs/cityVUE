@@ -141,7 +141,7 @@ export async function governedAvailabilityChecks(
     answers: [{ questionId: question.id, value: 'Fictional answer' }],
     location: { enteredAddress: 'Fictional test location' },
   };
-  const publicReceipt = await creator().execute(requestInput);
+  const publicReceipt = await creator().execute(org, requestInput);
   await creator().executeStaff(
     {
       ...requestInput,
@@ -225,7 +225,7 @@ export async function governedAvailabilityChecks(
       );
       assert.deepEqual(await snapshot(configuration), before);
       assert.deepEqual(await snapshot(historicalTables), historical);
-      await assert.rejects(creator().execute(requestInput));
+      await assert.rejects(creator().execute(org, requestInput));
       await assert.rejects(db.transaction().execute(down));
       await assert.rejects(
         sql`update service_definition set availability='INTERNAL_AND_EXTERNAL' where id=${id}`.execute(
@@ -439,7 +439,7 @@ export async function governedAvailabilityChecks(
         }
         return result;
       };
-      const creating = creator(repository).execute(requestInput);
+      const creating = creator(repository).execute(org, requestInput);
       await Promise.race([
         entered,
         creating.then(() => {
@@ -453,7 +453,7 @@ export async function governedAvailabilityChecks(
       release();
       const [receipt] = await Promise.all([creating, changing]);
       assert.ok(receipt.id);
-      await assert.rejects(creator().execute(requestInput));
+      await assert.rejects(creator().execute(org, requestInput));
       await creator().executeStaff(
         {
           ...requestInput,

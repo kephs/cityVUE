@@ -3,8 +3,6 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type { AppConfiguration } from '../config/configuration.js';
 import { PinoLoggerService } from '../common/logging/pino-logger.service.js';
 import { ResidentExperienceRepository } from './resident-experience.repository.js';
 import {
@@ -14,21 +12,19 @@ import {
 
 @Injectable()
 export class PublicResidentExperienceService {
-  private readonly organizationId: string;
   constructor(
-    config: ConfigService<AppConfiguration, true>,
     private readonly repository: ResidentExperienceRepository,
     private readonly logger: PinoLoggerService,
-  ) {
-    // Same deployment-owned development context as anonymous catalog/alerts.
-    // No Host, forwarded header, body or query value participates in resolution.
-    this.organizationId = config.get('catalog.developmentOrganizationId', {
-      infer: true,
-    });
-  }
-  async getPublished(): Promise<PublicResidentExperienceDto> {
+  ) {}
+  /** ADR-025. Organization comes from the resolved resident TenantContext,
+   * which the middleware derives server-side from the trusted request host.
+   * No Host, forwarded header, body or query value reaches this service, and
+   * no configuration fallback remains. */
+  async getPublished(
+    organizationId: string,
+  ): Promise<PublicResidentExperienceDto> {
     try {
-      const snapshot = await this.repository.getPublished(this.organizationId);
+      const snapshot = await this.repository.getPublished(organizationId);
       return snapshot === null
         ? { schemaVersion: 1, configuration: null }
         : projectPublishedResidentExperience(snapshot);
