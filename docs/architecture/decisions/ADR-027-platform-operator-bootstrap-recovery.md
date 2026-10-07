@@ -4,7 +4,9 @@ Status: **Accepted** — approved at architecture/security review on 2026-10-04.
 
 **Acceptance scope.** This record establishes the accepted architecture for establishing and recovering privileged production administration. **Acceptance is not authorization to implement.** No bootstrap CLI, platform principal, recovery operation, permission key, schema change, migration or authentication change is approved by this record; each remains separately gated. ADR-027 is documentation only and changes no runtime behavior.
 
-**Implementation state.** Nothing described here is implemented. A production deployment still has no route to its first Organization, its first staff identity or its first administrator. The controlled provisioning command remains restricted to a development profile and an approved local database.
+**Implementation state.** No bootstrap or recovery operation described here is implemented. A production deployment still has no route to its first Organization, its first staff identity or its first administrator. The controlled provisioning command remains restricted to a development profile and an approved local database.
+
+**There is no production operator CLI.** F060.3C-2a implemented the operator attribution and approval foundation for the tenant-domain registry under Migration 47, which resolves the decision 10 prerequisite for that registry only. The production operator entry point remains unimplemented and is tracked as **F060.3C-2b, outstanding**; the tenant-domain operator command is still development-profile and local-database only. Platform authority remains infrastructure-rooted: no platform principal table, permission key, role or grant was added, and nothing in this record is authorized to deploy.
 
 ## Context
 
@@ -121,7 +123,11 @@ Existing controlled provisioning can record `actor_staff_id IS NULL` without a p
 
 For production it is insufficient: the audit stream could not state **which human** bootstrapped or recovered a deployment, and there is no reason or approval field anywhere in the access audit schema.
 
-**Future operator-originated actions must carry attributable platform-level identity and evidence rather than anonymous NULL actor semantics.** This is a prerequisite for production bootstrap and recovery and must be resolved before either is implemented. **Do not fix it under this record.**
+**Future operator-originated actions must carry attributable platform-level identity and evidence rather than anonymous NULL actor semantics.** This is a prerequisite for production bootstrap and recovery and must be resolved before either is implemented.
+
+**Concrete finding, and partial resolution under F060.3C-2a.** The gap was located in the tenant-domain registry: `tenant_domain_audit.actor` was a free-text `varchar(200)` with no identity semantics, no reason, no correlation and no approval reference, so a production row could legitimately have read `actor = 'ops'`. Migration 47 supplements it with structured version-2 attribution — an infrastructure-issued operator identity under a mandatory `iam:`, `oidc:` or `dev:` scheme, a bounded reason, a correlation id, a closed outcome, and an approval reference for the two operations that change public reachability. Pre-cutover rows remain version 1 and are retained unchanged, with no synthetic identity backfilled; new rows cannot claim version 1; and the deferred audit invariant now requires version 2, so the database rather than the application is authoritative.
+
+**The access-provisioning instance of this gap remains open.** F060.3C-2a did not change `access_change_set`, so `actor_staff_id IS NULL` under the `controlled_provisioning` source still carries no operator reason or approval reference. That remains a prerequisite for production bootstrap and recovery, and it is **not** fixed under this record.
 
 ### 11. Separation of duties
 
@@ -168,7 +174,9 @@ Entra remains the only authentication mechanism. Multi-factor authentication and
 
 ## Testing note
 
-This Claude worktree and session did not have `TEST_DATABASE_URL` configured, so the `server/test/database` suite reported as skipped and not executed during the assessment that preceded this record. The project has previously used an authorized disposable PostgreSQL test environment in another isolated workstream.
+Disposable PostgreSQL validation now executes. The `server/test/database` suite runs against the authorized disposable database `reqro_f0592_test` as `reqro_test_user`, serially with `--test-concurrency=1`. The statement in earlier revisions of this record — that `TEST_DATABASE_URL` was unconfigured and the suite reported as skipped and not executed — described only the assessment session that preceded this record and is no longer current.
+
+Under F060.3C-2a that environment validated Migration 47 and the operator attribution and approval foundation: migration apply, rollback and reapply over retained legacy evidence, the version-1 to version-2 attribution boundary, mandatory structured attribution, independent approval for activation and revocation, the self-approval and third-party-consumption refusals, exact Organization, domain, operation, revision and state binding, the database-derived approval window, approval immutability, single-use consumption, and refusal of rollback while post-cutover evidence is retained. The full serial suite and the API end-to-end suite both ran clean on that database.
 
 Any future migration-bearing bootstrap or recovery implementation **must** run against an explicitly authorized disposable database and **must never** use `reqro_dev` for automated testing. The database tier matters more here than elsewhere, because for bootstrap and recovery the database constraints **are** the security control: one-time bootstrap, irreversibility, audit coupling, self-approval rejection, cross-Organization rejection and the last-administrator invariant are all database-enforced and can only be proven there.
 
