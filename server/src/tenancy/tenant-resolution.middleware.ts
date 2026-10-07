@@ -7,7 +7,7 @@ import { PinoLoggerService } from '../common/logging/pino-logger.service.js';
 import { TenantResolverService } from './tenant-resolver.service.js';
 import {
   resolvedTenant,
-  TENANT_NOT_FOUND,
+  tenantNotFound,
   TENANT_UNAVAILABLE,
   type RequestWithTenant,
   type TenantResolutionState,
@@ -88,7 +88,8 @@ export class TenantResolutionMiddleware implements NestMiddleware {
       // strategy, which environment validation confines to a development
       // NODE_ENV and profile with an explicit Organization. No registry
       // lookup happens here, and no hostname is consulted.
-      if (!this.developmentOrganizationId) return TENANT_NOT_FOUND;
+      if (!this.developmentOrganizationId)
+        return tenantNotFound('unknown_host');
       return resolvedTenant({
         source: 'development',
         organizationId: this.developmentOrganizationId,
@@ -101,10 +102,10 @@ export class TenantResolutionMiddleware implements NestMiddleware {
       request.headers,
       request.socket.remoteAddress,
     );
-    if (!selected.ok) return TENANT_NOT_FOUND;
+    if (!selected.ok) return tenantNotFound(selected.cause);
 
     const binding = await this.resolver.resolve(selected.hostname);
-    if (!binding) return TENANT_NOT_FOUND;
+    if (!binding) return tenantNotFound('unknown_host');
     return resolvedTenant({
       source: 'registry',
       organizationId: binding.organizationId,
@@ -130,6 +131,8 @@ export class TenantResolutionMiddleware implements NestMiddleware {
         requestId: correlationId,
         durationMs,
         tenantResolution: state.status,
+        // Operator-only closed allowlist; the HTTP response stays generic.
+        tenantReason: state.status === 'resolved' ? 'resolved' : state.reason,
         ...(resolved ? { tenantSource: resolved.source } : {}),
         ...(resolved?.source === 'registry'
           ? { tenantHostname: resolved.hostname, tenantRole: resolved.role }

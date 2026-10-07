@@ -86,13 +86,71 @@ test('an unknown tenant resolution strategy is rejected', () => {
   );
 });
 
-test('the API refuses to serve under the unimplemented registry resolver', () => {
+test('the development strategy serves without tenancy readiness', () => {
   assert.doesNotThrow(() => {
     assertServableTenantStrategy('development');
   });
+});
+
+/** ADR-025 F060.3C-1. Registry mode now boots, but only when the runtime
+ * can actually resolve a tenant. */
+const readiness = {
+  tenancyWired: true,
+  hostSource: 'direct' as const,
+  trustedProxyCidrs: '',
+  corsOrigins: 'https://requests.example.gov',
+};
+
+test('registry strategy serves once tenancy readiness is complete', () => {
+  assert.doesNotThrow(() => {
+    assertServableTenantStrategy('registry', readiness);
+  });
+  // Zero active bindings is a valid serving state: every resident host
+  // simply resolves nothing. Startup never consults the registry.
+  assert.doesNotThrow(() => {
+    assertServableTenantStrategy('registry', {
+      ...readiness,
+      hostSource: 'forwarded',
+      trustedProxyCidrs: '10.0.0.0/8',
+    });
+  });
+});
+
+test('registry strategy refuses to serve without resolvable tenancy', () => {
   assert.throws(() => {
     assertServableTenantStrategy('registry');
-  }, /registry tenant resolution is not implemented/);
+  }, /requires runtime tenancy readiness/);
+  assert.throws(() => {
+    assertServableTenantStrategy('registry', {
+      ...readiness,
+      tenancyWired: false,
+    });
+  }, /requires the tenancy module to be wired/);
+  assert.throws(() => {
+    assertServableTenantStrategy('registry', {
+      ...readiness,
+      hostSource: 'hop-count' as never,
+    });
+  }, /requires a valid TENANT_HOST_SOURCE/);
+  // Forwarded trust without an allowlist would trust nobody and resolve
+  // nothing, so it is refused rather than served.
+  assert.throws(() => {
+    assertServableTenantStrategy('registry', {
+      ...readiness,
+      hostSource: 'forwarded',
+      trustedProxyCidrs: '',
+    });
+  }, /forwarded tenant host source requires trusted proxy CIDRs/);
+  // A resident surface no browser could call is not servable.
+  for (const corsOrigins of ['', '  ', ',']) {
+    assert.throws(
+      () => {
+        assertServableTenantStrategy('registry', { ...readiness, corsOrigins });
+      },
+      /requires CORS_ORIGINS/,
+      JSON.stringify(corsOrigins),
+    );
+  }
 });
 
 test('configuration exposes the strategy and never substitutes a fixture Organization', () => {

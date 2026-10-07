@@ -212,7 +212,9 @@ test('a resident handler fails closed when no tenant resolved', () => {
   assert.throws(() => residentTenantFromRequest({}), NotFoundException);
   assert.throws(
     () =>
-      residentTenantFromRequest({ tenantResolution: { status: 'not_found' } }),
+      residentTenantFromRequest({
+        tenantResolution: { status: 'not_found', reason: 'unknown_host' },
+      }),
     NotFoundException,
   );
 });

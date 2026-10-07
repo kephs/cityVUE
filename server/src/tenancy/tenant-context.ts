@@ -37,16 +37,40 @@ export type TenantContext =
  * oracle. `unavailable` is separate only because an infrastructure failure is
  * independent of whether a hostname belongs to a customer.
  */
+/**
+ * Operator-only diagnostic cause, recorded in the server-side log and
+ * never returned to a client. A closed allowlist: it distinguishes "a
+ * customer's DNS is wrong" from "our proxy allowlist is wrong" without
+ * making the HTTP response distinguishable.
+ */
+export type TenantResolutionReason =
+  | 'resolved'
+  | 'unknown_host'
+  | 'malformed_host'
+  | 'untrusted_forwarded_peer'
+  | 'registry_unavailable';
+
 export type TenantResolutionState =
   | { readonly status: 'resolved'; readonly context: TenantContext }
-  | { readonly status: 'not_found' }
-  | { readonly status: 'unavailable' };
+  | {
+      readonly status: 'not_found';
+      readonly reason: TenantResolutionReason;
+    }
+  | {
+      readonly status: 'unavailable';
+      readonly reason: TenantResolutionReason;
+    };
 
-export const TENANT_NOT_FOUND: TenantResolutionState = Object.freeze({
-  status: 'not_found',
-});
+/** Callers outside the middleware see one indistinguishable outcome; the
+ * reason exists only for the operational log. */
+export function tenantNotFound(
+  reason: TenantResolutionReason,
+): TenantResolutionState {
+  return Object.freeze({ status: 'not_found', reason });
+}
 export const TENANT_UNAVAILABLE: TenantResolutionState = Object.freeze({
   status: 'unavailable',
+  reason: 'registry_unavailable',
 });
 
 /** Attached by `TenantResolutionMiddleware`. Follows the same inline-request

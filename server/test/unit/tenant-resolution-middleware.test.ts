@@ -292,13 +292,18 @@ test('the resident accessor converts state into context or a generic error', () 
 
   assert.throws(
     () =>
-      residentTenantFromRequest({ tenantResolution: { status: 'not_found' } }),
+      residentTenantFromRequest({
+        tenantResolution: { status: 'not_found', reason: 'unknown_host' },
+      }),
     NotFoundException,
   );
   assert.throws(
     () =>
       residentTenantFromRequest({
-        tenantResolution: { status: 'unavailable' },
+        tenantResolution: {
+          status: 'unavailable',
+          reason: 'registry_unavailable',
+        },
       }),
     ServiceUnavailableException,
   );
@@ -308,8 +313,8 @@ test('the resident accessor converts state into context or a generic error', () 
 
 test('accessor errors expose no internal tenant detail', () => {
   for (const state of [
-    { status: 'not_found' } as const,
-    { status: 'unavailable' } as const,
+    { status: 'not_found', reason: 'unknown_host' } as const,
+    { status: 'unavailable', reason: 'registry_unavailable' } as const,
   ]) {
     try {
       residentTenantFromRequest({ tenantResolution: state });

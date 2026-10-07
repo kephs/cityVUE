@@ -24,10 +24,23 @@ export type TenantHostSource = 'direct' | 'forwarded';
 
 export const FORWARDED_HOST_HEADER = 'x-forwarded-host';
 
-export type HostSelection =
-  { readonly ok: true; readonly hostname: string } | { readonly ok: false };
+/** A rejection carries an operator-only cause. Callers on the request
+ * path collapse it into one indistinguishable outcome; only the
+ * server-side log reads it. */
+export type HostRejectionCause = 'malformed_host' | 'untrusted_forwarded_peer';
 
-const REJECTED: HostSelection = Object.freeze({ ok: false });
+export type HostSelection =
+  | { readonly ok: true; readonly hostname: string }
+  | { readonly ok: false; readonly cause: HostRejectionCause };
+
+const MALFORMED: HostSelection = Object.freeze({
+  ok: false,
+  cause: 'malformed_host',
+});
+const UNTRUSTED_PEER: HostSelection = Object.freeze({
+  ok: false,
+  cause: 'untrusted_forwarded_peer',
+});
 
 export interface TenantHostPolicy {
   readonly source: TenantHostSource;
@@ -134,10 +147,12 @@ export function selectTrustedHost(
   if (policy.source === 'direct') {
     raw = singleHeaderValue(headers.host);
   } else {
-    if (!policy.isTrustedPeer(remoteAddress)) return REJECTED;
+    if (!policy.isTrustedPeer(remoteAddress)) return UNTRUSTED_PEER;
     raw = singleHeaderValue(headers[FORWARDED_HOST_HEADER]);
   }
-  if (raw === null) return REJECTED;
+  if (raw === null) return MALFORMED;
   const normalized = normalizeHostname(raw);
-  return normalized.ok ? { ok: true, hostname: normalized.hostname } : REJECTED;
+  return normalized.ok
+    ? { ok: true, hostname: normalized.hostname }
+    : MALFORMED;
 }

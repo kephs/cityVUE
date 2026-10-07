@@ -1,17 +1,25 @@
 export const DATA_SOURCES = Object.freeze({ legacy: "legacy", api: "api" });
 
+/** ADR-025 same-origin direction: the resident frontend and its API share an
+ * origin, so the browser's own hostname reaches the server and selects the
+ * tenant. One build therefore serves any verified tenant domain. */
+export const DEFAULT_API_BASE_URL = "/api/v1";
+
 export function readResidentIntakeConfig(environment = import.meta.env) {
     const dataSource = String(environment?.VITE_CITYVUE_DATA_SOURCE || DATA_SOURCES.legacy).trim().toLowerCase();
     if (!Object.values(DATA_SOURCES).includes(dataSource)) {
         throw new Error("VITE_CITYVUE_DATA_SOURCE must be either legacy or api.");
     }
 
-    const apiBaseUrl = String(environment?.VITE_CITYVUE_API_BASE_URL || "").trim().replace(/\/$/, "");
+    const configuredApiBaseUrl = String(environment?.VITE_CITYVUE_API_BASE_URL || "").trim().replace(/\/$/, "");
+    const apiBaseUrl = configuredApiBaseUrl || DEFAULT_API_BASE_URL;
     const developmentReadsEnabled = String(environment?.VITE_CITYVUE_ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS || "false").trim().toLowerCase() === "true";
-    if (dataSource === DATA_SOURCES.api) {
-        if (!apiBaseUrl) throw new Error("VITE_CITYVUE_API_BASE_URL is required in api mode.");
+    // An absent value means same-origin; an explicit override is still only
+    // accepted as an absolute HTTP(S) URL, which keeps local development on
+    // 5173 pointing at the backend on 3000.
+    if (dataSource === DATA_SOURCES.api && configuredApiBaseUrl) {
         let parsed;
-        try { parsed = new URL(apiBaseUrl); } catch { throw new Error("VITE_CITYVUE_API_BASE_URL must be a valid HTTP(S) URL."); }
+        try { parsed = new URL(configuredApiBaseUrl); } catch { throw new Error("VITE_CITYVUE_API_BASE_URL must be a valid HTTP(S) URL."); }
         if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("VITE_CITYVUE_API_BASE_URL must be a valid HTTP(S) URL.");
     }
     const tenantId = String(environment?.VITE_ENTRA_TENANT_ID || '').trim();

@@ -10,7 +10,10 @@ const id = (end) => `10000000-0000-4000-8000-${end.padStart(12, "0")}`;
 describe("resident intake data access", () => {
     test("defaults to legacy and validates API configuration", () => {
         expect(readResidentIntakeConfig({}).dataSource).toBe("legacy");
-        expect(() => readResidentIntakeConfig({ VITE_CITYVUE_DATA_SOURCE: "api" })).toThrow(/BASE_URL/);
+        // ADR-025: api mode now defaults to the same-origin base instead of requiring an absolute URL.
+        expect(readResidentIntakeConfig({ VITE_CITYVUE_DATA_SOURCE: "api" }).apiBaseUrl).toBe("/api/v1");
+        expect(() => readResidentIntakeConfig({ VITE_CITYVUE_DATA_SOURCE: "api", VITE_CITYVUE_API_BASE_URL: "not-a-url" })).toThrow(/BASE_URL/);
+        expect(() => readResidentIntakeConfig({ VITE_CITYVUE_DATA_SOURCE: "api", VITE_CITYVUE_API_BASE_URL: "ftp://example.test/api" })).toThrow(/BASE_URL/);
         expect(readResidentIntakeConfig({ VITE_CITYVUE_DATA_SOURCE: "api", VITE_CITYVUE_API_BASE_URL: "http://localhost:3000/api/v1/" }).apiBaseUrl).toBe("http://localhost:3000/api/v1");
     });
     test("selects repositories without requiring an API in legacy mode", async () => {

@@ -20,6 +20,11 @@ function select(
   return selectTrustedHost(policy, headers, peer);
 }
 
+/** A rejection carries an operator-only cause; the request path collapses
+ * every cause into one indistinguishable outcome. */
+const malformed = { ok: false, cause: 'malformed_host' } as const;
+const untrustedPeer = { ok: false, cause: 'untrusted_forwarded_peer' } as const;
+
 test('direct mode accepts the literal Host', () => {
   assert.deepEqual(select(direct, { host: 'requests.example.gov' }), {
     ok: true,
@@ -39,14 +44,14 @@ test('direct mode ignores X-Forwarded-Host completely', () => {
   // With no Host at all, a forwarded value still cannot stand in for one.
   assert.deepEqual(
     select(direct, { [FORWARDED_HOST_HEADER]: 'evil.example.com' }),
-    { ok: false },
+    malformed,
   );
 });
 
 test('a missing Host fails closed', () => {
-  assert.deepEqual(select(direct, {}), { ok: false });
-  assert.deepEqual(select(direct, { host: undefined }), { ok: false });
-  assert.deepEqual(select(direct, { host: '' }), { ok: false });
+  assert.deepEqual(select(direct, {}), malformed);
+  assert.deepEqual(select(direct, { host: undefined }), malformed);
+  assert.deepEqual(select(direct, { host: '' }), malformed);
 });
 
 test('a malformed Host fails closed', () => {
@@ -58,17 +63,18 @@ test('a malformed Host fails closed', () => {
     '127.0.0.1',
     'requests.example.gov:0',
   ])
-    assert.deepEqual(select(direct, { host }), { ok: false }, host);
+    assert.deepEqual(select(direct, { host }), malformed, host);
 });
 
 test('comma-joined and repeated Host values fail closed', () => {
-  assert.deepEqual(select(direct, { host: 'a.example.gov,b.example.gov' }), {
-    ok: false,
-  });
+  assert.deepEqual(
+    select(direct, { host: 'a.example.gov,b.example.gov' }),
+    malformed,
+  );
   // Node surfaces a repeated header as an array; it is ambiguous either way.
   assert.deepEqual(
     select(direct, { host: ['a.example.gov', 'b.example.gov'] }),
-    { ok: false },
+    malformed,
   );
 });
 
@@ -116,15 +122,15 @@ test('forwarded mode from an untrusted peer fails closed with no Host fallback',
       },
       '203.0.113.9',
     ),
-    { ok: false },
+    untrustedPeer,
   );
   assert.deepEqual(
     select(policy, { host: 'requests.example.gov' }, '203.0.113.9'),
-    { ok: false },
+    untrustedPeer,
   );
   assert.deepEqual(
     select(policy, { host: 'requests.example.gov' }, undefined),
-    { ok: false },
+    untrustedPeer,
   );
 });
 
@@ -133,7 +139,7 @@ test('forwarded mode fails closed when the forwarded host is missing', () => {
 
   assert.deepEqual(
     select(policy, { host: 'requests.example.gov' }, '10.0.0.1'),
-    { ok: false },
+    malformed,
   );
 });
 
@@ -146,7 +152,7 @@ test('forwarded mode fails closed on comma-joined or repeated forwarded hosts', 
       { [FORWARDED_HOST_HEADER]: 'a.example.gov, b.example.gov' },
       '10.0.0.1',
     ),
-    { ok: false },
+    malformed,
   );
   assert.deepEqual(
     select(
@@ -154,7 +160,7 @@ test('forwarded mode fails closed on comma-joined or repeated forwarded hosts', 
       { [FORWARDED_HOST_HEADER]: ['a.example.gov', 'b.example.gov'] },
       '10.0.0.1',
     ),
-    { ok: false },
+    malformed,
   );
 });
 
@@ -169,7 +175,7 @@ test('an empty trusted allowlist trusts nobody', () => {
       { [FORWARDED_HOST_HEADER]: 'requests.example.gov' },
       '10.0.0.1',
     ),
-    { ok: false },
+    untrustedPeer,
   );
 });
 

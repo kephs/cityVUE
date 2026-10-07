@@ -158,7 +158,9 @@ test('an unresolved resident tenant fails closed before any attachment work', as
   assert.throws(() => residentTenantFromRequest({}), NotFoundException);
   assert.throws(
     () =>
-      residentTenantFromRequest({ tenantResolution: { status: 'not_found' } }),
+      residentTenantFromRequest({
+        tenantResolution: { status: 'not_found', reason: 'unknown_host' },
+      }),
     NotFoundException,
   );
 });
