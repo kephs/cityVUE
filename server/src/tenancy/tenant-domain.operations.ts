@@ -18,22 +18,43 @@ import {
   type VerificationResult,
 } from './tenant-domain-verifier.js';
 
-/** ADR-025 Slice 1a operator registry operations.
+/** ADR-025 / ADR-027 operator registry operations.
  *
  * These are the only application paths that write the tenant-domain registry,
  * and they are reachable solely from the guarded operator CLI — never from an
  * HTTP or Admin API, because the hostname namespace is global across
  * customers and is not a tenant-administrator capability.
  *
- * Deliberately absent: any operation that verifies or activates a binding.
- * Registration always produces an unverified, inactive binding, which cannot
- * resolve. Ownership verification is not implemented in this slice, so there
- * is no code path — gated, flagged or otherwise — by which an operator makes
- * a hostname servable by typing it.
+ * Every mutation carries version-2 structured attribution, and the two
+ * operations that change what the public can reach — activation and
+ * revocation — additionally require an independent approval. Registration
+ * always produces an unverified, inactive binding; verification never
+ * activates; activation refuses anything not already verified. There is no
+ * code path, gated or flagged, by which one operator makes a hostname
+ * servable by typing it.
+ *
+ * Deliberately absent: Organization status transitions, any production
+ * operator entry point, and any access to resident, service-request,
+ * attachment or tracking data. This module reads Organization identity and
+ * status, the registry, verification evidence and operator attribution, and
+ * nothing else.
  */
+/** ADR-027 F060.3C-2a structured operator attribution.
+ *
+ * This is attribution, not authentication. Platform authority stays
+ * infrastructure-rooted: these values record which infrastructure-issued
+ * human performed a mutation, why, and under which correlation. Nothing here
+ * grants anything, and an operator identity is never a tenant staff identity.
+ */
+export interface OperatorAttribution {
+  readonly operatorIdentity: string;
+  readonly reason: string;
+  readonly correlationId: string;
+}
+
 export interface TenantDomainSelection {
   readonly organizationId: string;
-  readonly actor: string;
+  readonly attribution: OperatorAttribution;
   readonly dryRun: boolean;
 }
 
@@ -60,8 +81,43 @@ export interface TenantDomainChallengeIssue extends TenantDomainTransition {
   readonly lifetimeDays: number;
 }
 
-export interface TenantDomainVerification extends TenantDomainTransition {
+/** The two operations that change what the public can reach additionally
+ * require an independent approval recorded earlier by a different operator.
+ * The identifier is mandatory on this input and absent from every other input
+ * type, so an approval can neither be omitted here nor attached to a lesser
+ * operation. */
+export interface TenantDomainApprovedTransition extends TenantDomainTransition {
+  readonly approvalId: string;
+}
+
+export type TenantDomainApprovableOperation =
+  'activated' | 'verification_revoked';
+
+export const tenantDomainApprovableOperations: readonly TenantDomainApprovableOperation[] =
+  ['activated', 'verification_revoked'];
+
+/** Records an independent approval. The approver states only the revision
+ * they reviewed; the rest of the context is copied from the committed binding
+ * and re-checked by the database, so an approval can never describe a state
+ * the binding was not actually in. */
+export interface TenantDomainApprovalRequest {
+  readonly organizationId: string;
+  readonly hostname: string;
+  readonly expectedRevision: number;
+  readonly operation: TenantDomainApprovableOperation;
+  readonly requestedBy: string;
+  readonly approvedBy: string;
+  readonly reason: string;
   readonly correlationId: string;
+}
+
+export interface TenantDomainApproval {
+  readonly id: string;
+  readonly organizationId: string;
+  readonly hostname: string;
+  readonly operation: TenantDomainApprovableOperation;
+  readonly expectedRevision: number;
+  readonly expiresAt: string;
 }
 
 /** Returned by `issue-challenge` so the operator can give the customer the
@@ -158,11 +214,53 @@ function requireOrganizationId(value: string): string {
   return value.toLowerCase();
 }
 
-function requireActor(value: string): string {
-  const actor = value.trim();
-  if (actor.length === 0 || actor.length > 200)
-    fail('An explicit operator actor reference is required');
-  return actor;
+/** Mirrors the database grammar. The scheme prefix is mandatory, so an
+ * operator identity can never be a bare UUID and is never mistakable for a
+ * `staff_identity`; `dev:` marks synthetic development evidence as such. */
+const OPERATOR_IDENTITY_PATTERN =
+  /^(?:iam|oidc|dev):[A-Za-z0-9][A-Za-z0-9._@/+-]{1,180}$/;
+
+/** A long unbroken alphanumeric run is what a secret looks like. Refused in
+ * application code as well as in the database, so operator tooling never
+ * carries a pasted token as far as an audit row. */
+const SECRET_SHAPED_VALUE = /[A-Za-z0-9]{32,}/;
+
+function requireOperatorIdentity(value: string): string {
+  const identity = value.trim();
+  if (!OPERATOR_IDENTITY_PATTERN.test(identity))
+    fail(
+      'An infrastructure operator identity of the form iam:, oidc: or dev: is required',
+    );
+  if (SECRET_SHAPED_VALUE.test(identity))
+    fail('Operator identity must not contain a secret-shaped value');
+  return identity;
+}
+
+function requireReason(value: string): string {
+  const reason = value.trim();
+  if (reason.length < 12 || reason.length > 500)
+    fail('An operator reason of 12 to 500 characters is required');
+  if (/\p{Cc}/u.test(reason))
+    fail('Operator reason must not contain control characters');
+  return reason;
+}
+
+/** The version-2 attribution every new audit row must carry. There is no
+ * code path that writes a legacy version-1 row. */
+function requireAttribution(input: OperatorAttribution): {
+  readonly attribution_version: number;
+  readonly operator_identity: string;
+  readonly reason: string;
+  readonly correlation_id: string;
+  readonly outcome: 'applied';
+} {
+  return {
+    attribution_version: 2,
+    operator_identity: requireOperatorIdentity(input.operatorIdentity),
+    reason: requireReason(input.reason),
+    correlation_id: requireCorrelationId(input.correlationId),
+    outcome: 'applied',
+  };
 }
 
 function requireCanonicalHostname(value: string): string {
@@ -226,7 +324,7 @@ export async function registerTenantDomain(
   input: TenantDomainRegistration,
 ): Promise<TenantDomainOutcome> {
   const organizationId = requireOrganizationId(input.organizationId);
-  const actor = requireActor(input.actor);
+  const attribution = requireAttribution(input.attribution);
   const hostname = requireCanonicalHostname(input.hostname);
   if (!isTenantDomainRole(input.role))
     fail('An explicit domain role is required');
@@ -283,7 +381,8 @@ export async function registerTenantDomain(
           tenant_domain_id: created.id,
           hostname: created.hostname,
           action: 'registered',
-          actor,
+          actor: attribution.operator_identity,
+          ...attribution,
           prior_revision: null,
           revision: created.revision,
           prior_role: null,
@@ -320,7 +419,7 @@ export async function deactivateTenantDomain(
   input: TenantDomainDeactivation,
 ): Promise<TenantDomainOutcome> {
   const organizationId = requireOrganizationId(input.organizationId);
-  const actor = requireActor(input.actor);
+  const attribution = requireAttribution(input.attribution);
   const hostname = requireCanonicalHostname(input.hostname);
 
   return run(() =>
@@ -367,7 +466,8 @@ export async function deactivateTenantDomain(
           tenant_domain_id: updated.id,
           hostname: updated.hostname,
           action: 'deactivated',
-          actor,
+          actor: attribution.operator_identity,
+          ...attribution,
           prior_revision: binding.revision,
           revision: updated.revision,
           prior_role: binding.role,
@@ -435,6 +535,94 @@ function requireCorrelationId(value: string): string {
   return value.toLowerCase();
 }
 
+function requireApprovalId(value: string): string {
+  if (!UUID_PATTERN.test(value))
+    fail('An explicit independent approval UUID is required');
+  return value.toLowerCase();
+}
+
+/**
+ * Records an independent approval for activation or revocation.
+ *
+ * The approver names only the revision they reviewed. Everything else is
+ * copied from the committed binding under a row lock and re-checked by the
+ * database, so an approval cannot describe a state the binding was never in.
+ * The approval's lifetime is assigned by the database from its own clock, so
+ * no caller can backdate or extend it, and it is immutable once written.
+ *
+ * This records a decision; it grants nothing. Separation of duties is
+ * enforced twice — here, because an approval naming one identity for both
+ * roles is refused, and again at consumption, because the operator applying
+ * the change must be the named requester and must not be the approver.
+ */
+export async function recordTenantDomainApproval(
+  db: Kysely<DatabaseSchema>,
+  input: TenantDomainApprovalRequest,
+): Promise<TenantDomainApproval> {
+  const organizationId = requireOrganizationId(input.organizationId);
+  const hostname = requireCanonicalHostname(input.hostname);
+  const requestedBy = requireOperatorIdentity(input.requestedBy);
+  const approvedBy = requireOperatorIdentity(input.approvedBy);
+  const reason = requireReason(input.reason);
+  const correlationId = requireCorrelationId(input.correlationId);
+  if (
+    !(tenantDomainApprovableOperations as readonly string[]).includes(
+      input.operation,
+    )
+  )
+    fail('Only activation and revocation take an independent approval');
+  if (requestedBy === approvedBy)
+    fail('An approval requires a different approver than the operator');
+
+  return db.transaction().execute(async (trx) => {
+    const binding = await lockBinding(
+      trx,
+      organizationId,
+      hostname,
+      input.expectedRevision,
+    );
+    // Reported here so the approver sees why their decision is meaningless
+    // rather than reading a database refusal; the database checks the same
+    // preconditions independently.
+    if (binding.active)
+      fail('Deactivate the tenant domain before approving this operation');
+    if (input.operation === 'activated') {
+      if (binding.verification_state !== 'verified')
+        fail('Only a verified tenant domain can be approved for activation');
+    } else if (binding.verification_state === 'unverified')
+      fail('Tenant domain has no verification to approve revoking');
+
+    const created = await trx
+      .insertInto('tenant_domain_operator_approval')
+      .values({
+        organization_id: organizationId,
+        tenant_domain_id: binding.id,
+        operation: input.operation,
+        expected_revision: binding.revision,
+        expected_hostname: binding.hostname,
+        expected_role: binding.role,
+        expected_verification_state: binding.verification_state,
+        expected_active: binding.active,
+        requested_by: requestedBy,
+        approved_by: approvedBy,
+        reason,
+        correlation_id: correlationId,
+        policy_version: 1,
+      })
+      .returning(['id', 'expires_at'])
+      .executeTakeFirstOrThrow();
+
+    return {
+      id: created.id,
+      organizationId,
+      hostname: binding.hostname,
+      operation: input.operation,
+      expectedRevision: binding.revision,
+      expiresAt: created.expires_at.toISOString(),
+    };
+  });
+}
+
 /**
  * Issues a DNS ownership challenge, moving the binding to `pending`.
  *
@@ -448,7 +636,7 @@ export async function issueTenantDomainChallenge(
   input: TenantDomainChallengeIssue,
 ): Promise<TenantDomainOutcome> {
   const organizationId = requireOrganizationId(input.organizationId);
-  const actor = requireActor(input.actor);
+  const attribution = requireAttribution(input.attribution);
   const hostname = requireCanonicalHostname(input.hostname);
   const recordName = verificationRecordName(hostname);
   if (!recordName) fail('Hostname is too long to carry a verification record');
@@ -490,7 +678,8 @@ export async function issueTenantDomainChallenge(
           tenant_domain_id: updated.id,
           hostname: updated.hostname,
           action: 'verification_requested',
-          actor,
+          actor: attribution.operator_identity,
+          ...attribution,
           prior_revision: binding.revision,
           revision: updated.revision,
           prior_role: binding.role,
@@ -544,12 +733,11 @@ export async function issueTenantDomainChallenge(
 export async function verifyTenantDomain(
   db: Kysely<DatabaseSchema>,
   dns: DnsPort,
-  input: TenantDomainVerification,
+  input: TenantDomainTransition,
 ): Promise<VerificationOutcome> {
   const organizationId = requireOrganizationId(input.organizationId);
-  const actor = requireActor(input.actor);
+  const attribution = requireAttribution(input.attribution);
   const hostname = requireCanonicalHostname(input.hostname);
-  const correlationId = requireCorrelationId(input.correlationId);
   const recordName = verificationRecordName(hostname);
   if (!recordName) fail('Hostname is too long to carry a verification record');
 
@@ -620,8 +808,8 @@ export async function verifyTenantDomain(
           degraded_single_ns: observation.degradedSingleNs,
           ttl_seconds: observation.ttlSeconds,
           dnssec: observation.dnssec,
-          actor,
-          correlation_id: correlationId,
+          actor: attribution.operator_identity,
+          correlation_id: attribution.correlation_id,
           policy_version: 1,
         })
         .execute();
@@ -644,7 +832,7 @@ export async function verifyTenantDomain(
               degradedSingleNs: observation.degradedSingleNs,
               ttlSeconds: observation.ttlSeconds,
               dnssec: observation.dnssec,
-              correlationId,
+              correlationId: attribution.correlation_id,
               policyVersion: 1,
             },
             revision: binding.revision + 1,
@@ -662,7 +850,8 @@ export async function verifyTenantDomain(
             tenant_domain_id: updated.id,
             hostname: updated.hostname,
             action: 'verified',
-            actor,
+            actor: attribution.operator_identity,
+            ...attribution,
             prior_revision: binding.revision,
             revision: updated.revision,
             prior_role: binding.role,
@@ -671,7 +860,11 @@ export async function verifyTenantDomain(
             verification_state: updated.verification_state,
             prior_active: binding.active,
             active: updated.active,
-            evidence: { correlationId, tokenId, policyVersion: 1 },
+            evidence: {
+              correlationId: attribution.correlation_id,
+              tokenId,
+              policyVersion: 1,
+            },
           })
           .execute();
         domain = project(updated);
@@ -699,15 +892,21 @@ export async function verifyTenantDomain(
 
 /**
  * Activates a verified binding. This is the step that makes a hostname
- * resolvable, so it is deliberately separate from verification and carries
- * its own actor and audit action.
+ * resolvable, so it is deliberately separate from verification, carries its
+ * own attribution and audit action, and requires an independent approval
+ * recorded earlier by a different operator.
+ *
+ * The approval is validated by the database against the exact reviewed
+ * pre-state, so a stale, expired, self-approved, already-spent or
+ * wrong-context approval is refused there rather than here.
  */
 export async function activateTenantDomain(
   db: Kysely<DatabaseSchema>,
-  input: TenantDomainTransition,
+  input: TenantDomainApprovedTransition,
 ): Promise<TenantDomainOutcome> {
   const organizationId = requireOrganizationId(input.organizationId);
-  const actor = requireActor(input.actor);
+  const attribution = requireAttribution(input.attribution);
+  const approvalId = requireApprovalId(input.approvalId);
   const hostname = requireCanonicalHostname(input.hostname);
 
   return run(() =>
@@ -738,7 +937,9 @@ export async function activateTenantDomain(
           tenant_domain_id: updated.id,
           hostname: updated.hostname,
           action: 'activated',
-          actor,
+          actor: attribution.operator_identity,
+          ...attribution,
+          approval_id: approvalId,
           prior_revision: binding.revision,
           revision: updated.revision,
           prior_role: binding.role,
@@ -772,14 +973,17 @@ export async function activateTenantDomain(
  * An active hostname must be deactivated first. Combining the two would let
  * one command take a resident surface offline as a side effect of an
  * ownership decision; keeping them apart forces the availability choice to be
- * made and attributed on its own.
+ * made and attributed on its own. Because deactivation stays immediate and
+ * unapproved, incident response is never gated on a second operator, while
+ * the destructive step that follows always is.
  */
 export async function revokeTenantDomainVerification(
   db: Kysely<DatabaseSchema>,
-  input: TenantDomainTransition,
+  input: TenantDomainApprovedTransition,
 ): Promise<TenantDomainOutcome> {
   const organizationId = requireOrganizationId(input.organizationId);
-  const actor = requireActor(input.actor);
+  const attribution = requireAttribution(input.attribution);
+  const approvalId = requireApprovalId(input.approvalId);
   const hostname = requireCanonicalHostname(input.hostname);
 
   return run(() =>
@@ -821,7 +1025,9 @@ export async function revokeTenantDomainVerification(
           tenant_domain_id: updated.id,
           hostname: updated.hostname,
           action: 'verification_revoked',
-          actor,
+          actor: attribution.operator_identity,
+          ...attribution,
+          approval_id: approvalId,
           prior_revision: binding.revision,
           revision: updated.revision,
           prior_role: binding.role,

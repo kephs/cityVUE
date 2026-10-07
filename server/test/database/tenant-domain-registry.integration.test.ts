@@ -20,8 +20,18 @@ import {
   up,
   down,
 } from '../../migrations/20261015000000-add-tenant-domain-registry.js';
+import { up as up47 } from '../../migrations/20261017000000-add-tenant-domain-operator-controls.js';
 
 const MIGRATION = '20261015000000';
+// ADR-027 F060.3C-2a. Version-2 structured attribution is required of
+// every audit row written after Migration 47; dev: marks it synthetic.
+const OPERATOR = 'dev:synthetic-operator';
+const APPROVER = 'dev:synthetic-approver';
+const attribution = () => ({
+  operatorIdentity: OPERATOR,
+  reason: 'F060.1 synthetic registry invariant evidence',
+  correlationId: randomUUID(),
+});
 
 /** Matches whichever of the `ADR-025` database controls refused the write. */
 async function refuses(
@@ -153,6 +163,12 @@ test(
         },
       );
 
+      // ADR-027 F060.3C-2a. The operator path writes version-2 structured
+      // attribution, so the code under test now requires Migration 47. It is
+      // applied after the rollback case above, which must still exercise
+      // Migration 45 on its own.
+      await database.transaction().execute(up47);
+
       /** Registers through the operator path, which never verifies or
        * activates, then forces the lifecycle forward with direct SQL so the
        * database controls themselves are what is under test. */
@@ -168,7 +184,7 @@ test(
           organizationId,
           hostname,
           role,
-          actor: 'synthetic-operator',
+          attribution: attribution(),
           dryRun: false,
         });
       }
@@ -179,6 +195,23 @@ test(
         set: string,
         action: 'verification_requested' | 'verified' | 'activated',
       ): Promise<void> {
+        // Activation consumes an independent approval that a different
+        // operator committed in an earlier transaction.
+        let approvalId: string | null = null;
+        if (action === 'activated') {
+          const recorded = await sql<{ id: string }>`
+            insert into tenant_domain_operator_approval(organization_id,tenant_domain_id,operation,
+                expected_revision,expected_hostname,expected_role,expected_verification_state,expected_active,
+                requested_by,approved_by,reason,correlation_id,policy_version)
+              select d.organization_id,d.id,'activated',d.revision,d.hostname,d.role,d.verification_state,d.active,
+                ${OPERATOR},${APPROVER},'Synthetic activation approval for database control tests',
+                gen_random_uuid(),1
+              from tenant_domain d
+              where d.organization_id=${organizationId}::uuid and d.id=${id}::uuid
+              returning id`.execute(database);
+          approvalId = recorded.rows[0]?.id ?? null;
+          assert.ok(approvalId);
+        }
         await database.transaction().execute(async (trx) => {
           const before = await trx
             .selectFrom('tenant_domain')
@@ -210,7 +243,13 @@ test(
               tenant_domain_id: id,
               hostname: after.hostname,
               action,
-              actor: 'synthetic-operator',
+              actor: OPERATOR,
+              attribution_version: 2,
+              operator_identity: OPERATOR,
+              reason: 'Synthetic lifecycle advance for database control tests',
+              correlation_id: randomUUID(),
+              outcome: 'applied',
+              approval_id: approvalId,
               prior_revision: before.revision,
               revision: after.revision,
               prior_role: before.role,
@@ -281,7 +320,7 @@ test(
           organizationId: organizationB,
           hostname: 'dry-run.example.gov',
           role: 'public_alias',
-          actor: 'synthetic-operator',
+          attribution: attribution(),
           dryRun: true,
         });
 
@@ -414,15 +453,17 @@ test(
       );
 
       await t.test(
-        'every change must carry matching operator audit evidence',
+        'every change must carry matching attributed operator audit evidence',
         async () => {
+          // Migration 47 strengthened this invariant: the matching audit row
+          // must also carry version-2 structured attribution.
           await refuses(
             () =>
               sql`insert into tenant_domain(organization_id,hostname,role)
                 values(${organizationB}::uuid,'unaudited.example.gov','public_alias')`.execute(
                 database,
               ),
-            /require matching operator audit evidence/,
+            /require matching attributed operator audit evidence/,
           );
           const rows = await sql<{
             hostname: string;
@@ -460,10 +501,12 @@ test(
           assert.ok(id);
           await refuses(
             () =>
-              sql`insert into tenant_domain_audit(organization_id,tenant_domain_id,hostname,action,actor,revision,role,verification_state,active)
-                values(${organizationB}::uuid,${id}::uuid,'requests.example.gov','registered','operator',1,'public_canonical','unverified',false)`.execute(
-                database,
-              ),
+              sql`insert into tenant_domain_audit(organization_id,tenant_domain_id,hostname,action,actor,
+                  attribution_version,operator_identity,reason,correlation_id,outcome,
+                  revision,role,verification_state,active)
+                values(${organizationB}::uuid,${id}::uuid,'requests.example.gov','registered',${OPERATOR},
+                  2,${OPERATOR},'Synthetic cross-Organization attribution probe',gen_random_uuid(),'applied',
+                  1,'public_canonical','unverified',false)`.execute(database),
             /requires its binding|foreign key/i,
           );
         },
@@ -524,7 +567,7 @@ test(
             organizationId: organizationB,
             hostname: 'portal.example.gov',
             expectedRevision: 4,
-            actor: 'synthetic-operator',
+            attribution: attribution(),
             dryRun: false,
           });
           assert.equal(deactivated.domain.active, false);

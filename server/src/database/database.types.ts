@@ -537,13 +537,51 @@ interface TenantDomainAuditTable {
   prior_active: boolean | null;
   active: boolean;
   evidence: JsonValue | null;
+  /** ADR-027 F060.3C-2a. Version 1 is the retained legacy shape: a free-text
+   * `actor` and nothing more. Version 2 is the only version a new row may
+   * use, and it requires every structured field below. */
+  attribution_version: Generated<number>;
+  /** Infrastructure-issued human operator reference, `iam:`/`oidc:`/`dev:`
+   * prefixed. Attribution, never platform authentication, and never a
+   * `staff_identity`. */
+  operator_identity: string | null;
+  reason: string | null;
+  correlation_id: string | null;
+  outcome: 'applied' | null;
+  /** Required for `activated` and `verification_revoked`, refused otherwise. */
+  approval_id: string | null;
   occurred_at: Generated<Timestamp>;
   mutation_txid: Generated<string>;
+}
+/** ADR-027 F060.3C-2a immutable independent approval for the two operations
+ * that change what the public can reach. Bound to the exact reviewed
+ * pre-state, single use, and spent by the audit row that references it. */
+interface TenantDomainOperatorApprovalTable {
+  id: Generated<string>;
+  organization_id: string;
+  tenant_domain_id: string;
+  operation: 'activated' | 'verification_revoked';
+  expected_revision: number;
+  expected_hostname: string;
+  expected_role: TenantDomainRole;
+  expected_verification_state: TenantDomainVerificationState;
+  expected_active: boolean;
+  requested_by: string;
+  approved_by: string;
+  reason: string;
+  correlation_id: string;
+  policy_version: number;
+  /** Database assigned, with `expires_at` fixed at insert, so an approval
+   * window cannot be backdated or widened by a caller. */
+  approved_at: ColumnType<Date, Date | undefined, Date>;
+  expires_at: ColumnType<Date, Date | undefined, Date>;
+  creation_txid: Generated<string>;
 }
 
 export interface DatabaseSchema extends ResidentExperienceTables {
   tenant_domain: TenantDomainTable;
   tenant_domain_audit: TenantDomainAuditTable;
+  tenant_domain_operator_approval: TenantDomainOperatorApprovalTable;
   tenant_domain_verification_attempt: TenantDomainVerificationAttemptTable;
   organization_access_state: {
     organization_id: string;

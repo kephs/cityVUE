@@ -88,7 +88,8 @@ before(async () => {
       category = randomUUID(),
       service = randomUUID(),
       version = randomUUID(),
-      operator = randomUUID();
+      operator = `dev:registry-e2e-${label}`,
+      approver = `dev:registry-e2e-approver-${label}`;
     await database
       .insertInto('organization')
       .values({
@@ -194,20 +195,43 @@ before(async () => {
         trx,
       );
       await sql`insert into tenant_domain_audit(organization_id,tenant_domain_id,hostname,action,actor,
+          attribution_version,operator_identity,reason,correlation_id,outcome,
           prior_revision,revision,prior_role,role,prior_verification_state,verification_state,prior_active,active)
-        select d.organization_id,d.id,d.hostname,'registered',${operator},null,d.revision,null,d.role,null,
+        select d.organization_id,d.id,d.hostname,'registered',${operator},
+          2,${operator},'Synthetic registry tenancy evidence seed',gen_random_uuid(),'applied',
+          null,d.revision,null,d.role,null,
           d.verification_state,null,d.active from tenant_domain d where d.id=${domain}::uuid`.execute(
         trx,
       );
     });
     const advance = async (set: string, action: string, priorState: string) => {
+      // Activation consumes an independent approval that a different
+      // operator committed in an earlier transaction, which is what the
+      // database now requires before a hostname can become reachable.
+      let approval: string | null = null;
+      if (action === 'activated') {
+        const recorded = await sql<{ id: string }>`
+          insert into tenant_domain_operator_approval(organization_id,tenant_domain_id,operation,
+              expected_revision,expected_hostname,expected_role,expected_verification_state,expected_active,
+              requested_by,approved_by,reason,correlation_id,policy_version)
+            select d.organization_id,d.id,'activated',d.revision,d.hostname,d.role,d.verification_state,d.active,
+              ${operator},${approver},'Synthetic activation approval for registry tenancy evidence',
+              gen_random_uuid(),1
+            from tenant_domain d where d.id=${domain}::uuid
+            returning id`.execute(database);
+        approval = recorded.rows[0]?.id ?? null;
+        assert.ok(approval);
+      }
       await database.transaction().execute(async (trx) => {
         await sql`update tenant_domain set revision=revision+1, ${sql.raw(set)} where id=${domain}::uuid`.execute(
           trx,
         );
         await sql`insert into tenant_domain_audit(organization_id,tenant_domain_id,hostname,action,actor,
+            attribution_version,operator_identity,reason,correlation_id,outcome,approval_id,
             prior_revision,revision,prior_role,role,prior_verification_state,verification_state,prior_active,active)
-          select d.organization_id,d.id,d.hostname,${action},${operator},d.revision-1,d.revision,d.role,d.role,
+          select d.organization_id,d.id,d.hostname,${action},${operator},
+            2,${operator},'Synthetic registry tenancy evidence seed',gen_random_uuid(),'applied',${approval}::uuid,
+            d.revision-1,d.revision,d.role,d.role,
             ${priorState},d.verification_state,
             case when ${action}='activated' then false else d.active end, d.active
           from tenant_domain d where d.id=${domain}::uuid`.execute(trx);
@@ -484,8 +508,11 @@ test(
             trx,
           );
           await sql`insert into tenant_domain_audit(organization_id,tenant_domain_id,hostname,action,actor,
+            attribution_version,operator_identity,reason,correlation_id,outcome,
             prior_revision,revision,prior_role,role,prior_verification_state,verification_state,prior_active,active)
-          select d.organization_id,d.id,d.hostname,'deactivated','synthetic-operator',d.revision-1,d.revision,
+          select d.organization_id,d.id,d.hostname,'deactivated','dev:registry-e2e-deactivator',
+            2,'dev:registry-e2e-deactivator','Synthetic immediate deactivation, no approval required',gen_random_uuid(),'applied',
+            d.revision-1,d.revision,
             d.role,d.role,d.verification_state,d.verification_state,true,d.active
           from tenant_domain d where d.hostname=${HOST_B}`.execute(trx);
         });

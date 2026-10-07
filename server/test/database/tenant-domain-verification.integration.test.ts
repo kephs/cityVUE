@@ -15,6 +15,7 @@ import {
   activateTenantDomain,
   deactivateTenantDomain,
   issueTenantDomainChallenge,
+  recordTenantDomainApproval,
   registerTenantDomain,
   revokeTenantDomainVerification,
   verifyTenantDomain,
@@ -28,9 +29,19 @@ import {
   up as up46,
   down as down46,
 } from '../../migrations/20261016000000-add-tenant-domain-verification.js';
+import { up as up47 } from '../../migrations/20261017000000-add-tenant-domain-operator-controls.js';
 
 const MIGRATION = '20261016000000';
-const ACTOR = 'synthetic-operator';
+// ADR-027 F060.3C-2a. Every mutation carries version-2 structured
+// attribution, and the two approval-bearing operations name a distinct
+// approver. The dev: scheme marks this as synthetic development evidence.
+const OPERATOR = 'dev:synthetic-operator';
+const APPROVER = 'dev:synthetic-approver';
+const attribution = () => ({
+  operatorIdentity: OPERATOR,
+  reason: 'F060.2 synthetic ownership verification evidence',
+  correlationId: randomUUID(),
+});
 
 async function refuses(
   action: () => Promise<unknown>,
@@ -160,13 +171,44 @@ test(
         },
       );
 
+      // ADR-027 F060.3C-2a. The operator path writes version-2 structured
+      // attribution and consumes independent approvals, so the code under
+      // test now requires Migration 47. It is applied after the rollback case
+      // above, which must still exercise Migration 46 on its own.
+      await database.transaction().execute(up47);
+
       const selection = (hostname: string, expectedRevision: number) => ({
         organizationId: organizationA,
         hostname,
-        actor: ACTOR,
+        attribution: attribution(),
         expectedRevision,
         dryRun: false,
       });
+
+      /** Records an independent approval in its own transaction, which the
+       * database requires: an approval committed by the transaction that
+       * spends it is refused, so one operator cannot approve and apply
+       * atomically. */
+      async function approved(
+        hostname: string,
+        expectedRevision: number,
+        operation: 'activated' | 'verification_revoked',
+      ) {
+        const approval = await recordTenantDomainApproval(database, {
+          organizationId: organizationA,
+          hostname,
+          expectedRevision,
+          operation,
+          requestedBy: OPERATOR,
+          approvedBy: APPROVER,
+          reason: 'F060.3C-2a synthetic independent approval',
+          correlationId: randomUUID(),
+        });
+        return {
+          ...selection(hostname, expectedRevision),
+          approvalId: approval.id,
+        };
+      }
 
       async function register(
         hostname: string,
@@ -176,7 +218,7 @@ test(
           organizationId,
           hostname,
           role: 'public_alias',
-          actor: ACTOR,
+          attribution: attribution(),
           dryRun: false,
         });
       }
@@ -196,7 +238,6 @@ test(
           publishing([value]),
           {
             ...selection(hostname, 2),
-            correlationId: randomUUID(),
           },
         );
         assert.equal(outcome.verified, true);
@@ -257,7 +298,7 @@ test(
           const replayed = await verifyTenantDomain(
             database,
             publishing([stale]),
-            { ...selection(hostname, 3), correlationId: randomUUID() },
+            selection(hostname, 3),
           );
           assert.equal(replayed.verified, false);
           assert.equal(replayed.result, 'value_mismatch');
@@ -267,7 +308,6 @@ test(
             publishing([live]),
             {
               ...selection(hostname, 3),
-              correlationId: randomUUID(),
             },
           );
           assert.equal(accepted.verified, true);
@@ -290,7 +330,6 @@ test(
 
           const outcome = await verifyTenantDomain(database, silent, {
             ...selection(hostname, 2),
-            correlationId: randomUUID(),
           });
           assert.equal(outcome.verified, false);
           assert.equal(outcome.result, 'no_record');
@@ -344,9 +383,13 @@ test(
               where organization_id=${organizationA}::uuid and hostname=${hostname}`.execute(
             trx,
           );
+          // Carries version-2 attribution, which Migration 47 now requires of
+          // every new audit row, including one written by raw SQL.
           await sql`insert into tenant_domain_audit(organization_id,tenant_domain_id,hostname,action,actor,
+              attribution_version,operator_identity,reason,correlation_id,outcome,
               prior_revision,revision,prior_role,role,prior_verification_state,verification_state,prior_active,active)
-            select d.organization_id,d.id,d.hostname,'verification_requested',${ACTOR},
+            select d.organization_id,d.id,d.hostname,'verification_requested',${OPERATOR},
+              2,${OPERATOR},'Synthetic replacement challenge with a lapsing window',gen_random_uuid(),'applied',
               d.revision-1,d.revision,d.role,d.role,'pending',d.verification_state,d.active,d.active
             from tenant_domain d
             where d.organization_id=${organizationA}::uuid and d.hostname=${hostname}`.execute(
@@ -360,7 +403,6 @@ test(
           publishing([value]),
           {
             ...selection(hostname, 3),
-            correlationId: randomUUID(),
           },
         );
         assert.equal(outcome.verified, false);
@@ -420,8 +462,29 @@ test(
       await t.test('activation without verification is rejected', async () => {
         const hostname = 'unverified-activate.example.gov';
         await register(hostname);
+        // An unverified binding cannot even be approved for activation, so
+        // the verification precondition is proven to fire before any approval
+        // is consulted.
         await refuses(
-          () => activateTenantDomain(database, selection(hostname, 1)),
+          () =>
+            recordTenantDomainApproval(database, {
+              organizationId: organizationA,
+              hostname,
+              expectedRevision: 1,
+              operation: 'activated',
+              requestedBy: OPERATOR,
+              approvedBy: APPROVER,
+              reason: 'F060.3C-2a synthetic independent approval',
+              correlationId: randomUUID(),
+            }),
+          /Only a verified tenant domain can be approved for activation/,
+        );
+        await refuses(
+          () =>
+            activateTenantDomain(database, {
+              ...selection(hostname, 1),
+              approvalId: randomUUID(),
+            }),
           /Only a verified tenant domain can be activated/,
         );
         await refuses(
@@ -440,7 +503,7 @@ test(
           await verified(hostname);
           const activated = await activateTenantDomain(
             database,
-            selection(hostname, 3),
+            await approved(hostname, 3, 'activated'),
           );
 
           assert.equal(activated.domain.active, true);
@@ -457,17 +520,23 @@ test(
         async () => {
           const hostname = 'revoke-order.example.gov';
           await verified(hostname);
-          await activateTenantDomain(database, selection(hostname, 3));
+          await activateTenantDomain(
+            database,
+            await approved(hostname, 3, 'activated'),
+          );
 
           await refuses(
             () =>
-              revokeTenantDomainVerification(database, selection(hostname, 4)),
+              revokeTenantDomainVerification(database, {
+                ...selection(hostname, 4),
+                approvalId: randomUUID(),
+              }),
             /Deactivate the tenant domain before revoking verification/,
           );
           await deactivateTenantDomain(database, selection(hostname, 4));
           const revoked = await revokeTenantDomainVerification(
             database,
-            selection(hostname, 5),
+            await approved(hostname, 5, 'verification_revoked'),
           );
 
           assert.equal(revoked.domain.verificationState, 'unverified');
@@ -495,7 +564,7 @@ test(
           await issueTenantDomainChallenge(database, {
             organizationId: organizationB,
             hostname: theirs,
-            actor: ACTOR,
+            attribution: attribution(),
             expectedRevision: 1,
             lifetimeDays: 14,
             dryRun: false,
@@ -508,9 +577,8 @@ test(
             {
               organizationId: organizationB,
               hostname: theirs,
-              actor: ACTOR,
+              attribution: attribution(),
               expectedRevision: 2,
-              correlationId: randomUUID(),
               dryRun: false,
             },
           );
@@ -599,11 +667,9 @@ test(
           const outcomes = await Promise.allSettled([
             verifyTenantDomain(database, publishing([value]), {
               ...selection(hostname, 2),
-              correlationId: randomUUID(),
             }),
             verifyTenantDomain(database, publishing([value]), {
               ...selection(hostname, 2),
-              correlationId: randomUUID(),
             }),
           ]);
           const verifiedCount = outcomes.filter(

@@ -6,9 +6,12 @@ import {
   deactivateTenantDomain,
   issueTenantDomainChallenge,
   listTenantDomains,
+  recordTenantDomainApproval,
   registerTenantDomain,
   revokeTenantDomainVerification,
+  tenantDomainApprovableOperations,
   verifyTenantDomain,
+  type TenantDomainApprovableOperation,
 } from '../tenancy/tenant-domain.operations.js';
 import { isTenantDomainRole } from '../tenancy/tenant-domain.js';
 import {
@@ -18,7 +21,7 @@ import {
 import { nodeDnsPort } from '../tenancy/tenant-domain-verifier.js';
 import type { DatabaseSchema } from './database.types.js';
 
-/** ADR-025 tenant-domain operator CLI.
+/** ADR-025 / ADR-027 tenant-domain operator CLI.
  *
  * Registration, verification, activation, canonical promotion and revocation
  * are platform-operator capabilities, not tenant-administrator ones, and the
@@ -27,12 +30,19 @@ import type { DatabaseSchema } from './database.types.js';
  *
  * Verification and activation stay separate: a successful DNS check never
  * activates a hostname, and `activate` refuses anything not already verified.
+ *
+ * This remains a **development-only** command, pinned to the approved local
+ * database. It is not the production operator path and must not become one:
+ * the production entry point is a separate reviewed slice. Development
+ * evidence is written under `dev:` operator identities so it is never
+ * mistakable for production attribution in the audit trail.
  */
 const OPERATIONS = [
   'list',
   'register',
   'issue-challenge',
   'verify',
+  'approve',
   'activate',
   'deactivate',
   'revoke',
@@ -44,13 +54,18 @@ const USAGE =
   ' --dry-run|--confirm. ' +
   'Requires NODE_ENV=development, CITYVUE_DEPLOYMENT_PROFILE=development, ' +
   'TENANT_DOMAIN_OPERATOR_CONFIRM=true and the approved local database. ' +
-  'Reads TENANT_DOMAIN_ORGANIZATION_ID, TENANT_DOMAIN_ACTOR, TENANT_DOMAIN_HOSTNAME, ' +
+  'Reads TENANT_DOMAIN_ORGANIZATION_ID, TENANT_DOMAIN_HOSTNAME, ' +
+  'TENANT_DOMAIN_OPERATOR_IDENTITY (dev:<id> locally), TENANT_DOMAIN_REASON (12-500 characters) ' +
+  'and TENANT_DOMAIN_CORRELATION_ID for every change, ' +
   'TENANT_DOMAIN_ROLE (public_canonical|public_alias|platform_fallback) for register, ' +
   'TENANT_DOMAIN_EXPECTED_REVISION for every change, ' +
-  `TENANT_DOMAIN_CHALLENGE_LIFETIME_DAYS (1-${String(MAXIMUM_CHALLENGE_LIFETIME_DAYS)}, default ${String(DEFAULT_CHALLENGE_LIFETIME_DAYS)}) for issue-challenge, and ` +
-  'TENANT_DOMAIN_CORRELATION_ID plus optional TENANT_DOMAIN_DNS_TIMEOUT_MS/TENANT_DOMAIN_DNS_TRIES for verify. ' +
+  `TENANT_DOMAIN_CHALLENGE_LIFETIME_DAYS (1-${String(MAXIMUM_CHALLENGE_LIFETIME_DAYS)}, default ${String(DEFAULT_CHALLENGE_LIFETIME_DAYS)}) for issue-challenge, ` +
+  'optional TENANT_DOMAIN_DNS_TIMEOUT_MS/TENANT_DOMAIN_DNS_TRIES for verify, ' +
+  'TENANT_DOMAIN_APPROVAL_OPERATION (activated|verification_revoked) plus TENANT_DOMAIN_APPROVER_IDENTITY for approve, and ' +
+  'TENANT_DOMAIN_APPROVAL_ID for activate and revoke. ' +
   'Registration is always unverified and inactive; verification never activates; ' +
-  'activate requires a verified binding; revoke requires prior deactivation. ' +
+  'activate requires a verified binding; revoke requires prior deactivation; ' +
+  'activate and revoke each require an independent approval recorded earlier by a different operator. ' +
   'Load private configuration into the process; never pass credentials in arguments.\n';
 
 /** The same approved local development database the other operator commands
@@ -105,6 +120,10 @@ async function run(): Promise<void> {
     throw new Error('Explicit operation required');
   if (operation !== 'list' && !['--dry-run', '--confirm'].includes(mode ?? ''))
     throw new Error('Explicit mode required');
+  // Recording an approval has no dry run: there is no registry state to
+  // validate and discard, so `--dry-run` would silently write the approval.
+  if (operation === 'approve' && mode !== '--confirm')
+    throw new Error('Recording an approval requires --confirm');
   if (
     process.env.NODE_ENV !== 'development' ||
     process.env.CITYVUE_DEPLOYMENT_PROFILE !== 'development' ||
@@ -126,10 +145,36 @@ async function run(): Promise<void> {
       write(await listTenantDomains(db, organizationId));
       return;
     }
+    const hostname = process.env.TENANT_DOMAIN_HOSTNAME ?? '';
+    const operatorIdentity = process.env.TENANT_DOMAIN_OPERATOR_IDENTITY ?? '';
+    const reason = process.env.TENANT_DOMAIN_REASON ?? '';
+    const correlationId = process.env.TENANT_DOMAIN_CORRELATION_ID ?? '';
+    if (operation === 'approve') {
+      const approvalOperation = process.env.TENANT_DOMAIN_APPROVAL_OPERATION;
+      if (
+        !(tenantDomainApprovableOperations as readonly string[]).includes(
+          approvalOperation ?? '',
+        )
+      )
+        throw new Error('Explicit approvable operation required');
+      write(
+        await recordTenantDomainApproval(db, {
+          organizationId,
+          hostname,
+          expectedRevision: requiredRevision(),
+          operation: approvalOperation as TenantDomainApprovableOperation,
+          requestedBy: operatorIdentity,
+          approvedBy: process.env.TENANT_DOMAIN_APPROVER_IDENTITY ?? '',
+          reason,
+          correlationId,
+        }),
+      );
+      return;
+    }
     const selection = {
       organizationId,
-      actor: process.env.TENANT_DOMAIN_ACTOR ?? '',
-      hostname: process.env.TENANT_DOMAIN_HOSTNAME ?? '',
+      attribution: { operatorIdentity, reason, correlationId },
+      hostname,
       dryRun: mode === '--dry-run',
     };
     if (operation === 'register') {
@@ -172,23 +217,24 @@ async function run(): Promise<void> {
           'DNS tries',
         ),
       });
-      write(
-        await verifyTenantDomain(db, dns, {
-          ...transition,
-          correlationId: process.env.TENANT_DOMAIN_CORRELATION_ID ?? '',
-        }),
-      );
-      return;
-    }
-    if (operation === 'activate') {
-      write(await activateTenantDomain(db, transition));
+      write(await verifyTenantDomain(db, dns, transition));
       return;
     }
     if (operation === 'deactivate') {
       write(await deactivateTenantDomain(db, transition));
       return;
     }
-    write(await revokeTenantDomainVerification(db, transition));
+    // Activation and revocation are the only operations that take an
+    // approval, and the approval identifier is mandatory on their input type.
+    const approved = {
+      ...transition,
+      approvalId: process.env.TENANT_DOMAIN_APPROVAL_ID ?? '',
+    };
+    if (operation === 'activate') {
+      write(await activateTenantDomain(db, approved));
+      return;
+    }
+    write(await revokeTenantDomainVerification(db, approved));
   } finally {
     await db.destroy();
   }
