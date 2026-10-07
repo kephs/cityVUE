@@ -313,6 +313,37 @@ export async function listTenantDomains(
 }
 
 /**
+ * Reads exactly one binding the caller has already named.
+ *
+ * This exists for the pre-approval plan an operator produces so a second
+ * operator can review the exact context before approving. It is deliberately
+ * not a listing: the Organization and the hostname must both be supplied, so
+ * it cannot discover a hostname the caller did not already hold, and it
+ * returns only that binding's registry state.
+ */
+export async function inspectTenantDomain(
+  db: Kysely<DatabaseSchema>,
+  organizationId: string,
+  hostname: string,
+): Promise<TenantDomainRecord> {
+  const row = await db
+    .selectFrom('tenant_domain')
+    .select([
+      'id',
+      'hostname',
+      'role',
+      'verification_state',
+      'active',
+      'revision',
+    ])
+    .where('organization_id', '=', requireOrganizationId(organizationId))
+    .where('hostname', '=', requireCanonicalHostname(hostname))
+    .executeTakeFirst();
+  if (!row) fail('Tenant domain not found for this Organization');
+  return project(row);
+}
+
+/**
  * Registers an unverified, inactive binding.
  *
  * The hostname is canonicalized before anything else, so the registry stores

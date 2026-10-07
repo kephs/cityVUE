@@ -14,6 +14,7 @@
     "dev:participation": "tsx src/database/development-participation-cli.ts",
     "dev:requester": "tsx src/database/development-requester-cli.ts",
     "dev:tenant-domain": "tsx src/database/tenant-domain-cli.ts",
+    "operator:tenant-domain": "tsx src/database/tenant-domain-operator-cli.ts",
     "start": "node dist/main.js",
     "dev": "node scripts/dev.mjs",
     "build": "tsc -p tsconfig.build.json",
