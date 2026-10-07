@@ -51,6 +51,29 @@ export interface AttachmentClaim {
   batchId: string;
   token: string;
 }
+/**
+ * ADR-025 attachment authority.
+ *
+ * A discriminated union rather than an optional `access` parameter: a
+ * caller must state exactly one authority, so "both" and "neither" are
+ * unrepresentable and a resident call can never silently fall through to
+ * staff handling.
+ *
+ * Resident authority carries only an Organization, resolved server-side
+ * from the trusted request host. Staff authority carries the verified
+ * identity. The two are never interchangeable.
+ */
+export type AttachmentAuthority =
+  | { readonly kind: 'resident'; readonly organizationId: string }
+  | { readonly kind: 'staff'; readonly access: StaffAccess };
+
+export function residentAuthority(organizationId: string): AttachmentAuthority {
+  return { kind: 'resident', organizationId };
+}
+export function staffAuthority(access: StaffAccess): AttachmentAuthority {
+  return { kind: 'staff', access };
+}
+
 export interface AttachmentOwner {
   organizationId: string;
   context: AttachmentContext;
@@ -72,7 +95,6 @@ export class AttachmentService {
   readonly storage: AttachmentStorage;
   readonly scanner: AttachmentScanner;
   private readonly enabled: boolean;
-  private readonly organizationId: string;
   // Reject overload before buffering multipart or decoding. Local process bound, not distributed abuse protection.
   private inflight = 0;
   private processing = 0;
@@ -85,9 +107,6 @@ export class AttachmentService {
       config.get('attachments', { infer: true })?.developmentEnabled === true &&
       config.get('app.environment', { infer: true }) !== 'production' &&
       config.get('deployment.profile', { infer: true }) === 'development';
-    this.organizationId = config.get('catalog.developmentOrganizationId', {
-      infer: true,
-    });
     this.storage = new LocalAttachmentStorage(
       resolve(__dirname, '../..', '.local-data', 'attachments'),
     );
@@ -184,21 +203,27 @@ export class AttachmentService {
       })
       .execute();
   }
-  async startPublic(issueId: string, versionId: string) {
+  /** Resident evidence batches belong to the Organization the request
+   * host resolved to. There is no configuration fallback. */
+  async startPublic(
+    organizationId: string,
+    issueId: string,
+    versionId: string,
+  ) {
     this.assertEnabled();
     if (!requestUuid.test(issueId) || !requestUuid.test(versionId))
       throw new NotFoundException();
     if (
       !(await this.requests.loadSubmissionDefinition(
         this.database.client,
-        this.organizationId,
+        organizationId,
         issueId,
         versionId,
       ))
     )
       throw new NotFoundException();
     return this.start({
-      organizationId: this.organizationId,
+      organizationId,
       context: 'REQUEST_EVIDENCE',
       issueId,
       versionId,
@@ -278,7 +303,7 @@ export class AttachmentService {
   private async batch(
     trx: Trx,
     claim: AttachmentClaim | undefined,
-    access?: StaffAccess,
+    authority: AttachmentAuthority,
     allowFinal = false,
   ) {
     if (
@@ -294,14 +319,22 @@ export class AttachmentService {
       .where('id', '=', claim.batchId)
       .executeTakeFirst();
     if (!candidate) throw new NotFoundException();
-    if (candidate.context === 'REQUEST_EVIDENCE') {
-      if (candidate.organization_id !== this.organizationId || access)
+    if (authority.kind === 'resident') {
+      // Resident authority reaches evidence batches of its own
+      // Organization and nothing else; a staff-owned context is not
+      // addressable through it.
+      if (
+        candidate.context !== 'REQUEST_EVIDENCE' ||
+        candidate.organization_id !== authority.organizationId
+      )
         throw new NotFoundException();
       await lockRequestOrganization(trx, candidate.organization_id);
     } else {
+      const access = authority.access;
       if (
+        candidate.context === 'REQUEST_EVIDENCE' ||
         !candidate.service_request_id ||
-        candidate.organization_id !== access?.organizationId ||
+        candidate.organization_id !== access.organizationId ||
         candidate.staff_identity_id !== access.staffIdentityId
       )
         throw new NotFoundException();
@@ -333,12 +366,18 @@ export class AttachmentService {
       new Date(batch.expires_at).getTime() <= Date.now()
     )
       throw new NotFoundException();
-    if (batch.context === 'REQUEST_EVIDENCE') {
-      if (batch.organization_id !== this.organizationId || access)
+    // Re-checked against the locked row under the same authority.
+    if (authority.kind === 'resident') {
+      if (
+        batch.context !== 'REQUEST_EVIDENCE' ||
+        batch.organization_id !== authority.organizationId
+      )
         throw new NotFoundException();
     } else {
+      const access = authority.access;
       if (
-        access?.organizationId !== batch.organization_id ||
+        batch.context === 'REQUEST_EVIDENCE' ||
+        access.organizationId !== batch.organization_id ||
         access.staffIdentityId !== batch.staff_identity_id
       )
         throw new NotFoundException();
@@ -346,18 +385,20 @@ export class AttachmentService {
     }
     return batch;
   }
-  async admit(claim: AttachmentClaim, access?: StaffAccess) {
+  async admit(claim: AttachmentClaim, authority: AttachmentAuthority) {
     this.assertEnabled();
     return this.database.client
       .transaction()
-      .execute((trx) => this.batch(trx, claim, access).then(() => undefined));
+      .execute((trx) =>
+        this.batch(trx, claim, authority).then(() => undefined),
+      );
   }
   async upload(
     claim: AttachmentClaim,
     fileId: string,
     file:
       { buffer: Buffer; originalname: string; mimetype: string } | undefined,
-    access?: StaffAccess,
+    authority: AttachmentAuthority,
   ) {
     this.assertEnabled();
     if (!requestUuid.test(fileId) || !file)
@@ -370,7 +411,7 @@ export class AttachmentService {
     try {
       const admitted = await this.database.client
         .transaction()
-        .execute((trx) => this.batch(trx, claim, access));
+        .execute((trx) => this.batch(trx, claim, authority));
       const processed = await processImage(
         file.buffer,
         file.originalname,
@@ -385,7 +426,7 @@ export class AttachmentService {
       const result = await this.database.client
         .transaction()
         .execute(async (trx) => {
-          const batch = await this.batch(trx, claim, access);
+          const batch = await this.batch(trx, claim, authority);
           const prior = await trx
             .selectFrom('attachment')
             .selectAll()
@@ -467,11 +508,15 @@ export class AttachmentService {
       throw new NotFoundException();
     }
   }
-  async preview(claim: AttachmentClaim, fileId: string, access?: StaffAccess) {
+  async preview(
+    claim: AttachmentClaim,
+    fileId: string,
+    authority: AttachmentAuthority,
+  ) {
     this.assertEnabled();
     if (!requestUuid.test(fileId)) throw new NotFoundException();
     const locate = async (trx: Trx) => {
-      const batch = await this.batch(trx, claim, access);
+      const batch = await this.batch(trx, claim, authority);
       const file = await trx
         .selectFrom('attachment')
         .selectAll()
@@ -495,11 +540,11 @@ export class AttachmentService {
   async remove(
     claim: AttachmentClaim,
     fileId: string | undefined,
-    access?: StaffAccess,
+    authority: AttachmentAuthority,
   ) {
     this.assertEnabled();
     return this.database.client.transaction().execute(async (trx) => {
-      const batch = await this.batch(trx, claim, access);
+      const batch = await this.batch(trx, claim, authority);
       let query = trx
         .selectFrom('attachment')
         .selectAll()
@@ -528,11 +573,11 @@ export class AttachmentService {
     claim: AttachmentClaim,
     owner: AttachmentOwner,
     digest: string,
-    access?: StaffAccess,
+    authority: AttachmentAuthority,
     prepared?: { manifest: string; finalized: boolean },
   ) {
     this.assertEnabled();
-    const batch = await this.batch(trx, claim, access, true);
+    const batch = await this.batch(trx, claim, authority, true);
     if (
       batch.organization_id !== owner.organizationId ||
       batch.context !== owner.context ||
@@ -568,11 +613,11 @@ export class AttachmentService {
   }
 
   /** Immutable object reads happen before the final parent/child transaction. */
-  async prepareFiles(claim: AttachmentClaim, access?: StaffAccess) {
+  async prepareFiles(claim: AttachmentClaim, authority: AttachmentAuthority) {
     const prepared = await this.database.client
       .transaction()
       .execute(async (trx) => {
-        const batch = await this.batch(trx, claim, access, true);
+        const batch = await this.batch(trx, claim, authority, true);
         return {
           finalized: batch.state === 'FINALIZED',
           files: await trx

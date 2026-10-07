@@ -9,7 +9,13 @@ import { checksum } from '../../src/attachments/attachment.domain.js';
 import type { AppConfiguration } from '../../src/config/configuration.js';
 import type { DatabaseService } from '../../src/database/database.service.js';
 import type { ServiceRequestRepository } from '../../src/service-request/service-request.repository.js';
-import { AttachmentService } from '../../src/attachments/attachment.service.js';
+import {
+  AttachmentService,
+  residentAuthority,
+} from '../../src/attachments/attachment.service.js';
+
+/** ADR-025: resident attachment calls state their Organization explicitly. */
+const RESIDENT_ORGANIZATION = '10000000-0000-4000-8000-000000000001';
 
 test('F046 processing remains bounded after HTTP admission is released and recovers after failure', async () => {
   const waiting: ((error: Error) => void)[] = [];
@@ -49,17 +55,24 @@ test('F046 processing remains bounded after HTTP admission is released and recov
     claim,
     '10000000-0000-4000-8000-000000000003',
     file,
+    residentAuthority(RESIDENT_ORGANIZATION),
   );
   const second = service.upload(
     claim,
     '10000000-0000-4000-8000-000000000004',
     file,
+    residentAuthority(RESIDENT_ORGANIZATION),
   );
   const completed = Promise.allSettled([first, second]);
   releaseA();
   releaseB();
   await assert.rejects(
-    service.upload(claim, '10000000-0000-4000-8000-000000000005', file),
+    service.upload(
+      claim,
+      '10000000-0000-4000-8000-000000000005',
+      file,
+      residentAuthority(RESIDENT_ORGANIZATION),
+    ),
     ServiceUnavailableException,
   );
   assert.equal(waiting.length, 2);
@@ -70,6 +83,7 @@ test('F046 processing remains bounded after HTTP admission is released and recov
     claim,
     '10000000-0000-4000-8000-000000000005',
     file,
+    residentAuthority(RESIDENT_ORGANIZATION),
   );
   assert.equal(waiting.length, 1);
   waiting[0]?.(new Error('Fictional transaction failure'));
@@ -139,13 +153,28 @@ test('F046 finalized retries obey capability expiry while valid retries remain a
   for (const state of ['STAGED', 'FINALIZED']) {
     row.state = state;
     await assert.rejects(
-      service.prepare(trx, claim, owner, digest),
+      service.prepare(
+        trx,
+        claim,
+        owner,
+        digest,
+        residentAuthority(organizationId),
+      ),
       NotFoundException,
     );
   }
   row.state = 'FINALIZED';
   row.expires_at = new Date(Date.now() + 60000);
-  assert.equal(await service.prepare(trx, claim, owner, digest), row);
+  assert.equal(
+    await service.prepare(
+      trx,
+      claim,
+      owner,
+      digest,
+      residentAuthority(organizationId),
+    ),
+    row,
+  );
 });
 
 test('SEC-001 parser admission fails closed for non-development deployments and beyond the concurrency cap', () => {

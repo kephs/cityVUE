@@ -7,7 +7,10 @@ import { sql, type Kysely } from 'kysely';
 import request from 'supertest';
 import sharp from 'sharp';
 import { Readable } from 'node:stream';
-import { AttachmentService } from '../../src/attachments/attachment.service.js';
+import {
+  AttachmentService,
+  residentAuthority,
+} from '../../src/attachments/attachment.service.js';
 import type { AttachmentStorage } from '../../src/attachments/attachment-storage.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import type { StaffAccess } from '../../src/auth/auth.types.js';
@@ -685,6 +688,7 @@ export async function checkParticipation(
       });
       try {
         const claim = await attachments.startPublic(
+          org,
           input.serviceDefinitionId,
           input.serviceDefinitionVersionId,
         );
@@ -703,11 +707,16 @@ export async function checkParticipation(
           .jpeg()
           .toBuffer();
         assert.ok((await sharp(image).metadata()).exif);
-        await attachments.upload(claim, randomUUID(), {
-          buffer: image,
-          originalname: 'fictional.jpg',
-          mimetype: 'image/jpeg',
-        });
+        await attachments.upload(
+          claim,
+          randomUUID(),
+          {
+            buffer: image,
+            originalname: 'fictional.jpg',
+            mimetype: 'image/jpeg',
+          },
+          residentAuthority(org),
+        );
         for (const bytes of blobs.values())
           assert.equal((await sharp(bytes).metadata()).exif, undefined);
         const submission = {
@@ -748,14 +757,20 @@ export async function checkParticipation(
         assert.equal(row.requester_id, null);
         assert.equal(row.participation_area_id, a);
         const claim2 = await attachments.startPublic(
+          org,
           input.serviceDefinitionId,
           input.serviceDefinitionVersionId,
         );
-        await attachments.upload(claim2, randomUUID(), {
-          buffer: image,
-          originalname: 'fictional.jpg',
-          mimetype: 'image/jpeg',
-        });
+        await attachments.upload(
+          claim2,
+          randomUUID(),
+          {
+            buffer: image,
+            originalname: 'fictional.jpg',
+            mimetype: 'image/jpeg',
+          },
+          residentAuthority(org),
+        );
         const noSelection = await create.execute(org, {
           ...input,
           attachments: claim2,

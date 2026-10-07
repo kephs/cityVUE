@@ -31,7 +31,19 @@ import {
 import { StaffAccessGuard } from '../auth/staff-access.guard.js';
 import type { StaffAccess } from '../auth/auth.types.js';
 import type { AppConfiguration } from '../config/configuration.js';
-import { AttachmentService } from './attachment.service.js';
+import {
+  AttachmentService,
+  residentAuthority,
+  staffAuthority,
+} from './attachment.service.js';
+import {
+  ResidentTenant,
+  residentTenantFromRequest,
+} from '../tenancy/resident-tenant.decorator.js';
+import type {
+  RequestWithTenant,
+  TenantContext,
+} from '../tenancy/tenant-context.js';
 import {
   attachmentLimits,
   type AttachmentContext,
@@ -73,7 +85,15 @@ export class AttachmentUploadGuard implements CanActivate {
   async canActivate(context: ExecutionContext) {
     const req = context
       .switchToHttp()
-      .getRequest<Request & { staffAccess?: StaffAccess }>();
+      .getRequest<
+        Request & { staffAccess?: StaffAccess } & RequestWithTenant
+      >();
+    // Exactly one authority: verified staff identity when the route is
+    // guarded, otherwise the resolved resident tenant, which fails
+    // closed when no tenant resolved.
+    const authority = req.staffAccess
+      ? staffAuthority(req.staffAccess)
+      : residentAuthority(residentTenantFromRequest(req).organizationId);
     const res = context.switchToHttp().getResponse<Response>();
     const release = this.attachments.acquire();
     res.once('finish', release);
@@ -84,7 +104,7 @@ export class AttachmentUploadGuard implements CanActivate {
           batchId: String(req.params.batchId),
           token: String(req.headers['x-reqro-attachment'] ?? ''),
         },
-        req.staffAccess,
+        authority,
       );
     } catch (error) {
       release();
@@ -118,27 +138,45 @@ export class IntakeAttachmentController {
   }
   @Post('batches')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  start(@Body() body: IntakeAttachmentDto) {
-    return this.attachments.startPublic(body.issueId, body.versionId);
+  start(
+    @ResidentTenant() tenant: TenantContext,
+    @Body() body: IntakeAttachmentDto,
+  ) {
+    return this.attachments.startPublic(
+      tenant.organizationId,
+      body.issueId,
+      body.versionId,
+    );
   }
   @Post('batches/:batchId/files/:fileId')
   @UseGuards(AttachmentUploadGuard)
   @UseInterceptors(upload)
   upload(
+    @ResidentTenant() tenant: TenantContext,
     @Param('batchId') batchId: string,
     @Param('fileId') fileId: string,
     @Headers('x-reqro-attachment') token: string,
     @UploadedFile() file: Upload | undefined,
   ) {
-    return this.attachments.upload({ batchId, token }, fileId, file);
+    return this.attachments.upload(
+      { batchId, token },
+      fileId,
+      file,
+      residentAuthority(tenant.organizationId),
+    );
   }
   @Get('batches/:batchId/files/:fileId')
   async preview(
+    @ResidentTenant() tenant: TenantContext,
     @Param('batchId') batchId: string,
     @Param('fileId') fileId: string,
     @Headers('x-reqro-attachment') token: string,
   ) {
-    const result = await this.attachments.preview({ batchId, token }, fileId);
+    const result = await this.attachments.preview(
+      { batchId, token },
+      fileId,
+      residentAuthority(tenant.organizationId),
+    );
     return new StreamableFile(result.bytes, {
       type: result.metadata.mediaType,
       length: result.metadata.byteSize,
@@ -147,18 +185,28 @@ export class IntakeAttachmentController {
   }
   @Delete('batches/:batchId/files/:fileId')
   remove(
+    @ResidentTenant() tenant: TenantContext,
     @Param('batchId') batchId: string,
     @Param('fileId') fileId: string,
     @Headers('x-reqro-attachment') token: string,
   ) {
-    return this.attachments.remove({ batchId, token }, fileId);
+    return this.attachments.remove(
+      { batchId, token },
+      fileId,
+      residentAuthority(tenant.organizationId),
+    );
   }
   @Delete('batches/:batchId')
   abandon(
+    @ResidentTenant() tenant: TenantContext,
     @Param('batchId') batchId: string,
     @Headers('x-reqro-attachment') token: string,
   ) {
-    return this.attachments.remove({ batchId, token }, undefined);
+    return this.attachments.remove(
+      { batchId, token },
+      undefined,
+      residentAuthority(tenant.organizationId),
+    );
   }
 }
 
@@ -187,7 +235,12 @@ export class StaffAttachmentController {
     @UploadedFile() file: Upload | undefined,
     @CurrentStaff() access: StaffAccess,
   ) {
-    return this.attachments.upload({ batchId, token }, fileId, file, access);
+    return this.attachments.upload(
+      { batchId, token },
+      fileId,
+      file,
+      staffAuthority(access),
+    );
   }
   @Get('batches/:batchId/files/:fileId')
   async preview(
@@ -199,7 +252,7 @@ export class StaffAttachmentController {
     const result = await this.attachments.preview(
       { batchId, token },
       fileId,
-      access,
+      staffAuthority(access),
     );
     return new StreamableFile(result.bytes, {
       type: result.metadata.mediaType,
@@ -214,7 +267,11 @@ export class StaffAttachmentController {
     @Headers('x-reqro-attachment') token: string,
     @CurrentStaff() access: StaffAccess,
   ) {
-    return this.attachments.remove({ batchId, token }, fileId, access);
+    return this.attachments.remove(
+      { batchId, token },
+      fileId,
+      staffAuthority(access),
+    );
   }
   @Delete('batches/:batchId')
   abandon(
@@ -222,7 +279,11 @@ export class StaffAttachmentController {
     @Headers('x-reqro-attachment') token: string,
     @CurrentStaff() access: StaffAccess,
   ) {
-    return this.attachments.remove({ batchId, token }, undefined, access);
+    return this.attachments.remove(
+      { batchId, token },
+      undefined,
+      staffAuthority(access),
+    );
   }
   @Get('requests/:requestId/evidence')
   evidence(

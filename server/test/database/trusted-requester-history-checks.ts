@@ -16,7 +16,10 @@ import {
 } from '../../src/service-request/trusted-requester.js';
 import { RequesterHistoryService } from '../../src/service-request/requester-history.service.js';
 import { down } from '../../migrations/20260926000000-add-trusted-requester-history.js';
-import { AttachmentService } from '../../src/attachments/attachment.service.js';
+import {
+  AttachmentService,
+  residentAuthority,
+} from '../../src/attachments/attachment.service.js';
 import type { AttachmentStorage } from '../../src/attachments/attachment-storage.js';
 import { Readable } from 'node:stream';
 import sharp from 'sharp';
@@ -679,6 +682,7 @@ export async function checkTrustedRequesterHistory(
       });
       try {
         const claim = await attachments.startPublic(
+          org,
           input.serviceDefinitionId,
           input.serviceDefinitionVersionId,
         );
@@ -687,11 +691,16 @@ export async function checkTrustedRequesterHistory(
         })
           .png()
           .toBuffer();
-        await attachments.upload(claim, randomUUID(), {
-          buffer: image,
-          originalname: 'fictional.png',
-          mimetype: 'image/png',
-        });
+        await attachments.upload(
+          claim,
+          randomUUID(),
+          {
+            buffer: image,
+            originalname: 'fictional.png',
+            mimetype: 'image/png',
+          },
+          residentAuthority(org),
+        );
         const submission = { ...input, attachments: claim };
         const results = await Promise.all([
           create.executeTrusted(submission, trusted),

@@ -6,6 +6,7 @@ import { requestTransaction, lockRequestRow } from './request-authorization.js';
 import { Optional } from '@nestjs/common';
 import {
   AttachmentService,
+  staffAuthority,
   type AttachmentClaim,
 } from '../attachments/attachment.service.js';
 import { checksum } from '../attachments/attachment.domain.js';
@@ -116,7 +117,10 @@ export class RequestCommunicationService {
       throw new BadRequestException('Attachments unavailable');
     const prepared =
       attachmentClaim && attachments
-        ? await attachments.prepareFiles(attachmentClaim, access)
+        ? await attachments.prepareFiles(
+            attachmentClaim,
+            staffAuthority(access),
+          )
         : undefined;
     const normalized = normalizeCommunicationBody(body);
     return requestTransaction(
@@ -141,7 +145,7 @@ export class RequestCommunicationService {
                   staffId: access.staffIdentityId,
                 },
                 attachmentDigest,
-                access,
+                staffAuthority(access),
                 prepared,
               )
             : undefined;

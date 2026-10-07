@@ -21,7 +21,10 @@ import {
   validateIdentityContact,
 } from './requester-identity-policy.js';
 import { Optional } from '@nestjs/common';
-import { AttachmentService } from '../attachments/attachment.service.js';
+import {
+  AttachmentService,
+  residentAuthority,
+} from '../attachments/attachment.service.js';
 import { checksum } from '../attachments/attachment.domain.js';
 import type { StaffAccess } from '../auth/auth.types.js';
 import { validServicePoint } from '../location-eligibility/service-location.domain.js';
@@ -195,7 +198,10 @@ export class CreateServiceRequestService {
       throw new BadRequestException('Attachments unavailable');
     const prepared =
       input.attachments && attachments
-        ? await attachments.prepareFiles(input.attachments)
+        ? await attachments.prepareFiles(
+            input.attachments,
+            residentAuthority(context.organizationId),
+          )
         : undefined;
     const preparedDefinition = prepared?.finalized
       ? undefined
@@ -287,7 +293,7 @@ export class CreateServiceRequestService {
                 versionId: input.serviceDefinitionVersionId,
               },
               attachmentDigest,
-              undefined,
+              residentAuthority(context.organizationId),
               prepared,
             )
           : undefined;
