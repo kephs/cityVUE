@@ -80,6 +80,7 @@ import {
   up as internalReadUp,
   down as internalReadDown,
 } from '../../migrations/20260919010000-add-internal-request-read-permission.js';
+import { applyRuntimeReferenceLocks } from '../helpers/runtime-reference-locks.js';
 
 const url = process.env.TEST_DATABASE_URL;
 test(
@@ -118,6 +119,10 @@ test(
         authUp,
       ])
         await migrate(db);
+      // F060.3C-2d: the converted reference-lock call sites need the
+      // Migration 49 helpers, which are applied as text because migrations
+      // compile into the test output only when imported statically.
+      await applyRuntimeReferenceLocks(db, schema);
       for (const id of [org, otherOrg])
         await db
           .insertInto('organization')

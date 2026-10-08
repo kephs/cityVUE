@@ -329,13 +329,19 @@ export class CreateServiceRequestService {
         .forShare()
         .executeTakeFirst();
       if (!action) throw new NotFoundException();
-      await trx
-        .selectFrom('category')
-        .select('id')
-        .where('organization_id', '=', context.organizationId)
-        .where('id', '=', action.category_id)
-        .forShare()
-        .executeTakeFirstOrThrow();
+      // F060.3C-2d: the existence-only Category lock that stood here was
+      // removed. Its selected identifier was discarded, so it asserted only
+      // that the Category still existed -- and referential integrity already
+      // guarantees that, through a chain rather than a direct reference:
+      // service_request's foreign key is
+      // (organization_id, category_id, service_definition_id) ->
+      // service_definition(organization_id, category_id, id), and
+      // service_definition in turn references category(organization_id, id).
+      // The insert therefore takes an implicit FOR KEY SHARE on the
+      // service_definition row, and the Category behind it cannot be deleted
+      // while any service_definition references it. The explicit lock added
+      // no invariant while forcing the runtime to hold UPDATE privilege on a
+      // reference table.
       if (action.status !== 'active')
         throw new ConflictException(
           'This Issue is no longer available for new requests',

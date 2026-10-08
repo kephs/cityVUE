@@ -26,6 +26,7 @@ import {
   requestUuid,
   staffRequestReadScope,
 } from './staff-request-scope.js';
+import { lockStaff } from '../database/reference-locks.js';
 
 @Injectable()
 export class RequestNoteService {
@@ -132,13 +133,19 @@ export class RequestNoteService {
                 prepared,
               )
             : undefined;
+        // F060.3C-2d: the acting staff row is pinned by an owner-owned helper,
+        // which carries the same active predicate, then its display name is
+        // read with an ordinary SELECT against the locked row.
+        if (
+          !(await lockStaff(trx, access.organizationId, access.staffIdentityId))
+        )
+          throw new ForbiddenException('Access denied');
         const author = await trx
           .selectFrom('staff_identity as s')
           .select(safeStaffName.as('displayName'))
           .where('s.organization_id', '=', access.organizationId)
           .where('s.id', '=', access.staffIdentityId)
           .where('s.active', '=', true)
-          .forShare()
           .executeTakeFirst();
         if (!author) throw new ForbiddenException('Access denied');
         const result = await this.notes.create(trx, {

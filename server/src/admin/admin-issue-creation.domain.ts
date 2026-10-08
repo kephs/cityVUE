@@ -4,6 +4,10 @@ import type { DatabaseSchema } from '../database/database.types.js';
 import type { StaffAccess } from '../auth/auth.types.js';
 import { requestUuid } from '../service-request/staff-request-scope.js';
 import { validateTargetSearch } from '../service-request/ownership-targets.js';
+import {
+  lockActiveCategory,
+  lockActiveDivision,
+} from '../database/reference-locks.js';
 
 export interface CreationCategory {
   id: string;
@@ -34,6 +38,14 @@ export async function lockCreationCategory(
 ) {
   if (!id || !requestUuid.test(id))
     throw new BadRequestException({ code: 'ISSUE_CATEGORY_UNAVAILABLE' });
+  // F060.3C-2d: the lock moved into an owner-owned SECURITY DEFINER helper,
+  // so the runtime needs no UPDATE privilege on category or department. The
+  // helper pins the Category and its Department in one statement and carries
+  // the same both-active predicate this caller has always required; the read
+  // below then observes the pinned rows, because row locks are scoped to the
+  // transaction rather than to the function call.
+  if (!(await lockActiveCategory(trx, org, id)))
+    throw new BadRequestException({ code: 'ISSUE_CATEGORY_UNAVAILABLE' });
   const row = await trx
     .selectFrom('category as c')
     .innerJoin('department as d', (j) =>
@@ -46,21 +58,12 @@ export async function lockCreationCategory(
     .where('c.id', '=', id)
     .where('c.status', '=', 'active')
     .where('d.status', '=', 'active')
-    .forShare(['c', 'd'])
     .executeTakeFirst();
   if (!row)
     throw new BadRequestException({ code: 'ISSUE_CATEGORY_UNAVAILABLE' });
   if (
     row.division_id &&
-    !(await trx
-      .selectFrom('division')
-      .select('id')
-      .where('organization_id', '=', org)
-      .where('department_id', '=', row.department_id)
-      .where('id', '=', row.division_id)
-      .where('status', '=', 'active')
-      .forShare()
-      .executeTakeFirst())
+    !(await lockActiveDivision(trx, org, row.department_id, row.division_id))
   )
     throw new BadRequestException({ code: 'ISSUE_CATEGORY_UNAVAILABLE' });
   return row;

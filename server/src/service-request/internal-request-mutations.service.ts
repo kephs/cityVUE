@@ -36,6 +36,12 @@ import {
   assertRequestOperation,
   persistedRequestAudience,
 } from './staff-request-policy.js';
+import {
+  lockActiveDepartment,
+  lockActiveDivision,
+  lockDepartment,
+  lockDivision,
+} from '../database/reference-locks.js';
 
 export interface InternalRoutingInput {
   expectedRevision: number;
@@ -165,26 +171,26 @@ export class InternalRequestMutationsService {
             (divisionId !== null && !access.divisionIds.includes(divisionId))
           )
             throw new NotFoundException();
-          const department = await trx
-            .selectFrom('department')
-            .select('id')
-            .where('organization_id', '=', access.organizationId)
-            .where('id', '=', departmentId)
-            .where('status', '=', 'active')
-            .forShare()
-            .executeTakeFirst();
-          if (!department) throw new NotFoundException();
+          // F060.3C-2d: route-target validation locks through owner-owned
+          // helpers, preserving the same active predicate.
+          if (
+            !(await lockActiveDepartment(
+              trx,
+              access.organizationId,
+              departmentId,
+            ))
+          )
+            throw new NotFoundException();
           if (divisionId !== null) {
-            const division = await trx
-              .selectFrom('division')
-              .select('id')
-              .where('organization_id', '=', access.organizationId)
-              .where('department_id', '=', departmentId)
-              .where('id', '=', divisionId)
-              .where('status', '=', 'active')
-              .forShare()
-              .executeTakeFirst();
-            if (!division) throw new NotFoundException();
+            if (
+              !(await lockActiveDivision(
+                trx,
+                access.organizationId,
+                departmentId,
+                divisionId,
+              ))
+            )
+              throw new NotFoundException();
           }
           if (
             departmentId === current.departmentId &&
@@ -192,24 +198,30 @@ export class InternalRequestMutationsService {
           )
             throw new ConflictException('Request already has this route');
           operationalType = 'request_routed';
+          // The audit snapshot pins each row then reads its name, so the
+          // recorded route cannot describe a name that was never in effect.
+          // Existence only: this path has never applied a status predicate.
           const snapshot = async (dept: string, div: string | null) => {
+            if (!(await lockDepartment(trx, access.organizationId, dept)))
+              throw new NotFoundException();
             const d = await trx
               .selectFrom('department')
               .select('name')
               .where('organization_id', '=', access.organizationId)
               .where('id', '=', dept)
-              .forShare()
               .executeTakeFirstOrThrow();
-            const v = div
-              ? await trx
-                  .selectFrom('division')
-                  .select('name')
-                  .where('organization_id', '=', access.organizationId)
-                  .where('department_id', '=', dept)
-                  .where('id', '=', div)
-                  .forShare()
-                  .executeTakeFirstOrThrow()
-              : null;
+            let v: { name: string } | null = null;
+            if (div) {
+              if (!(await lockDivision(trx, access.organizationId, dept, div)))
+                throw new NotFoundException();
+              v = await trx
+                .selectFrom('division')
+                .select('name')
+                .where('organization_id', '=', access.organizationId)
+                .where('department_id', '=', dept)
+                .where('id', '=', div)
+                .executeTakeFirstOrThrow();
+            }
             return { department: d.name, division: v?.name ?? null };
           };
           const from = await snapshot(current.departmentId, current.divisionId);

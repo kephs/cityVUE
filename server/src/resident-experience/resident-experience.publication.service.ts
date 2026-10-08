@@ -124,12 +124,20 @@ export class ResidentPublicationService {
           const publisher = await resolveRequestAuthority(trx, initialAccess);
           assertResidentPublicationAuthority(publisher, false);
 
+          // F060.3C-2d: the FOR UPDATE locks on the review request and
+          // decision were removed. Single use is already a unique-index
+          // invariant -- resident_approval_consumed on
+          // (organization_id, review_decision_id) where operation='published'
+          // -- and resident_publication_transition admits one publication per
+          // resource revision. The resource row above is still locked FOR
+          // UPDATE and its expected revision still checked, which serializes
+          // concurrent publications of the same resource. Nothing anywhere
+          // updates or deletes these two tables, so no writer was excluded.
           const request = await trx
             .selectFrom('resident_experience_review_request')
             .selectAll()
             .where('organization_id', '=', publisher.organizationId)
             .where('id', '=', command.reviewRequestId)
-            .forUpdate()
             .executeTakeFirst();
           if (!request) throw new NotFoundException();
 
@@ -138,7 +146,6 @@ export class ResidentPublicationService {
             .selectAll()
             .where('organization_id', '=', publisher.organizationId)
             .where('request_id', '=', request.id)
-            .forUpdate()
             .executeTakeFirst();
           if (!decision)
             throw new ConflictException('Resident approval is not usable');

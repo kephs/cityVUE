@@ -36,6 +36,7 @@ import {
   assertRequestOperation,
   persistedRequestAudience,
 } from './staff-request-policy.js';
+import { lockAssignmentTarget } from '../database/reference-locks.js';
 
 export interface OwnershipInput {
   expectedRevision: number;
@@ -268,21 +269,20 @@ export class RequestOwnershipService {
         const previous = await currentAssignment(db, access.organizationId, id);
         let target: OwnershipTarget | undefined;
         if (operation !== 'unassign') {
-          // Lock the selected principal/team/role before rechecking its current eligibility.
-          const table =
-            type === 'staff'
-              ? 'staff_identity'
-              : type === 'role'
-                ? 'operational_role'
-                : 'work_group';
-          const found = await db
-            .selectFrom(table)
-            .select('id')
-            .where('organization_id', '=', access.organizationId)
-            .where('id', '=', targetId)
-            .forShare()
-            .executeTakeFirst();
-          if (!found) throw new NotFoundException();
+          // Lock the selected principal/team/role before rechecking its
+          // current eligibility. F060.3C-2d: the three-way table choice and
+          // its lock live in an owner-owned helper with a static branch per
+          // table, so the runtime holds no UPDATE privilege on any of them.
+          // Existence only, exactly as before.
+          if (
+            !(await lockAssignmentTarget(
+              db,
+              access.organizationId,
+              type,
+              targetId,
+            ))
+          )
+            throw new NotFoundException();
           if (removing) {
             target = (
               await sql<OwnershipTarget>`select t.type,t.id,t.name as "displayName",t.active from ${targetCatalog(access.organizationId)} t where t.type=${type} and t.id=${targetId}`.execute(

@@ -37,6 +37,7 @@ import {
   up,
   down,
 } from '../../migrations/20261005000000-issue-availability-external-history.js';
+import { applyRuntimeReferenceLocks } from '../helpers/runtime-reference-locks.js';
 
 const url = process.env.TEST_DATABASE_URL;
 test(
@@ -165,6 +166,9 @@ test(
         )) as { up: (db: Kysely<DatabaseSchema>) => Promise<void> };
         await db.transaction().execute(migration.up);
       }
+      // F060.3C-2d: the converted reference-lock call sites need the
+      // Migration 49 helpers.
+      await applyRuntimeReferenceLocks(db, schema);
       await sql`insert into organization(id,name,short_name,slug,status,default_business_timezone) values(${org},'Fictional','Test',${org},'active','UTC'),(${otherOrg},'Other fictional','Other',${otherOrg},'active','UTC')`.execute(
         db,
       );

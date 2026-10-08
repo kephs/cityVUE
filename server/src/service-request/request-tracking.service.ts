@@ -23,6 +23,7 @@ import {
   TRACKING_MANAGE,
 } from './request-tracking.domain.js';
 import { RequestTrackingRepository } from './request-tracking.repository.js';
+import { lockStaff } from '../database/reference-locks.js';
 
 @Injectable()
 export class RequestTrackingService {
@@ -46,16 +47,9 @@ export class RequestTrackingService {
       ? query.forUpdate('request').forShare(['category', 'organization'])
       : query.forShare(['request', 'category', 'organization']);
     if (!(await query.executeTakeFirst())) throw new NotFoundException();
-    if (
-      !(await trx
-        .selectFrom('staff_identity')
-        .select('id')
-        .where('organization_id', '=', access.organizationId)
-        .where('id', '=', access.staffIdentityId)
-        .where('active', '=', true)
-        .forShare()
-        .executeTakeFirst())
-    )
+    // F060.3C-2d: actor liveness is asserted by the owner-owned helper, which
+    // carries the same active predicate this site already required.
+    if (!(await lockStaff(trx, access.organizationId, access.staffIdentityId)))
       throw new ForbiddenException();
   }
   async state(id: string, access: StaffAccess | undefined) {

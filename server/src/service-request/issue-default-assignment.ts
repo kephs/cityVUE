@@ -14,6 +14,7 @@ import {
 } from './ownership-targets.js';
 import { insertCurrentAssignment } from './assignment-write.js';
 import type { StaffRequestAudience } from './staff-request-scope.js';
+import { lockAssignmentTarget } from '../database/reference-locks.js';
 
 export interface DefaultAssignmentInput {
   expectedRevision: number;
@@ -35,19 +36,11 @@ async function lockTarget(
   type: TargetType,
   id: string,
 ) {
-  const table =
-    type === 'staff'
-      ? 'staff_identity'
-      : type === 'role'
-        ? 'operational_role'
-        : 'work_group';
-  return db
-    .selectFrom(table)
-    .select('id')
-    .where('organization_id', '=', org)
-    .where('id', '=', id)
-    .forShare()
-    .executeTakeFirst();
+  // F060.3C-2d: the three-way table choice and its lock moved into an
+  // owner-owned SECURITY DEFINER helper with a static branch per table, so
+  // the runtime needs no UPDATE privilege on staff_identity, operational_role
+  // or work_group. Existence only, exactly as before.
+  return lockAssignmentTarget(db, org, type, id);
 }
 
 /** Shared Category-based eligibility for Add preflight and authoritative assignment writes. */
@@ -204,6 +197,13 @@ export async function resolveIssueDefault(
     config.staff_identity_id ??
     config.operational_role_id ??
     config.work_group_id;
+  // F060.3C-2d: deliberately a native Category FOR SHARE, not a helper.
+  // Category is locked at sixteen runtime sites, thirteen of them through the
+  // shared staff request scope's OF-alias form where the Category row is
+  // locked atomically alongside the Service Request and the Organization.
+  // Routing one site through a helper would not remove the runtime's need for
+  // Category row-lock privilege, so the runtime instead holds a column-scoped
+  // UPDATE (id) made inert by the protect_category_identity invariant.
   const category = await db
     .selectFrom('category')
     .select(['department_id', 'division_id'])
