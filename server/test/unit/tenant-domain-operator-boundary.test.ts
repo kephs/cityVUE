@@ -60,9 +60,14 @@ const ALLOWED_RUNTIME_EXTERNALS = [
   'reflect-metadata',
 ];
 
-/** The approved control-plane database surface. */
+/** The approved control-plane database surface.
+ *
+ * F060.3C-2c-2 removed `organization`. That is a deliberate tightening, not
+ * a weakened assertion: the Organization row lock and status read moved into
+ * the schema-owner-owned `tenant_domain_lock_organization` helper, so the
+ * operator role needs no privilege on that table at all. Re-adding it here
+ * would mean the operator path had regained direct Organization access. */
 const ALLOWED_TABLES = [
-  'organization',
   'tenant_domain',
   'tenant_domain_audit',
   'tenant_domain_operator_approval',
@@ -74,8 +79,13 @@ const ALLOWED_TABLES = [
  * mutation. */
 const ALLOWED_RAW_SQL = [
   'select current_database() as database, current_user as user, inet_server_addr()::text as address',
+  'select tenant_domain_lock_organization(${organizationId}::uuid) as servable',
   'set constraints all immediate',
 ];
+
+/** Closed function allowlist. Every application database function the
+ * operator runtime path invokes directly. */
+const ALLOWED_FUNCTIONS = ['tenant_domain_lock_organization'];
 
 /** Application domains the operator credential must never be able to reach.
  * Redundant with the closed allowlist on purpose, so a breach reports which
@@ -287,29 +297,45 @@ test('the runtime path reaches exactly the approved tables', () => {
   );
 });
 
-test('Organization access selects exactly id and status', () => {
-  const reads = runtimeSources.flatMap(({ module, text }) =>
-    [
-      ...text.matchAll(
-        /selectFrom\('organization'\)\s*\.select\(\s*(\[[^\]]*\])/g,
-      ),
-    ].map((match) => ({ module, columns: match[1] ?? '' })),
-  );
-  assert.equal(reads.length, 1, 'expected exactly one Organization read');
-  assert.equal(
-    reads[0]?.columns.replace(/\s+/g, ''),
-    "['id','status']",
-    'the operator path must read only the Organization target-validation columns',
-  );
-  // No other shape may read the table.
-  for (const { text } of runtimeSources)
-    assert.equal(
-      [...text.matchAll(/selectFrom\('organization'\)/g)].length,
-      text.includes("selectFrom('organization')") ? 1 : 0,
-    );
+test('the operator path reads the Organization table in no way at all', () => {
+  // F060.3C-2c-2: the row lock and status read live in a schema-owner-owned
+  // SECURITY DEFINER helper that returns only a boolean, so the operator role
+  // needs no Organization privilege. Any direct read reappearing here would
+  // reintroduce the `FOR SHARE` requirement for UPDATE privilege on the table.
+  for (const { module, text } of runtimeSources)
+    for (const shape of [
+      "selectFrom('organization')",
+      "insertInto('organization')",
+      "updateTable('organization')",
+      "deleteFrom('organization')",
+      'from organization',
+      'from public.organization',
+    ])
+      assert.ok(
+        !text.includes(shape),
+        `${module} must not access the Organization table directly: found ${shape}`,
+      );
 });
 
-test('the runtime path carries exactly the two reviewed raw statements', () => {
+test('the operator path calls exactly the approved database functions', () => {
+  // Application database functions invoked from raw SQL in the operator path.
+  // The call site is unqualified by design — PostgreSQL never searches
+  // `pg_temp` for function names — so the allowlist matches the bare name,
+  // while the function bodies themselves stay fully qualified.
+  const called = new Set<string>();
+  for (const { text } of runtimeSources)
+    for (const match of text.matchAll(
+      /sql(?:<[^>]*>)?`[\s\S]*?\b(tenant_domain_[a-z_]+)\(/g,
+    ))
+      if (match[1]) called.add(match[1]);
+  assert.deepEqual(
+    [...called].sort(),
+    ALLOWED_FUNCTIONS,
+    'the operator path invokes an application database function outside the approved set',
+  );
+});
+
+test('the runtime path carries exactly the reviewed raw statements', () => {
   const statements: string[] = [];
   for (const { text } of runtimeSources)
     for (const match of text.matchAll(/sql(?:<[^>]*>)?`([\s\S]*?)`/g)) {

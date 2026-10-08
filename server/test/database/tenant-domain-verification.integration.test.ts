@@ -9,6 +9,7 @@ import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
+import { applyFunctionHardening } from '../helpers/tenant-domain-hardening.js';
 import { TenantResolverService } from '../../src/tenancy/tenant-resolver.service.js';
 import { TenantDomainRepository } from '../../src/tenancy/tenant-domain.repository.js';
 import {
@@ -176,6 +177,9 @@ test(
       // test now requires Migration 47. It is applied after the rollback case
       // above, which must still exercise Migration 46 on its own.
       await database.transaction().execute(up47);
+      // ADR-027 F060.3C-2c-2: every operator path now calls the Organization
+      // lock helper, so the hardening must be present for the code under test.
+      await applyFunctionHardening(database, schema);
 
       const selection = (hostname: string, expectedRevision: number) => ({
         organizationId: organizationA,

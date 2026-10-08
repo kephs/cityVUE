@@ -363,14 +363,11 @@ export async function registerTenantDomain(
 
   return run(() =>
     db.transaction().execute(async (trx) => {
-      const organization = await trx
-        .selectFrom('organization')
-        .select(['id', 'status'])
-        .where('id', '=', organizationId)
-        .forShare()
-        .executeTakeFirst();
-      if (!organization) fail('Organization not found');
-      if (organization.status !== 'active') fail('Organization is not active');
+      // Organization first, then the registry. Registration requires an
+      // active Organization, as it always has; the direct read it replaces
+      // needed UPDATE privilege on the table because of the row lock, which
+      // the operator role must never hold.
+      await lockOrganization(trx, organizationId, 'active');
 
       // The hostname namespace is global, so a clash with another Organization
       // is reported as a clash without naming the holder.
@@ -455,6 +452,10 @@ export async function deactivateTenantDomain(
 
   return run(() =>
     db.transaction().execute(async (trx) => {
+      // Organization first, for lock order only. Deactivation is the safe
+      // direction and must stay available when an Organization is no longer
+      // active — that is exactly when an operator is most likely to need it.
+      await lockOrganization(trx, organizationId, 'lock_only');
       const binding = await trx
         .selectFrom('tenant_domain')
         .select([
@@ -534,14 +535,67 @@ const BINDING_COLUMNS = [
   'revision',
 ] as const;
 
+/**
+ * ADR-027 F060.3C-2c-2. Whether a non-active Organization is fatal depends on
+ * the direction of the operation.
+ *
+ * `active` is required by anything that can make a hostname publicly
+ * reachable. `lock_only` takes the same row lock but tolerates a non-active
+ * Organization, so a safe-direction operation — deactivating a hostname,
+ * revoking ownership evidence — does not become impossible precisely when it
+ * is most likely to be needed.
+ */
+type OrganizationRequirement = 'active' | 'lock_only';
+
+/**
+ * Takes the Organization row lock through the hardened Migration 48 helper.
+ *
+ * The operator path holds **no privilege on `organization`**: the lock and the
+ * status read happen inside a `SECURITY DEFINER` function owned by the schema
+ * owner, which returns only a boolean. Row locks are transaction scoped, so
+ * the lock acquired inside that function is held by this transaction until
+ * commit — the concurrency guarantee is preserved, not relocated.
+ */
+async function lockOrganization(
+  trx: Kysely<DatabaseSchema>,
+  organizationId: string,
+  requirement: OrganizationRequirement,
+): Promise<void> {
+  // The call is intentionally unqualified, while the helper's own body and
+  // every hardened guard are fully schema qualified. PostgreSQL never searches
+  // `pg_temp` for function or operator names, so a temporary object cannot
+  // hijack this call; the shadowing risk is for relations and composite types,
+  // which is exactly what the qualified function bodies close. Hard-coding a
+  // schema here would instead bind the application to one deployment layout.
+  // The residual risk — a same-named function in an earlier writable schema —
+  // is closed by the operator role holding no CREATE on any searchable schema,
+  // which F060.3C-2c-3 must provision.
+  const locked = await sql<{ servable: boolean }>`
+    select tenant_domain_lock_organization(${organizationId}::uuid) as servable`.execute(
+    trx,
+  );
+  if (requirement === 'active' && locked.rows[0]?.servable !== true)
+    fail('Organization is not an active servable target');
+}
+
 /** Re-reads a binding under a row lock and confirms the operator acted on the
- * state they claimed. Every transition below goes through this. */
+ * state they claimed. Every transition below goes through this.
+ *
+ * The Organization lock is taken **first**, so every supported operator path
+ * acquires locks in the order Organization then tenant_domain. The previous
+ * order was inconsistent — registration locked the Organization first while
+ * every transition locked the binding first and reached the Organization only
+ * inside the trigger — which would become a genuine deadlock window as soon
+ * as anything takes the Organization row `FOR UPDATE`, as a future
+ * Organization lifecycle writer would. */
 async function lockBinding(
   trx: Kysely<DatabaseSchema>,
   organizationId: string,
   hostname: string,
   expectedRevision: number,
+  requirement: OrganizationRequirement,
 ) {
+  await lockOrganization(trx, organizationId, requirement);
   const binding = await trx
     .selectFrom('tenant_domain')
     .select([
@@ -611,6 +665,7 @@ export async function recordTenantDomainApproval(
       organizationId,
       hostname,
       input.expectedRevision,
+      'active',
     );
     // Reported here so the approver sees why their decision is meaningless
     // rather than reading a database refusal; the database checks the same
@@ -679,6 +734,7 @@ export async function issueTenantDomainChallenge(
         organizationId,
         hostname,
         input.expectedRevision,
+        'lock_only',
       );
       if (binding.verification_state === 'verified')
         fail('Tenant domain is already verified; revoke before re-challenging');
@@ -803,6 +859,7 @@ export async function verifyTenantDomain(
         organizationId,
         hostname,
         input.expectedRevision,
+        'lock_only',
       );
       if (binding.verification_token_id !== tokenId)
         fail('Challenge was replaced while verifying; re-read and retry');
@@ -947,6 +1004,7 @@ export async function activateTenantDomain(
         organizationId,
         hostname,
         input.expectedRevision,
+        'active',
       );
       if (binding.verification_state !== 'verified')
         fail('Only a verified tenant domain can be activated');
@@ -1024,6 +1082,7 @@ export async function revokeTenantDomainVerification(
         organizationId,
         hostname,
         input.expectedRevision,
+        'lock_only',
       );
       if (binding.active)
         fail('Deactivate the tenant domain before revoking verification');

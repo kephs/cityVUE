@@ -9,6 +9,7 @@ import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
+import { applyFunctionHardening } from '../helpers/tenant-domain-hardening.js';
 import { TenantResolverService } from '../../src/tenancy/tenant-resolver.service.js';
 import { TenantDomainRepository } from '../../src/tenancy/tenant-domain.repository.js';
 import {
@@ -20,6 +21,7 @@ import {
   up,
   down,
 } from '../../migrations/20261015000000-add-tenant-domain-registry.js';
+import { up as up46 } from '../../migrations/20261016000000-add-tenant-domain-verification.js';
 import { up as up47 } from '../../migrations/20261017000000-add-tenant-domain-operator-controls.js';
 
 const MIGRATION = '20261015000000';
@@ -167,7 +169,11 @@ test(
       // attribution, so the code under test now requires Migration 47. It is
       // applied after the rollback case above, which must still exercise
       // Migration 45 on its own.
+      await database.transaction().execute(up46);
       await database.transaction().execute(up47);
+      // ADR-027 F060.3C-2c-2: every operator path now calls the Organization
+      // lock helper, so the hardening must be present for the code under test.
+      await applyFunctionHardening(database, schema);
 
       /** Registers through the operator path, which never verifies or
        * activates, then forces the lifecycle forward with direct SQL so the
@@ -279,7 +285,7 @@ test(
         await advance(
           organizationId,
           domain.id,
-          `verification_state='pending',verification_method='dns_txt',verification_challenge='challenge-${domain.id}',verification_requested_at=clock_timestamp()`,
+          `verification_state='pending',verification_method='dns_txt',verification_challenge='challenge-${domain.id}',verification_requested_at=clock_timestamp(),verification_token_id=gen_random_uuid(),verification_expires_at=clock_timestamp()+interval '14 days'`,
           'verification_requested',
         );
         await advance(
@@ -433,7 +439,7 @@ test(
           await advance(
             organizationB,
             domain.id,
-            `verification_state='pending',verification_method='dns_txt',verification_challenge='issued',verification_requested_at=clock_timestamp()`,
+            `verification_state='pending',verification_method='dns_txt',verification_challenge='issued',verification_requested_at=clock_timestamp(),verification_token_id=gen_random_uuid(),verification_expires_at=clock_timestamp()+interval '14 days'`,
             'verification_requested',
           );
           await refuses(

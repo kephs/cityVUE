@@ -9,6 +9,7 @@ import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
+import { applyFunctionHardening } from '../helpers/tenant-domain-hardening.js';
 import {
   activateTenantDomain,
   deactivateTenantDomain,
@@ -227,6 +228,11 @@ test(
           await database.transaction().execute(up47);
         },
       );
+
+      // ADR-027 F060.3C-2c-2: the operator paths exercised below call the
+      // Organization lock helper, so the hardening is applied once Migration
+      // 47 has settled.
+      await applyFunctionHardening(database, schema);
 
       await t.test(
         'legacy audit rows are preserved exactly as recorded',

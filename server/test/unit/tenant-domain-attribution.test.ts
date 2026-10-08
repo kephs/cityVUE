@@ -190,13 +190,16 @@ test('operator control code reaches no application data', () => {
   assert.deepEqual(
     [...new Set(reached)].sort(),
     [
-      'organization',
       'tenant_domain',
       'tenant_domain_audit',
       'tenant_domain_operator_approval',
       'tenant_domain_verification_attempt',
     ],
-    'the operator path may reach Organization identity and status, the registry, verification evidence and operator attribution, and nothing else',
+    // F060.3C-2c-2 removed `organization`: the row lock and status read moved
+    // into the schema-owner-owned tenant_domain_lock_organization helper, so
+    // the operator role needs no privilege on that table. This is a
+    // tightening — re-adding it would mean direct access had returned.
+    'the operator path may reach the registry, verification evidence and operator attribution, and nothing else',
   );
   // Raw SQL could reach past the query builders, so the only template allowed
   // here is the dry-run constraint check.

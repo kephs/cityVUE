@@ -10,6 +10,7 @@ import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
+import { applyFunctionHardening } from '../helpers/tenant-domain-hardening.js';
 
 /**
  * ADR-027 F060.3C-2b. Drives the production-capable operator command as a
@@ -85,7 +86,7 @@ test(
 
       const folder = path.resolve(__dirname, '../../migrations');
       const migrations = (await readdir(folder))
-        .filter((file) => file.endsWith('.js'))
+        .filter((file) => file.endsWith('.js') && file < '20261018000000')
         .sort();
       assert.equal(migrations.length, 47);
       for (const file of migrations) {
@@ -94,6 +95,7 @@ test(
         )) as { up: (db: Kysely<DatabaseSchema>) => Promise<void> };
         await database.transaction().execute(migration.up);
       }
+      await applyFunctionHardening(database, schema);
 
       await database
         .insertInto('organization')
