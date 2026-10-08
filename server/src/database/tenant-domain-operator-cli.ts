@@ -9,7 +9,9 @@ import {
   assertRuntimeMatchesTarget,
   operatorFailure,
   OperatorRefusal,
+  resolveDeploymentSchema,
   resolveOperatorTarget,
+  withoutConnectionOptions,
   type OperatorFailureCode,
   type OperatorTarget,
 } from '../config/operator-environment.js';
@@ -276,6 +278,10 @@ async function run(): Promise<void> {
   const approvalRequired = verb === 'activate' || verb === 'revoke';
 
   const target = resolveOperatorTarget(process.env);
+  // Infrastructure owned, resolved before the pool is built: object
+  // resolution must not depend on the operator role's own stored
+  // `search_path`, which that role may change.
+  const deploymentSchema = resolveDeploymentSchema(process.env);
   const environment = validateEnvironment(process.env);
   assertRuntimeMatchesTarget(target, {
     nodeEnvironment: environment.NODE_ENV,
@@ -362,10 +368,16 @@ async function run(): Promise<void> {
       pool: new Pool({
         ...databaseConnectionOptions({
           environment: environment.NODE_ENV,
-          url: environment.DATABASE_URL,
+          // Stripped of any `options` parameter, which `pg` would otherwise
+          // let override the pinned search_path below.
+          url: withoutConnectionOptions(environment.DATABASE_URL),
           sslMode: environment.DATABASE_SSL_MODE,
           caFile: environment.DATABASE_SSL_CA_FILE,
         }),
+        // Pinned at connection startup, so every statement below resolves
+        // against the deployment-owned schema regardless of what the role's
+        // default path says.
+        options: deploymentSchema.connectionOptions,
         max: 1,
         connectionTimeoutMillis: environment.DATABASE_CONNECTION_TIMEOUT_MS,
         statement_timeout: environment.DATABASE_STATEMENT_TIMEOUT_MS,

@@ -194,6 +194,95 @@ export function resolveOperatorTarget(
   return { environment: target, database, databaseUser, serving };
 }
 
+/** The deployment-owned application schema, and the `options` string that
+ * pins it on a connection. */
+export interface DeploymentSchema {
+  readonly schema: string;
+  readonly connectionOptions: string;
+}
+
+/** Namespaces PostgreSQL reserves or resolves specially. None of these may be
+ * named as the application schema: `pg_catalog` and `pg_temp` are searched by
+ * their own rules, and `pg_` is reserved. */
+const RESERVED_SCHEMA = /^(pg_|information_schema$)/;
+
+/** The default. A deployment that has not said otherwise runs in `public`,
+ * which is what every migration in this repository creates into. */
+const DEFAULT_SCHEMA = 'public';
+
+/**
+ * Resolves the schema the operator connection pins at startup.
+ *
+ * Why this exists. A PostgreSQL role may always change its own stored
+ * `search_path` with `ALTER ROLE ... SET search_path`, including to a value
+ * that omits the application schema. Measured under the constrained role on
+ * PostgreSQL 17: doing so breaks the operator path's unqualified reference to
+ * `tenant_domain_lock_organization(uuid)`, because resolution then finds no
+ * such function. Object resolution for the production operator path therefore
+ * must not depend on a value the operator can edit.
+ *
+ * `REQRO_DEPLOYMENT_SCHEMA` is **infrastructure owned**, exactly like
+ * `REQRO_DEPLOYMENT_ENVIRONMENT`. It is deliberately not a CLI argument and
+ * there is no `--schema` flag: a schema override in operator hands would move
+ * object resolution back under operator control, which is the thing this
+ * closes. Tests supply their own isolated schema through the same variable.
+ *
+ * The value is a plain lower-case identifier and nothing else — no quoting, no
+ * whitespace, no separators — so it cannot carry a second `-c` setting into
+ * the connection options, and no credential or host content can be smuggled
+ * through it.
+ */
+export function resolveDeploymentSchema(
+  environment: NodeJS.ProcessEnv,
+): DeploymentSchema {
+  const supplied = (environment.REQRO_DEPLOYMENT_SCHEMA ?? '').trim();
+  const schema = supplied === '' ? DEFAULT_SCHEMA : supplied;
+  if (!IDENTIFIER.test(schema))
+    refuse(
+      'database_mismatch',
+      'REQRO_DEPLOYMENT_SCHEMA is not a plain PostgreSQL identifier',
+    );
+  if (RESERVED_SCHEMA.test(schema))
+    refuse(
+      'database_mismatch',
+      'REQRO_DEPLOYMENT_SCHEMA must not name a reserved PostgreSQL namespace',
+    );
+  // Pinned as the whole search_path, so the effective path equals the
+  // deployment-owned schema and the role's own default is overridden for the
+  // life of the connection.
+  return { schema, connectionOptions: `-c search_path=${schema}` };
+}
+
+/**
+ * Removes a `options` parameter from a database URL.
+ *
+ * `pg` lets a connection-string `options` parameter **override** the explicit
+ * `options` key in a pool configuration, which would let the URL decide
+ * `search_path` and defeat the deployment-owned pin. Measured on PostgreSQL
+ * 17: with both present, the connection string won.
+ *
+ * `DATABASE_URL` is infrastructure owned, so this is not an operator-
+ * controlled vector, but a pin that something else can override is not a pin.
+ * This mirrors the existing precedence guard in the shared TLS module, which
+ * rejects URL-supplied TLS and host parameters for the same reason, and is
+ * applied here rather than there so shared database configuration is left
+ * untouched.
+ *
+ * An unparseable value is returned unchanged; validating the URL belongs to
+ * `databaseConnectionOptions`, which refuses it with its own message.
+ */
+export function withoutConnectionOptions(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  if (!parsed.searchParams.has('options')) return url;
+  parsed.searchParams.delete('options');
+  return parsed.href;
+}
+
 export interface RuntimeConfiguration {
   readonly nodeEnvironment: string;
   readonly deploymentProfile: string;

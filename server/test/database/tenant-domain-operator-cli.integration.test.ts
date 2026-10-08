@@ -68,10 +68,12 @@ test(
       await admin.query(`create schema "${schema}"`);
       created = true;
 
-      // The command builds its own pool, so the disposable schema travels
-      // through the connection string's options parameter.
-      const scoped = new URL(testUrl);
-      scoped.searchParams.set('options', `-c search_path=${schema}`);
+      // F060.3C-2c-3: the command pins the application schema on its own
+      // connection from REQRO_DEPLOYMENT_SCHEMA, which is deployment owned.
+      // The disposable schema is supplied through that same variable rather
+      // than smuggled through the connection string, so there is exactly one
+      // mechanism and it is not operator controlled: there is no `--schema`
+      // flag and argv carries only the verb, operation and mode.
 
       db = new Kysely<DatabaseSchema>({
         dialect: new PostgresDialect({
@@ -133,8 +135,9 @@ test(
             NODE_ENV: 'test',
             CITYVUE_DEPLOYMENT_PROFILE: 'development',
             DEVELOPMENT_ORGANIZATION_ID: ORGANIZATION,
-            DATABASE_URL: scoped.href,
+            DATABASE_URL: testUrl,
             DATABASE_SSL_MODE: 'disable',
+            REQRO_DEPLOYMENT_SCHEMA: schema,
             REQRO_OPERATOR_IDENTITY: REQUESTER,
             REQRO_OPERATOR_REASON: REASON,
             REQRO_OPERATOR_CORRELATION_ID: randomUUID(),

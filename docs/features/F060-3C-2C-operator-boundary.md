@@ -614,6 +614,568 @@ helper name now that the call site is unqualified; and the F060.3C-2a and
 2c-1 table allowlists both had to drop `organization`, which is the tightening
 working as designed.
 
+## F060.3C-2c-3 — Least-privilege operator role proof and grant artifact
+
+Baseline `037d51d9273e55e19bda22cb7fd78d6c56be93b5`, branch
+`claude/operator-role-boundary`. This slice answers, empirically, whether the
+intended least-privilege operator role actually exists: whether a genuinely
+constrained non-owner PostgreSQL role can execute all seven operator verbs and
+cannot escape that surface.
+
+### Why a dedicated cluster was necessary
+
+Every other database suite runs as `reqro_test_user`, which **owns** the
+objects it creates. An owner holds every privilege implicitly, so "the operator
+cannot do X" is unprovable there — revoking from `PUBLIC` does not constrain an
+owner — and `reqro_test_user` lacks `CREATEROLE`, so no second non-owner role
+could be created. That is precisely the evidence gap 2c-2 recorded rather than
+guessed.
+
+`server/test/helpers/operator-role-cluster.ts` therefore stands up a disposable
+PostgreSQL 17 container the suite owns, with **three separate identities**: a
+cluster superuser that provisions, a non-superuser schema owner that migrates
+and owns every object, and `reqro_operator` —
+`NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`, zero role
+memberships, owning nothing. Credentials are generated in memory for the
+container's lifetime; nothing is written to any `.env` and nothing is
+committed. The container is removed in `finally`.
+
+**PostgreSQL 17 is authoritative** because `server/compose.yml` pins
+`postgres:17-alpine`. The harness refuses any other major version, so the
+developer's local 18.x server cannot silently become the evidence. The cluster
+reported **17.11**.
+
+A second benefit: because the cluster's application schema genuinely _is_
+`public`, Migration 48 is applied as its own unmodified SQL. This is the first
+time its literal `public.` qualification has been exercised rather than
+rewritten to a disposable schema, which closes the harness-adaptation caveat
+recorded under "Test-harness adaptation, stated openly".
+
+### The measured minimal grant set
+
+Each entry below is load bearing: removing it makes a named verb fail. The
+suite proves this by one-out ablation rather than by inspection.
+
+| Grant                                                        | Why it is required                                                               |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `usage on schema public`                                     | Redundant on a default PG17 database; load bearing once `PUBLIC` loses USAGE     |
+| `select, insert, update on tenant_domain`                    | Revision-checked read-modify-write, and `UPDATE` is what permits `FOR SHARE`     |
+| `select, insert on tenant_domain_audit`                      | Evidence row; `SELECT` is read by two `SECURITY INVOKER` guards as the caller    |
+| `select, insert on tenant_domain_operator_approval`          | Record an approval; guards re-check the approval being spent                     |
+| `update (policy_version) on tenant_domain_operator_approval` | **Authorized on review.** Required only to permit `FOR SHARE` on an approval row |
+| `insert on tenant_domain_verification_attempt`               | Every DNS observation is recorded; never read back, so no `SELECT`               |
+| `execute on tenant_domain_lock_organization(uuid)`           | The entire function surface, and why no Organization privilege is needed         |
+
+Nothing else. No `DELETE` anywhere, no `CREATE` anywhere, no privilege on
+`organization`, no sequence or identity privilege, and — settled below — no
+`EXECUTE` on any trigger function.
+
+### RESOLVED ON REVIEW — the approval row lock privilege
+
+> This section records the blocker as it was first reported. The security
+> review that followed **authorized** the narrow privilege; see
+> "Security-review continuation" below for the authorization and the
+> behavioural proof that it confers no mutation authority. No Migration 49
+> was created and no further `SECURITY DEFINER` function was added.
+
+`guard_tenant_domain_audit` takes `SELECT ... FOR SHARE` on the approval row an
+audit row spends, so one operator cannot create and spend an approval
+atomically. PostgreSQL requires `UPDATE` on at least one column of a row-locked
+table. This is the **same class of blocker** 2c-2 resolved for `organization`,
+in a second place that was not visible until a real non-owner role existed.
+
+Measured, attributed to a verb: with no `UPDATE` privilege on that table,
+`register`, `issue-challenge`, `verify` and both `approve` calls succeed and
+**`activate` fails** with SQLSTATE 42501; `revoke` would fail next. With a
+single column-scoped grant, all seven verbs succeed.
+
+`update (policy_version)` is the narrowest form that works, and it is inert
+behind two independent barriers:
+
+1. `guard_tenant_domain_approval` raises
+   `Tenant domain operator approvals are immutable` on every `UPDATE`, `DELETE`
+   and `TRUNCATE`, so no update reaches storage — measured for both
+   `policy_version = 1` and `policy_version = 2`.
+2. `check(policy_version = 1)` admits no other value even if that trigger were
+   absent.
+
+It confers **no** table-level `UPDATE`: `approved_by`, `expires_at`,
+`requested_by` and every other column remain non-updatable, and `DELETE` and
+`TRUNCATE` stay refused at the privilege layer. Approval rows were counted
+before and after every mutation attempt and were unchanged.
+
+**As first reported the grant was withheld**, because column-scoped `UPDATE`
+on that table was not in the authorized grant list, and the artifact carried
+it as a commented block with its evidence. The review then authorized exactly
+that privilege and declined the alternative — relocating the approval lock
+into a `SECURITY DEFINER` helper as Migration 48 did for `organization` —
+because it would require a new migration. The grant is now enabled in
+`deploy/database/operator-role.sql` and all seven verbs execute.
+
+### RESOLVED — the trigger EXECUTE question
+
+Settled against a real non-owner role: **firing a trigger does not check
+`EXECUTE` on the trigger function.** `EXECUTE` was revoked from `PUBLIC` on all
+seven control-plane trigger functions, the operator was confirmed to hold
+`EXECUTE` on none of them, and the full seven-verb lifecycle still completed.
+
+The trigger functions therefore appear nowhere in the grant artifact. Granting
+`EXECUTE` on them would have been surplus surface; omitting them breaks
+nothing. No grant was changed on an assumption at any point.
+
+### DISCHARGED — the conditional acceptance of the unqualified helper call
+
+All seven conditions the 2c-2 acceptance named are now proven against the real
+least-privilege role:
+
+- **No `CREATE` on `public`** — PostgreSQL 15 removed that `PUBLIC` default;
+  confirmed false for the role, and `create table public....` is refused.
+- **No `CREATE` on any other searchable schema** — the role has no `CREATE` on
+  the database, so it cannot create a schema at all. This is also what makes
+  the default `"$user", public` path safe rather than merely conventional: the
+  `$user` schema cannot be brought into existence by the role it would serve.
+  That was the sharpest residual risk 2c-2 recorded.
+- **Cannot create a competing same-signature helper** — refused in `public`;
+  possible only in `pg_temp`, which is never reached.
+- **Only the schema `USAGE` actually required** — one grant, proven load
+  bearing once `PUBLIC` loses USAGE.
+- **Schema posture cannot redirect the call** — the decisive test: `pg_temp`
+  listed _explicitly_ first in `search_path`, with a same-signature decoy
+  planted there and owned by the role. The unqualified name still resolved to
+  `public`, `prosecdef = true`, and returned `false` for an inactive
+  Organization while the qualified `pg_temp` decoy returned `true`. The
+  active-Organization control held behaviourally: registering against an
+  inactive Organization was refused, with zero registry rows written.
+- **`pg_temp` cannot shadow function lookup** — now behavioural evidence
+  against the real role, not a pinned reasoning assertion. Explicitly listing
+  `pg_temp` does not change it.
+- **All seven verbs still execute** — subject to the withheld approval-lock
+  grant above.
+
+The unqualified call is accepted on evidence. It must still not be qualified as
+`public.`; the test and runtime architecture supports isolated schemas.
+
+### Residual items, measured rather than asserted
+
+**`pg_temp` relation shadowing is session-local and fails closed.** `pg_temp`
+_is_ searched first for relations, so the application's own unqualified table
+names are shadowable inside the operator's own session. It grants no authority
+and corrupts nothing: with a `pg_temp` mirror of `tenant_domain` in place,
+`register` was refused by the schema-qualified guard with
+`Tenant domain audit requires its binding`, and the registry and audit tables
+received zero rows. The Migration 48 qualification is what makes this fail
+closed.
+
+**`TEMPORARY` is not needed and revoking it closes the vector.** With
+`TEMPORARY` revoked from `PUBLIC` the role can create neither a temporary table
+nor a `pg_temp` function, and all seven verbs still pass. Recorded in the
+artifact as recommended hardening rather than applied, because it is a
+database-wide change affecting every role. `revoke all on database ... from
+public` is explicitly not recommended — it would also remove `CONNECT`.
+
+**The role can deny itself, and only itself.** A role may always set its own
+GUC defaults, so `alter role ... set search_path = ...` on itself succeeds —
+the one self-service change it retains. It cannot redirect the helper and
+cannot point `search_path` at a writable schema, but it can exclude `public`
+and break its own tooling until a role with `ALTER ROLE` resets it. An
+availability concern, not an escalation. A connection pinning
+`-c search_path=public` is immune; `development-staff-cli.ts` and
+`mixed-access-uat-cli.ts` already did this and the operator CLI did not.
+**Resolved on review:** pinning the operator CLI connection was approved and
+is implemented through the deployment-owned `REQRO_DEPLOYMENT_SCHEMA`,
+recorded below. At the time of the first report no approved assumption had
+failed, so no application change was made then.
+
+**Self-escalation is a silent no-op, not a grant.** PostgreSQL answers a
+`GRANT` from a role without grant options with a warning rather than an error,
+so the statement appearing to succeed proves nothing. The catalog is what
+settles it: after the role issued `grant delete on tenant_domain` and
+`grant update on tenant_domain_operator_approval` to itself, it held neither.
+Also refused: `set session_replication_role` (which would have disabled every
+guard), `set role` to the schema owner, `alter role ... superuser`,
+`alter role ... createrole`, `create role`, reading `pg_authid`,
+`create extension`, `pg_read_file`, `copy ... from program`, and
+`set log_statement`.
+
+### Version alignment
+
+The 2c-2 mismatch is resolved by validating against the pinned version rather
+than by editing documentation: the role model is proven on **PostgreSQL 17.11**,
+which is what `server/compose.yml` pins. Supported-version documentation was
+deliberately not changed, and the local 18.x server was not used. The
+version-sensitive control this mattered for — `PUBLIC`'s default `CREATE` on
+`public`, removed in PostgreSQL 15 — was measured as absent on 17 rather than
+assumed.
+
+### What this slice does NOT establish
+
+No database role was created anywhere real, no grant was applied to any
+deployment, no provisioning or cloud change was made, and no migration was
+added. Runtime and migration role separation does not exist in the repository —
+`server/compose.yml` still defines a single superuser `cityvue` that owns its
+own database — and remains **F060.3C-2d**, an independent production
+blocker.
+
+The status this slice may claim is **production operator database boundary
+complete**. It is explicitly **not** "overall Reqro database least privilege
+complete" and **not** "production deployment authorized". **Production use
+remains unauthorized.**
+
+### Security-review continuation — the two approved decisions
+
+The review that followed the first 2c-3 report approved two things and
+required both to be proven behaviourally rather than argued.
+
+#### 1. The approval row-lock privilege, authorized narrowly
+
+`GRANT UPDATE (policy_version)` on the approval table is authorized and is now
+**enabled** in the artifact. No Migration 49 was created and no additional
+`SECURITY DEFINER` function was added. It remains the only table privilege
+beyond the previously approved set, and it exists solely because
+`guard_tenant_domain_audit` performs `SELECT ... FOR SHARE` against the
+approval row, for which PostgreSQL requires UPDATE on at least one column.
+
+It is proven not to be mutation authority. Under the constrained PostgreSQL 17
+role:
+
+- the role holds `UPDATE (policy_version)` and **no table-level `UPDATE`** on
+  `tenant_domain_operator_approval`;
+- every other column is enumerated from `pg_attribute` and asserted
+  non-updatable, and the sensitive ones — `requested_by`, `approved_by`,
+  `expires_at`, `approved_at`, `operation`, `expected_revision`,
+  `expected_hostname`, `expected_role`, `expected_verification_state`,
+  `expected_active`, `organization_id`, `tenant_domain_id`, `correlation_id`,
+  `creation_txid`, `reason`, `id` — are additionally named individually, so a
+  future column rename cannot quietly satisfy the complement;
+- `UPDATE ... SET policy_version = policy_version` is **refused**, as are
+  `= 1`, `= 2` and the `where true` form. The no-op case matters: a privilege
+  check alone would have allowed it through, and it is the immutability
+  trigger that refuses it;
+- `DELETE` and `TRUNCATE` are refused at the privilege layer;
+- the role cannot disable the protecting trigger (`disable trigger all`,
+  `disable trigger tenant_domain_approval_guard`), cannot drop it, and cannot
+  replace, `ALTER` or `DROP` `guard_tenant_domain_approval()`.
+
+No approval-row mutation committed. The evidence is a content digest —
+`md5(string_agg(...::text))` over the whole table — compared before and after
+every attempt and found byte-for-byte identical, rather than a row count.
+
+#### 2. Deterministic object resolution: the CLI pins the schema
+
+The repository had no deployment-owned schema abstraction; the two sibling
+CLIs hard-code `-c search_path=public`. `resolveDeploymentSchema` in
+`src/config/operator-environment.ts` introduces one, following that module's
+existing idiom (the shared `IDENTIFIER` pattern and closed `OperatorRefusal`
+codes, reusing `database_mismatch` rather than widening the closed union).
+
+`REQRO_DEPLOYMENT_SCHEMA` is infrastructure owned exactly like
+`REQRO_DEPLOYMENT_ENVIRONMENT`. It defaults to `public`, admits only a plain
+lower-case identifier, and refuses reserved namespaces (`pg_*`,
+`information_schema`). There is **no `--schema` flag and no operator-supplied
+override**: a schema override in operator hands would move object resolution
+back under operator control, which is the thing this closes. Tests supply
+their isolated schema through the same variable. The operator CLI resolves it
+before the pool is built and pins it with `options` at connection startup, so
+it applies before any tenant-domain operation runs.
+
+Unit evidence (three new tests, operator CLI suite 22 → 25): the default and
+blank cases; an isolated test schema; and refusal of `public extra`,
+`public,pg_temp`, `public;drop table tenant_domain`, `"Public"`,
+`public -c log_statement=all`, `PUBLIC`, `public.schema`, `1public`,
+`_public`, a too-short and a too-long name, and a connection URL — so the
+value cannot carry a second `-c` setting, a statement separator, or
+credential/host content. Plus: the CLI contains no `--schema`,
+`--search-path` or `--searchPath`, and `process.argv` is still read only as
+`process.argv.slice(2)`.
+
+Behavioural evidence, in the order the review asked for it: the role changes
+its own stored default (`rolconfig` asserted as `search_path=pg_temp`); a
+fresh connection carrying the pin reports an effective `search_path` **equal
+to the deployment-owned schema**; the unqualified
+`tenant_domain_lock_organization(uuid)` resolves to the **owner-created**
+`SECURITY DEFINER` helper, asserted on schema, `pg_get_userbyid(proowner)` and
+`prosecdef` together; and all seven verbs still work. The same connection
+**without** the pin fails with `does not exist`, which is what makes the pin
+load bearing rather than cosmetic.
+
+#### The seven-verb proof, under the full operator protocol
+
+Driven as the constrained role, with each step attributed to a verb:
+`register`, `issue-challenge`, `verify`, pre-approval dry run, independent
+`approve`, post-approval dry run, `activate` (confirm), `deactivate`,
+`approve`, `revoke`, plus `list`/`inspect`.
+
+- The **pre-approval dry run** is refused for want of an approval, and the
+  binding's revision and `active` flag are unchanged afterwards.
+- The **independent approver** is enforced twice over: the application refuses
+  a self-approval, and — because that alone would leave the guarantee resting
+  on the application layer — a self-approving row written as **raw SQL by the
+  constrained role** is refused by the check constraint.
+- The **post-approval dry run** returns `applied: false`, leaves the revision
+  untouched, and `tenant_domain_approval_consumed` reports `false`: the dry
+  run does not spend the approval. This is also the step that needs the row
+  lock.
+- After **confirm**, the approval is consumed **exactly once** — `consumed`
+  true with exactly one audit row carrying that `approval_id` — and replaying
+  it is refused.
+- **Inactive-Organization safe direction.** The guarantee is about direction:
+  `deactivate` succeeds against a suspended Organization, and `revoke`
+  succeeds when its approval already exists. Both `register` and **recording
+  any new approval** are refused with `not an active servable target`.
+
+  One correction to the first report's framing, found by this test rather than
+  reasoned about: recording a revocation approval takes the Organization lock
+  with the _active_ requirement, so a revocation that has no approval yet
+  **cannot** be completed while the Organization is suspended. Only the
+  already-approved revocation can. Recorded because it is a real operational
+  constraint, not a defect.
+
+#### The artifact is proven by being applied, not imitated
+
+`deploy/database/operator-role.sql` is copied into the container and applied
+by `psql` as the schema owner with `ON_ERROR_STOP`, after **every** operator
+privilege and PUBLIC's schema `USAGE` have been revoked and the role confirmed
+to reach nothing. The file then establishes the entire posture by itself, the
+resulting role runs the full protocol, and applying it a second time is a
+clean no-op, which is what a provisioning rerun does.
+
+The artifact carries its own fail-closed assertions, which refuse the
+transaction on a widened posture: table-level `UPDATE` on the approval table,
+any updatable approval column beyond `policy_version`, a **missing**
+`UPDATE (policy_version)` (so a deployment cannot silently ship a role that
+fails at `activate`), any `DELETE`/`TRUNCATE` on the four tables, any
+Organization privilege, any `CREATE` on the schema or database, and any direct
+`EXECUTE` grant beyond the lock helper.
+
+Those assertions are themselves proven to fire rather than assumed: granting
+table-level `UPDATE` on the approval table makes the artifact exit non-zero
+with `refusing: ... holds table-level UPDATE`. They also caught a genuine
+defect in this suite — see the validation record.
+
+One implementation note: psql does not interpolate `:'var'` inside
+dollar-quoted text, so the names reach the `DO` block through
+`set_config('reqro.operator_role', ...)` / `set_config('reqro.app_schema', ...)`
+rather than being substituted into it.
+
+#### Final privilege posture, asserted as a complement
+
+Over every relation in the schema, for `SELECT`, `INSERT`, `UPDATE`, `DELETE`
+and `TRUNCATE`, the operator's entire exposure is exactly:
+
+| Relation                             | Privileges             |
+| ------------------------------------ | ---------------------- |
+| `tenant_domain`                      | SELECT, INSERT, UPDATE |
+| `tenant_domain_audit`                | SELECT, INSERT         |
+| `tenant_domain_operator_approval`    | SELECT, INSERT         |
+| `tenant_domain_verification_attempt` | INSERT                 |
+
+Four tables, nothing else. Table-level `UPDATE` exists only on
+`tenant_domain`. Column-level `UPDATE` outside the registry is exactly
+`tenant_domain_operator_approval.policy_version`. `organization` carries zero
+privileges at table scope across `SELECT`, `INSERT`, `UPDATE`, `DELETE`,
+`TRUNCATE`, `REFERENCES` and `TRIGGER`, and zero at column scope.
+
+The direct function grant surface is exactly
+`tenant_domain_lock_organization(uuid)`. This is asserted on ACL entries that
+**name the role** (`aclexplode(proacl)` joined to the role's OID), not on
+`has_function_privilege`: every function PostgreSQL creates carries a default
+`EXECUTE` for `PUBLIC`, so effective privilege would also report the trigger
+functions and say nothing about what this role was granted. Ten functions are
+additionally named individually and asserted to carry no operator grant,
+`tenant_domain_approval_consumed` among them.
+
+Future objects: `pg_default_acl` is empty, and a table created afterwards by
+the owner is unreadable, uninsertable, unupdatable and undeletable by the
+operator — created, probed and dropped inside the subtest.
+
+#### Narrow production revokes
+
+Both were tested under the constrained role with all seven verbs still
+passing, and both are recorded in the artifact as recommended deployment
+hardening rather than applied by it, because each affects every role:
+
+- `revoke temporary on database <db> from public` — the role can then create
+  neither a temporary table nor a `pg_temp` function, so no competing
+  same-signature helper can exist anywhere.
+- `revoke create on schema <schema> from public`.
+
+With both in force the posture is `schema_create false`, `db_create false`,
+`db_temp false`, no `$user` schema, and the full protocol still runs.
+`revoke all on database ... from public` is explicitly not recommended and was
+not performed — it would also remove `CONNECT`.
+
+### Pre-checkpoint reconciliation
+
+#### "Pre-approval dry run refused" was my own imprecise wording, not a regression
+
+The F060.3C-2b dry-run contract is intact and was not touched by this slice.
+What the earlier report described was an **operations-layer** subtest that
+called `activateTenantDomain` with `dryRun: true` and a **randomly generated
+`approvalId`** — a dry run carrying a _bogus_ approval, which is correctly
+refused. That is a different state from a dry run with **no** approval, and
+the report should not have called it the pre-approval dry run.
+
+The distinction is structural, not incidental. `TenantDomainApprovedTransition`
+declares `approvalId` as a required field, so the operations layer **cannot
+express** "no approval": the pre-approval plan is a CLI-level state that never
+calls `activateTenantDomain` at all. In the CLI the identifier is optional when
+planning and mandatory when committing:
+
+```ts
+const approvalId = approvalRequired
+  ? dryRun
+    ? (process.env.REQRO_OPERATOR_APPROVAL_ID ?? "").trim()
+    : requiredValue("REQRO_OPERATOR_APPROVAL_ID", "approval_missing")
+  : "";
+```
+
+and the `pending_approval` branch validates the Organization, the binding, its
+current state, the expected revision and the attribution, writes nothing, and
+emits the advisory `independent approval is required and absent; this plan is
+not commit validated`.
+
+All three states are proven separately, and the tests predate this slice:
+
+| State                       | Reports                                                                                                     | Evidence                                                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `--dry-run`, no approval    | `approvalRequired: true`, `approvalPresent: false`, `mutation: not_executed`, `pending_approval` + advisory | operator CLI integration, per verb; writes nothing, asserted against a before-snapshot and an approval-row count |
+| `--dry-run`, exact approval | `mutation: not_executed`, `approvalPresent: true`, `validated`                                              | same suite; constraints run, rolled back, approval unconsumed                                                    |
+| `--confirm`, no approval    | refuses `approval_missing` before any database work                                                         | operator CLI units                                                                                               |
+| `--confirm`, exact approval | `committed`, consumed exactly once                                                                          | operator CLI integration                                                                                         |
+
+The seven-verb surface is unchanged and `--confirm` approval enforcement is
+unchanged. No narrow fix was needed for the dry run itself.
+
+#### A real defect the reconciliation did surface: the pin was overridable
+
+Chasing the above exposed something that did need fixing. The operator CLI
+integration suite carried its isolated schema to the command through the
+**connection string**, as `DATABASE_URL?options=-c search_path=<schema>`, and
+this slice added an explicit `options` key to the same pool. Measured on
+PostgreSQL 17: with both present **the connection string wins**, so the
+explicit key alone was not a reliable pin.
+
+`DATABASE_URL` is infrastructure owned, so this was never an operator-
+controlled vector — but a pin something else can override is not a pin. Two
+narrow changes, both inside the operator path:
+
+1. `withoutConnectionOptions` in `src/config/operator-environment.ts` removes
+   an `options` parameter from the URL before it reaches
+   `databaseConnectionOptions`. It removes one named parameter, not the query
+   string, and passes an unparseable value through so URL validation stays
+   where it already lives. This deliberately mirrors the precedence guard the
+   shared TLS module already applies to URL-supplied TLS and host parameters,
+   and is applied in the operator path rather than there because **shared
+   database configuration was out of scope** — the authorization required a
+   STOP rather than broadening into it.
+2. The integration suite now supplies its schema through
+   `REQRO_DEPLOYMENT_SCHEMA`, the deployment-owned variable, instead of the
+   connection string. One mechanism, still not operator controlled: there is
+   no `--schema` flag and `process.argv` is read only as
+   `process.argv.slice(2)`.
+
+Proven on PostgreSQL 17, in one subtest that asserts both halves: with the
+parameter present the connection string overrides the key (so the sanitizer is
+load bearing rather than defensive decoration), and with the sanitizer applied
+the effective `search_path` equals the deployment-owned schema and all seven
+verbs run. Four unit tests cover the stripping, parameter preservation,
+byte-for-byte passthrough when absent, and unparseable input, plus an
+assertion that the CLI composes both halves and still reads no other
+`DATABASE_*` input.
+
+No privilege was added. The grant set, the single function `EXECUTE`, and the
+zero-privilege Organization posture are unchanged.
+
+### Validation record — F060.3C-2c-3
+
+`tenant-domain-operator-role.integration.test.js`: **27/27, 26 subtests,
+nothing skipped** after the security-review continuation, and **20/20, 19
+subtests** at the first report. Both figures are real; the suite grew.
+
+Earlier invocations, preserved rather than summarized away:
+
+- One run at **17 pass / 2 fail** — subtest 8, "every grant in the set is load
+  bearing", failed with `Missing expected rejection`.
+- Exploratory probe runs before the suite existed, which is where the defect
+  originated.
+
+**The defect, and why it matters.** An exploratory probe reported all ten
+ablations as load bearing. That was **vacuous**: the grant set it ablated was
+itself already failing at `activate` for the approval-row-lock reason above, so
+every ablation "failed" for the wrong cause and the verdicts proved nothing.
+The same class of error as the `'suspended'` status defect in 2c-2, and
+recorded as worse than a failure for the same reason. The suite now collects a
+per-grant verdict map and asserts the whole map, so a redundant grant is
+**named** instead of surfacing as a bare missing rejection — which is how
+`usage on schema public` was correctly identified as redundant on a default
+PG17 database rather than being asserted as load bearing on the strength of an
+unrelated failure. It is kept, with a separate subtest proving it becomes load
+bearing once `USAGE` is revoked from `PUBLIC`.
+
+Continuation invocations, every one preserved:
+
+- **22 pass / 3 fail** — subtests 20 and 23 failed on my own defects, and
+  21/22/24 then failed downstream because subtest 20 aborted after setting
+  the Organization inactive and never restored it. The status mutation is now
+  wrapped in `finally`, so a failure cannot cascade and a real defect is
+  reported where it happens.
+- **0 pass / 1 fail** — the whole suite failed in `startControlledCluster`
+  with "Connection terminated unexpectedly". A genuine harness bug, not a
+  retryable flake: `pg_isready` succeeds against the entrypoint's temporary
+  initialization server, which is then restarted, so there is a window where
+  readiness passes while a published-port connection is still refused. The
+  harness now waits for a successful TCP round trip, which is the real
+  readiness condition.
+- **20 pass / 5 fail**, then **23 pass / 2 fail**, then **24 pass / 3 fail**
+  while the defects below were fixed one at a time.
+- **27/27** clean, and **27/27** again after formatting.
+
+Three further defects of mine, all found by the suite rather than reasoned
+about:
+
+1. The self-approval assertion expected a database check-constraint message,
+   but the application refuses it first. Fixed to assert the real message —
+   and, because matching the application layer alone would have weakened the
+   claim, a self-approving row is now also written as raw SQL by the
+   constrained role and proven to be refused by the constraint.
+2. The function-surface assertion used `has_function_privilege`, which
+   includes `PUBLIC`'s default `EXECUTE` and so reported the trigger
+   functions. It now asserts ACL entries that name the role.
+3. The safe-direction proof tried to deactivate a freshly registered binding
+   (already inactive) and then to record a revocation approval while the
+   Organization was suspended. Rewritten around the actual matrix, which is
+   what surfaced the operational constraint recorded above.
+
+And one defect the **artifact itself** caught, which is the clearest evidence
+that its fail-closed assertions earn their place: an earlier version of the
+narrow-revoke subtest "restored" `CREATE` on the schema to `PUBLIC` after
+revoking it. PostgreSQL 15 removed that default, so the restore left the
+cluster **wider than the measured baseline**. Applying the artifact failed
+with `refusing: reqro_operator holds CREATE on the schema or database`. The
+subtest now restores only `TEMPORARY`, which `PUBLIC` does hold by default.
+
+Supporting suites at the continuation: backend units **652/652** (up from 649
+with the three new schema tests), operator CLI units **25/25** (from 22),
+2c-1 boundary **13/13**, 2a attribution **9/9**, API E2E **68 pass, 1
+skipped, 0 fail**, root shared **64/64**. Lint, typecheck, build, test
+compilation and changed-file formatting all clean; `git diff --check` clean.
+
+Earlier in the slice the backend units were observed at **647/649** under the
+ambient environment and **648/649** once with a clean one, the single failure
+being `development-startup.test.ts`, which spawns a full Nest initialization
+under a 60-second timeout and is load sensitive. It passed on every
+subsequent run. No `src/` change in this slice touches it.
+
+**Database suites requiring `TEST_DATABASE_URL` were NOT EXECUTED.**
+`server/.env.test.local` was deleted at the F060.3C-2c-2 checkpoint and was
+not recreated. Reported as not executed, never as passed. The role suite
+needs none of it: it owns its own cluster.
+
+Disposable PostgreSQL 17 containers were created and removed throughout;
+`docker ps -a` afterwards showed none remaining. No shared, developer or
+client database was touched: this slice never used `TEST_DATABASE_URL`, never
+read a credential from the environment, and never accessed `reqro_dev`.
+
 ## Files changed
 
 | File                                                       | Change                                                          |
@@ -642,6 +1204,30 @@ was created.
 **No database role or grant was issued** in either slice, and ADR-027 was not
 amended. The only ACL change is Migration 48's
 `REVOKE EXECUTE … FROM PUBLIC` on the new helper.
+
+**F060.3C-2c-3** additionally changed:
+
+| File                                                                   | Change                                                                                    |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `server/test/helpers/operator-role-cluster.ts`                         | **new** — disposable PostgreSQL 17 cluster with three real identities, and `applySqlFile` |
+| `server/test/database/tenant-domain-operator-role.integration.test.ts` | **new** — the role proof: twenty-six subtests, Docker-gated                               |
+| `deploy/database/operator-role.sql`                                    | **new** — the reviewed grant artifact, with its own fail-closed assertions                |
+| `server/src/config/operator-environment.ts`                            | `resolveDeploymentSchema` — the deployment-owned application schema                       |
+| `server/src/database/tenant-domain-operator-cli.ts`                    | pins that schema on the connection at startup                                             |
+| `server/test/unit/tenant-domain-operator-cli.test.ts`                  | three tests for the schema resolver and the absence of any operator override              |
+| `docs/features/F060-3C-2C-operator-boundary.md`                        | this 2c-3 record                                                                          |
+| `docs/security/SECURITY_FRAMEWORK.md`                                  | operator role status                                                                      |
+
+**Still no database role or grant was issued anywhere real**, no migration was
+added, and ADR-027 was not amended. `deploy/database/operator-role.sql` is
+reviewed configuration, not a provisioning action. `server/compose.yml`, the
+runtime `DATABASE_URL` architecture and the migration role architecture are
+untouched.
+
+`REQRO_DEPLOYMENT_SCHEMA` is a new infrastructure-owned environment variable.
+It is documented here and in the grant artifact; `server/README.md` operator
+guidance was deliberately left alone, because changing it was prohibited for
+this slice, and adding it there is the recommended documentation follow-up.
 
 ## Validation record — F060.3C-2c-1
 

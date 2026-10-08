@@ -11,7 +11,9 @@ import {
   operatorFailure,
   operatorFailureCodes,
   OperatorRefusal,
+  resolveDeploymentSchema,
   resolveOperatorTarget,
+  withoutConnectionOptions,
 } from '../../src/config/operator-environment.js';
 
 /** ADR-027 F060.3C-2b. The production operator gates, proven without a
@@ -639,4 +641,148 @@ test('the help text names no credential and the command never echoes one', () =>
     assert.doesNotMatch(output, /db\.example\.test/);
     assert.doesNotMatch(output, /postgresql:\/\//);
   }
+});
+
+test('the deployment schema defaults to public and is infrastructure owned', () => {
+  // A deployment that says nothing runs in `public`, which is what every
+  // migration in this repository creates into.
+  for (const supplied of [
+    {},
+    { REQRO_DEPLOYMENT_SCHEMA: '' },
+    { REQRO_DEPLOYMENT_SCHEMA: '   ' },
+  ])
+    assert.deepEqual(resolveDeploymentSchema(supplied), {
+      schema: 'public',
+      connectionOptions: '-c search_path=public',
+    });
+  // A test may name its own isolated schema through the same variable.
+  assert.deepEqual(
+    resolveDeploymentSchema({
+      REQRO_DEPLOYMENT_SCHEMA: 'operator_role_fixture',
+    }),
+    {
+      schema: 'operator_role_fixture',
+      connectionOptions: '-c search_path=operator_role_fixture',
+    },
+  );
+});
+
+test('the deployment schema is a plain identifier and nothing else', () => {
+  // The value becomes part of a connection `options` string, so anything that
+  // could carry a second `-c` setting, a quoted name, a statement separator or
+  // credential/host content is refused rather than escaped.
+  for (const value of [
+    'public extra',
+    'public,pg_temp',
+    'public;drop table tenant_domain',
+    '"Public"',
+    'public -c log_statement=all',
+    'PUBLIC',
+    'public.schema',
+    '1public',
+    '_public',
+    'ab',
+    'a' + 'b'.repeat(63),
+    'postgresql://user:secret@localhost/db',
+  ])
+    assert.equal(
+      refusalCode(() =>
+        resolveDeploymentSchema({ REQRO_DEPLOYMENT_SCHEMA: value }),
+      ),
+      'database_mismatch',
+      `REQRO_DEPLOYMENT_SCHEMA must refuse ${value}`,
+    );
+  // Namespaces PostgreSQL reserves or resolves by its own rules cannot be the
+  // application schema.
+  for (const reserved of [
+    'pg_catalog',
+    'pg_temp',
+    'pg_toast',
+    'pg_anything',
+    'information_schema',
+  ])
+    assert.equal(
+      refusalCode(() =>
+        resolveDeploymentSchema({ REQRO_DEPLOYMENT_SCHEMA: reserved }),
+      ),
+      'database_mismatch',
+    );
+});
+
+test('the operator cannot supply or override the schema', () => {
+  // The pin is applied at connection startup from the validated environment.
+  assert.match(cliCode, /options: deploymentSchema\.connectionOptions/);
+  assert.match(cliCode, /resolveDeploymentSchema\(process\.env\)/);
+  // There is no schema flag and no operator-controlled override: argv is still
+  // read only for the verb, the approved operation and the mode.
+  for (const forbidden of ['--schema', '--search-path', '--searchPath'])
+    assert.ok(
+      !cliCode.includes(forbidden),
+      `the production operator command must not accept ${forbidden}`,
+    );
+  assert.deepEqual(
+    [
+      ...new Set(
+        [...cliCode.matchAll(/process\.argv[^\n]*/g)].map((m) => m[0]),
+      ),
+    ],
+    ['process.argv.slice(2);'],
+  );
+});
+
+test('a connection string cannot carry its own search_path into the operator pool', () => {
+  // Measured against PostgreSQL 17: `pg` lets a connection-string `options`
+  // parameter override the explicit `options` key, so the parameter is removed
+  // before the pool is built or the deployment-owned pin would not hold.
+  assert.equal(
+    withoutConnectionOptions(
+      'postgresql://u:p@localhost:5432/db?options=-c%20search_path%3Dpg_temp',
+    ),
+    'postgresql://u:p@localhost:5432/db',
+  );
+  // Other parameters survive untouched; this removes one named parameter, not
+  // the query string.
+  assert.equal(
+    withoutConnectionOptions(
+      'postgresql://u:p@localhost:5432/db?application_name=x&options=-c%20a%3Db&connect_timeout=5',
+    ),
+    'postgresql://u:p@localhost:5432/db?application_name=x&connect_timeout=5',
+  );
+  // A URL without the parameter is returned byte for byte, so the common case
+  // is not rewritten.
+  for (const url of [
+    'postgresql://u:p@localhost:5432/db',
+    'postgresql://u:p@localhost:5432/db?application_name=x',
+  ])
+    assert.equal(withoutConnectionOptions(url), url);
+  // An unparseable value is passed through: validating the URL belongs to the
+  // shared TLS module, which refuses it with its own message.
+  for (const invalid of ['', 'not a url', 'localhost/db'])
+    assert.equal(withoutConnectionOptions(invalid), invalid);
+});
+
+test('the operator command strips the connection-string override before pinning', () => {
+  // Both halves are required: the strip, and the pin that then holds.
+  assert.match(
+    cliCode,
+    /url: withoutConnectionOptions\(environment\.DATABASE_URL\)/,
+  );
+  assert.match(cliCode, /options: deploymentSchema\.connectionOptions/);
+  // Still no other DATABASE_* input, so the allowlist asserted above is intact.
+  assert.deepEqual(
+    [
+      ...new Set(
+        [...cliCode.matchAll(/environment\.DATABASE_[A-Z_]+/g)].map(
+          (m) => m[0],
+        ),
+      ),
+    ].sort(),
+    [
+      'environment.DATABASE_CONNECTION_TIMEOUT_MS',
+      'environment.DATABASE_SSL_CA_FILE',
+      'environment.DATABASE_SSL_MODE',
+      'environment.DATABASE_STATEMENT_TIMEOUT_MS',
+      'environment.DATABASE_URL',
+    ],
+  );
 });
