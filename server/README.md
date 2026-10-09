@@ -1,6 +1,6 @@
 # CityVUE API — Backend Workspace
 
-This workspace began with the Phase A platform foundation and now contains Reqro's implemented backend through **F058**: canonical catalog/requests, Entra/database authorization, operations, protected contact, Internal Notes, recorded Requester Communication, secure attachments, Organization administration, Administrative Access & Permissions (F057) and transaction-time request authorization coordination (F058.1). There are **40 migration files**; a live database's applied state must be verified with `npm run migration:status` rather than assumed. CityVUE remains the existing technical identifier. Read the [current architecture](../docs/ARCHITECTURE.md) and [development protocol](../docs/development/REQRO_CODEX_PROTOCOL.md) before changes; historical phase-specific sections below describe their original scope.
+This workspace began with the Phase A platform foundation and now contains Reqro's implemented backend through **F058**: canonical catalog/requests, Entra/database authorization, operations, protected contact, Internal Notes, recorded Requester Communication, secure attachments, Organization administration, Administrative Access & Permissions (F057) and transaction-time request authorization coordination (F058.1). There are **49 migration files**; a live database's applied state must be verified with `npm run migration:status` rather than assumed. CityVUE remains the existing technical identifier. Read the [current architecture](../docs/ARCHITECTURE.md) and [development protocol](../docs/development/REQRO_CODEX_PROTOCOL.md) before changes; historical phase-specific sections below describe their original scope.
 
 ## Prerequisites
 
@@ -76,6 +76,94 @@ API and migration connections use the same databaseConnectionOptions policy in s
 Without DATABASE_SSL_CA_FILE, verified TLS uses Node's default trusted CA set; OS trust depends on the Node runtime configuration. The actual production certificate chain has not been inspected. For an approved private CA, set DATABASE_SSL_CA_FILE to a readable PEM CA bundle mounted outside the repository and image. A relative path resolves from the process working directory; prefer an absolute path. An explicit bundle replaces Node's default CA list for that connection. Keep it server-side, never in VITE_* or Git. Unreadable, malformed, non-CA, or non-certificate material fails startup with a generic error. A CA file cannot be used with disable. Certificate and hostname verification remain enabled; never bypass verification globally.
 
 Before production activation, validate the real database hostname, certificate chain, mounted CA permissions, and rotation procedure for both API and migration jobs. Current automated checks verify effective pg options without production connections; they do not establish successful production handshakes. No TLS server fixture is included in the existing local PostgreSQL Compose workflow.
+
+## Database roles and connection variables
+
+ADR-027 F060.3C-2d separates what used to be one superuser into four
+identities. PostgreSQL 17 is the supported and reproducible version.
+
+| Role             | Login       | Holds                                                           |
+| ---------------- | ----------- | --------------------------------------------------------------- |
+| `reqro_owner`    | **NOLOGIN** | the database, the schema and every application object           |
+| `reqro_migrate`  | LOGIN       | member of the owner with `NOINHERIT`; applies migrations        |
+| `reqro_runtime`  | LOGIN       | owns nothing; the application's DML and function `EXECUTE` only |
+| `reqro_operator` | LOGIN       | the tenant-domain control plane, unchanged from F060.3C-2c-3    |
+
+All four are `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`.
+`NOINHERIT` on `reqro_migrate` is load bearing: it holds no authority at all
+until it explicitly assumes the owner, so a migration path that forgets to do
+so fails closed instead of creating objects owned by the login.
+
+**Two credentials, never interchangeable.** `DATABASE_URL` is the runtime
+credential; `MIGRATION_DATABASE_URL` is the migration credential. The
+migration command never falls back to `DATABASE_URL` under
+`NODE_ENV=production` — a development and test fallback exists and is reported
+on use rather than applied silently. The runtime never reads
+`MIGRATION_DATABASE_URL` at all, which is asserted structurally over the built
+runtime module graph rather than left to convention.
+
+**Migrations assume the owner role.** `npm run migration:up` connects with the
+migration credential, checks that the login is not itself the owner, issues
+`SET ROLE <REQRO_DATABASE_OWNER_ROLE>`, and then verifies that `current_user`
+is the owner while `session_user` is still the migration login — so objects
+belong to the owner regardless of which credential applied them, and the audit
+trail survives the assumption. All of that happens before the first migration
+runs, on a single-connection pool so no un-assumed connection can run DDL.
+Runtime code performs no `SET ROLE`; that too is asserted structurally.
+
+**`REQRO_DEPLOYMENT_SCHEMA`** is the deployment-owned application schema,
+pinned on the runtime, migration and operator connections at startup. It is
+infrastructure owned: there is no `--schema` flag and no operator-supplied
+override, reserved namespaces (`pg_*`, `information_schema`) are refused, and
+it defaults to `public`. An `options` parameter is stripped from every
+connection string first, because F060.3C-2c-3 measured that a
+connection-string `options` value **overrides** an explicit `options` key in a
+pool configuration.
+
+### Provisioning order
+
+1. create the database (infrastructure)
+2. `deploy/database/bootstrap-roles.sql`, as the bootstrap administrator —
+   creates the four roles and the ownership and `PUBLIC` posture, and sets **no
+   password**
+3. inject login secrets from secret management, never from source
+4. `MIGRATION_DATABASE_URL=... npm run migration:up`
+5. `deploy/database/runtime-role.sql`, as `reqro_owner`
+6. `deploy/database/operator-role.sql`, as `reqro_owner`
+7. start the application with `DATABASE_URL` pointing at `reqro_runtime`
+
+Steps 5 and 6 must follow step 4, because they grant privileges on objects the
+migrations create. Locally, `server/deploy/local/01-roles.sql` runs from the
+Compose entrypoint on first initialization and provisions the same topology
+with obvious development-only passwords; the historical `cityvue` superuser
+still exists for existing development CLIs and the disposable test database.
+
+### Rollback coupling — Migration 49 and the runtime grants
+
+Two of the runtime grants are safe only while Migration 49 is applied, so
+**rolling it back and withdrawing those grants are one operational change**.
+
+- `UPDATE (id) ON category` is inert because Migration 49's
+  `category_identity_immutable` trigger refuses a real identity change.
+  Rolling back drops that trigger and would leave the runtime able to repoint a
+  Category to another UUID.
+- `UPDATE (bootstrap_established)` on `organization_access_state` is
+  sufficient only because Migration 49 hardened `advance_access_revision` and
+  `invalidate_access_revision` to `SECURITY DEFINER`. Rolling back restores
+  `SECURITY INVOKER` functions, and every role, permission and assignment
+  write would then fail for want of `UPDATE` on `authorization_revision`,
+  `mutation_txid` and `updated_at`.
+
+Roll back both together, or neither.
+
+### Naming inconsistencies, recorded rather than renamed
+
+The Compose database and bootstrap superuser are still `cityvue`, the
+development database is `reqro_dev` with `reqro_dev_user`, and the disposable
+test database is `reqro_f0592_test` with `reqro_test_user`. These predate the
+`reqro_*` role naming introduced here. A repository-wide rename is deliberately
+out of scope; see
+[the role separation record](../docs/features/F060-3C-2D-database-role-separation.md).
 
 ## Database and migrations
 

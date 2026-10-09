@@ -6,6 +6,7 @@ import type { AppConfiguration } from '../config/configuration.js';
 import { PinoLoggerService } from '../common/logging/pino-logger.service.js';
 import { safeErrorContext } from '../common/logging/log-sanitization.js';
 import { databaseConnectionOptions } from '../config/database-tls.js';
+import { resolveRuntimeConnection } from '../config/runtime-connection.js';
 import type { DatabaseSchema, DatabaseStatus } from './database.types.js';
 
 @Injectable()
@@ -17,13 +18,24 @@ export class DatabaseService implements OnApplicationShutdown {
     config: ConfigService<AppConfiguration, true>,
     private readonly logger: PinoLoggerService,
   ) {
+    // ADR-027 F060.3C-2d. The runtime keeps DATABASE_URL; what changes is the
+    // identity behind it (reqro_runtime) and the connection hygiene around it.
+    // The deployment-owned schema is pinned at startup and any
+    // search_path-bearing `options` parameter is stripped from the URL first,
+    // because F060.3C-2c-3 measured that a connection-string `options` value
+    // overrides an explicit `options` key in the pool configuration.
+    const runtime = resolveRuntimeConnection(
+      config.get('database.url', { infer: true }),
+      process.env,
+    );
     const poolConfig: PoolConfig = {
       ...databaseConnectionOptions({
         environment: config.get('app.environment', { infer: true }),
-        url: config.get('database.url', { infer: true }),
+        url: runtime.url,
         sslMode: config.get('database.sslMode', { infer: true }),
         caFile: config.get('database.caFile', { infer: true }),
       }),
+      options: runtime.connectionOptions,
       max: config.get('database.poolMax', { infer: true }),
       connectionTimeoutMillis: config.get('database.connectionTimeoutMs', {
         infer: true,

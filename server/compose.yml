@@ -1,11 +1,27 @@
 services:
   postgres:
     image: postgres:17-alpine
+    # ADR-027 F060.3C-2d. The bootstrap superuser exists only to initialize the
+    # cluster and to run the provisioning scripts below; no application
+    # workflow uses it. The separated identities it creates are
+    # reqro_owner (NOLOGIN, owns everything), reqro_migrate (applies
+    # migrations by assuming the owner), reqro_runtime (the application) and
+    # reqro_operator (the tenant-domain control plane).
+    #
+    # Naming note, deliberately not cleaned up here: the database and the
+    # bootstrap role are still called `cityvue`, which is the historical
+    # technical identifier. A repository-wide rename is out of scope for this
+    # slice; see docs/features/F060-3C-2D-database-role-separation.md.
     environment:
       POSTGRES_DB: cityvue
       POSTGRES_USER: cityvue
       POSTGRES_PASSWORD: cityvue_dev_only
     ports:
+      # Published to LOCALHOST ONLY, deliberately. This container is
+      # provisioned with the placeholder passwords in deploy/local/01-roles.sql,
+      # so a broadly bound port (`5432:5432`) would expose known development
+      # credentials to anything that can reach the host on the network. Do not
+      # widen this binding.
       - '127.0.0.1:5432:5432'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U cityvue -d cityvue']
@@ -14,6 +30,9 @@ services:
       retries: 10
     volumes:
       - cityvue-postgres-data:/var/lib/postgresql/data
+      # Runs once, on first initialization of an empty data volume. Recreate
+      # the volume to re-provision:  docker compose down -v && docker compose up
+      - ./deploy/local/01-roles.sql:/docker-entrypoint-initdb.d/01-roles.sql:ro
 
 volumes:
   cityvue-postgres-data:
