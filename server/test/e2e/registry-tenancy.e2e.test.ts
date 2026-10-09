@@ -494,8 +494,8 @@ test(
         await get('/api/v1/alerts/active', 'unknown.example.gov')
           .set('X-Forwarded-Host', HOST_A)
           .expect(404);
-        await get('/api/v1/alerts/active', `${HOST_A},${HOST_B}`).expect(404);
-        await get('/api/v1/alerts/active', '*.example.gov').expect(404);
+        await get('/api/v1/alerts/active', `${HOST_A},${HOST_B}`).expect(400);
+        await get('/api/v1/alerts/active', '*.example.gov').expect(400);
       },
     );
 

@@ -2,6 +2,37 @@
 
 Status: **Accepted** — approved at architecture/security review on 2026-10-04.
 
+**Factual implementation-status amendment — 2026-10-09, F060.4A-1.** At
+checkpoint `1751922c77039d0c41380f5e861f22d666025008`, registry-backed HTTP
+serving is implemented: AppModule wires TenantResolutionMiddleware, resident
+controllers consume its frozen context, and bootstrap permits registry startup
+under the established configuration/readiness gates. F060.3A implements
+peer-gated forwarded-host handling; F060.3B and F060.3B-A propagate resident
+Organization authority; F060.3C enables guarded serving and the frontend's
+same-origin `/api/v1` default. The later production operator CLI and database
+boundaries also exist; operational execution/identity remains a separate
+workstream. Earlier paragraphs below describing those capabilities as absent
+or registry startup as unconditionally refused are historical slice evidence,
+not the current implementation status. Their original rationale is retained.
+
+F060.4A-1 adds rejection of duplicate wire authority using Node `rawHeaders`.
+Invalid/missing/multiple authoritative values fail before registry lookup and
+produce a generic 400 on resident tenant-dependent routes. Valid unknown,
+inactive, unverified or ambiguous bindings and untrusted forwarded peers retain
+generic 404; registry infrastructure failure retains generic 503. This factual
+HTTP-status amendment distinguishes invalid syntax without exposing registry
+membership. Non-tenant route authority is unchanged. Direct mode still ignores
+forwarded headers; forwarded mode still requires the immediate trusted peer,
+never falls back to Host, and ignores Forwarded. Express trust proxy remains off.
+
+This amendment does not authorize production deployment or change the accepted
+deployment-per-tenant, staff identity, tracking credential, domain-role, DNS,
+TLS, cache, origin or operator architecture. Edge configuration, certificates,
+same-origin deployment routing and real-domain UAT remain separate prerequisites.
+F060.4A-1 hardens HTTP authority selection; it does not implement edge, TLS,
+CDN or routing. Remaining production blockers belong to later F060.4A slices.
+See [F060.4A-1 evidence](../../features/F060-4A-1-http-authority-hardening.md).
+
 **Acceptance scope.** The architecture below is accepted as Reqro's decided direction for anonymous/public Organization resolution, and the Slice 0 configuration boundary is accepted as implemented. Acceptance of the decision is **not** implementation: the sections describing trusted-proxy policy, request TenantContext, staff/hostname consistency, same-origin API direction and remaining production domain onboarding remain **target architecture to be built under later reviewed slices**, each still subject to the repository's migration, security and deployment gates.
 
 **Implementation state.** Beyond the Slice 0 configuration boundary, the tenant-domain registry, hostname normalization, the repository and resolver foundation and the operator CLI are implemented by [F060.1](../../features/F060-1-tenant-domain-registry-foundation.md) (Migration 45), and DNS ownership-challenge issuance, authoritative DNS verification, the verification evidence and audit model and the operator verification, activation and revocation commands by [F060.2](../../features/F060-2-tenant-domain-ownership-verification.md) (Migration 46). All of it is deliberately **unwired from the HTTP request pipeline**: registry-backed production tenant resolution is still disabled at startup, and `TENANT_RESOLUTION_STRATEGY=registry` continues to fail closed rather than serving with no Organization authority. Request-scoped TenantContext, request hostname resolution, `TenancyModule` integration into `AppModule`, production registry enablement, forwarded-header and trusted-proxy handling, tenant-aware CORS and throttling, same-origin frontend API-base conversion, automated re-verification and deactivation, hostname reassignment or release, and a production platform-operator path all remain unbuilt. Nothing in this record authorizes shared multi-Organization hosting, cross-tenant administration, a production deployment or a domain purchase. Product and domain naming below is recorded as an approved product decision, not as evidence that any domain is registered, provisioned or certified.

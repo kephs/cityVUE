@@ -31,11 +31,10 @@ export type TenantContext =
  * middleware can record "we looked and found nothing" without fabricating a
  * context, and so callers must handle absence explicitly.
  *
- * `not_found` deliberately carries no reason. Unknown, malformed, missing,
- * inactive, unverified, ambiguous and untrusted-peer cases are one
- * indistinguishable outcome, so resolution cannot become a tenant-enumeration
- * oracle. `unavailable` is separate only because an infrastructure failure is
- * independent of whether a hostname belongs to a customer.
+ * Unknown, inactive, unverified, ambiguous and untrusted-peer cases share a
+ * generic not-found response. Invalid HTTP authority is distinct and rejected
+ * before lookup, so its 400 cannot reveal registration state. Infrastructure
+ * failure is separately unavailable. Diagnostic reasons stay server-side.
  */
 /**
  * Operator-only diagnostic cause, recorded in the server-side log and
@@ -52,6 +51,7 @@ export type TenantResolutionReason =
 
 export type TenantResolutionState =
   | { readonly status: 'resolved'; readonly context: TenantContext }
+  | { readonly status: 'invalid_authority'; readonly reason: 'malformed_host' }
   | {
       readonly status: 'not_found';
       readonly reason: TenantResolutionReason;
@@ -71,6 +71,10 @@ export function tenantNotFound(
 export const TENANT_UNAVAILABLE: TenantResolutionState = Object.freeze({
   status: 'unavailable',
   reason: 'registry_unavailable',
+});
+export const TENANT_INVALID_AUTHORITY: TenantResolutionState = Object.freeze({
+  status: 'invalid_authority',
+  reason: 'malformed_host',
 });
 
 /** Attached by `TenantResolutionMiddleware`. Follows the same inline-request

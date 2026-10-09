@@ -85,6 +85,24 @@ The browser must not hold privileged vendor credentials or access PostgreSQL dir
 
 ## Identity and authentication
 
+**Factual serving-status amendment — 2026-10-09 (F060.4A-1).** The ADR-025
+paragraph below retains its historical Slice 0 status. Registry resolution,
+hostname normalization, peer-gated proxy trust, frozen request tenant context,
+resident Organization propagation and guarded registry startup are now
+implemented. The frontend defaults its API base to `/api/v1`; that does not
+provision same-origin hosting. F060.4A-1 validates singular wire authority before
+lookup: invalid authority yields generic 400 on resident tenant-dependent
+routes, valid unresolvable hosts/untrusted peers retain 404, and registry
+exceptions retain 503. Staff identity and credential-based tracking remain
+independent of resident hostname. Express trust proxy stays disabled. Earlier
+claims below that no resolver exists or registry serving is unavailable must
+not be read as current. Production edge/TLS/cache/origin evidence and operational
+approvals remain outstanding. See the [ADR-025 dated amendment](../architecture/decisions/ADR-025-trusted-production-organization-resolution.md)
+and [F060.4A-1 validation record](../features/F060-4A-1-http-authority-hardening.md).
+Duplicate wire authority is now rejected. This slice hardens HTTP authority
+selection; it does not implement edge, TLS, CDN or routing. Remaining production
+blockers belong to later F060.4A slices.
+
 Use Microsoft Entra ID for authenticated City staff, following F008: separate SPA and API registrations, public-client authorization code with PKCE, and no SPA secret. Protected APIs must validate signed access tokens, trusted issuer, intended audience, tenant, lifetime, required claims, and delegated scope. An ID token or browser assertion is not API authorization.
 
 **Anonymous Organization resolution (ADR-025, Accepted).** Anonymous resident surfaces do not derive Organization from identity. They currently use one server-configured Organization, which is **not** a production multi-tenant boundary. `TENANT_RESOLUTION_STRATEGY` makes that explicit and fail-closed: the `development` strategy requires an explicit `DEVELOPMENT_ORGANIZATION_ID`, no longer falls back to a repository fixture UUID, and is rejected in production and in any client profile; the `registry` strategy is accepted configuration state but has no resolver, so the API refuses to serve under it. The intended production design resolves a normalized hostname against a verified tenant-domain registry, treating the hostname as a lookup key rather than an authentication credential, with default-deny forwarded-host trust and fail-closed behavior for unknown, inactive, unverified or ambiguous hosts. **Planned/future:** the registry, hostname normalizer, trusted-proxy policy, request tenant context, staff/hostname consistency and tenant-aware cache keys and CORS origins are not implemented. Browser query parameters, bodies, custom Organization headers and browser storage are never Organization authority.

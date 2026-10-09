@@ -16,12 +16,19 @@ function select(
   policy: ReturnType<typeof createTenantHostPolicy>,
   headers: Record<string, string | string[] | undefined>,
   peer?: string | null,
+  rawHeaders = Object.entries(headers).flatMap(([name, value]) =>
+    value === undefined
+      ? []
+      : (Array.isArray(value) ? value : [value]).flatMap((item) => [
+          name,
+          item,
+        ]),
+  ),
 ) {
-  return selectTrustedHost(policy, headers, peer);
+  return selectTrustedHost(policy, headers, peer, rawHeaders);
 }
 
-/** A rejection carries an operator-only cause; the request path collapses
- * every cause into one indistinguishable outcome. */
+/** Causes remain private; invalid authority is 400, untrusted peers are 404. */
 const malformed = { ok: false, cause: 'malformed_host' } as const;
 const untrustedPeer = { ok: false, cause: 'untrusted_forwarded_peer' } as const;
 
@@ -71,10 +78,73 @@ test('comma-joined and repeated Host values fail closed', () => {
     select(direct, { host: 'a.example.gov,b.example.gov' }),
     malformed,
   );
-  // Node surfaces a repeated header as an array; it is ambiguous either way.
+  // Arrays are invalid too, but are not how Node exposes duplicate Host fields.
   assert.deepEqual(
     select(direct, { host: ['a.example.gov', 'b.example.gov'] }),
     malformed,
+  );
+});
+
+test('wire authority is singular even when Node has discarded duplicates', () => {
+  for (const [policy, name, peer] of [
+    [direct, 'Host', undefined],
+    [forwarded('127.0.0.1'), 'X-Forwarded-Host', '127.0.0.1'],
+  ] as const) {
+    const headers = { [name.toLowerCase()]: 'requests.example.gov' };
+    assert.deepEqual(
+      select(policy, headers, peer, [
+        name,
+        'requests.example.gov',
+        name.toLowerCase(),
+        'other.example.gov',
+      ]),
+      malformed,
+    );
+    assert.deepEqual(
+      select(policy, headers, peer, [
+        name,
+        'requests.example.gov',
+        name.toUpperCase(),
+        'requests.example.gov',
+      ]),
+      malformed,
+    );
+    assert.deepEqual(select(policy, headers, peer, []), malformed);
+    assert.deepEqual(select(policy, headers, peer, [name]), malformed);
+    assert.deepEqual(
+      select(policy, headers, peer, [name, 'other.example.gov']),
+      malformed,
+    );
+    assert.deepEqual(
+      select(policy, { [name.toLowerCase()]: ['requests.example.gov'] }, peer, [
+        name,
+        'requests.example.gov',
+      ]),
+      malformed,
+    );
+  }
+});
+
+test('duplicates in ignored headers never become authority', () => {
+  assert.deepEqual(
+    select(direct, {
+      host: 'requests.example.gov',
+      'x-forwarded-host': ['a.example.gov', 'b.example.gov'],
+      forwarded: 'host=evil.example.gov',
+    }),
+    { ok: true, hostname: 'requests.example.gov' },
+  );
+  assert.deepEqual(
+    select(
+      forwarded('127.0.0.1'),
+      {
+        host: ['a.example.gov', 'b.example.gov'],
+        'x-forwarded-host': 'requests.example.gov',
+        forwarded: 'host=evil.example.gov',
+      },
+      '127.0.0.1',
+    ),
+    { ok: true, hostname: 'requests.example.gov' },
   );
 });
 

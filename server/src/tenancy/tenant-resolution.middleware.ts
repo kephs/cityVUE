@@ -9,6 +9,7 @@ import {
   resolvedTenant,
   tenantNotFound,
   TENANT_UNAVAILABLE,
+  TENANT_INVALID_AUTHORITY,
   type RequestWithTenant,
   type TenantResolutionState,
 } from './tenant-context.js';
@@ -21,15 +22,15 @@ import {
 /** ADR-025 Slice 1b-A request tenancy.
  *
  * Attaches a `TenantResolutionState` to every request and **never terminates
- * one**. Anonymous routes will require the context in a later slice; staff
+ * one**. Resident routes require it through ResidentTenant; staff
  * and admin routes must keep deriving Organization from verified Entra
  * identity and ignore this entirely. Refusing here would impose resident
  * tenancy on staff routes, which is precisely the boundary ADR-025 forbids
  * crossing.
  *
- * No service or controller consumes the attached state in this slice, and
- * `bootstrap.ts` still refuses to serve under the registry strategy, so this
- * creates no production-serving path.
+ * Registry serving is wired and guarded by bootstrap readiness checks.
+ * Malformed authority becomes 400 only on tenant-dependent resident routes;
+ * it does not change the authority or availability of unrelated routes.
  *
  * The injection graph stays singleton: state travels on the request object
  * and will be passed explicitly to services, rather than making the
@@ -101,8 +102,12 @@ export class TenantResolutionMiddleware implements NestMiddleware {
       this.policy,
       request.headers,
       request.socket.remoteAddress,
+      request.rawHeaders,
     );
-    if (!selected.ok) return tenantNotFound(selected.cause);
+    if (!selected.ok)
+      return selected.cause === 'malformed_host'
+        ? TENANT_INVALID_AUTHORITY
+        : tenantNotFound(selected.cause);
 
     const binding = await this.resolver.resolve(selected.hostname);
     if (!binding) return tenantNotFound('unknown_host');

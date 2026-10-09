@@ -5,11 +5,12 @@ import { normalizeHostname } from './tenant-hostname.js';
 
 /** ADR-025 anonymous Organization resolution.
  *
- * Slice 1a builds the resolver but does not wire it to incoming HTTP
- * requests; `bootstrap.ts` still refuses to serve under the `registry`
- * strategy, so this changes no production runtime behavior.
+ * TenantResolutionMiddleware calls this resolver for incoming registry-mode
+ * requests after validating their HTTP authority. Bootstrap permits registry
+ * serving only when the configured tenancy prerequisites are satisfied.
  *
- * Every failure returns `null`. There is no reason code, no partial context
+ * Every lookup miss returns `null`; database exceptions propagate to the
+ * middleware's unavailable outcome. There is no partial context
  * and no fallback: an unknown, malformed, inactive, unverified, ambiguous or
  * suspended binding is indistinguishable from any other, so resolution cannot
  * be used to enumerate tenants. Absent tenant context is an error for the

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { NextFunction, Request, Response } from 'express';
 import { TenantResolutionMiddleware } from '../../src/tenancy/tenant-resolution.middleware.js';
@@ -64,10 +68,19 @@ async function run(
   options: Options,
   headers: Record<string, string | string[] | undefined> = {},
   peer = '10.0.0.1',
+  rawHeaders = Object.entries(headers).flatMap(([name, value]) =>
+    value === undefined
+      ? []
+      : (Array.isArray(value) ? value : [value]).flatMap((item) => [
+          name,
+          item,
+        ]),
+  ),
 ): Promise<{ state: TenantResolutionState | undefined; nextCalls: number }> {
   const request = {
     id: CORRELATION,
     headers,
+    rawHeaders,
     socket: { remoteAddress: peer },
   } as unknown as Request & RequestWithTenant;
   let nextCalls = 0;
@@ -171,7 +184,7 @@ test('a malformed or missing host never reaches the resolver', async () => {
       },
       headers,
     );
-    assert.equal(state?.status, 'not_found', JSON.stringify(headers));
+    assert.equal(state?.status, 'invalid_authority', JSON.stringify(headers));
     assert.equal(lookups, 0);
   }
 });
@@ -188,6 +201,34 @@ test('a resolver or database failure is unavailable, never a tenant', async () =
   assert.equal(state?.status, 'unavailable');
   // The request continues; the middleware never terminates it.
   assert.equal(nextCalls, 1);
+});
+
+test('duplicate wire authority is rejected before lookup without terminating unrelated routes', async () => {
+  for (const hostSource of ['direct', 'forwarded'] as const) {
+    let lookups = 0;
+    const name = hostSource === 'direct' ? 'host' : 'x-forwarded-host';
+    const { state, nextCalls } = await run(
+      {
+        strategy: 'registry',
+        hostSource,
+        trustedProxyCidrs: '10.0.0.1',
+        resolve: () => {
+          lookups += 1;
+          return Promise.resolve(binding);
+        },
+      },
+      { [name]: binding.hostname },
+      '10.0.0.1',
+      [name, binding.hostname, name.toUpperCase(), 'other.example.gov'],
+    );
+    assert.equal(state?.status, 'invalid_authority');
+    assert.equal(lookups, 0);
+    assert.equal(nextCalls, 1);
+    assert.throws(
+      () => residentTenantFromRequest({ tenantResolution: state }),
+      BadRequestException,
+    );
+  }
 });
 
 test('the registry strategy never falls back to the development Organization', async () => {
@@ -313,6 +354,7 @@ test('the resident accessor converts state into context or a generic error', () 
 
 test('accessor errors expose no internal tenant detail', () => {
   for (const state of [
+    { status: 'invalid_authority', reason: 'malformed_host' } as const,
     { status: 'not_found', reason: 'unknown_host' } as const,
     { status: 'unavailable', reason: 'registry_unavailable' } as const,
   ]) {

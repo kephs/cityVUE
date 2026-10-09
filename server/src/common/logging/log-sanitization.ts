@@ -191,11 +191,15 @@ const enums: Record<string, Set<string>> = {
     'development_outside',
     'development_no_match',
   ]),
-  // ADR-025 request tenancy. Outcome carries no reason beyond these three, so
-  // a log cannot distinguish unknown from inactive, unverified or untrusted.
-  tenantResolution: new Set(['resolved', 'not_found', 'unavailable']),
+  // Closed request-tenancy outcomes; raw authority values are never logged.
+  tenantResolution: new Set([
+    'resolved',
+    'invalid_authority',
+    'not_found',
+    'unavailable',
+  ]),
   // Operator-only diagnostic cause. Closed allowlist, server-side log
-  // only; the HTTP response for every non-resolved case stays generic.
+  // only; HTTP responses remain generic within their 400/404/503 categories.
   tenantReason: new Set([
     'resolved',
     'unknown_host',

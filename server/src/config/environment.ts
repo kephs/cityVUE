@@ -8,9 +8,9 @@ import {
 export type NodeEnvironment = 'development' | 'test' | 'production';
 export type DatabaseSslMode = 'disable' | 'require' | 'verify-full';
 /** ADR-025. `development` serves one configured Organization to anonymous
- * callers and is never a production tenant boundary. `registry` is the future
- * verified hostname resolver; no resolver exists yet, so the API refuses to
- * serve under it (see assertServableTenantStrategy in bootstrap.ts). */
+ * callers and is never a production tenant boundary. `registry` uses the
+ * implemented verified-hostname request resolver, subject to the readiness
+ * gate in assertServableTenantStrategy and the environment checks below. */
 export type TenantResolutionStrategy = 'development' | 'registry';
 
 export interface EnvironmentVariables {

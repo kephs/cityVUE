@@ -121,12 +121,27 @@ export function createTenantHostPolicy(
   };
 }
 
-/** A repeated header arrives as an array; a comma-joined one arrives as a
- * string the normalizer rejects. Both are ambiguous and both fail closed. */
-function singleHeaderValue(
-  value: string | string[] | undefined,
+/** Node can discard duplicate Host fields in `headers`. Count the original
+ * fields before trusting that projection; never recover missing wire evidence
+ * from the collapsed map. Ignored headers do not participate in selection. */
+function singleAuthorityValue(
+  headers: Partial<Record<string, string | string[] | undefined>>,
+  rawHeaders: readonly string[],
+  name: string,
 ): string | null {
-  return typeof value === 'string' ? value : null;
+  if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) return null;
+  let raw: string | undefined;
+  for (let index = 0; index < rawHeaders.length; index += 2) {
+    const field: unknown = rawHeaders[index];
+    const value: unknown = rawHeaders[index + 1];
+    if (typeof field !== 'string' || typeof value !== 'string') return null;
+    if (field.toLowerCase() !== name) continue;
+    if (raw !== undefined) return null;
+    raw = value;
+  }
+  // Also refuse arrays and inconsistent projections, including middleware
+  // rewrites of the authoritative value after Node parsed the wire headers.
+  return typeof raw === 'string' && headers[name] === raw ? raw : null;
 }
 
 /**
@@ -142,13 +157,14 @@ export function selectTrustedHost(
   policy: TenantHostPolicy,
   headers: Partial<Record<string, string | string[] | undefined>>,
   remoteAddress: string | null | undefined,
+  rawHeaders: readonly string[],
 ): HostSelection {
   let raw: string | null;
   if (policy.source === 'direct') {
-    raw = singleHeaderValue(headers.host);
+    raw = singleAuthorityValue(headers, rawHeaders, 'host');
   } else {
     if (!policy.isTrustedPeer(remoteAddress)) return UNTRUSTED_PEER;
-    raw = singleHeaderValue(headers[FORWARDED_HOST_HEADER]);
+    raw = singleAuthorityValue(headers, rawHeaders, FORWARDED_HOST_HEADER);
   }
   if (raw === null) return MALFORMED;
   const normalized = normalizeHostname(raw);

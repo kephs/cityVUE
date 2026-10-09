@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   NotFoundException,
   ServiceUnavailableException,
   createParamDecorator,
@@ -15,17 +16,18 @@ import type { RequestWithTenant, TenantContext } from './tenant-context.js';
  * two authorities are deliberately different primitives so they cannot be
  * confused at a call site.
  *
- * No controller consumes it in Slice 1b-A.
+ * Resident controllers consume this context; staff/admin controllers do not.
  */
 export function residentTenantFromRequest(
   request: RequestWithTenant,
 ): TenantContext {
   const state = request.tenantResolution;
   if (state?.status === 'resolved') return state.context;
+  if (state?.status === 'invalid_authority') throw new BadRequestException();
   // Infrastructure failure is reported separately because it is independent
   // of whether a hostname belongs to a customer.
   if (state?.status === 'unavailable') throw new ServiceUnavailableException();
-  // Everything else — unknown, malformed, missing, inactive, unverified,
+  // Everything else — unknown, inactive, unverified,
   // ambiguous, untrusted peer, or middleware never having run — is one
   // indistinguishable 404 carrying no internal detail.
   throw new NotFoundException();
