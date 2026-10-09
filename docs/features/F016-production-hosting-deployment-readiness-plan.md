@@ -4,23 +4,30 @@
 
 **Scope:** Target architecture, prerequisites, and sequencing only
 
+**2026-10-09 refinement:** [ADR-030](../architecture/decisions/ADR-030-production-serving-contract.md)
+records the conditionally approved Front Door Premium + private static/API origin
+reference, with a static-serving container replacing this plan's earlier Static
+Web Apps preference. Only [F060.4A-2A repository configuration](F060-4A-2A-production-serving-configuration.md)
+is authorized for implementation; all infrastructure and deployment prerequisites
+below remain separately gated. The original proposal is retained for history.
+
 No infrastructure has been approved or provisioned through this record, and no application, database, Firebase, Azure, DNS, identity, integration, or CI/CD deployment has been performed. Resource names, subscriptions, environments, domains, certificates, identifiers, credentials, service tiers, network topology, availability objectives, and operational owners remain subject to City review.
 
 ## Preferred first-municipality target
 
 The recommended initial production architecture uses managed Azure services:
 
-| Responsibility | Preferred target |
-| --- | --- |
-| React frontend | Azure Static Web Apps |
-| NestJS API and future workers | Azure Container Apps |
-| Container images | Azure Container Registry |
-| Canonical database | Azure Database for PostgreSQL Flexible Server |
-| Server secrets | Azure Key Vault, accessed through approved managed identity where practical |
-| Staff identity | Microsoft Entra ID |
-| Future attachments | Private Azure Blob Storage with relational metadata |
-| Monitoring | Application Insights and Azure Monitor using structured, correlated telemetry |
-| DNS and TLS | City-approved domain, DNS, and certificate process |
+| Responsibility                | Preferred target                                                              |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| React frontend                | Azure Static Web Apps                                                         |
+| NestJS API and future workers | Azure Container Apps                                                          |
+| Container images              | Azure Container Registry                                                      |
+| Canonical database            | Azure Database for PostgreSQL Flexible Server                                 |
+| Server secrets                | Azure Key Vault, accessed through approved managed identity where practical   |
+| Staff identity                | Microsoft Entra ID                                                            |
+| Future attachments            | Private Azure Blob Storage with relational metadata                           |
+| Monitoring                    | Application Insights and Azure Monitor using structured, correlated telemetry |
+| DNS and TLS                   | City-approved domain, DNS, and certificate process                            |
 
 This is a preferred target, not evidence of City approval, procurement, provisioning, security acceptance, or production readiness. The existing public production MVP remains React/Vite on Firebase Hosting with browser-local legacy persistence. The NestJS/PostgreSQL platform remains local-development-only.
 

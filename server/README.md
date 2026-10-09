@@ -30,6 +30,14 @@ Backend development uses the existing TypeScript compiler in watch mode with `ts
 
 ## Platform endpoints
 
+Production HTTP startup additionally enforces the
+[F060.4A-2A serving configuration contract](../docs/features/F060-4A-2A-production-serving-configuration.md):
+client/registry/forwarded mode, explicit final-hop peers, a canonical
+`REQRO_PUBLIC_HOSTNAMES` inventory and exact HTTPS CORS origins within it.
+The HTTP-only validator leaves operator/migration validation unchanged. This
+does not configure an edge or establish production readiness. See
+[ADR-030](../docs/architecture/decisions/ADR-030-production-serving-contract.md).
+
 - Readiness: `GET http://localhost:3000/api/v1/health`
 - Liveness: `GET http://localhost:3000/api/v1/health/live`
 - Explicit readiness: `GET http://localhost:3000/api/v1/health/ready`

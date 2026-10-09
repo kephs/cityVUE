@@ -5,7 +5,7 @@ import { AppModule } from './app.module.js';
 import { configureApplication } from './bootstrap.js';
 import type { AppConfiguration } from './config/configuration.js';
 import { PinoLoggerService } from './common/logging/pino-logger.service.js';
-import { commandFailure } from './common/logging/log-sanitization.js';
+import { servingStartupFailure } from './config/serving-environment.js';
 
 async function bootstrap(): Promise<void> {
   // Configuration can fail before the DI logger exists. Route that failure
@@ -24,6 +24,6 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap().catch((error: unknown) => {
-  process.stderr.write(commandFailure('API startup failed', error));
+  process.stderr.write(servingStartupFailure(error));
   process.exitCode = 1;
 });
