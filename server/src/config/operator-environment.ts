@@ -52,7 +52,20 @@ export type OperatorFailureCode =
   | 'revision_stale'
   | 'verification_unavailable'
   | 'database_unavailable'
-  | 'operation_invalid';
+  | 'operation_invalid'
+  // ADR-028 F060.3C-2e-1 trusted production execution. Each names a distinct
+  // reason a serving invocation is not covered by trusted infrastructure
+  // context, so a job log alert can distinguish an incomplete deployment
+  // configuration from a stale elevation, an unexpected runner,
+  // unprovenanced code, an insufficient grant, an attempted actor override
+  // and an unavailable audit sink.
+  | 'execution_context_missing'
+  | 'elevation_invalid'
+  | 'runner_untrusted'
+  | 'provenance_invalid'
+  | 'permission_denied'
+  | 'identity_override_rejected'
+  | 'audit_unavailable';
 
 export const operatorFailureCodes: readonly OperatorFailureCode[] = [
   'environment_mismatch',
@@ -66,6 +79,13 @@ export const operatorFailureCodes: readonly OperatorFailureCode[] = [
   'verification_unavailable',
   'database_unavailable',
   'operation_invalid',
+  'execution_context_missing',
+  'elevation_invalid',
+  'runner_untrusted',
+  'provenance_invalid',
+  'permission_denied',
+  'identity_override_rejected',
+  'audit_unavailable',
 ];
 
 /** Carries a closed code alongside a message that is never emitted as-is. */

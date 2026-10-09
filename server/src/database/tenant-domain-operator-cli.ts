@@ -16,6 +16,19 @@ import {
   type OperatorTarget,
 } from '../config/operator-environment.js';
 import {
+  assertExecutionPermitted,
+  assertPermitted,
+  resolveTrustedExecution,
+  type TrustedExecutionContext,
+} from '../config/operator-execution.js';
+import {
+  beginAuditedInvocation,
+  completeAuditedInvocation,
+  resolveAuditSink,
+  startRecord,
+  type OperatorAuditSink,
+} from '../config/operator-audit.js';
+import {
   activateTenantDomain,
   deactivateTenantDomain,
   inspectTenantDomain,
@@ -52,12 +65,22 @@ import type { DatabaseSchema } from './database.types.js';
  * credentials.
  *
  * Infrastructure IAM is the authentication trust root. This command records
- * *attribution*, never authentication: `REQRO_OPERATOR_IDENTITY` must be
- * injected by trusted infrastructure from the current per-human IAM
- * principal and must not be an operator-editable field in a production job
- * definition. The command validates its shape and refuses a development
- * scheme in a serving environment; it does not and cannot verify who
- * supplied it.
+ * *attribution*, never authentication: it does not and cannot verify who
+ * supplied the claims it is given.
+ *
+ * **ADR-028 F060.3C-2e-1 changed where the actor comes from.** In a serving
+ * environment the operator identity is no longer read from
+ * `REQRO_OPERATOR_IDENTITY`; it is normalized from the trusted IAM claims the
+ * runner injects, and supplying `REQRO_OPERATOR_IDENTITY` is refused outright
+ * with `identity_override_rejected`. Humans choose the action — which binding,
+ * which verb, which mode, which revision — and never the actor. A serving
+ * invocation additionally requires a live just-in-time elevation, a declared
+ * trusted runner, an IAM grant covering the chosen verb, immutable code
+ * provenance, and an established invocation audit record; any of these
+ * missing refuses the invocation before a database pool is built. The gated
+ * `test` target has none of that infrastructure and keeps the F060.3C-2b
+ * attribution path unchanged, which is why it may never name a non-test
+ * database.
  *
  * The separate development command keeps its own local-database pin and is
  * untouched. No verb here reaches resident, service-request, attachment,
@@ -93,7 +116,14 @@ const USAGE =
   'Targeting requires REQRO_OPERATOR_ENVIRONMENT (test|staging|production) to equal the infrastructure-owned ' +
   'REQRO_DEPLOYMENT_ENVIRONMENT, plus REQRO_OPERATOR_DATABASE and REQRO_OPERATOR_DATABASE_USER, which are ' +
   'verified against the live connection before any mutation. ' +
-  'Attribution requires REQRO_OPERATOR_IDENTITY (iam: or oidc: in a serving environment), REQRO_OPERATOR_REASON, ' +
+  'A serving environment additionally requires complete infrastructure-injected trusted execution context: ' +
+  'REQRO_OPERATOR_IAM_TENANT_ID, REQRO_OPERATOR_IAM_SUBJECT (the immutable hyphenated-GUID subject, not a UPN), ' +
+  'REQRO_OPERATOR_IAM_PERMISSIONS, REQRO_OPERATOR_ELEVATION_REQUEST_ID, REQRO_OPERATOR_ELEVATION_GRANTED_AT, ' +
+  'REQRO_OPERATOR_ELEVATION_EXPIRES_AT, REQRO_OPERATOR_RUNNER_IDENTITY, REQRO_OPERATOR_RUNNER_PLATFORM, ' +
+  'REQRO_OPERATOR_JOB_RUN_ID, REQRO_OPERATOR_COMMIT_SHA, REQRO_OPERATOR_IMAGE_DIGEST, plus ' +
+  'REQRO_OPERATOR_TRUSTED_RUNNER and REQRO_OPERATOR_AUDIT_SINK. The operator identity is derived from those ' +
+  'claims and REQRO_OPERATOR_IDENTITY is refused in a serving environment. ' +
+  'Attribution requires REQRO_OPERATOR_IDENTITY outside a serving environment, plus REQRO_OPERATOR_REASON, ' +
   'REQRO_OPERATOR_CORRELATION_ID, REQRO_OPERATOR_ORGANIZATION_ID and REQRO_OPERATOR_HOSTNAME, with ' +
   'REQRO_OPERATOR_EXPECTED_REVISION for every change, REQRO_OPERATOR_APPROVAL_ID for activate and revoke ' +
   '(optional in a dry run, mandatory to confirm), ' +
@@ -192,14 +222,25 @@ function requiredRevision(): number {
   return value;
 }
 
-/** Reads the version-2 attribution fields Migration 47 requires. Each is an
+/**
+ * Reads the version-2 attribution fields Migration 47 requires. Each is an
  * individually named and individually validated input; there is no JSON or
- * free-form payload that could carry an unvalidated key through. */
-function readAttribution(target: OperatorTarget): OperatorAttribution {
-  const operatorIdentity = requiredValue(
-    'REQRO_OPERATOR_IDENTITY',
-    'attribution_invalid',
-  );
+ * free-form payload that could carry an unvalidated key through.
+ *
+ * **The actor is not one of them in a serving environment.** When a trusted
+ * execution context exists, `operatorIdentity` comes from the normalized IAM
+ * claims and `REQRO_OPERATOR_IDENTITY` is not consulted at all — it has
+ * already been refused outright by `resolveTrustedExecution` if it was set.
+ * The human still chooses the reason and the correlation identifier, which
+ * describe *why* and *which change*, never *who*.
+ */
+function readAttribution(
+  target: OperatorTarget,
+  execution: TrustedExecutionContext | null,
+): OperatorAttribution {
+  const operatorIdentity =
+    execution?.identity ??
+    requiredValue('REQRO_OPERATOR_IDENTITY', 'attribution_invalid');
   assertOperatorIdentityScheme(target, operatorIdentity);
   return {
     operatorIdentity,
@@ -289,7 +330,30 @@ async function run(): Promise<void> {
     tenantResolutionStrategy: environment.TENANT_RESOLUTION_STRATEGY,
   });
 
-  const attribution = readAttribution(target);
+  // ADR-028 F060.3C-2e-1. A serving target must present complete trusted
+  // execution context — IAM identity, a live just-in-time elevation, a
+  // declared trusted runner and immutable code provenance — before any
+  // operation input is acted on. A serving invocation that cannot produce it
+  // is refused here; there is no workstation path and no partial mode. The
+  // gated test target has no IAM, so this returns null and the F060.3C-2b
+  // attribution path applies unchanged.
+  const execution = resolveTrustedExecution({
+    environment: process.env,
+    target,
+  });
+
+  // Two independent grants. The verb grant says which operation may be
+  // performed — for `approve` that verb is `approve`, never the operation the
+  // approval authorizes, so `tenant-domain.request` can never record an
+  // approval. The execution grant says whether it may be committed rather
+  // than only planned, so planning, approving and applying can be held by
+  // three different people.
+  if (execution) {
+    assertPermitted(execution, verb);
+    assertExecutionPermitted(execution, dryRun);
+  }
+
+  const attribution = readAttribution(target, execution);
   const organizationId = requiredValue(
     'REQRO_OPERATOR_ORGANIZATION_ID',
     'operation_invalid',
@@ -362,6 +426,40 @@ async function run(): Promise<void> {
     5,
     'REQRO_OPERATOR_DNS_TRIES',
   );
+
+  /**
+   * The invocation audit record, established before anything is attempted.
+   *
+   * This is the trail that exists even when the mutation does not: a refusal,
+   * a crash and a dry run all leave a record here, while only a committed
+   * change leaves one in `tenant_domain_audit`. In a serving environment the
+   * start record is mandatory — if it cannot be written the invocation is
+   * refused with `audit_unavailable` and no pool is ever built.
+   */
+  let audit: OperatorAuditSink | null = null;
+  if (execution) {
+    audit = resolveAuditSink(process.env, target.serving);
+    await beginAuditedInvocation(
+      audit,
+      startRecord(
+        execution,
+        {
+          deploymentEnvironment: target.environment,
+          database: target.database,
+          databaseUser: target.databaseUser,
+          operation: verb === 'approve' ? `approve:${approvedVerb}` : verb,
+          mode: dryRun ? 'dry-run' : 'confirm',
+          organizationId,
+          hostname,
+          correlationId: attribution.correlationId,
+        },
+        new Date(),
+      ),
+    );
+  }
+
+  let outcome: 'succeeded' | 'refused' | 'failed' = 'succeeded';
+  let outcomeCode: string | null = null;
 
   const database = new Kysely<DatabaseSchema>({
     dialect: new PostgresDialect({
@@ -538,8 +636,39 @@ async function run(): Promise<void> {
           ? await activateTenantDomain(database, approved)
           : await revokeTenantDomainVerification(database, approved),
     });
+  } catch (error) {
+    // Classified here so the audit record carries the same closed code the
+    // job log receives, and never the message.
+    outcome = error instanceof OperatorRefusal ? 'refused' : 'failed';
+    outcomeCode =
+      error instanceof OperatorRefusal ? error.code : classify(error);
+    throw error;
   } finally {
     await database.destroy();
+    if (audit !== null && execution !== null) {
+      const written = await completeAuditedInvocation(audit, {
+        phase: 'outcome',
+        invocationId: execution.invocationId,
+        occurredAt: new Date().toISOString(),
+        outcome,
+        code: outcomeCode,
+      });
+      // A lost outcome record is reported rather than thrown: replacing the
+      // real failure with an audit failure would hide the thing that went
+      // wrong. The start record already proves the invocation happened, so an
+      // outcome gap is visible as a record with no partner.
+      if (!written)
+        process.stderr.write(
+          JSON.stringify({
+            level: 40,
+            time: Date.now(),
+            service: 'cityvue-api',
+            msg: 'tenant domain operator outcome record could not be written',
+            code: 'audit_unavailable',
+            invocationId: execution.invocationId,
+          }) + '\n',
+        );
+    }
   }
 }
 

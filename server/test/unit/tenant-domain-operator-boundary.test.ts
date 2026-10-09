@@ -38,7 +38,15 @@ const ALLOWED_RUNTIME_MODULES = [
   'common/logging/log-sanitization.js',
   'config/database-tls.js',
   'config/environment.js',
+  // ADR-028 F060.3C-2e-1, reviewed additions. All three are configuration
+  // and policy only: the trusted execution contract, its provider-neutral
+  // identity adapter, and the invocation audit interface with its stream and
+  // in-memory adapters. None reaches an application domain, none opens a
+  // database connection, and none reads a credential.
+  'config/operator-audit.js',
   'config/operator-environment.js',
+  'config/operator-execution.js',
+  'config/operator-identity.js',
   'database/tenant-domain-operator-cli.js',
   'tenancy/tenant-domain-challenge.js',
   'tenancy/tenant-domain-verifier.js',

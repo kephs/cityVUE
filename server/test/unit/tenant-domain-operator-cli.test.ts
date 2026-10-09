@@ -343,10 +343,18 @@ test('there is no discovery, onboarding, raw-SQL or database-url surface', () =>
   // The connection comes only from the validated environment, never from
   // arguments: argv is read solely for the verb, the approved operation and
   // the mode.
+  //
+  // `[^\r\n]` rather than `[^\n]`: this repository checks out with
+  // `core.autocrlf=true` and has no `.gitattributes` override, so on a fresh
+  // Windows checkout the captured line carries a trailing carriage return and
+  // the comparison failed on the line ending rather than on the assertion.
+  // Proven against `origin/main`'s own source, so this is pre-existing
+  // fragility in the check, not a change in what it asserts: argv must still
+  // be read exactly once, through `slice(2)`.
   assert.deepEqual(
     [
       ...new Set(
-        [...cliCode.matchAll(/process\.argv[^\n]*/g)].map((m) => m[0]),
+        [...cliCode.matchAll(/process\.argv[^\r\n]*/g)].map((m) => m[0]),
       ),
     ],
     ['process.argv.slice(2);'],
@@ -386,7 +394,12 @@ test('the direct import allowlist excludes all application data', () => {
   assert.deepEqual(imports, [
     '../config/database-tls.js',
     '../config/environment.js',
+    // ADR-028 F060.3C-2e-1: the trusted execution contract and the
+    // invocation audit interface. Configuration only; neither reaches
+    // application data.
+    '../config/operator-audit.js',
     '../config/operator-environment.js',
+    '../config/operator-execution.js',
     '../tenancy/tenant-domain-challenge.js',
     '../tenancy/tenant-domain-verifier.js',
     '../tenancy/tenant-domain.js',
@@ -432,6 +445,45 @@ test('the operator-target module reaches no tables of its own', () => {
     );
 });
 
+/**
+ * ADR-028 F060.3C-2e-1. Complete trusted execution context for the spawn
+ * harness.
+ *
+ * These cases target a serving environment, where an invocation is now
+ * refused with `execution_context_missing` before any attribution or
+ * approval check runs. Supplying the trusted context keeps each case below
+ * testing what it was written to test, rather than all of them collapsing
+ * onto the new gate.
+ *
+ * The elevation window is computed at load time so the suite does not expire.
+ * `tenant-domain.request` grants the six change verbs these cases use and
+ * deliberately does not authorize `approve`; `tenant-domain.execute` is the
+ * separate commit authority, needed because several cases use `--confirm`.
+ */
+const ELEVATION = {
+  REQRO_OPERATOR_ELEVATION_REQUEST_ID: 'elev-harness',
+  REQRO_OPERATOR_ELEVATION_GRANTED_AT: new Date(
+    Date.now() - 60_000,
+  ).toISOString(),
+  REQRO_OPERATOR_ELEVATION_EXPIRES_AT: new Date(
+    Date.now() + 29 * 60_000,
+  ).toISOString(),
+};
+
+const trustedExecution = {
+  REQRO_OPERATOR_IAM_TENANT_ID: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
+  REQRO_OPERATOR_IAM_SUBJECT: '1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e',
+  REQRO_OPERATOR_IAM_PERMISSIONS: 'tenant-domain.request,tenant-domain.execute',
+  ...ELEVATION,
+  REQRO_OPERATOR_RUNNER_IDENTITY: 'runner/tenant-domain-operator',
+  REQRO_OPERATOR_RUNNER_PLATFORM: 'neutral-runner',
+  REQRO_OPERATOR_JOB_RUN_ID: 'job-harness',
+  REQRO_OPERATOR_COMMIT_SHA: 'a'.repeat(40),
+  REQRO_OPERATOR_IMAGE_DIGEST: 'sha256:' + 'b'.repeat(64),
+  REQRO_OPERATOR_TRUSTED_RUNNER: 'runner/tenant-domain-operator',
+  REQRO_OPERATOR_AUDIT_SINK: 'stream',
+};
+
 /** Spawns the compiled production command. Every case below refuses before a
  * database connection is opened, so these stay pure unit tests. */
 function invoke(
@@ -456,6 +508,7 @@ function invoke(
         DATABASE_SSL_MODE: 'verify-full',
         TENANT_RESOLUTION_STRATEGY: 'registry',
         ...production,
+        ...trustedExecution,
         ...environment,
       },
     },
@@ -467,8 +520,10 @@ function invoke(
   };
 }
 
+/** The human-supplied fields. `REQRO_OPERATOR_IDENTITY` is deliberately
+ * absent: under ADR-028 the actor is derived from the trusted IAM claims and
+ * a human-supplied identity is refused outright in a serving environment. */
 const attribution = {
-  REQRO_OPERATOR_IDENTITY: 'iam:user/alex',
   REQRO_OPERATOR_REASON: REASON,
   REQRO_OPERATOR_CORRELATION_ID: CORRELATION,
   REQRO_OPERATOR_ORGANIZATION_ID: ORGANIZATION,
@@ -482,8 +537,17 @@ function invokedCode(
 ): string {
   const result = invoke(args, environment);
   assert.equal(result.code, 1, result.stderr);
-  const parsed = JSON.parse(result.stderr.trim()) as Record<string, unknown>;
-  return String(parsed.code);
+  // The stream audit adapter writes its start and outcome records to stderr
+  // too, so the failure line is selected by its level rather than by being
+  // assumed to be the only line.
+  const lines = result.stderr
+    .trim()
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  const failures = lines.filter((line) => line.level === 50);
+  assert.equal(failures.length, 1, result.stderr);
+  return String(failures[0]?.code);
 }
 
 test('an unknown or absent verb and mode is refused', () => {
@@ -502,11 +566,11 @@ test('an unknown or absent verb and mode is refused', () => {
 });
 
 test('each attribution field is individually required', () => {
-  for (const key of [
-    'REQRO_OPERATOR_IDENTITY',
-    'REQRO_OPERATOR_REASON',
-    'REQRO_OPERATOR_CORRELATION_ID',
-  ])
+  // `REQRO_OPERATOR_IDENTITY` is no longer in this list: in a serving
+  // environment it is not an input at all, and supplying it is refused by the
+  // test below. The reason and the correlation identifier remain required,
+  // because a human still says why and which change.
+  for (const key of ['REQRO_OPERATOR_REASON', 'REQRO_OPERATOR_CORRELATION_ID'])
     assert.equal(
       invokedCode(['deactivate', '--dry-run'], { ...attribution, [key]: '' }),
       'attribution_invalid',
@@ -530,14 +594,30 @@ test('each attribution field is individually required', () => {
   );
 });
 
-test('a development identity is refused in a serving environment', () => {
-  assert.equal(
-    invokedCode(['deactivate', '--dry-run'], {
-      ...attribution,
-      REQRO_OPERATOR_IDENTITY: 'dev:synthetic-operator',
-    }),
-    'attribution_invalid',
-  );
+test('any human-supplied identity is refused in a serving environment', () => {
+  // This supersedes the narrower F060.3C-2b case, which asserted only that a
+  // `dev:` scheme was refused here. ADR-028 refuses the field outright, which
+  // strictly contains that: a synthetic identity, a well-formed `iam:` one
+  // and one identical to the derived identity are all refused, so a human
+  // cannot select the actor by any spelling.
+  for (const supplied of [
+    'dev:synthetic-operator',
+    'iam:user/alex',
+    'iam:0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d/1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e',
+  ])
+    assert.equal(
+      invokedCode(['deactivate', '--dry-run'], {
+        ...attribution,
+        REQRO_OPERATOR_IDENTITY: supplied,
+      }),
+      'identity_override_rejected',
+      supplied,
+    );
+  // The serving `dev:` refusal in assertOperatorIdentityScheme is now
+  // unreachable through this command, because the broader refusal fires
+  // first. It is retained as defence in depth and remains asserted directly
+  // against the function in 'a serving environment refuses a development
+  // operator identity' earlier in this file.
 });
 
 test('an approval-required confirm demands an approval; a dry run does not', () => {
@@ -720,10 +800,11 @@ test('the operator cannot supply or override the schema', () => {
       !cliCode.includes(forbidden),
       `the production operator command must not accept ${forbidden}`,
     );
+  // Line-ending tolerant for the same reason as the earlier occurrence.
   assert.deepEqual(
     [
       ...new Set(
-        [...cliCode.matchAll(/process\.argv[^\n]*/g)].map((m) => m[0]),
+        [...cliCode.matchAll(/process\.argv[^\r\n]*/g)].map((m) => m[0]),
       ),
     ],
     ['process.argv.slice(2);'],
