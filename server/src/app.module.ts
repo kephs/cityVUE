@@ -6,7 +6,7 @@ import {
   configuration,
   type AppConfiguration,
 } from './config/configuration.js';
-import { validateEnvironment } from './config/environment.js';
+import { validateServingEnvironment } from './config/serving-environment.js';
 import { LoggingModule } from './common/logging/logging.module.js';
 import { RequestLoggingMiddleware } from './common/logging/request-logging.middleware.js';
 import { DatabaseModule } from './database/database.module.js';
@@ -30,7 +30,7 @@ import { TenantResolutionMiddleware } from './tenancy/tenant-resolution.middlewa
       isGlobal: true,
       cache: true,
       load: [configuration],
-      validate: validateEnvironment,
+      validate: validateServingEnvironment,
     }),
     LoggingModule,
     ThrottlerModule.forRootAsync({

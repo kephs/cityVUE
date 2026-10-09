@@ -1,3 +1,5 @@
+import { assertClientServingConfig } from "./servingConfig.mjs";
+
 export const DATA_SOURCES = Object.freeze({ legacy: "legacy", api: "api" });
 
 /** ADR-025 same-origin direction: the resident frontend and its API share an
@@ -6,6 +8,7 @@ export const DATA_SOURCES = Object.freeze({ legacy: "legacy", api: "api" });
 export const DEFAULT_API_BASE_URL = "/api/v1";
 
 export function readResidentIntakeConfig(environment = import.meta.env) {
+    assertClientServingConfig(environment);
     const dataSource = String(environment?.VITE_CITYVUE_DATA_SOURCE || DATA_SOURCES.legacy).trim().toLowerCase();
     if (!Object.values(DATA_SOURCES).includes(dataSource)) {
         throw new Error("VITE_CITYVUE_DATA_SOURCE must be either legacy or api.");
