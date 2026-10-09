@@ -1,0 +1,153 @@
+# =====================================================================
+# Resolve the acting human to an Entra object ID  --  ADR-029
+# =====================================================================
+#
+# ADR-028 requires the operator identity to be injected by trusted
+# infrastructure and never chosen by a human. This template is that
+# injection for the Azure DevOps control plane.
+#
+# THE ONE RULE: the actor comes from `Build.RequestedForId`, which Azure
+# DevOps sets from the authenticated identity that queued the run. It is
+# never a pipeline parameter, and no parameter below can influence it.
+#
+# AN AZURE DEVOPS IDENTITY ID IS NOT AN ENTRA OBJECT ID. It is a
+# control-plane identifier, and treating one as the other would record an
+# identity that does not exist in the client's directory. The resolution
+# chain is therefore explicit:
+#
+#   Build.RequestedForId
+#     -> Azure DevOps Identities API      (identity -> subject descriptor)
+#     -> Azure DevOps Graph Users API     (descriptor -> origin, originId)
+#     -> require origin == 'aad'          (reject vsts / msa / ghb)
+#     -> Microsoft Graph in the expected tenant (prove directory membership)
+#     -> originId = the Entra object ID, hyphenated
+#
+# `displayName`, `principalName` and `mailAddress` are deliberately not
+# used as the subject. They are reassignable, so an audit row written
+# years earlier would resolve to the wrong human.
+#
+# CREDENTIALS: none. `System.AccessToken` is the pipeline's own
+# platform-issued OAuth token, and the Azure calls use the workload
+# identity federation service connection. There is no PAT anywhere.
+
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: expectedTenantId
+    type: string
+  - name: azureDevOpsOrganization
+    type: string
+
+steps:
+  - checkout: none
+
+  - task: AzureCLI@2
+    name: operatorIdentity
+    displayName: 'Resolve acting human -> Entra object ID (platform identity only)'
+    env:
+      # Platform-issued, short-lived, project-scoped. Not a PAT.
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+
+        # The actor is read from the platform, never from a parameter.
+        requestedForId="$(Build.RequestedForId)"
+        if [ -z "${requestedForId}" ]; then
+          echo "the platform did not supply a requesting identity" >&2
+          exit 1
+        fi
+
+        org="${{ parameters.azureDevOpsOrganization }}"
+        auth="Authorization: Bearer ${SYSTEM_ACCESSTOKEN}"
+
+        # 1. Azure DevOps identity -> subject descriptor.
+        identity=$(curl -sS --fail-with-body -H "${auth}" \
+          "https://vssps.dev.azure.com/${org}/_apis/identities?identityIds=${requestedForId}&api-version=7.1")
+        subjectDescriptor=$(printf '%s' "${identity}" | jq -r '.value[0].subjectDescriptor // empty')
+        if [ -z "${subjectDescriptor}" ]; then
+          echo "the requesting identity has no subject descriptor" >&2
+          exit 1
+        fi
+
+        # 2. Graph user -> origin and originId.
+        graphUser=$(curl -sS --fail-with-body -H "${auth}" \
+          "https://vssps.dev.azure.com/${org}/_apis/graph/users/${subjectDescriptor}?api-version=7.1")
+        origin=$(printf '%s' "${graphUser}" | jq -r '.origin // empty')
+        originId=$(printf '%s' "${graphUser}" | jq -r '.originId // empty')
+        subjectKind=$(printf '%s' "${graphUser}" | jq -r '.subjectKind // empty')
+
+        # 3. Fail closed on anything that is not a directory-backed human.
+        #    `vsts` is an Azure DevOps-local identity, `msa` a personal
+        #    Microsoft account; neither exists in the client's directory.
+        if [ "${origin}" != "aad" ] || [ "${subjectKind}" != "user" ]; then
+          echo "the requesting principal is not an Entra directory user" >&2
+          exit 1
+        fi
+        if ! printf '%s' "${originId}" | grep -Eiq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+          echo "the resolved originId is not a hyphenated GUID" >&2
+          exit 1
+        fi
+
+        # 4. Prove directory membership in the tenant this deployment
+        #    accepts. The service-connection token is tenant-scoped, so a
+        #    successful lookup of the oid in that tenant is the proof. A
+        #    guest or cross-tenant principal fails here.
+        resolvedTenant=$(az account show --query tenantId -o tsv)
+        if [ "${resolvedTenant}" != "${{ parameters.expectedTenantId }}" ]; then
+          echo "the service connection is not the expected Entra tenant" >&2
+          exit 1
+        fi
+        graphToken=$(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)
+        directoryUser=$(curl -sS --fail-with-body \
+          -H "Authorization: Bearer ${graphToken}" \
+          "https://graph.microsoft.com/v1.0/users/${originId}?\$select=id")
+        if [ "$(printf '%s' "${directoryUser}" | jq -r '.id // empty')" != "${originId}" ]; then
+          echo "the resolved object ID is not a member of the expected tenant" >&2
+          exit 1
+        fi
+
+        # Only non-secret, infrastructure-resolved values are published. The
+        # oid is a directory identifier, not a credential.
+        echo "##vso[task.setvariable variable=iamSubject;isOutput=true]${originId}"
+        echo "##vso[task.setvariable variable=iamOrigin;isOutput=true]${origin}"
+        echo "##vso[task.setvariable variable=iamOriginTenantId;isOutput=true]${resolvedTenant}"
+
+  - task: AzureCLI@2
+    displayName: 'Require active PIM elevation (fails closed until configured)'
+    inputs:
+      azureSubscription: ${{ parameters.serviceConnection }}
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set -euo pipefail
+
+        # ADR-028 requires evidence of a live just-in-time elevation before a
+        # serving invocation, and group membership alone is not that evidence.
+        #
+        # This step ships REFUSING. The exact Microsoft Graph privileged-access
+        # query and the directory permissions it needs are an infrastructure
+        # decision that has not been made, and writing a plausible-looking
+        # query here would be inventing vendor behaviour. Failing closed is
+        # the honest state: the pipeline cannot run a serving operation until
+        # somebody configures this deliberately.
+        #
+        # Whatever replaces this must establish, for the resolved object ID:
+        #   - an ACTIVE (not merely eligible) assignment to the required group;
+        #   - MFA satisfied at activation;
+        #   - the activation and expiry instants;
+        #   - a window no wider than 60 minutes.
+        # It must then publish elevationRequestId, elevationGrantedAt and
+        # elevationExpiresAt. The operator container re-validates the window,
+        # so a wrong value here is refused rather than trusted.
+        if [ "${REQRO_PIM_VERIFICATION:-}" != "configured" ]; then
+          echo "PIM elevation verification is not configured; refusing to run a serving operator invocation" >&2
+          exit 1
+        fi
+        echo "##vso[task.setvariable variable=elevationRequestId;isOutput=true]${REQRO_PIM_REQUEST_ID}"
+        echo "##vso[task.setvariable variable=elevationGrantedAt;isOutput=true]${REQRO_PIM_GRANTED_AT}"
+        echo "##vso[task.setvariable variable=elevationExpiresAt;isOutput=true]${REQRO_PIM_EXPIRES_AT}"
+    name: operatorElevation

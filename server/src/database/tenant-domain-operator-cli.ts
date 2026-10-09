@@ -17,10 +17,18 @@ import {
 } from '../config/operator-environment.js';
 import {
   assertExecutionPermitted,
+  assertNetworkProfile,
   assertPermitted,
   resolveTrustedExecution,
   type TrustedExecutionContext,
 } from '../config/operator-execution.js';
+import {
+  assertIndependentApprover,
+  assertRequestContext,
+  buildRequestArtifact,
+  loadRequestArtifact,
+  MAXIMUM_REQUEST_LIFETIME_MINUTES,
+} from '../config/operator-request-artifact.js';
 import {
   beginAuditedInvocation,
   completeAuditedInvocation,
@@ -351,6 +359,11 @@ async function run(): Promise<void> {
   if (execution) {
     assertPermitted(execution, verb);
     assertExecutionPermitted(execution, dryRun);
+    // ADR-029. `verify` is the only verb that needs outbound internet DNS,
+    // because the verifier queries each authoritative name server directly.
+    // Checked both ways: a mutating verb may not run on the DNS-capable
+    // profile either.
+    assertNetworkProfile(execution, verb);
   }
 
   const attribution = readAttribution(target, execution);
@@ -377,6 +390,38 @@ async function run(): Promise<void> {
       'is accepted only when recording an approval',
     );
 
+  /**
+   * ADR-029. The trusted request artifact an approval is bound to.
+   *
+   * In a serving environment the requester is **never** a human input. It is
+   * read from an artifact the request invocation produced, whose digest the
+   * platform vouched for through the trusted channel. The approver still
+   * states the context they believe they are approving, and a mismatch is
+   * refused rather than resolved in the human's favour — so a valid artifact
+   * for one change cannot be presented while approving another.
+   */
+  const requestArtifact =
+    execution && verb === 'approve'
+      ? loadRequestArtifact(
+          execution.requestArtifactPath ??
+            refuse(
+              'request_artifact_invalid',
+              'a serving approval requires the platform-supplied request artifact',
+            ),
+          execution.requestArtifactDigest ??
+            refuse(
+              'request_artifact_invalid',
+              'a serving approval requires the platform-vouched request artifact digest',
+            ),
+          new Date(),
+        )
+      : null;
+  if (requestArtifact)
+    refusedValue(
+      'REQRO_OPERATOR_REQUESTER_IDENTITY',
+      'is not accepted in a serving environment; the requester comes from the trusted request artifact',
+    );
+
   // Every verb-specific input is resolved and validated here, before a pool
   // exists, so a malformed request is refused with its own code instead of
   // surfacing later as a database failure.
@@ -395,8 +440,20 @@ async function run(): Promise<void> {
       ? (process.env.REQRO_OPERATOR_APPROVAL_ID ?? '').trim()
       : requiredValue('REQRO_OPERATOR_APPROVAL_ID', 'approval_missing')
     : '';
-  const requesterIdentity =
-    verb === 'approve'
+  // Serving: from the artifact, and bound to exactly what was planned.
+  // Non-serving test target: the F060.3C-2b input, unchanged.
+  if (requestArtifact) {
+    assertRequestContext(requestArtifact, {
+      operation: approvedVerb,
+      organizationId,
+      hostname,
+      expectedRevision,
+    });
+    assertIndependentApprover(requestArtifact, attribution.operatorIdentity);
+  }
+  const requesterIdentity = requestArtifact
+    ? requestArtifact.requesterIdentity
+    : verb === 'approve'
       ? requiredValue(
           'REQRO_OPERATOR_REQUESTER_IDENTITY',
           'attribution_invalid',
@@ -554,11 +611,46 @@ async function run(): Promise<void> {
             'the tenant domain has no verification to revoke',
           );
       }
+      /**
+       * ADR-029. The pre-approval plan is where the trusted request artifact
+       * is produced, because this is the only point at which the requester's
+       * resolved identity and the validated operation context both exist.
+       *
+       * It is emitted rather than written to disk: the container runs
+       * non-root and owns no durable storage, and persisting it is the
+       * control plane's job — it publishes the content as an immutable run
+       * artifact and carries the digest forward through the trusted channel
+       * for the separate approval invocation.
+       */
+      const request = execution
+        ? buildRequestArtifact({
+            requesterIdentity: attribution.operatorIdentity,
+            operation: verb,
+            organizationId,
+            hostname,
+            role: null,
+            expectedRevision,
+            reason: attribution.reason,
+            ticket: (process.env.REQRO_OPERATOR_TICKET ?? '').trim() || null,
+            correlationId: attribution.correlationId,
+            commitSha: execution.commitSha,
+            imageDigest: execution.imageDigest,
+            jobRunId: execution.jobRunId,
+            createdAt: new Date(),
+            lifetimeMinutes: MAXIMUM_REQUEST_LIFETIME_MINUTES,
+          })
+        : null;
       emit({
         ...plan,
         domain,
         advisory:
           'independent approval is required and absent; this plan is not commit validated',
+        ...(request
+          ? {
+              requestArtifact: request.artifact,
+              requestArtifactDigest: request.digest,
+            }
+          : {}),
       });
       return;
     }

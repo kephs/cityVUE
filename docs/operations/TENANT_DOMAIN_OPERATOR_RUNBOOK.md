@@ -16,7 +16,7 @@ All of the following are **outstanding infrastructure prerequisites**, each sepa
 
 1. Per-human IAM identities in the deployment's identity provider, with just-in-time elevation (maximum 60-minute windows).
 2. Group or role assignments carrying the approved permissions. **`tenant-domain.request` and `tenant-domain.approve` are mutually exclusive assignments** — no human may hold both — and `tenant-domain.execute` may coexist with either but must be granted deliberately rather than bundled. Reqro does not refuse an elevation carrying both verb permissions; the database refuses self-approval regardless, so this rule is yours to enforce in IAM.
-3. A job runner, and a decision about which one. None is selected.
+3. An Azure DevOps organization and project with the three operator pipeline definitions, plus the Azure Pipelines GitHub App service connection for checkout. ADR-029 selects Azure DevOps as the control plane and a one-shot Azure Container Instance in the private VNet as the execution substrate; neither exists.
 4. Secret-manager injection of `DATABASE_URL` for the operator database role.
 5. An operator image built from `server/deploy/operator/Dockerfile`, pushed, and referenced **by digest**.
 6. A log destination with immutable off-host retention. The shipped audit adapter writes to the job's stderr; its durability is the runner's pipeline, which is **not** immutable retention. **Immutable off-host retention remains an open infrastructure blocker**, and production remains blocked until a real, independently administered, off-host, immutable and retention-controlled sink exists.
@@ -65,7 +65,7 @@ Also infrastructure-owned and pre-existing: `REQRO_OPERATOR_DATABASE`, `REQRO_OP
 | `REQRO_OPERATOR_ROLE` | `register` only. |
 | `REQRO_OPERATOR_EXPECTED_REVISION` | Every verb except `register`. |
 | `REQRO_OPERATOR_APPROVAL_ID` | `activate` and `revoke`. Optional when planning, mandatory to confirm. |
-| `REQRO_OPERATOR_REQUESTER_IDENTITY` | `approve` only. |
+| ~~`REQRO_OPERATOR_REQUESTER_IDENTITY`~~ | **No longer accepted in a serving environment** (ADR-029). The requester is read from the trusted request artifact; supplying this is refused. It remains the input for the gated `test` target only. |
 | `REQRO_OPERATOR_REASON` | Why. Recorded. |
 | `REQRO_OPERATOR_CORRELATION_ID` | A UUID tying the steps of one change together. |
 | `REQRO_OPERATOR_CHALLENGE_LIFETIME_DAYS` | `issue-challenge`, optional. |
@@ -151,6 +151,18 @@ approve revoke --confirm        # second person
 revoke --dry-run                # with the approval → validated
 revoke --confirm
 ```
+
+## Why an approved change cannot be applied twice
+
+Three independent controls, none of which you need to remember:
+
+1. **The approval is single-use.** Consuming it writes its ID into the audit row, and a partial unique index makes a second consumption a database error. Two concurrent attempts cannot both commit.
+2. **The expected revision must still be current.** A committed change advances the revision, so re-running the same request reports `revision_stale`. Re-read and re-plan.
+3. **State preconditions.** Activation requires a verified, inactive binding; revocation requires prior deactivation.
+
+Approvals also expire 24 hours after they are recorded, and the request artifact has its own shorter ceiling.
+
+**You cannot forge a request.** The approval job downloads the artifact from the pinned request run of the infrastructure-owned request pipeline; the artifact's content and digest are not inputs you can edit, and changing any field in it is refused. If you need to approve something different, ask the requester to re-plan it.
 
 ## Reading the output
 

@@ -1,0 +1,138 @@
+# =====================================================================
+# Stage 2 of 3 — APPROVE  --  ADR-029 F060.3C-2e-2A
+# =====================================================================
+#
+# A separate invocation, queued by a DIFFERENT human. Records the
+# independent approval that activate/revoke will later consume.
+#
+# Required IAM: tenant-domain.approve AND tenant-domain.execute.
+# `tenant-domain.request` grants no part of this, and the two verb
+# permissions are mutually exclusive IAM assignments, so the human who
+# planned the change cannot be the human who approves it.
+#
+# THE REQUESTER IS NOT AN INPUT. It is read from the request artifact
+# downloaded from the pinned request run, whose digest is carried forward
+# through the trusted execution channel. The container recomputes the
+# digest over the artifact's canonical form and refuses a substituted or
+# modified artifact, an expired one, or one whose context does not match
+# what is being approved.
+
+name: 'tenant-domain-operator-approve-$(Date:yyyyMMdd)-$(Rev:r)'
+
+trigger: none
+pr: none
+
+resources:
+  repositories:
+    - repository: source
+      type: github
+      endpoint: reqro-github
+      name: kephs/cityVUE
+      ref: refs/heads/main
+
+parameters:
+  - name: requestBuildId
+    displayName: 'Request run ID to approve (pins the artifact)'
+    type: string
+  - name: approvedOperation
+    displayName: 'Operation being approved'
+    type: string
+    values:
+      - activate
+      - revoke
+  - name: organizationId
+    displayName: 'Organization UUID (must match the request artifact)'
+    type: string
+  - name: hostname
+    displayName: 'Resident hostname (must match the request artifact)'
+    type: string
+  - name: expectedRevision
+    displayName: 'Expected revision (must match the request artifact)'
+    type: string
+  - name: reason
+    displayName: 'Approval reason'
+    type: string
+  - name: ticket
+    displayName: 'Change ticket (optional)'
+    type: string
+    default: ''
+
+variables:
+  - group: reqro-operator-production
+
+stages:
+  - stage: approve
+    displayName: 'Record the independent approval'
+    jobs:
+      - deployment: approve
+        displayName: 'Operator approval'
+        timeoutInMinutes: 15
+        pool:
+          vmImage: ubuntu-latest
+        # The protected environment carries the required reviewers. The
+        # reviewer gate is an additional human control; it does not replace
+        # the IAM separation, because a reviewer is not necessarily the
+        # queuing identity and only the queuing identity becomes the actor.
+        environment: reqro-operator-production-approval
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: none
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download the pinned request artifact'
+                  inputs:
+                    buildType: specific
+                    project: $(System.TeamProject)
+                    definition: $(requestPipelineDefinitionId)
+                    buildVersionToDownload: specific
+                    pipelineId: ${{ parameters.requestBuildId }}
+                    artifactName: tenant-domain-request
+                    targetPath: $(Pipeline.Workspace)/request
+
+                - bash: |
+                    set -euo pipefail
+                    # Both halves come from the immutable published artifact
+                    # of the pinned request run: that immutability is the
+                    # platform integrity property this binding rests on.
+                    # The digest is the one the *requester's* container
+                    # computed over the canonical form; it is carried, never
+                    # recomputed here, and the approving container recomputes
+                    # it from the content and refuses any mismatch.
+                    digest=$(tr -d ' \n\r' < "$(Pipeline.Workspace)/request/request.digest")
+                    case "${digest}" in
+                      sha256:*) ;;
+                      *) echo "the request digest is malformed" >&2; exit 1 ;;
+                    esac
+                    echo "##vso[task.setvariable variable=requestDigest;isOutput=true]${digest}"
+                    echo "##vso[task.setvariable variable=requestBase64;isOutput=true]$(base64 -w0 "$(Pipeline.Workspace)/request/request.json")"
+                  name: requestBinding
+                  displayName: 'Carry the request artifact and its digest'
+
+                - template: templates/operator-identity.yml
+                  parameters:
+                    serviceConnection: $(operatorServiceConnection)
+                    expectedTenantId: $(expectedTenantId)
+                    azureDevOpsOrganization: $(azureDevOpsOrganization)
+
+                - template: templates/operator-job.yml
+                  parameters:
+                    serviceConnection: $(operatorServiceConnection)
+                    operation: approve
+                    approvedOperation: ${{ parameters.approvedOperation }}
+                    mode: '--confirm'
+                    networkProfile: restricted
+                    organizationId: ${{ parameters.organizationId }}
+                    hostname: ${{ parameters.hostname }}
+                    expectedRevision: ${{ parameters.expectedRevision }}
+                    reason: ${{ parameters.reason }}
+                    ticket: ${{ parameters.ticket }}
+                    iamSubject: $(operatorIdentity.iamSubject)
+                    iamOrigin: $(operatorIdentity.iamOrigin)
+                    iamOriginTenantId: $(operatorIdentity.iamOriginTenantId)
+                    elevationRequestId: $(operatorElevation.elevationRequestId)
+                    elevationGrantedAt: $(operatorElevation.elevationGrantedAt)
+                    elevationExpiresAt: $(operatorElevation.elevationExpiresAt)
+                    requestArtifactDigest: $(requestBinding.requestDigest)
+                    requestArtifactBase64: $(requestBinding.requestBase64)

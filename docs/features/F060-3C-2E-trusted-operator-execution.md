@@ -183,6 +183,37 @@ The session-start `git status` snapshot listed `server/src/config/operator-ident
 
 No content was lost and no product-owner acceptance is required. The underlying cause of the mistaken report is that the snapshot is labelled as the state at "the start of the conversation", which is the start of the resumed context window rather than the start of the work.
 
+## F060.3C-2e-2A validation record
+
+| Suite | Result |
+| --- | --- |
+| Platform contract (new) | 25/25, nothing skipped |
+| Four operator suites combined | 105/105, nothing skipped |
+| Root shared | 64/64 |
+| Backend units, serial, final tree | **740/742 with two environment/timing `spawnSync ETIMEDOUT` exceptions** |
+| typecheck / lint / build / test compile / changed-file formatting / `git diff --check` | pass |
+| PostgreSQL 17 operator role | not required; no migration, SQL, database deployment file, grant or schema changed |
+
+**The final backend suite is not recorded as fully passing.** It is an accepted
+**environmental/timing exception**, approved at security review, on these grounds:
+both failures were `spawnSync ETIMEDOUT` with no behavioural assertion failure;
+`logging-sanitization` passes independently; the development startup check
+*completes successfully* but has host-dependent runtime around the existing
+60-second budget, measured on the unchanged tree at 62 s and then 53 s — crossing
+the threshold in both directions; the same two failures have appeared under host
+pressure and passed in other runs; and two subsequent full reruns were terminated
+by the host memory reaper rather than by any assertion, so they produced no result.
+The slice's only change inside the Nest application module graph is four string
+literals added to a closed failure-code union and its array, and the added source
+is 405 of 32,684 lines, so it cannot account for the variance.
+
+**The existing 60-second timeout was deliberately not increased.** Raising it to
+obtain a pass would have hidden a host-performance fact behind a green check.
+
+## Follow-up delivered in F060.3C-2e-2A
+
+[ADR-029](../architecture/decisions/ADR-029-production-operator-platform.md) selects the first production platform and closes the requester-attribution gap recorded below: `REQRO_OPERATOR_REQUESTER_IDENTITY` is no longer accepted in a serving environment, and an approval derives the requester from a digest-bound trusted request artifact instead. That slice also adds the Entra directory-origin and expected-tenant checks, and the separate `dns-verification` / `restricted` execution network profiles.
+
 ## Known limitations
 
 1. **Immutable off-host audit retention does not exist.** The stream adapter's durability is the runner's log pipeline.

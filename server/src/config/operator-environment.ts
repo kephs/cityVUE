@@ -65,7 +65,14 @@ export type OperatorFailureCode =
   | 'provenance_invalid'
   | 'permission_denied'
   | 'identity_override_rejected'
-  | 'audit_unavailable';
+  | 'audit_unavailable'
+  // ADR-029 F060.3C-2e-2A. The trusted request artifact that binds an
+  // approval to the request it approves, and the execution network profile
+  // that isolates the DNS-capable `verify` path from every other verb.
+  | 'request_artifact_invalid'
+  | 'request_artifact_expired'
+  | 'request_context_mismatch'
+  | 'network_profile_invalid';
 
 export const operatorFailureCodes: readonly OperatorFailureCode[] = [
   'environment_mismatch',
@@ -86,6 +93,10 @@ export const operatorFailureCodes: readonly OperatorFailureCode[] = [
   'permission_denied',
   'identity_override_rejected',
   'audit_unavailable',
+  'request_artifact_invalid',
+  'request_artifact_expired',
+  'request_context_mismatch',
+  'network_profile_invalid',
 ];
 
 /** Carries a closed code alongside a message that is never emitted as-is. */

@@ -47,6 +47,10 @@ const ALLOWED_RUNTIME_MODULES = [
   'config/operator-environment.js',
   'config/operator-execution.js',
   'config/operator-identity.js',
+  // ADR-029 F060.3C-2e-2A. The trusted request artifact contract:
+  // canonical form, digest verification, expiry and context binding.
+  // Pure configuration and crypto hashing; reaches no application data.
+  'config/operator-request-artifact.js',
   'database/tenant-domain-operator-cli.js',
   'tenancy/tenant-domain-challenge.js',
   'tenancy/tenant-domain-verifier.js',
