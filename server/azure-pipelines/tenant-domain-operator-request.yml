@@ -1,0 +1,125 @@
+# =====================================================================
+# Stage 1 of 3 — REQUEST (plan only)  --  ADR-029 F060.3C-2e-2A
+# =====================================================================
+#
+# Produces the pre-approval plan and the trusted request artifact. Writes
+# nothing to the registry: the operator runs `--dry-run`, so the mutation
+# is never executed and `commitEligibility` reports `pending_approval`.
+#
+# Required IAM: tenant-domain.request. Deliberately NOT
+# tenant-domain.execute — a requester who cannot commit can still produce
+# the plan a second human reviews, which is the point of the split.
+#
+# Three stages, three pipelines, three invocations by (at least) two
+# humans. They are separate definitions rather than stages of one run so
+# that a single queued run can never perform both the request and the
+# approval.
+
+name: 'tenant-domain-operator-request-$(Date:yyyyMMdd)-$(Rev:r)'
+
+# Manual dispatch only. An operator action must never be triggered by a
+# push, a pull request or a schedule.
+trigger: none
+pr: none
+
+resources:
+  repositories:
+    - repository: source
+      type: github
+      # The Azure Pipelines GitHub App service connection. GitHub remains
+      # the source of truth; no PAT and no deploy key.
+      endpoint: reqro-github
+      name: kephs/cityVUE
+      ref: refs/heads/main
+
+parameters:
+  # Operation inputs only. There is deliberately no parameter for the
+  # operator identity, the requester, the permissions, the elevation or
+  # the runner: those are resolved from platform identity, and a
+  # parameter for any of them would hand the actor back to the human.
+  - name: operation
+    displayName: 'Operation to plan'
+    type: string
+    values:
+      - activate
+      - revoke
+  - name: organizationId
+    displayName: 'Organization UUID'
+    type: string
+  - name: hostname
+    displayName: 'Resident hostname'
+    type: string
+  - name: expectedRevision
+    displayName: 'Expected tenant-domain revision'
+    type: string
+  - name: reason
+    displayName: 'Business reason'
+    type: string
+  - name: ticket
+    displayName: 'Change ticket (optional)'
+    type: string
+    default: ''
+
+variables:
+  - group: reqro-operator-production
+
+stages:
+  - stage: request
+    displayName: 'Plan the change and emit the request artifact'
+    jobs:
+      - job: plan
+        displayName: 'Operator dry run'
+        timeoutInMinutes: 15
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - template: templates/operator-identity.yml
+            parameters:
+              serviceConnection: $(operatorServiceConnection)
+              expectedTenantId: $(expectedTenantId)
+              azureDevOpsOrganization: $(azureDevOpsOrganization)
+
+          - template: templates/operator-job.yml
+            parameters:
+              serviceConnection: $(operatorServiceConnection)
+              operation: ${{ parameters.operation }}
+              mode: '--dry-run'
+              # Mutating verbs get no internet DNS egress.
+              networkProfile: restricted
+              organizationId: ${{ parameters.organizationId }}
+              hostname: ${{ parameters.hostname }}
+              expectedRevision: ${{ parameters.expectedRevision }}
+              reason: ${{ parameters.reason }}
+              ticket: ${{ parameters.ticket }}
+              iamSubject: $(operatorIdentity.iamSubject)
+              iamOrigin: $(operatorIdentity.iamOrigin)
+              iamOriginTenantId: $(operatorIdentity.iamOriginTenantId)
+              elevationRequestId: $(operatorElevation.elevationRequestId)
+              elevationGrantedAt: $(operatorElevation.elevationGrantedAt)
+              elevationExpiresAt: $(operatorElevation.elevationExpiresAt)
+
+          - bash: |
+              set -euo pipefail
+              # The operator emits the artifact and its digest on stdout. The
+              # digest is computed inside the container over the canonical
+              # form, so it is never recomputed here from the JSON file —
+              # recomputing would mean trusting this step's idea of the
+              # canonical form instead of the operator's.
+              mkdir -p "$(Pipeline.Workspace)/request"
+              plan=$(grep -h '"requestArtifact"' "$(Pipeline.Workspace)/operator/output.log" | tail -1)
+              if [ -z "${plan}" ]; then
+                echo "the operator emitted no request artifact; nothing to approve" >&2
+                exit 1
+              fi
+              printf '%s' "${plan}" | jq -e '.requestArtifact' \
+                > "$(Pipeline.Workspace)/request/request.json"
+              printf '%s' "${plan}" | jq -re '.requestArtifactDigest' \
+                > "$(Pipeline.Workspace)/request/request.digest"
+              # The plan itself is published too, so the reviewing human sees
+              # exactly what the requester saw.
+              printf '%s' "${plan}" > "$(Pipeline.Workspace)/request/plan.json"
+            displayName: 'Extract the request artifact and its digest'
+
+          - publish: $(Pipeline.Workspace)/request
+            artifact: tenant-domain-request
+            displayName: 'Publish the request artifact (immutable run artifact)'

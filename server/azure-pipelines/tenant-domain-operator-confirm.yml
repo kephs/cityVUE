@@ -1,0 +1,143 @@
+# =====================================================================
+# Stage 3 of 3 — CONFIRM (the mutation)  --  ADR-029 F060.3C-2e-2A
+# =====================================================================
+#
+# A third separate invocation, queued by the requester, consuming the
+# approval recorded in stage 2.
+#
+# Required IAM: tenant-domain.request AND tenant-domain.execute. The
+# requester plans and applies; a different human approves. No single
+# identity holds all three authorities.
+#
+# It runs the validating dry run first — which executes the real
+# transaction, every constraint and the approval context check, then
+# rolls back and reports `commitEligibility=validated` — and only then
+# the confirm. A failing validation stops the run before any mutation.
+#
+# `verify` is the one verb that runs on the dns-verification profile, and
+# it is a separate job here so that the DNS egress is scoped to it alone.
+
+name: 'tenant-domain-operator-confirm-$(Date:yyyyMMdd)-$(Rev:r)'
+
+trigger: none
+pr: none
+
+resources:
+  repositories:
+    - repository: source
+      type: github
+      endpoint: reqro-github
+      name: kephs/cityVUE
+      ref: refs/heads/main
+
+parameters:
+  - name: operation
+    displayName: 'Operation to apply'
+    type: string
+    values:
+      - register
+      - issue-challenge
+      - verify
+      - activate
+      - deactivate
+      - revoke
+  - name: organizationId
+    displayName: 'Organization UUID'
+    type: string
+  - name: hostname
+    displayName: 'Resident hostname'
+    type: string
+  - name: domainRole
+    displayName: 'Tenant-domain role (register only)'
+    type: string
+    default: ''
+  - name: expectedRevision
+    displayName: 'Expected tenant-domain revision'
+    type: string
+    default: ''
+  - name: approvalId
+    displayName: 'Approval UUID (activate and revoke only)'
+    type: string
+    default: ''
+  - name: reason
+    displayName: 'Business reason'
+    type: string
+  - name: ticket
+    displayName: 'Change ticket (optional)'
+    type: string
+    default: ''
+
+variables:
+  - group: reqro-operator-production
+  # `verify` queries each authoritative name server directly, so it is the
+  # only operation granted outbound DNS. Every other verb runs with no
+  # arbitrary internet DNS egress at all.
+  - name: networkProfile
+    ${{ if eq(parameters.operation, 'verify') }}:
+      value: dns-verification
+    ${{ else }}:
+      value: restricted
+
+stages:
+  - stage: confirm
+    displayName: 'Validate, then apply'
+    jobs:
+      - deployment: apply
+        displayName: 'Operator confirm'
+        timeoutInMinutes: 15
+        pool:
+          vmImage: ubuntu-latest
+        environment: reqro-operator-production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: none
+
+                - template: templates/operator-identity.yml
+                  parameters:
+                    serviceConnection: $(operatorServiceConnection)
+                    expectedTenantId: $(expectedTenantId)
+                    azureDevOpsOrganization: $(azureDevOpsOrganization)
+
+                # Validating dry run. With the approval present this runs
+                # every constraint and rolls back.
+                - template: templates/operator-job.yml
+                  parameters:
+                    serviceConnection: $(operatorServiceConnection)
+                    operation: ${{ parameters.operation }}
+                    mode: '--dry-run'
+                    networkProfile: $(networkProfile)
+                    organizationId: ${{ parameters.organizationId }}
+                    hostname: ${{ parameters.hostname }}
+                    domainRole: ${{ parameters.domainRole }}
+                    expectedRevision: ${{ parameters.expectedRevision }}
+                    approvalId: ${{ parameters.approvalId }}
+                    reason: ${{ parameters.reason }}
+                    ticket: ${{ parameters.ticket }}
+                    iamSubject: $(operatorIdentity.iamSubject)
+                    iamOrigin: $(operatorIdentity.iamOrigin)
+                    iamOriginTenantId: $(operatorIdentity.iamOriginTenantId)
+                    elevationRequestId: $(operatorElevation.elevationRequestId)
+                    elevationGrantedAt: $(operatorElevation.elevationGrantedAt)
+                    elevationExpiresAt: $(operatorElevation.elevationExpiresAt)
+
+                - template: templates/operator-job.yml
+                  parameters:
+                    serviceConnection: $(operatorServiceConnection)
+                    operation: ${{ parameters.operation }}
+                    mode: '--confirm'
+                    networkProfile: $(networkProfile)
+                    organizationId: ${{ parameters.organizationId }}
+                    hostname: ${{ parameters.hostname }}
+                    domainRole: ${{ parameters.domainRole }}
+                    expectedRevision: ${{ parameters.expectedRevision }}
+                    approvalId: ${{ parameters.approvalId }}
+                    reason: ${{ parameters.reason }}
+                    ticket: ${{ parameters.ticket }}
+                    iamSubject: $(operatorIdentity.iamSubject)
+                    iamOrigin: $(operatorIdentity.iamOrigin)
+                    iamOriginTenantId: $(operatorIdentity.iamOriginTenantId)
+                    elevationRequestId: $(operatorElevation.elevationRequestId)
+                    elevationGrantedAt: $(operatorElevation.elevationGrantedAt)
+                    elevationExpiresAt: $(operatorElevation.elevationExpiresAt)

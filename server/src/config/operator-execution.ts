@@ -168,6 +168,13 @@ export interface TrustedExecutionContext {
   /** Code provenance: both immutable, neither a branch nor a tag. */
   readonly commitSha: string;
   readonly imageDigest: string;
+  /** ADR-029. The network policy this job was started under. */
+  readonly networkProfile: NetworkProfile;
+  /** ADR-029. The trusted request artifact an approval must be bound to:
+   * the file the platform supplied and the digest it vouches for. Both null
+   * outside an approval, where no request is being approved. */
+  readonly requestArtifactPath: string | null;
+  readonly requestArtifactDigest: string | null;
   /** Locally generated; correlates this invocation's audit records. */
   readonly invocationId: string;
 }
@@ -181,6 +188,13 @@ export interface TrustedExecutionContext {
 export const TRUSTED_EXECUTION_VARIABLES = [
   'REQRO_OPERATOR_IAM_TENANT_ID',
   'REQRO_OPERATOR_IAM_SUBJECT',
+  // ADR-029. The directory origin of the resolved principal, and the tenant
+  // it was actually resolved from. The control plane reports both; the
+  // identity adapter requires origin `aad` and the resolved tenant to equal
+  // the expected one, so an Azure DevOps service identity, a personal
+  // Microsoft account or a cross-tenant guest fails closed.
+  'REQRO_OPERATOR_IAM_ORIGIN',
+  'REQRO_OPERATOR_IAM_ORIGIN_TENANT_ID',
   'REQRO_OPERATOR_IAM_PERMISSIONS',
   'REQRO_OPERATOR_ELEVATION_REQUEST_ID',
   'REQRO_OPERATOR_ELEVATION_GRANTED_AT',
@@ -190,7 +204,83 @@ export const TRUSTED_EXECUTION_VARIABLES = [
   'REQRO_OPERATOR_JOB_RUN_ID',
   'REQRO_OPERATOR_COMMIT_SHA',
   'REQRO_OPERATOR_IMAGE_DIGEST',
+  // ADR-029. The network policy the platform actually started this job under.
+  // Declared by infrastructure and checked against the verb, so the
+  // DNS-capable profile cannot be used for a mutating verb and `verify`
+  // cannot be run somewhere its DNS queries would silently fail.
+  'REQRO_OPERATOR_NETWORK_PROFILE',
 ] as const;
+
+/**
+ * The two execution network profiles, and the verbs each may run.
+ *
+ * `verify` is structurally different from every other verb. The verifier
+ * discovers a zone's authoritative name servers and queries **each of them
+ * directly**, so the job needs outbound UDP and TCP 53 to arbitrary internet
+ * hosts. Every other verb needs no internet DNS at all — only the private
+ * database endpoint and the platform's own control endpoints.
+ *
+ * Granting that egress to every invocation would be unnecessary reach for the
+ * mutating verbs, and withholding it from `verify` would make verification
+ * fail in a way that looks like a DNS problem in the customer's zone rather
+ * than a misconfigured job. So the profile is declared by infrastructure and
+ * checked here, and a mismatch in either direction fails closed.
+ *
+ * This does not weaken the verifier: the quorum rules, the direct
+ * authoritative queries and the fail-closed disagreement handling are
+ * untouched. It only states where that verb is allowed to run.
+ */
+export const NETWORK_PROFILES = {
+  /** Outbound 53 to arbitrary hosts. `verify` only. */
+  'dns-verification': ['verify'],
+  /** No arbitrary internet DNS egress. Every other verb. */
+  restricted: [
+    'register',
+    'issue-challenge',
+    'activate',
+    'deactivate',
+    'revoke',
+    'approve',
+  ],
+} as const satisfies Record<string, readonly string[]>;
+
+export type NetworkProfile = keyof typeof NETWORK_PROFILES;
+
+export const networkProfiles = Object.keys(
+  NETWORK_PROFILES,
+) as readonly NetworkProfile[];
+
+/** The profile a verb requires. Total over the verb surface: an unknown verb
+ * is refused rather than defaulted, so a new verb cannot silently inherit
+ * DNS egress. */
+export function requiredNetworkProfile(verb: string): NetworkProfile {
+  for (const profile of networkProfiles)
+    if ((NETWORK_PROFILES[profile] as readonly string[]).includes(verb))
+      return profile;
+  refuse(
+    'network_profile_invalid',
+    'no execution network profile covers this operation',
+  );
+}
+
+/**
+ * Asserts the job was started under the profile its verb requires.
+ *
+ * Checked in both directions deliberately. A mutating verb running on the
+ * DNS-capable profile is refused even though it would work, because the point
+ * of the split is that only `verify` ever holds that egress.
+ */
+export function assertNetworkProfile(
+  context: TrustedExecutionContext,
+  verb: string,
+): void {
+  const required = requiredNetworkProfile(verb);
+  if (context.networkProfile !== required)
+    refuse(
+      'network_profile_invalid',
+      'the declared execution network profile does not match the profile this operation requires',
+    );
+}
 
 /**
  * The human-selectable operation inputs.
@@ -463,6 +553,31 @@ export function resolveTrustedExecution(
       'REQRO_OPERATOR_IMAGE_DIGEST must be an immutable sha256 digest; a mutable image tag is not provenance',
     );
 
+  const declaredProfile = trusted(
+    environment,
+    'REQRO_OPERATOR_NETWORK_PROFILE',
+  );
+  if (!(networkProfiles as readonly string[]).includes(declaredProfile))
+    refuse(
+      'network_profile_invalid',
+      'REQRO_OPERATOR_NETWORK_PROFILE does not name a known execution network profile',
+    );
+
+  // Both or neither. A digest without a file cannot be checked, and a file
+  // without a digest is unverified content, so a half-supplied artifact is a
+  // configuration error rather than a reason to proceed unbound.
+  const artifactPath = (
+    environment.REQRO_OPERATOR_REQUEST_ARTIFACT ?? ''
+  ).trim();
+  const artifactDigest = (
+    environment.REQRO_OPERATOR_REQUEST_DIGEST ?? ''
+  ).trim();
+  if ((artifactPath === '') !== (artifactDigest === ''))
+    refuse(
+      'request_artifact_invalid',
+      'the request artifact path and its digest must be supplied together',
+    );
+
   return {
     identity: identity.identity,
     identityIssuer: identity.issuer,
@@ -478,6 +593,9 @@ export function resolveTrustedExecution(
     jobRunId,
     commitSha,
     imageDigest,
+    networkProfile: declaredProfile as NetworkProfile,
+    requestArtifactPath: artifactPath === '' ? null : artifactPath,
+    requestArtifactDigest: artifactDigest === '' ? null : artifactDigest,
     invocationId: (resolution.newInvocationId ?? defaultInvocationId)(),
   };
 }

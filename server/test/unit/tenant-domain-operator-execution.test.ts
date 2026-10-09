@@ -86,6 +86,8 @@ function completeEnvironment(): NodeJS.ProcessEnv {
   return {
     REQRO_OPERATOR_IAM_TENANT_ID: TENANT,
     REQRO_OPERATOR_IAM_SUBJECT: SUBJECT,
+    REQRO_OPERATOR_IAM_ORIGIN: 'aad',
+    REQRO_OPERATOR_IAM_ORIGIN_TENANT_ID: TENANT,
     REQRO_OPERATOR_IAM_PERMISSIONS: 'tenant-domain.request',
     REQRO_OPERATOR_ELEVATION_REQUEST_ID: 'elev-01HQ8X',
     REQRO_OPERATOR_ELEVATION_GRANTED_AT: GRANTED_AT,
@@ -95,6 +97,7 @@ function completeEnvironment(): NodeJS.ProcessEnv {
     REQRO_OPERATOR_JOB_RUN_ID: 'job-4412',
     REQRO_OPERATOR_COMMIT_SHA: SHA,
     REQRO_OPERATOR_IMAGE_DIGEST: DIGEST,
+    REQRO_OPERATOR_NETWORK_PROFILE: 'restricted',
     REQRO_OPERATOR_TRUSTED_RUNNER: 'runner/tenant-domain-operator',
     REQRO_OPERATOR_AUDIT_SINK: 'stream',
   };
@@ -111,6 +114,18 @@ function resolveServing(
     newInvocationId: () => 'c0000000-0000-4000-8000-00000000000c',
   });
 }
+
+/** ADR-029: the Entra adapter now also requires directory-origin evidence,
+ * so these cases supply it and vary only the field under test. */
+const directoryClaims = (
+  overrides: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv => ({
+  REQRO_OPERATOR_IAM_TENANT_ID: TENANT,
+  REQRO_OPERATOR_IAM_SUBJECT: SUBJECT,
+  REQRO_OPERATOR_IAM_ORIGIN: 'aad',
+  REQRO_OPERATOR_IAM_ORIGIN_TENANT_ID: TENANT,
+  ...overrides,
+});
 
 function refusalCode(action: () => unknown): string {
   try {
@@ -198,10 +213,11 @@ test('an unhyphenated subject is refused rather than written and rejected by the
   );
   assert.equal(
     refusalCode(() =>
-      entraExecutionClaims({
-        REQRO_OPERATOR_IAM_TENANT_ID: TENANT,
-        REQRO_OPERATOR_IAM_SUBJECT: bare,
-      }),
+      entraExecutionClaims(
+        directoryClaims({
+          REQRO_OPERATOR_IAM_SUBJECT: bare,
+        }),
+      ),
     ),
     'identity_malformed',
   );
@@ -223,10 +239,11 @@ test('the subject is the immutable object identifier, never a UPN, mail or displ
   ])
     assert.equal(
       refusalCode(() =>
-        entraExecutionClaims({
-          REQRO_OPERATOR_IAM_TENANT_ID: TENANT,
-          REQRO_OPERATOR_IAM_SUBJECT: reassignable,
-        }),
+        entraExecutionClaims(
+          directoryClaims({
+            REQRO_OPERATOR_IAM_SUBJECT: reassignable,
+          }),
+        ),
       ),
       'identity_malformed',
       `${reassignable} must not be accepted as the subject`,
@@ -751,8 +768,8 @@ test('a complete serving context resolves, so the ablation below cannot pass vac
   assert.equal(context.jobRunId, 'job-4412');
   assert.equal(context.invocationId, 'c0000000-0000-4000-8000-00000000000c');
   // Thirteen trusted fields, eleven of them independently required.
-  assert.equal(Object.keys(context).length, 15);
-  assert.equal(TRUSTED_EXECUTION_VARIABLES.length, 11);
+  assert.equal(Object.keys(context).length, 18);
+  assert.equal(TRUSTED_EXECUTION_VARIABLES.length, 14);
 });
 
 test('removing any one of the eleven trusted variables refuses the invocation', () => {
@@ -780,6 +797,9 @@ test('removing any one of the eleven trusted variables refuses the invocation', 
     REQRO_OPERATOR_JOB_RUN_ID: 'execution_context_missing',
     REQRO_OPERATOR_COMMIT_SHA: 'execution_context_missing',
     REQRO_OPERATOR_IMAGE_DIGEST: 'execution_context_missing',
+    REQRO_OPERATOR_IAM_ORIGIN: 'execution_context_missing',
+    REQRO_OPERATOR_IAM_ORIGIN_TENANT_ID: 'execution_context_missing',
+    REQRO_OPERATOR_NETWORK_PROFILE: 'execution_context_missing',
   });
   // The trusted-runner declaration is required too, and is separate from the
   // runner's own assertion of its identity.

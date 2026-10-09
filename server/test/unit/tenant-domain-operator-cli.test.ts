@@ -400,6 +400,7 @@ test('the direct import allowlist excludes all application data', () => {
     '../config/operator-audit.js',
     '../config/operator-environment.js',
     '../config/operator-execution.js',
+    '../config/operator-request-artifact.js',
     '../tenancy/tenant-domain-challenge.js',
     '../tenancy/tenant-domain-verifier.js',
     '../tenancy/tenant-domain.js',
@@ -473,6 +474,8 @@ const ELEVATION = {
 const trustedExecution = {
   REQRO_OPERATOR_IAM_TENANT_ID: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
   REQRO_OPERATOR_IAM_SUBJECT: '1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e',
+  REQRO_OPERATOR_IAM_ORIGIN: 'aad',
+  REQRO_OPERATOR_IAM_ORIGIN_TENANT_ID: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
   REQRO_OPERATOR_IAM_PERMISSIONS: 'tenant-domain.request,tenant-domain.execute',
   ...ELEVATION,
   REQRO_OPERATOR_RUNNER_IDENTITY: 'runner/tenant-domain-operator',
@@ -480,6 +483,7 @@ const trustedExecution = {
   REQRO_OPERATOR_JOB_RUN_ID: 'job-harness',
   REQRO_OPERATOR_COMMIT_SHA: 'a'.repeat(40),
   REQRO_OPERATOR_IMAGE_DIGEST: 'sha256:' + 'b'.repeat(64),
+  REQRO_OPERATOR_NETWORK_PROFILE: 'restricted',
   REQRO_OPERATOR_TRUSTED_RUNNER: 'runner/tenant-domain-operator',
   REQRO_OPERATOR_AUDIT_SINK: 'stream',
 };
@@ -530,6 +534,15 @@ const attribution = {
   REQRO_OPERATOR_HOSTNAME: 'requests.example.gov',
   REQRO_OPERATOR_EXPECTED_REVISION: '3',
 };
+
+/** ADR-029. The execution network profile each verb must be started under.
+ * `verify` queries authoritative name servers directly and is the only verb
+ * granted internet DNS egress; declaring the wrong profile is refused, which
+ * is why a multi-verb loop must set this per verb. */
+const profileFor = (verb: string): Record<string, string> => ({
+  REQRO_OPERATOR_NETWORK_PROFILE:
+    verb === 'verify' ? 'dns-verification' : 'restricted',
+});
 
 function invokedCode(
   args: readonly string[],
@@ -643,6 +656,7 @@ test('the approval identifier is accepted only when consuming an approval', () =
     assert.equal(
       invokedCode([verb, '--dry-run'], {
         ...attribution,
+        ...profileFor(verb),
         REQRO_OPERATOR_ROLE: 'public_alias',
         REQRO_OPERATOR_APPROVAL_ID: CORRELATION,
       }),
@@ -656,6 +670,7 @@ test('the requester identity is accepted only when recording an approval', () =>
     assert.equal(
       invokedCode([verb, '--dry-run'], {
         ...attribution,
+        ...profileFor(verb),
         REQRO_OPERATOR_ROLE: 'public_alias',
         REQRO_OPERATOR_REQUESTER_IDENTITY: 'iam:user/sam',
       }),
