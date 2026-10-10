@@ -12,7 +12,15 @@ import type {
   OrderingGuarantee,
   SideEffectRisk,
 } from '../integration/connector-capabilities.js';
-import type { ConnectorLifecycleState } from '../integration/delivery-contract.js';
+import type {
+  ConnectorLifecycleState,
+  DeliveryState,
+} from '../integration/delivery-contract.js';
+import type {
+  AggregateType,
+  ContractKind,
+  IntegrationType,
+} from '../integration/integration-envelope.js';
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type JsonValue = ColumnType<unknown, unknown, unknown>;
@@ -682,7 +690,56 @@ interface IntegrationConnectorAuditTable {
   mutation_txid: Generated<string>;
 }
 
+export type IntegrationPayloadMode =
+  | 'historical_reference'
+  | 'approved_snapshot'
+  | 'current_state_projection';
+
+/** F062.2C transactional outbox. Every vocabulary column is typed by the
+ * F062.1 union that defines it, so the check constraint and the TypeScript
+ * type cannot drift: adding or renaming an integration type, aggregate type,
+ * contract kind or delivery state in `src/integration/` is a compile error
+ * here.
+ *
+ * **No payload and no business data.** The envelope carries none, and this
+ * shape carries only identifiers, closed vocabulary members, integers and
+ * timestamps. Nothing here enables delivery.
+ *
+ * Delivery progression is inert in this slice: `state` is forced to
+ * `pending` on insert and every UPDATE is refused, so the only reachable
+ * value is the initial one even though the column's domain is the full
+ * delivery vocabulary. There is deliberately no `Updateable` use of this
+ * table anywhere. */
+interface IntegrationOutboxTable {
+  id: Generated<string>;
+  organization_id: string;
+  integration_connector_id: string;
+  /** The intent identity consumers deduplicate on, and the per-connector
+   * dedupe key. */
+  integration_id: string;
+  contract_kind: ContractKind;
+  integration_type: IntegrationType;
+  schema_version: number;
+  aggregate_type: AggregateType;
+  aggregate_id: string;
+  aggregate_revision: number | null;
+  origin_kind: 'reqro' | 'external';
+  origin_connector_id: string | null;
+  correlation_id: string;
+  causation_id: string | null;
+  deployment_environment: string;
+  payload_mode: IntegrationPayloadMode;
+  /** `integration_connector.configuration_revision`, never
+   * `record_revision`: the pin is semantic. */
+  pinned_connector_configuration_revision: number;
+  /** Database-forced to `pending`; a caller cannot choose it. */
+  state: Generated<DeliveryState>;
+  occurred_at: Timestamp;
+  created_at: Generated<Timestamp>;
+}
+
 export interface DatabaseSchema extends ResidentExperienceTables {
+  integration_outbox: IntegrationOutboxTable;
   integration_connector: IntegrationConnectorTable;
   integration_connector_audit: IntegrationConnectorAuditTable;
   tenant_domain: TenantDomainTable;
