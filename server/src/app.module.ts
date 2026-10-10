@@ -25,6 +25,8 @@ import { TenancyModule } from './tenancy/tenancy.module.js';
 import { TenantResolutionMiddleware } from './tenancy/tenant-resolution.middleware.js';
 import { RequestTracingModule } from './observability/request-tracing.module.js';
 import { RequestTracingMiddleware } from './observability/request-tracing.middleware.js';
+import { RequestMetricsModule } from './observability/request-metrics.module.js';
+import { RequestMetricsMiddleware } from './observability/request-metrics.middleware.js';
 
 @Module({
   imports: [
@@ -36,6 +38,7 @@ import { RequestTracingMiddleware } from './observability/request-tracing.middle
     }),
     LoggingModule,
     RequestTracingModule,
+    RequestMetricsModule,
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<AppConfiguration, true>) => [
@@ -71,6 +74,7 @@ export class AppModule implements NestModule {
       .apply(
         RequestLoggingMiddleware,
         RequestTracingMiddleware,
+        RequestMetricsMiddleware,
         TenantResolutionMiddleware,
       )
       .forRoutes('*');
