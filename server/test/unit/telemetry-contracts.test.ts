@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, relative, sep } from 'node:path';
 import ts from 'typescript';
 import {
   signalResponsibilities,
@@ -242,7 +242,70 @@ test('SLI metadata uses neutral concepts without assigning a production target',
   assert.equal(metricConcepts.integration_reconciliation_failure, 'count');
 });
 
-test('AST boundary permits only local contracts and pure built-ins, with no runtime consumers', () => {
+/**
+ * F061.1A. The closed reviewed-consumer allowlist.
+ *
+ * F061.1 shipped with **zero** runtime consumers, and the boundary test
+ * asserted that absolutely. That was correct while nothing consumed the
+ * policy, but zero-consumer status was always temporary: the point of a
+ * provider-neutral telemetry policy is that application code defers to it
+ * rather than inventing its own.
+ *
+ * F062.1 is the **first explicitly reviewed consumer**. It reached this
+ * boundary because its own draft maintained a competing metric-label policy
+ * that classified `connectorId` as permitted, which F061.1 forbids; deferring
+ * to this module is the fix.
+ *
+ * The invariant is therefore now a **closed allowlist of exact paths**, not a
+ * directory allowance. `src/integration/` as a whole is deliberately *not*
+ * permitted: only the one integration module that owns the telemetry seam may
+ * import the policy, so a future consumer requires another explicit review of
+ * this list rather than inheriting access from its neighbours.
+ */
+const REVIEWED_TELEMETRY_CONSUMERS: readonly string[] = [
+  'src/integration/integration-telemetry.ts',
+];
+
+/** Repo-relative, posix-normalized path of a scanned file. */
+const relativePosix = (root: string, path: string): string =>
+  relative(root, path).split(sep).join('/');
+
+/** Pure predicate, so the allowlist mechanism can be exercised with synthetic
+ * inputs rather than only against whatever files happen to exist. */
+const isReviewedTelemetryConsumer = (relativePath: string): boolean =>
+  REVIEWED_TELEMETRY_CONSUMERS.includes(relativePath);
+
+test('the reviewed-consumer allowlist is closed and exact', () => {
+  // Exactly one consumer is reviewed today.
+  assert.deepEqual(REVIEWED_TELEMETRY_CONSUMERS, [
+    'src/integration/integration-telemetry.ts',
+  ]);
+  assert.ok(
+    isReviewedTelemetryConsumer('src/integration/integration-telemetry.ts'),
+  );
+  // Exercised with synthetic paths because the mechanism must hold whether or
+  // not the consumer is present in this working tree: F062.1 is still
+  // unpublished, so the real file may be absent here.
+  for (const refused of [
+    // a sibling in the same directory inherits nothing
+    'src/integration/connector-registry.ts',
+    'src/integration/index.ts',
+    // a directory allowance is not what was granted
+    'src/integration/telemetry.ts',
+    'src/integration/sub/integration-telemetry.ts',
+    // a same-basename file elsewhere must not pass: the allowlist is a path,
+    // not a filename
+    'src/notifications/integration-telemetry.ts',
+    'src/service-request/integration-telemetry.ts',
+    // unrelated application areas
+    'src/database/database.service.ts',
+    'src/tenancy/tenant-context.ts',
+    'src/main.ts',
+  ])
+    assert.equal(isReviewedTelemetryConsumer(refused), false, refused);
+});
+
+test('AST boundary permits only local contracts, pure built-ins and reviewed consumers', () => {
   const root = resolve(__dirname, '../../..');
   const area = join(root, 'src/observability');
   const files = readdirSync(area).sort();
@@ -265,7 +328,18 @@ test('AST boundary permits only local contracts and pure built-ins, with no runt
     const visit = (node: ts.Node): void => {
       if (ts.isImportDeclaration(node)) {
         assert.ok(ts.isStringLiteral(node.moduleSpecifier));
+        // The only import the policy may have is its own sibling contract.
+        // This single equality is what keeps the policy provider-neutral: a
+        // monitoring vendor type cannot be referenced without importing it,
+        // and it also prevents observability from depending on integration,
+        // preserving the one-way direction integration -> observability.
         assert.equal(node.moduleSpecifier.text, './telemetry-contracts.js');
+        assert.ok(
+          !/integration|@azure|opentelemetry|applicationinsights|aws-sdk|@google-cloud/i.test(
+            node.moduleSpecifier.text,
+          ),
+          'The provider-neutral contract must not import a consumer or a monitoring vendor',
+        );
       }
       assert.equal(
         ts.isNewExpression(node),
@@ -297,17 +371,21 @@ test('AST boundary permits only local contracts and pure built-ins, with no runt
         ts.ScriptTarget.Latest,
         true,
       );
+      const relativePath = relativePosix(root, path);
       const visit = (node: ts.Node): void => {
         if (
           ts.isStringLiteral(node) &&
           (ts.isImportDeclaration(node.parent) ||
             ts.isExportDeclaration(node.parent) ||
-            ts.isCallExpression(node.parent))
+            ts.isCallExpression(node.parent)) &&
+          node.text.includes('observability/')
         ) {
-          assert.equal(
-            node.text.includes('observability/'),
-            false,
-            `Unexpected runtime consumer: ${entry.name}`,
+          // A consumer is permitted only if its exact path was reviewed.
+          // Reported by relative path, never by basename, so the refusal
+          // names the module unambiguously.
+          assert.ok(
+            isReviewedTelemetryConsumer(relativePath),
+            `Unexpected runtime consumer: ${relativePath}`,
           );
         }
         ts.forEachChild(node, visit);
