@@ -7,6 +7,12 @@ import type {
   TenantDomainVerificationMethod,
   TenantDomainVerificationState,
 } from '../tenancy/tenant-domain.js';
+import type {
+  ConnectorOperation,
+  OrderingGuarantee,
+  SideEffectRisk,
+} from '../integration/connector-capabilities.js';
+import type { ConnectorLifecycleState } from '../integration/delivery-contract.js';
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type JsonValue = ColumnType<unknown, unknown, unknown>;
@@ -578,7 +584,107 @@ interface TenantDomainOperatorApprovalTable {
   creation_txid: Generated<string>;
 }
 
+/** F062.2B integration connector metadata. Every vocabulary column is typed
+ * by the F062.1 union that defines it, so the check constraint and the
+ * TypeScript type cannot drift apart: renaming a lifecycle state or a
+ * side-effect risk in `src/integration/` is a compile error here. The
+ * capability columns mirror F062.1 `ConnectorCapabilities` field for field.
+ *
+ * No credential is stored. `credential_reference` is a non-secret locator
+ * constrained by the schema, and no column holds vendor payload or error
+ * text. Nothing in this shape enables integration traffic. */
+interface IntegrationConnectorTable {
+  id: Generated<string>;
+  organization_id: string;
+  connector_key: string;
+  connector_kind: IntegrationConnectorKind;
+  lifecycle_state: Generated<ConnectorLifecycleState>;
+  /** The semantic pin future outbox intents record. Advances only on a
+   * behaviour-relevant change. */
+  configuration_revision: Generated<number>;
+  /** The optimistic-concurrency token. Advances on every accepted mutation,
+   * including a semantically inert credential rotation. */
+  record_revision: Generated<number>;
+  operations: Generated<ConnectorOperation[]>;
+  supports_idempotency_key: Generated<boolean>;
+  supports_read_after_write: Generated<boolean>;
+  supports_reconciliation: Generated<boolean>;
+  supports_webhook_callback: Generated<boolean>;
+  supports_ordering: Generated<OrderingGuarantee>;
+  supports_update: Generated<boolean>;
+  supports_cancel: Generated<boolean>;
+  supports_delete: Generated<boolean>;
+  supports_current_state_sync: Generated<boolean>;
+  reports_terminal_state: Generated<boolean>;
+  side_effect_risk: Generated<SideEffectRisk>;
+  credential_reference: string | null;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+  disabled_at: Timestamp | null;
+  retired_at: Timestamp | null;
+}
+
+/** Provider-neutral capability profile, never a vendor product name. */
+export type IntegrationConnectorKind =
+  | 'loopback'
+  | 'work_management'
+  | 'asset_management'
+  | 'service_request_exchange';
+
+export type IntegrationConnectorChangeCategory =
+  | 'registered'
+  | 'lifecycle_changed'
+  | 'capabilities_changed'
+  | 'credential_reference_rotated';
+
+/** F062.2B per-revision connector history. Answers what configuration and
+ * capabilities were authoritative at revision N, which F062.2A requires so a
+ * past ambiguous delivery is resolved against the semantics that governed it.
+ *
+ * `audit_sequence`, `changed_at` and `mutation_txid` are assigned by the
+ * database guard, and the snapshot is verified against committed connector
+ * state, so these shapes describe what can be read rather than what a caller
+ * may freely write. `credential_reference_present` records presence only; the
+ * locator's value is never copied into history.
+ *
+ * This table is NOT Reqro's authoritative authorization record for who
+ * approved an administrative change; `actor` is traceability only. */
+interface IntegrationConnectorAuditTable {
+  id: Generated<string>;
+  organization_id: string;
+  integration_connector_id: string;
+  record_revision: number;
+  configuration_revision: number;
+  prior_record_revision: number | null;
+  revision_advanced: boolean;
+  change_category: IntegrationConnectorChangeCategory;
+  connector_key: string;
+  connector_kind: IntegrationConnectorKind;
+  lifecycle_state: ConnectorLifecycleState;
+  operations: ConnectorOperation[];
+  supports_idempotency_key: boolean;
+  supports_read_after_write: boolean;
+  supports_reconciliation: boolean;
+  supports_webhook_callback: boolean;
+  supports_ordering: OrderingGuarantee;
+  supports_update: boolean;
+  supports_cancel: boolean;
+  supports_delete: boolean;
+  supports_current_state_sync: boolean;
+  reports_terminal_state: boolean;
+  side_effect_risk: SideEffectRisk;
+  credential_reference_present: boolean;
+  prior_configuration_revision: number | null;
+  prior_lifecycle_state: ConnectorLifecycleState | null;
+  actor: string;
+  correlation_id: string;
+  changed_at: Generated<Timestamp>;
+  mutation_txid: Generated<string>;
+}
+
 export interface DatabaseSchema extends ResidentExperienceTables {
+  integration_connector: IntegrationConnectorTable;
+  integration_connector_audit: IntegrationConnectorAuditTable;
   tenant_domain: TenantDomainTable;
   tenant_domain_audit: TenantDomainAuditTable;
   tenant_domain_operator_approval: TenantDomainOperatorApprovalTable;
