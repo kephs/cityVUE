@@ -61,9 +61,29 @@ Commands use the installed Node v24.19.0 runtime and local tool entry points cor
 
 Repeat focused invocations are not additional distinct test coverage. No repository-wide green suite is claimed. Shared/React/API E2E/database suites were not run because no consumer, endpoint, shared module or persistence changed.
 
-The AST boundary test permits only the local contracts import and reviewed pure built-in calls, rejects constructor calls/re-exports and checks for production consumers. Together with the scoped diff, this verifies no SDK, network, persistence, cloud client, header parser or runtime instrumentation was introduced. This is source-boundary evidence, not deployed telemetry evidence.
+The AST boundary test permits only the local contracts import and reviewed pure built-in calls, rejects constructor calls/re-exports and checks production consumers against a closed reviewed allowlist (see the amendment below). Together with the scoped diff, this verifies no SDK, network, persistence, cloud client, header parser or runtime instrumentation was introduced. This is source-boundary evidence, not deployed telemetry evidence.
 
 No database, query or schema changed; no migration is needed and no database integration suite is required for this allocation. No shared or React files/consumers are affected. No live credentials, infrastructure, production resources or external service were used. Existing installed server dependencies are reused through an ignored worktree junction; no installation occurred.
+
+## F061.1A amendment — reviewed telemetry-policy consumer boundary
+
+**F061.1 initially shipped with zero runtime consumers**, and its AST boundary test asserted that absolutely: no module outside `src/observability` could import these contracts. That invariant was correct while nothing consumed the policy, but zero-consumer status was always temporary — the purpose of a provider-neutral telemetry policy is that application code defers to it instead of inventing its own.
+
+**F062.1 is the first explicitly reviewed consumer.** It reached this boundary for a substantive reason: its own draft maintained a competing metric-label policy that classified `connectorId` as a *permitted* label, which F061.1 forbids. Deferring to this module is the correction, and it keeps exactly one authority for what may become a metric label.
+
+**The invariant is now a closed consumer allowlist rather than permanent zero-consumer status.** The allowlist holds exact repo-relative paths, currently one:
+
+```text
+src/integration/integration-telemetry.ts
+```
+
+`src/integration/` as a whole is deliberately **not** permitted. Only the single integration module that owns the telemetry seam may import the policy, so a future consumer requires another explicit review and an update to that list rather than inheriting access from a neighbouring file. The allowlist is matched on full path, not basename, so a same-named file elsewhere does not qualify.
+
+The boundary test still fails if an unexpected application module imports the contracts, if a reviewed consumer's path differs by so much as a directory, if observability imports integration, if a monitoring-vendor or cloud SDK specifier appears in the contract's imports, or if arbitrary runtime consumers appear. Because F062.1 is still unpublished, its real import cannot be exercised from this branch; the allowlist decision logic is therefore proven directly with synthetic paths, including sibling, nested, relocated-basename and unrelated-area cases, and the end-to-end admission is additionally covered by F062.1's own boundary suite.
+
+**The dependency direction is one-way:** integration → observability contracts, never the reverse. F061.1 remains unaware of F062.
+
+**F061.1 remains the authority for telemetry privacy and cardinality policy.** This amendment changes **no** policy or classification. Unchanged and still in force: `connectorId`, `organizationId`, `customerHostname` and `tenantHostname` remain restricted with `restrictedAttributePolicy.metricLabels = 'forbidden'`; correlation, trace and span identifiers remain metric-forbidden; and every PII and high-cardinality prohibition stands. `telemetry-contracts.ts` and `metric-label-policy.ts` are byte-for-byte unmodified by this slice.
 
 ## Remaining work and review boundary
 
