@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
-import { resolve, join, relative, sep } from 'node:path';
+import { resolve, join, dirname, relative, sep } from 'node:path';
 import ts from 'typescript';
 import {
   signalResponsibilities,
@@ -276,7 +276,7 @@ const isReviewedTelemetryConsumer = (relativePath: string): boolean =>
   REVIEWED_TELEMETRY_CONSUMERS.includes(relativePath);
 
 test('the reviewed-consumer allowlist is closed and exact', () => {
-  // Exactly one consumer is reviewed today.
+  // F061.1A reviewed exactly one integration consumer; tracing edges are separate.
   assert.deepEqual(REVIEWED_TELEMETRY_CONSUMERS, [
     'src/integration/integration-telemetry.ts',
   ]);
@@ -308,8 +308,96 @@ test('the reviewed-consumer allowlist is closed and exact', () => {
 test('AST boundary permits only local contracts, pure built-ins and reviewed consumers', () => {
   const root = resolve(__dirname, '../../..');
   const area = join(root, 'src/observability');
-  const files = readdirSync(area).sort();
-  assert.deepEqual(files, ['metric-label-policy.ts', 'telemetry-contracts.ts']);
+  // Exact source -> target edges, including consumers INSIDE observability.
+  // Directory membership never grants permission to consume the contracts.
+  const allowedEdges = new Map<string, readonly string[]>([
+    [
+      'src/app.module.ts',
+      [
+        'src/observability/request-tracing.module.ts',
+        'src/observability/request-tracing.middleware.ts',
+      ],
+    ],
+    [
+      'src/observability/request-tracing.module.ts',
+      [
+        'src/observability/request-tracing.ts',
+        'src/observability/request-tracing.middleware.ts',
+      ],
+    ],
+    [
+      'src/observability/request-tracing.middleware.ts',
+      ['src/observability/request-tracing.ts'],
+    ],
+    [
+      'src/observability/request-tracing.ts',
+      ['src/observability/telemetry-contracts.ts'],
+    ],
+    [
+      'src/observability/metric-label-policy.ts',
+      ['src/observability/telemetry-contracts.ts'],
+    ],
+  ]);
+  const checkEdge = (path: string, specifier: string): void => {
+    if (!specifier.startsWith('.')) return;
+    const target = resolve(dirname(path), specifier).replace(/\.js$/, '.ts');
+    if (target !== area && !target.startsWith(area + sep)) return;
+    const importer = relativePosix(root, path);
+    const destination = relativePosix(root, target);
+    // F061.1A authorized this exact integration path against the two existing
+    // policy modules. New tracing modules do not expand that target scope.
+    const reviewedPolicyEdge =
+      isReviewedTelemetryConsumer(importer) &&
+      [
+        'src/observability/telemetry-contracts.ts',
+        'src/observability/metric-label-policy.ts',
+      ].includes(destination);
+    assert.ok(
+      reviewedPolicyEdge || allowedEdges.get(importer)?.includes(destination),
+      `Unapproved observability edge: ${importer} -> ${destination}`,
+    );
+  };
+  for (const importer of [
+    'src/observability/future.ts',
+    'src/observability/request-tracing.module.ts',
+    'src/integration/connector-registry.ts',
+    'src/app.module.ts',
+  ]) {
+    assert.throws(() => {
+      checkEdge(
+        join(root, importer),
+        importer === 'src/app.module.ts'
+          ? './observability/telemetry-contracts.js'
+          : '../observability/telemetry-contracts.js',
+      );
+    }, /Unapproved observability edge/);
+  }
+  assert.throws(() => {
+    checkEdge(join(root, 'src/future.ts'), './observability');
+  }, /Unapproved observability edge/);
+  // Positive target checks do not require F062.1 implementation to exist.
+  for (const target of ['telemetry-contracts', 'metric-label-policy']) {
+    assert.doesNotThrow(() => {
+      checkEdge(
+        join(root, 'src/integration/integration-telemetry.ts'),
+        `../observability/${target}.js`,
+      );
+    });
+  }
+  for (const target of [
+    'request-tracing',
+    'request-tracing.module',
+    'request-tracing.middleware',
+    'future',
+  ]) {
+    assert.throws(() => {
+      checkEdge(
+        join(root, 'src/integration/integration-telemetry.ts'),
+        `../observability/${target}.js`,
+      );
+    }, /Unapproved observability edge/);
+  }
+  const files = ['metric-label-policy.ts', 'telemetry-contracts.ts'];
   const pureCalls = new Set([
     'Object.freeze',
     'Object.getPrototypeOf',
@@ -359,7 +447,6 @@ test('AST boundary permits only local contracts, pure built-ins and reviewed con
   const scan = (directory: string): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
-      if (path === area) continue;
       if (entry.isDirectory()) {
         scan(path);
         continue;
@@ -371,22 +458,14 @@ test('AST boundary permits only local contracts, pure built-ins and reviewed con
         ts.ScriptTarget.Latest,
         true,
       );
-      const relativePath = relativePosix(root, path);
       const visit = (node: ts.Node): void => {
         if (
           ts.isStringLiteral(node) &&
           (ts.isImportDeclaration(node.parent) ||
             ts.isExportDeclaration(node.parent) ||
-            ts.isCallExpression(node.parent)) &&
-          node.text.includes('observability/')
+            ts.isCallExpression(node.parent))
         ) {
-          // A consumer is permitted only if its exact path was reviewed.
-          // Reported by relative path, never by basename, so the refusal
-          // names the module unambiguously.
-          assert.ok(
-            isReviewedTelemetryConsumer(relativePath),
-            `Unexpected runtime consumer: ${relativePath}`,
-          );
+          checkEdge(path, node.text);
         }
         ts.forEachChild(node, visit);
       };

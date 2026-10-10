@@ -32,6 +32,7 @@ export interface AppConfiguration {
     max: number;
   };
   telemetry: {
+    requestTracingEnabled?: boolean;
     serviceName: string;
     otlpEndpoint?: string;
   };
@@ -114,6 +115,8 @@ export function configuration(): AppConfiguration {
       max: Number(process.env.RATE_LIMIT_MAX ?? 120),
     },
     telemetry: {
+      requestTracingEnabled:
+        process.env.REQRO_REQUEST_TRACING_ENABLED === 'true',
       serviceName: process.env.OTEL_SERVICE_NAME ?? 'cityvue-api',
       ...(otlpEndpoint ? { otlpEndpoint } : {}),
     },

@@ -23,6 +23,8 @@ import { NotificationsModule } from './notifications/notifications.module.js';
 import { ResidentExperienceModule } from './resident-experience/resident-experience.module.js';
 import { TenancyModule } from './tenancy/tenancy.module.js';
 import { TenantResolutionMiddleware } from './tenancy/tenant-resolution.middleware.js';
+import { RequestTracingModule } from './observability/request-tracing.module.js';
+import { RequestTracingMiddleware } from './observability/request-tracing.middleware.js';
 
 @Module({
   imports: [
@@ -33,6 +35,7 @@ import { TenantResolutionMiddleware } from './tenancy/tenant-resolution.middlewa
       validate: validateServingEnvironment,
     }),
     LoggingModule,
+    RequestTracingModule,
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<AppConfiguration, true>) => [
@@ -65,7 +68,11 @@ export class AppModule implements NestModule {
     // state and never terminates a request, so staff and admin routes are
     // unaffected and keep deriving Organization from verified identity.
     consumer
-      .apply(RequestLoggingMiddleware, TenantResolutionMiddleware)
+      .apply(
+        RequestLoggingMiddleware,
+        RequestTracingMiddleware,
+        TenantResolutionMiddleware,
+      )
       .forRoutes('*');
   }
 }
