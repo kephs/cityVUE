@@ -13,7 +13,7 @@ const source = (path: string) =>
     true,
   );
 
-test('SDK imports are confined to the tracing adapter; no monitoring vendor/exporter imports exist', () => {
+test('SDK imports are confined to the reviewed signal adapters; no monitoring vendor/exporter imports exist', () => {
   const walk = (directory: string): void => {
     for (const entry of readdirSync(join(root, directory), {
       withFileTypes: true,
@@ -37,10 +37,16 @@ test('SDK imports are confined to the tracing adapter; no monitoring vendor/expo
             /applicationinsights|azure.*monitor|exporter.*otlp|exporter.*azure|sdk-logs|auto-instrumentation/i,
           );
           if (specifier.startsWith('@opentelemetry/')) {
-            assert.equal(path, 'src/observability/request-tracing.ts');
+            assert.ok(
+              [
+                'src/observability/request-tracing.ts',
+                'src/observability/request-metrics.ts',
+              ].includes(path),
+            );
             assert.ok(
               [
                 '@opentelemetry/api',
+                '@opentelemetry/sdk-metrics',
                 '@opentelemetry/sdk-trace',
                 '@opentelemetry/resources',
               ].includes(specifier),
@@ -63,6 +69,7 @@ test('SDK imports are confined to the tracing adapter; no monitoring vendor/expo
     [
       '@opentelemetry/api',
       '@opentelemetry/resources',
+      '@opentelemetry/sdk-metrics',
       '@opentelemetry/sdk-trace',
     ],
   );
@@ -77,6 +84,25 @@ test('observability imports are closed against database, tenant enrichment, netw
   const allowed: Record<string, readonly string[]> = {
     'telemetry-contracts.ts': [],
     'metric-label-policy.ts': ['./telemetry-contracts.js'],
+    'request-metrics.ts': [
+      '@opentelemetry/api',
+      '@opentelemetry/resources',
+      '@opentelemetry/sdk-metrics',
+      './metric-label-policy.js',
+      './telemetry-contracts.js',
+    ],
+    'request-metrics.middleware.ts': [
+      '@nestjs/common',
+      'express',
+      './request-metrics.js',
+    ],
+    'request-metrics.module.ts': [
+      '@nestjs/common',
+      '@nestjs/config',
+      '../config/configuration.js',
+      './request-metrics.js',
+      './request-metrics.middleware.js',
+    ],
     'request-tracing.ts': [
       '@opentelemetry/api',
       '@opentelemetry/resources',
@@ -182,6 +208,7 @@ test('production wiring preserves server correlation before tracing and tenant r
         [
           'RequestLoggingMiddleware',
           'RequestTracingMiddleware',
+          'RequestMetricsMiddleware',
           'TenantResolutionMiddleware',
         ],
       );

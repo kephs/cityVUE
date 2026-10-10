@@ -37,6 +37,7 @@ export interface EnvironmentVariables {
   RATE_LIMIT_MAX: number;
   OTEL_SERVICE_NAME: string;
   REQRO_REQUEST_TRACING_ENABLED: boolean;
+  REQRO_REQUEST_METRICS_ENABLED: boolean;
   TENANT_RESOLUTION_STRATEGY: TenantResolutionStrategy;
   TENANT_HOST_SOURCE: TenantHostSource;
   TENANT_TRUSTED_PROXY_CIDRS: string;
@@ -124,6 +125,10 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
   RATE_LIMIT_TTL_MS: Joi.number().integer().min(1000).default(60000),
   RATE_LIMIT_MAX: Joi.number().integer().min(1).default(120),
   OTEL_SERVICE_NAME: Joi.string().trim().min(1).default('cityvue-api'),
+  REQRO_REQUEST_METRICS_ENABLED: Joi.boolean()
+    .truthy('true')
+    .falsy('false')
+    .default(false),
   REQRO_REQUEST_TRACING_ENABLED: Joi.boolean()
     .truthy('true')
     .falsy('false')

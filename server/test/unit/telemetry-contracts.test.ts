@@ -312,9 +312,29 @@ test('AST boundary permits only local contracts, pure built-ins and reviewed con
   // Directory membership never grants permission to consume the contracts.
   const allowedEdges = new Map<string, readonly string[]>([
     [
+      'src/observability/request-metrics.module.ts',
+      [
+        'src/observability/request-metrics.ts',
+        'src/observability/request-metrics.middleware.ts',
+      ],
+    ],
+    [
+      'src/observability/request-metrics.middleware.ts',
+      ['src/observability/request-metrics.ts'],
+    ],
+    [
+      'src/observability/request-metrics.ts',
+      [
+        'src/observability/telemetry-contracts.ts',
+        'src/observability/metric-label-policy.ts',
+      ],
+    ],
+    [
       'src/app.module.ts',
       [
         'src/observability/request-tracing.module.ts',
+        'src/observability/request-metrics.module.ts',
+        'src/observability/request-metrics.middleware.ts',
         'src/observability/request-tracing.middleware.ts',
       ],
     ],
@@ -359,6 +379,9 @@ test('AST boundary permits only local contracts, pure built-ins and reviewed con
   };
   for (const importer of [
     'src/observability/future.ts',
+    'src/observability/nested/request-metrics.ts',
+    'src/observability/request-metrics.middleware.ts',
+    'src/observability/request-metrics.module.ts',
     'src/observability/request-tracing.module.ts',
     'src/integration/connector-registry.ts',
     'src/app.module.ts',
