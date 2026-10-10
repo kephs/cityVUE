@@ -84,6 +84,10 @@ test('observability imports are closed against database, tenant enrichment, netw
   const allowed: Record<string, readonly string[]> = {
     'telemetry-contracts.ts': [],
     'metric-label-policy.ts': ['./telemetry-contracts.js'],
+    'telemetry-export.ts': [
+      './metric-label-policy.js',
+      './telemetry-contracts.js',
+    ],
     'request-metrics.ts': [
       '@opentelemetry/api',
       '@opentelemetry/resources',
