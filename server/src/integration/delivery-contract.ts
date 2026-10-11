@@ -7,6 +7,11 @@
  * exceptional, which is the premise every idempotency mechanism rests on.
  */
 
+import {
+  transientIntegrationFailures,
+  type IntegrationFailureCategory,
+} from './integration-envelope.js';
+
 /**
  * The closed delivery state vocabulary.
  *
@@ -54,6 +59,120 @@ export const unsettledAttemptOutcomes: readonly AttemptOutcome[] = [
 
 export function isSettledOutcome(outcome: AttemptOutcome): boolean {
   return !unsettledAttemptOutcomes.includes(outcome);
+}
+
+/**
+ * F062.2D-2C-1 — the bounded Reqro-owned attempt settlement reason namespace.
+ *
+ * **`reason_code` and `failure_category` answer different questions.**
+ * `failure_category` answers "what did the destination or external transport
+ * do?" and is the ten-value destination taxonomy. A reason code answers "what
+ * did Reqro's own delivery machinery do?" and no destination is implied by
+ * any value in it.
+ *
+ * **This is the currently persisted subset, not the whole design.** F062.2A
+ * §8.1 designs a wider taxonomy across ten groups; only the two values below
+ * have a producer, so only they are persisted. The remainder arrives with the
+ * classifying settle path that can write it, alongside its own authority
+ * here. Adding a value requires a reviewed migration altering the `CHECK`,
+ * which is deliberately the same friction as adding a delivery state.
+ *
+ * **These are delivery evidence, not observability classifications.** F061's
+ * `reason` dimension is a bounded metric label and is deliberately coarser.
+ * The dependency direction is F062 semantics → a future mapping → F061
+ * observability, never the reverse, so nothing here imports F061.
+ */
+export const integrationAttemptReasonCodes = [
+  /** The claim lease expired while the dispatch boundary was unset, so no
+   * external transmission could have occurred. The one reason that authorizes
+   * automatic retry, and it is authorized by evidence rather than by elapsed
+   * time. It never means "a generic internal failure". */
+  'lease_expired_pre_dispatch',
+  /** The claim lease expired after the dispatch boundary was set, so a
+   * request may already have reached the destination and its outcome cannot
+   * be established. Blind retry is forbidden; resolution is the
+   * capability-gated re-attempt, reconciliation, or an operator. */
+  'lease_expired_uncertain',
+] as const;
+export type IntegrationAttemptReasonCode =
+  (typeof integrationAttemptReasonCodes)[number];
+
+export function isIntegrationAttemptReasonCode(
+  value: string,
+): value is IntegrationAttemptReasonCode {
+  return (integrationAttemptReasonCodes as readonly string[]).includes(value);
+}
+
+/** One attempt's settlement evidence, as the database records it.
+ *
+ * `dispatchStarted` is the boolean reading of `dispatch_started_at`: the
+ * timestamp itself carries no authority here, only whether the boundary was
+ * crossed. */
+export interface AttemptSettlementEvidence {
+  readonly outcome: AttemptOutcome | null;
+  readonly failureCategory: IntegrationFailureCategory | null;
+  readonly reasonCode: IntegrationAttemptReasonCode | null;
+  readonly dispatchStarted: boolean;
+}
+
+/**
+ * Whether a settlement shape is one the contract authorizes.
+ *
+ * The TypeScript twin of the `integration_delivery_attempt` settlement
+ * constraints, so the matrix is assertable from either side and a divergence
+ * is a test failure rather than a discovery. Pure and side-effect free: this
+ * is contract authority, not application behaviour.
+ *
+ * | Origin                       | outcome            | category     | reason                       |
+ * | ---------------------------- | ------------------ | ------------ | ---------------------------- |
+ * | open                         | null               | null         | null                         |
+ * | A success                    | `succeeded`        | null         | null                         |
+ * | B adapter-derived            | the other three    | **not null** | null                         |
+ * | C pre-dispatch recovery      | `failed_transient` | null         | `lease_expired_pre_dispatch` |
+ * | D possibly-dispatched expiry | `ambiguous`        | null         | `lease_expired_uncertain`    |
+ *
+ * C additionally requires the boundary **unset** and D requires it **set**, so
+ * neither reason can assert a boundary state the evidence contradicts.
+ */
+export function isAuthorizedAttemptSettlement(
+  evidence: AttemptSettlementEvidence,
+): boolean {
+  const { outcome, failureCategory, reasonCode, dispatchStarted } = evidence;
+
+  // An open attempt has nothing to explain yet.
+  if (outcome === null) return failureCategory === null && reasonCode === null;
+
+  // A. Success carries neither an explanation nor a reason.
+  if (outcome === 'succeeded')
+    return failureCategory === null && reasonCode === null;
+
+  // C and D. A lifecycle reason never coexists with destination behaviour it
+  // did not observe, and each pins both its outcome and its boundary state.
+  if (reasonCode === 'lease_expired_pre_dispatch')
+    return (
+      outcome === 'failed_transient' &&
+      failureCategory === null &&
+      !dispatchStarted
+    );
+  if (reasonCode === 'lease_expired_uncertain')
+    return (
+      outcome === 'ambiguous' && failureCategory === null && dispatchStarted
+    );
+
+  // B. Adapter-derived. Every non-successful settlement is explained by
+  // exactly one namespace, so with no lifecycle reason a category is required
+  // -- which is also what refuses `failed_permanent` with no category.
+  if (failureCategory === null) return false;
+
+  // F062.1 transientIntegrationFailures, both halves. A timeout may already
+  // have taken effect, so it settles only as ambiguous and can never earn a
+  // transient retry.
+  if (outcome === 'failed_transient')
+    return (transientIntegrationFailures as readonly string[]).includes(
+      failureCategory,
+    );
+  if (failureCategory === 'destination_timeout') return outcome === 'ambiguous';
+  return true;
 }
 
 /** Terminal states. A terminal state is not re-attempted without an explicit,

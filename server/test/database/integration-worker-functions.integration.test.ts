@@ -13,6 +13,7 @@ import { up as catalogUp } from '../../migrations/20260902000000-create-organiza
 import { up as connectorUp } from '../../migrations/20261020000000-add-integration-connector-registry.js';
 import { up as outboxUp } from '../../migrations/20261021000000-add-integration-outbox.js';
 import { up as attemptUp } from '../../migrations/20261022000000-add-integration-delivery-attempt.js';
+import { up as leaseUp } from '../../migrations/20261024000000-add-integration-lease-recovery-evidence.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import {
   attemptOutcomes,
@@ -125,6 +126,11 @@ async function withSchema(run: (f: Fixture) => Promise<void>): Promise<void> {
     await outboxUp(db);
     await attemptUp(db);
     await applyIntegrationWorkerFunctions(db, schema);
+    // F062.2D-2C-1, applied in ordinal order after Migration 53. The worker
+    // API must keep working unchanged under the lease, dispatch-boundary and
+    // recovery-reason constraints, so the whole suite below runs against
+    // them rather than against the pre-2C-1 schema.
+    await leaseUp(db);
 
     const organizationA = randomUUID();
     const organizationB = randomUUID();

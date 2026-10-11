@@ -443,7 +443,7 @@ test('no network, vendor, secret or resident behaviour exists in the migration',
 
 test('the migration is applied as text, so no test may import it', () => {
   const files = readdirSync(MIGRATIONS).filter((file) => file.endsWith('.ts'));
-  assert.equal(files.length, 53, 'the repository holds 53 migrations');
+  assert.equal(files.length, 54, 'the repository holds 54 migrations');
   assert.ok(files.includes(MIGRATION));
   // Migrations are compiled into the test output only when a test imports
   // them statically, and a migration hardcoding `public.` must not be
