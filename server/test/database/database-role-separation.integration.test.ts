@@ -30,8 +30,27 @@ import {
 const BOOTSTRAP_ARTIFACT = 'bootstrap-roles.sql';
 const RUNTIME_ARTIFACT = 'runtime-role.sql';
 const OPERATOR_ARTIFACT = 'operator-role.sql';
+const WORKER_ARTIFACT = 'integration-worker-role.sql';
 const MIGRATION_48 = '20261018000000-harden-tenant-domain-functions.ts';
 const MIGRATION_49 = '20261019000000-harden-runtime-reference-locks.ts';
+const MIGRATION_53 = '20261023000000-add-integration-worker-function-api.ts';
+/** F062.2D-2B. The names are fixed in the artifacts rather than generated,
+ * because the cluster helper's role names are fixed the same way. */
+const FUNCTION_OWNER = 'reqro_integration_function_owner';
+const API_SCHEMA = 'reqro_integration_api';
+/** The exact privilege set integration-worker-role.sql derives from the two
+ * function bodies. Column-level UPDATE (id) on integration_connector lives in
+ * pg_attribute.attacl rather than relacl, so it is asserted separately. */
+const FUNCTION_OWNER_MATRIX: Readonly<Record<string, readonly string[]>> = {
+  integration_connector: ['SELECT'],
+  integration_connector_audit: ['SELECT'],
+  integration_delivery_attempt: ['INSERT', 'SELECT', 'UPDATE'],
+  integration_outbox: ['SELECT', 'UPDATE'],
+};
+const WORKER_FUNCTIONS = [
+  'claim_integration_intent',
+  'complete_integration_attempt',
+];
 
 /** The canonical runtime table privilege matrix from F060.3C-2d-B, including
  * every correction the five-technique cross-check produced. Asserted by
@@ -184,7 +203,7 @@ test(
       });
 
       await t.test(
-        'the bootstrap artifact establishes exactly the four-role topology',
+        'the bootstrap artifact establishes exactly the five-identity topology',
         async () => {
           const applied = cluster.applySqlFileAs(
             cluster.bootstrap,
@@ -194,6 +213,8 @@ test(
               migrate: cluster.migrate.user,
               runtime: cluster.runtime.user,
               operator: cluster.operator.user,
+              function_owner: FUNCTION_OWNER,
+              api_schema: API_SCHEMA,
               schema: cluster.schema,
               db: cluster.database,
             },
@@ -214,6 +235,8 @@ test(
               migrate: cluster.migrate.user,
               runtime: cluster.runtime.user,
               operator: cluster.operator.user,
+              function_owner: FUNCTION_OWNER,
+              api_schema: API_SCHEMA,
               schema: cluster.schema,
               db: cluster.database,
             },
@@ -255,10 +278,51 @@ test(
             );
           }
 
-          // Exactly one membership: migrate -> owner.
-          const members = await sql<{ member: string; grantee: string }>`
+          // F062.2D-2B. The function owner exists, is NOLOGIN, and carries
+          // the same constrained attributes as every other identity. Asserted
+          // here rather than in a separate subtest because it is the same
+          // bootstrap run that must produce it.
+          const functionOwner = await sql<{
+            rolcanlogin: boolean;
+            rolsuper: boolean;
+            rolinherit: boolean;
+            rolcreaterole: boolean;
+            rolcreatedb: boolean;
+            rolbypassrls: boolean;
+          }>`
+            select rolcanlogin, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
+                   rolbypassrls
+            from pg_roles where rolname = ${FUNCTION_OWNER}`.execute(admin);
+          assert.deepEqual(functionOwner.rows, [
+            {
+              rolcanlogin: false,
+              rolsuper: false,
+              rolinherit: false,
+              rolcreaterole: false,
+              rolcreatedb: false,
+              rolbypassrls: false,
+            },
+          ]);
+          // The worker principal belongs to F062.2D-3, so after this slice the
+          // function API is reachable by no login role at all.
+          const worker = await sql<{ present: number }>`
+            select count(*)::int as present from pg_roles
+            where rolname = 'reqro_integration_worker'`.execute(admin);
+          assert.equal(worker.rows[0]?.present, 0);
+
+          // Exactly two memberships, both outward from the migration login:
+          // migrate -> owner and migrate -> function owner. An equality
+          // assertion, so an unreviewed edge fails rather than passing.
+          const members = await sql<{
+            member: string;
+            grantee: string;
+            inherit_option: boolean;
+            set_option: boolean;
+            admin_option: boolean;
+          }>`
             select (select rolname from pg_roles r where r.oid = m.member) as member,
-                   (select rolname from pg_roles r where r.oid = m.roleid) as grantee
+                   (select rolname from pg_roles r where r.oid = m.roleid) as grantee,
+                   m.inherit_option, m.set_option, m.admin_option
             from pg_auth_members m
             where (select rolname from pg_roles r where r.oid = m.member)
                     = any(${[
@@ -266,10 +330,59 @@ test(
                       cluster.migrate.user,
                       cluster.runtime.user,
                       cluster.operator.user,
+                      FUNCTION_OWNER,
                     ]})
-            order by 1`.execute(admin);
+            order by 2`.execute(admin);
           assert.deepEqual(members.rows, [
-            { member: cluster.migrate.user, grantee: cluster.owner.user },
+            {
+              member: cluster.migrate.user,
+              grantee: FUNCTION_OWNER,
+              inherit_option: false,
+              set_option: true,
+              admin_option: false,
+            },
+            {
+              member: cluster.migrate.user,
+              grantee: cluster.owner.user,
+              inherit_option: false,
+              set_option: true,
+              admin_option: false,
+            },
+          ]);
+
+          // The function namespace: owned by the function owner, reachable by
+          // nobody else, and holding nothing yet.
+          const namespace = await sql<{
+            owner: string;
+            public_usage: boolean;
+            public_create: boolean;
+            runtime_usage: boolean;
+            operator_usage: boolean;
+            migrate_usage: boolean;
+            objects: string;
+          }>`
+            select pg_get_userbyid(nspowner) as owner,
+                   has_schema_privilege('public', ${API_SCHEMA}, 'USAGE') as public_usage,
+                   has_schema_privilege('public', ${API_SCHEMA}, 'CREATE') as public_create,
+                   has_schema_privilege(${cluster.runtime.user}, ${API_SCHEMA}, 'USAGE')
+                     as runtime_usage,
+                   has_schema_privilege(${cluster.operator.user}, ${API_SCHEMA}, 'USAGE')
+                     as operator_usage,
+                   has_schema_privilege(${cluster.migrate.user}, ${API_SCHEMA}, 'USAGE')
+                     as migrate_usage,
+                   (select count(*) from pg_class c
+                      where c.relnamespace = pg_namespace.oid) as objects
+            from pg_namespace where nspname = ${API_SCHEMA}`.execute(admin);
+          assert.deepEqual(namespace.rows, [
+            {
+              owner: FUNCTION_OWNER,
+              public_usage: false,
+              public_create: false,
+              runtime_usage: false,
+              operator_usage: false,
+              migrate_usage: false,
+              objects: '0',
+            },
           ]);
 
           // Database and schema ownership, and the PUBLIC posture.
@@ -309,6 +422,8 @@ test(
             migrate: cluster.migrate.user,
             runtime: cluster.runtime.user,
             operator: cluster.operator.user,
+            function_owner: FUNCTION_OWNER,
+            api_schema: API_SCHEMA,
             schema: cluster.schema,
             db: cluster.database,
           },
@@ -346,7 +461,7 @@ test(
       );
 
       await t.test(
-        'with SET ROLE the migration login applies all 52 migrations, owned by the owner',
+        'with SET ROLE the migration login applies all 53 migrations, owned by the owner',
         async () => {
           const assumed = connect(
             cluster,
@@ -372,8 +487,10 @@ test(
           const files = (await readdir(folder))
             .filter((file) => file.endsWith('.js'))
             .sort();
-          // 50 compiled migrations plus Migrations 48 and 49, which are
-          // applied as text below, is the full inventory of 52.
+          // 50 compiled migrations plus Migrations 48, 49 and 53, which are
+          // applied as text below, is the full inventory of 53. Those three
+          // hardcode `public.` for their SECURITY DEFINER functions, so no
+          // test imports them and they are not compiled.
           assert.equal(files.length, 50);
           for (const file of files) {
             const migration = (await import(
@@ -390,6 +507,18 @@ test(
           await sql
             .raw(await migrationSql(MIGRATION_49, 'up'))
             .execute(assumed);
+          // Migration 53 assumes the function owner itself, from a session
+          // whose session_user is the migration login -- which is what
+          // PostgreSQL checks for SET ROLE -- and restores reqro_owner
+          // afterwards, so this connection stays usable.
+          await sql
+            .raw(await migrationSql(MIGRATION_53, 'up'))
+            .execute(assumed);
+          const restored = await sql<{ current_user: string }>`
+            select current_user`.execute(assumed);
+          assert.deepEqual(restored.rows, [
+            { current_user: cluster.owner.user },
+          ]);
 
           // Every application object belongs to the owner, and nothing to the
           // migration login.
@@ -470,6 +599,14 @@ test(
               OPERATOR_ARTIFACT,
               { operator: cluster.operator.user, schema: cluster.schema },
             ],
+            [
+              WORKER_ARTIFACT,
+              {
+                function_owner: FUNCTION_OWNER,
+                api_schema: API_SCHEMA,
+                schema: cluster.schema,
+              },
+            ],
           ] as const) {
             const applied = cluster.applySqlFileAs(
               cluster.migrate,
@@ -492,6 +629,500 @@ test(
             );
             assert.equal(again.status, 0, again.stderr || again.stdout);
           }
+        },
+      );
+
+      await t.test(
+        'F062.2D-2B the function owner holds exactly its reviewed ceiling',
+        async () => {
+          // It owns the api schema and the two functions, and NO relation
+          // anywhere. That is the property that keeps a SECURITY DEFINER flaw
+          // away from resident data: the owner's grants are the blast radius.
+          const owned = await sql<{ relations: string; namespaces: string }>`
+            select (select count(*) from pg_class c
+                      join pg_namespace n on n.oid = c.relnamespace
+                      where c.relkind in ('r','p','v','m','f','S')
+                        and pg_get_userbyid(c.relowner) = ${FUNCTION_OWNER})
+                     as relations,
+                   (select count(*) from pg_namespace
+                      where pg_get_userbyid(nspowner) = ${FUNCTION_OWNER})
+                     as namespaces`.execute(admin);
+          assert.deepEqual(owned.rows, [{ relations: '0', namespaces: '1' }]);
+
+          const functions = await sql<{
+            proname: string;
+            owner: string;
+            prosecdef: boolean;
+            provolatile: string;
+            proconfig: string[] | null;
+          }>`
+            select p.proname, pg_get_userbyid(p.proowner) as owner, p.prosecdef,
+                   p.provolatile, p.proconfig
+            from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = ${API_SCHEMA} order by p.proname`.execute(admin);
+          assert.deepEqual(
+            functions.rows.map((row) => row.proname),
+            WORKER_FUNCTIONS,
+            'the api schema holds exactly the two reviewed functions',
+          );
+          for (const row of functions.rows) {
+            assert.equal(row.owner, FUNCTION_OWNER);
+            assert.equal(row.prosecdef, true);
+            assert.equal(row.provolatile, 'v');
+            assert.deepEqual(row.proconfig, [
+              `search_path=pg_catalog, ${cluster.schema}, pg_temp`,
+            ]);
+          }
+
+          // Table privileges equal the derived matrix exactly, and none is
+          // grantable -- so a compromised owner cannot pass delivery-data
+          // access to another role.
+          const grants = await sql<{
+            relname: string;
+            privileges: string[];
+            grantable: string;
+          }>`
+            select c.relname,
+                   array_agg(distinct a.privilege_type order by a.privilege_type)
+                     as privileges,
+                   count(*) filter (where a.is_grantable)::text as grantable
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            cross join aclexplode(c.relacl) a
+            where n.nspname = ${cluster.schema}
+              and a.grantee::regrole::text = ${FUNCTION_OWNER}
+            group by c.relname order by c.relname`.execute(admin);
+          assert.deepEqual(
+            Object.fromEntries(
+              grants.rows.map((row) => [row.relname, row.privileges]),
+            ),
+            FUNCTION_OWNER_MATRIX,
+          );
+          for (const row of grants.rows)
+            assert.equal(row.grantable, '0', `${row.relname} is grantable`);
+
+          // The column grant FOR SHARE requires, and not the table-wide one
+          // it stands in for. F062.2B's identity guard makes it inert.
+          const columnGrant = await sql<{
+            column_update: boolean;
+            table_update: boolean;
+            app_usage: boolean;
+            app_create: boolean;
+            db_create: boolean;
+          }>`
+            select has_column_privilege(${FUNCTION_OWNER},
+                     format('%I.%I', ${cluster.schema}::text, 'integration_connector'),
+                     'id', 'UPDATE') as column_update,
+                   has_table_privilege(${FUNCTION_OWNER},
+                     format('%I.%I', ${cluster.schema}::text, 'integration_connector'),
+                     'UPDATE') as table_update,
+                   has_schema_privilege(${FUNCTION_OWNER}, ${cluster.schema}, 'USAGE')
+                     as app_usage,
+                   has_schema_privilege(${FUNCTION_OWNER}, ${cluster.schema}, 'CREATE')
+                     as app_create,
+                   has_database_privilege(${FUNCTION_OWNER}, ${cluster.database}, 'CREATE')
+                     as db_create`.execute(admin);
+          assert.deepEqual(columnGrant.rows, [
+            {
+              column_update: true,
+              table_update: false,
+              app_usage: true,
+              app_create: false,
+              db_create: false,
+            },
+          ]);
+
+          // Nothing on any business table, and nothing on the operator family.
+          const business = await sql<{ relname: string }>`
+            select distinct c.relname
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            cross join aclexplode(c.relacl) a
+            where n.nspname = ${cluster.schema}
+              and a.grantee::regrole::text = ${FUNCTION_OWNER}
+              and c.relname not like 'integration\\_%'
+            order by 1`.execute(admin);
+          assert.deepEqual(business.rows, []);
+          const defaults = await sql<{ rows: string }>`
+            select count(*) as rows from pg_default_acl
+            where pg_get_userbyid(defaclrole) = ${FUNCTION_OWNER}`.execute(
+            admin,
+          );
+          assert.deepEqual(defaults.rows, [{ rows: '0' }]);
+        },
+      );
+
+      await t.test(
+        'F062.2D-2B neither PUBLIC nor the runtime can reach the function API',
+        async () => {
+          const reach = await sql<{
+            public_usage: boolean;
+            runtime_usage: boolean;
+            operator_usage: boolean;
+            public_claim: boolean;
+            public_complete: boolean;
+            runtime_claim: boolean;
+            runtime_complete: boolean;
+          }>`
+            select has_schema_privilege('public', ${API_SCHEMA}, 'USAGE') as public_usage,
+                   has_schema_privilege(${cluster.runtime.user}, ${API_SCHEMA}, 'USAGE')
+                     as runtime_usage,
+                   has_schema_privilege(${cluster.operator.user}, ${API_SCHEMA}, 'USAGE')
+                     as operator_usage,
+                   has_function_privilege('public',
+                     ${API_SCHEMA} || '.claim_integration_intent(uuid,uuid,text)',
+                     'EXECUTE') as public_claim,
+                   has_function_privilege('public',
+                     ${API_SCHEMA} || '.complete_integration_attempt(uuid,uuid,uuid,bigint,text,varchar,varchar)',
+                     'EXECUTE') as public_complete,
+                   has_function_privilege(${cluster.runtime.user},
+                     ${API_SCHEMA} || '.claim_integration_intent(uuid,uuid,text)',
+                     'EXECUTE') as runtime_claim,
+                   has_function_privilege(${cluster.runtime.user},
+                     ${API_SCHEMA} || '.complete_integration_attempt(uuid,uuid,uuid,bigint,text,varchar,varchar)',
+                     'EXECUTE') as runtime_complete`.execute(admin);
+          assert.deepEqual(reach.rows, [
+            {
+              public_usage: false,
+              runtime_usage: false,
+              operator_usage: false,
+              public_claim: false,
+              public_complete: false,
+              runtime_claim: false,
+              runtime_complete: false,
+            },
+          ]);
+
+          // Behavioural, not only catalogue: the runtime is refused when it
+          // actually tries.
+          await refuses(
+            () =>
+              sql
+                .raw(
+                  `select ${API_SCHEMA}.claim_integration_intent(
+                     '00000000-0000-0000-0000-000000000000'::uuid,
+                     '00000000-0000-0000-0000-000000000000'::uuid, 'x')`,
+                )
+                .execute(runtime),
+            /permission denied for schema/,
+          );
+          // And it still cannot touch the integration tables directly, which
+          // is unchanged: it was never granted them.
+          await refuses(
+            () =>
+              sql
+                .raw('select 1 from integration_outbox limit 1')
+                .execute(runtime),
+            /permission denied for table integration_outbox/,
+          );
+
+          // No membership route to the function owner exists for anyone but
+          // the migration login, and the migration login holds nothing from it
+          // without an explicit SET ROLE.
+          const operatorSession = connect(cluster, cluster.operator);
+          extra.push(operatorSession);
+          for (const session of [runtime, operatorSession])
+            await refuses(
+              () => sql.raw(`set role ${FUNCTION_OWNER}`).execute(session),
+              /permission denied to set role/,
+            );
+          await refuses(
+            () =>
+              sql
+                .raw('select 1 from integration_delivery_attempt limit 1')
+                .execute(migrate),
+            /permission denied for table integration_delivery_attempt/,
+          );
+          // admin_option false: the migration login cannot widen the graph.
+          await refuses(
+            () =>
+              sql
+                .raw(`grant ${FUNCTION_OWNER} to ${cluster.runtime.user}`)
+                .execute(migrate),
+            /must have admin option on role|permission denied/,
+          );
+        },
+      );
+
+      await t.test(
+        'F062.2D-2B no untrusted principal holds effective CREATE on the application schema',
+        async () => {
+          // This is the condition that makes `pg_catalog, public, pg_temp` a
+          // safe SECURITY DEFINER path. If an untrusted principal could
+          // create a relation, a type or a function in the application
+          // schema, it could shadow an object the definer functions resolve
+          // through `public.` and so capture their privileges. The invariant
+          // is proven from effective privilege rather than from source text,
+          // and behaviourally as well as from the catalogue.
+          //
+          // In this cluster the application schema IS literally `public`,
+          // exactly as in deployment, so the proof is not an analogue.
+          assert.equal(cluster.schema, 'public');
+
+          // --- Effective privilege, for every principal named by review ---
+          // has_schema_privilege reports what a principal can actually
+          // exercise, including anything reaching it through PUBLIC or
+          // through an inheriting membership. That is the question a bare
+          // ACL dump cannot answer.
+          const principals = [
+            'public', // the PUBLIC pseudo-role
+            cluster.runtime.user,
+            cluster.operator.user,
+            FUNCTION_OWNER,
+            cluster.migrate.user,
+          ];
+          const effective = await sql<{
+            who: string;
+            schema_create: boolean;
+            schema_usage: boolean;
+            database_create: boolean;
+          }>`
+            select who,
+                   has_schema_privilege(who, ${cluster.schema}, 'CREATE')
+                     as schema_create,
+                   has_schema_privilege(who, ${cluster.schema}, 'USAGE')
+                     as schema_usage,
+                   has_database_privilege(who, ${cluster.database}, 'CREATE')
+                     as database_create
+            from unnest(${principals}::text[]) as p(who)
+            order by who`.execute(admin);
+          assert.equal(effective.rows.length, principals.length);
+
+          for (const row of effective.rows) {
+            assert.equal(
+              row.schema_create,
+              false,
+              `${row.who} holds CREATE on the application schema`,
+            );
+            // Schema CREATE is the shadowing privilege, but database CREATE
+            // would let a competing schema be interposed, so it is denied to
+            // the same set.
+            assert.equal(
+              row.database_create,
+              false,
+              `${row.who} holds CREATE on the database`,
+            );
+          }
+
+          // The function owner specifically: USAGE yes, CREATE no. It must
+          // reach the tables it was granted and nothing beyond them.
+          assert.deepEqual(
+            effective.rows.find((row) => row.who === FUNCTION_OWNER),
+            {
+              who: FUNCTION_OWNER,
+              schema_create: false,
+              schema_usage: true,
+              database_create: false,
+            },
+          );
+
+          // --- Only the trusted owner holds CREATE, at the ACL itself ---
+          // An equality over the schema ACL: a surplus grantee fails here
+          // even if no tested principal happens to benefit from it today.
+          const schemaAcl = await sql<{ grantee: string; privilege: string }>`
+            select coalesce(nullif(a.grantee::regrole::text, '-'), 'public')
+                     as grantee,
+                   a.privilege_type as privilege
+            from pg_namespace n
+            cross join aclexplode(n.nspacl) a
+            where n.nspname = ${cluster.schema}
+            order by 1, 2`.execute(admin);
+          assert.deepEqual(
+            schemaAcl.rows
+              .filter((row) => row.privilege === 'CREATE')
+              .map((row) => row.grantee),
+            [cluster.owner.user],
+            'exactly one principal may hold CREATE on the application schema',
+          );
+          // PUBLIC may retain USAGE -- that is how an unprivileged session
+          // reaches a granted table at all -- but nothing further.
+          assert.deepEqual(
+            schemaAcl.rows
+              .filter((row) => row.grantee === 'public')
+              .map((row) => row.privilege),
+            ['USAGE'],
+          );
+
+          // --- No membership path and no default-privilege path ---
+          // pg_has_role(..., 'USAGE') asks whether a role's privileges are
+          // available WITHOUT SET ROLE; 'MEMBER' asks whether the principal
+          // could assume it. The migration login is the only principal that
+          // may assume the owner, and even it inherits nothing: that is the
+          // entire purpose of the NOINHERIT edge.
+          const membership = await sql<{
+            who: string;
+            inherits_owner: boolean;
+            may_assume_owner: boolean;
+            inherits_function_owner: boolean;
+            may_assume_function_owner: boolean;
+          }>`
+            select who,
+                   pg_has_role(who, ${cluster.owner.user}, 'USAGE')
+                     as inherits_owner,
+                   pg_has_role(who, ${cluster.owner.user}, 'MEMBER')
+                     as may_assume_owner,
+                   pg_has_role(who, ${FUNCTION_OWNER}, 'USAGE')
+                     as inherits_function_owner,
+                   pg_has_role(who, ${FUNCTION_OWNER}, 'MEMBER')
+                     as may_assume_function_owner
+            from unnest(${[
+              cluster.runtime.user,
+              cluster.operator.user,
+              cluster.migrate.user,
+            ]}::text[]) as p(who)
+            order by who`.execute(admin);
+          assert.deepEqual(
+            Object.fromEntries(
+              membership.rows.map((row) => [
+                row.who,
+                [
+                  row.inherits_owner,
+                  row.may_assume_owner,
+                  row.inherits_function_owner,
+                  row.may_assume_function_owner,
+                ],
+              ]),
+            ),
+            {
+              // Neither inherits nor may assume either privileged role.
+              [cluster.runtime.user]: [false, false, false, false],
+              [cluster.operator.user]: [false, false, false, false],
+              // May assume both; inherits neither.
+              [cluster.migrate.user]: [false, true, false, true],
+            },
+          );
+
+          // No default privilege confers anything on a future object, and
+          // none exists at all, so no such path can open quietly later.
+          const defaults = await sql<{ rows: string }>`
+            select count(*) as rows from pg_default_acl`.execute(admin);
+          assert.deepEqual(defaults.rows, [{ rows: '0' }]);
+
+          // --- Behavioural: the refusal actually happens ---
+          const probeTable = `shadow_probe_${randomUUID().replaceAll('-', '')}`;
+
+          // A fresh LOGIN role holding no grant and no membership, so its
+          // only privileges are those PUBLIC confers. That makes PUBLIC's
+          // absent CREATE observable from a real session. It exists solely
+          // inside this disposable container and is named by no deployment
+          // artifact; the bootstrap topology assertion has already run and
+          // is scoped to the five reviewed names.
+          const probe = {
+            user: `reqro_public_probe_${randomUUID().slice(0, 8)}`,
+            password: randomUUID(),
+          };
+          await sql
+            .raw(`create role ${probe.user} login password '${probe.password}'`)
+            .execute(admin);
+          const probeSession = connect(cluster, probe);
+          extra.push(probeSession);
+          const probeIsBare = await sql<{
+            memberships: string;
+            table_grants: string;
+          }>`
+            select (select count(*) from pg_auth_members m
+                      where m.member = (select oid from pg_roles
+                                        where rolname = ${probe.user}))
+                     as memberships,
+                   (select count(*) from pg_class c
+                      join pg_namespace n on n.oid = c.relnamespace
+                      cross join aclexplode(c.relacl) a
+                      where n.nspname = ${cluster.schema}
+                        and a.grantee = (select oid from pg_roles
+                                         where rolname = ${probe.user}))
+                     as table_grants`.execute(admin);
+          assert.deepEqual(probeIsBare.rows, [
+            { memberships: '0', table_grants: '0' },
+          ]);
+
+          // PUBLIC, the runtime, the operator, and the migration login
+          // without SET ROLE: every one refused when it really tries.
+          const operatorSession = connect(cluster, cluster.operator);
+          extra.push(operatorSession);
+          const untrusted: readonly [string, Kysely<DatabaseSchema>][] = [
+            ['the PUBLIC probe', probeSession],
+            ['the runtime', runtime],
+            ['the operator', operatorSession],
+            ['the migration login', migrate],
+          ];
+          for (const [label, session] of untrusted) {
+            await refuses(
+              () =>
+                sql
+                  .raw(`create table ${probeTable} (id uuid primary key)`)
+                  .execute(session),
+              /permission denied for schema public/,
+            );
+            // A function is the sharper hijack: a shadowed call would
+            // capture definer privilege, not merely read data.
+            await refuses(
+              () =>
+                sql
+                  .raw(
+                    `create function ${probeTable}_fn() returns int ` +
+                      `language sql as 'select 1'`,
+                  )
+                  .execute(session),
+              /permission denied for schema public/,
+            );
+            // And the refusal is not an accident of identity: none of these
+            // sessions is the object owner.
+            const who = await sql<{ who: string }>`
+              select current_user as who`.execute(session);
+            assert.notEqual(
+              who.rows[0]?.who,
+              cluster.owner.user,
+              `${label} must not be running as the object owner`,
+            );
+          }
+
+          // The function owner is NOLOGIN, so its effective privilege is
+          // exercised the only way it can be: assumed from the one login
+          // permitted to assume it. Still refused.
+          const assumed = connect(cluster, cluster.migrate);
+          extra.push(assumed);
+          await sql.raw(`set role ${FUNCTION_OWNER}`).execute(assumed);
+          const assumedRole = await sql<{ who: string }>`
+            select current_user as who`.execute(assumed);
+          assert.deepEqual(assumedRole.rows, [{ who: FUNCTION_OWNER }]);
+          await refuses(
+            () =>
+              sql
+                .raw(`create table ${probeTable} (id uuid primary key)`)
+                .execute(assumed),
+            /permission denied for schema public/,
+          );
+          await refuses(
+            () =>
+              sql
+                .raw(
+                  `create function ${probeTable}_fn() returns int ` +
+                    `language sql as 'select 1'`,
+                )
+                .execute(assumed),
+            /permission denied for schema public/,
+          );
+
+          // --- The trusted path, and only it, can create ---
+          const owned = connect(cluster, cluster.migrate);
+          extra.push(owned);
+          await sql.raw(`set role ${cluster.owner.user}`).execute(owned);
+          await sql
+            .raw(`create table ${probeTable} (id uuid primary key)`)
+            .execute(owned);
+          const created = await sql<{ owner: string }>`
+            select pg_get_userbyid(c.relowner) as owner
+            from pg_class c join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = ${cluster.schema}
+              and c.relname = ${probeTable}`.execute(admin);
+          assert.deepEqual(
+            created.rows,
+            [{ owner: cluster.owner.user }],
+            'the explicit ownership path must be the only one that creates',
+          );
+          // Leave no residue: the suite's later surface assertions are
+          // equalities, and a probe table is not part of the surface.
+          await sql.raw(`drop table ${probeTable}`).execute(owned);
         },
       );
 

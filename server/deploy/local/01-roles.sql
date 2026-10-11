@@ -53,11 +53,36 @@ create role reqro_operator
   login password 'reqro_operator_dev_only'
   nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
 
+-- F062.2D-2B. The integration worker function API's owner. NOLOGIN and
+-- password-free even here, because nothing ever authenticates as it: it is a
+-- privilege container holding DML on four integration tables, so a flaw in a
+-- SECURITY DEFINER worker function cannot reach a business table. Its
+-- privileges come from deploy/database/integration-worker-role.sql, after
+-- migrations.
+--
+-- reqro_integration_worker, the principal that will CALL those functions, is
+-- deliberately absent until F062.2D-3.
+create role reqro_integration_function_owner
+  nologin nosuperuser nocreatedb nocreaterole noinherit nobypassrls;
+
+-- The one new membership edge, with the options the production bootstrap
+-- pins: the migration login may ASSUME the function owner to create the
+-- function API under the correct owner, inherits none of its privileges
+-- without doing so, and cannot grant the membership onward.
+grant reqro_integration_function_owner to reqro_migrate
+  with inherit false, set true, admin false;
+
 -- Ownership moves to reqro_owner. On PostgreSQL 15+ schema `public` is owned
 -- by `pg_database_owner`, so the database transfer carries the schema with
 -- it; the explicit ALTER SCHEMA is kept so the intent is legible.
 alter database cityvue owner to reqro_owner;
 alter schema public owner to reqro_owner;
+
+-- The worker function namespace, created here rather than by Migration 53
+-- for the reason the production bootstrap records: CREATE SCHEMA requires
+-- CREATE on the database, which the function owner must not hold.
+create schema reqro_integration_api authorization reqro_integration_function_owner;
+revoke all on schema reqro_integration_api from public;
 
 -- The same narrow PUBLIC posture the production bootstrap applies. CONNECT
 -- is retained deliberately; REVOKE ALL ON DATABASE is never used.
@@ -74,6 +99,12 @@ revoke create on schema public from public;
 --   psql "postgresql://reqro_migrate:reqro_migrate_dev_only@localhost:5432/cityvue" \
 --     -v runtime=reqro_runtime -v schema=public \
 --     -c 'set role reqro_owner' -f ../deploy/database/runtime-role.sql
+--
+--   # and the integration function owner's surface, also as the owner
+--   psql "postgresql://reqro_migrate:reqro_migrate_dev_only@localhost:5432/cityvue" \
+--     -v function_owner=reqro_integration_function_owner \
+--     -v api_schema=reqro_integration_api -v schema=public \
+--     -c 'set role reqro_owner' -f ../deploy/database/integration-worker-role.sql
 --
 --   # finally run the application as the runtime identity
 --   DATABASE_URL=postgresql://reqro_runtime:reqro_runtime_dev_only@localhost:5432/cityvue \
