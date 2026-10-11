@@ -15,6 +15,7 @@ import {
   type TenantHostSource,
 } from './tenancy/tenant-host-source.js';
 import { TenantResolutionMiddleware } from './tenancy/tenant-resolution.middleware.js';
+import { apiCacheDefault } from './common/http/api-cache.middleware.js';
 
 /** What `registry` serving needs beyond what environment validation already
  * guarantees. Everything here is runtime wiring or a value the environment
@@ -104,6 +105,7 @@ export function configureApplication(app: INestApplication): void {
   );
 
   app.useLogger(logger);
+  app.use(apiCacheDefault);
   app.use(helmet());
   app.enableCors({
     origin: parseCorsOrigins(config.get('app.corsOrigins', { infer: true })),
