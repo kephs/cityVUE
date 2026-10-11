@@ -336,9 +336,9 @@ test(
           const files = (await readdir(folder))
             .filter((file) => file.endsWith('.js'))
             .sort();
-          // F062.2D-2C-1 added Migration 54, which hardcodes no
-          // schema name and so compiles like Migration 52.
-          assert.equal(files.length, 51);
+          // F062.2D-2C-1 and F062.2D-2C-2 added Migrations 54 and 55,
+          // which hardcode no schema name and so compile like Migration 52.
+          assert.equal(files.length, 52);
           for (const file of files) {
             const migration = (await import(
               path

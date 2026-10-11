@@ -739,6 +739,21 @@ interface IntegrationOutboxTable {
   state: Generated<DeliveryState>;
   occurred_at: Timestamp;
   created_at: Generated<Timestamp>;
+  /** F062.2D-2C-2. The ordering contract PINNED at enqueue, derived by the
+   * database from the pinned connector audit snapshot rather than from the
+   * connector's current row. Database-assigned: a caller omits it, and a
+   * caller that supplies a value contradicting the snapshot is refused.
+   * Immutable thereafter, so a later connector revision cannot reinterpret
+   * an existing obligation. */
+  requires_ordered_delivery: Generated<boolean>;
+  /** F062.2D-2C-2. When this obligation next becomes retry-eligible. Legal
+   * only while `retrying`, and cleared by the transition that leaves it.
+   *
+   * Null means **not currently retry-eligible**, which is the fail-closed
+   * reading and the only value anything produces today: no scheduler exists
+   * and the completion function writes no schedule. F062.2D-2C-3 authors it
+   * at the moment of transition. Never caller-supplied. */
+  next_attempt_at: Timestamp | null;
 }
 
 /** F062.2D-2A delivery-attempt evidence. Vocabulary columns are typed by the
