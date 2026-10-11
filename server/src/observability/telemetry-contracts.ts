@@ -58,6 +58,26 @@ export const integrationDeadLetterReasonClasses = Object.freeze([
 export type IntegrationDeadLetterReasonClass =
   (typeof integrationDeadLetterReasonClasses)[number];
 
+/** F061.3C observation classes, never F062 lifecycle reason-code authority.
+ * Only confirmed recovery actions count; unknown causes have no fallback.
+ */
+export const integrationLeaseRecoveryClasses = Object.freeze([
+  'pre_dispatch_recovery',
+  'uncertain_dispatch_recovery',
+] as const);
+export type IntegrationLeaseRecoveryClass =
+  (typeof integrationLeaseRecoveryClasses)[number];
+
+/** Classify each blocked obligation once by its governing predecessor.
+ * An ambiguous predecessor takes the ambiguity class, not both classes.
+ */
+export const integrationOrderedBlockerClasses = Object.freeze([
+  'ordered_predecessor',
+  'ambiguous_predecessor',
+] as const);
+export type IntegrationOrderedBlockerClass =
+  (typeof integrationOrderedBlockerClasses)[number];
+
 /** Conservative starter set, not automatic discovery of every application route.
  * Additions require review. Release is a finite cohort, never a raw SHA/tag. */
 export const metricDimensions = Object.freeze({
@@ -122,6 +142,8 @@ export const metricDimensions = Object.freeze({
     'untrusted_forwarded_peer',
     'registry_unavailable',
     ...integrationDeadLetterReasonClasses,
+    ...integrationLeaseRecoveryClasses,
+    ...integrationOrderedBlockerClasses,
   ] as const),
   endpointClass: Object.freeze([
     'resident',
@@ -237,8 +259,31 @@ export const metricConcepts = Object.freeze({
   // Obligations with a confirmed automatic-processing state change due to an
   // approved age policy. Never age calculation, eligibility or mutation logic.
   integration_age_policy_transition_count: 'count',
+  // Current open claims, including expired-but-not-recovered ones. Not events.
+  integration_active_claim_count: 'count',
+  // Current open claims already qualified as expired by F062; no clock/policy.
+  integration_expired_lease_count: 'count',
+  // Confirmed completed recovery actions, classified by the bounded reason.
+  // Excludes scans, refusals and repeated observations of the same action.
+  integration_lease_recovery_count: 'count',
+  // Eligible waiting age since the governing retry-ready timestamp, only for
+  // obligations currently eligible to retry. F062 supplies the qualified age.
+  // Not original pending age, backoff duration or a retry-eligibility evaluator.
+  integration_oldest_retry_eligible_age: 'milliseconds',
+  // Current blocked obligations, NOT streams. Count each once, classified by
+  // its governing predecessor; ambiguity impact is a subset, never additive.
+  integration_ordered_stream_blocked_count: 'count',
 } as const);
 export type MetricConcept = keyof typeof metricConcepts;
+
+/** Vocabulary is not activation approval: future producers must supply fresh,
+ * meaningful observations for these gates, including missing-data handling.
+ */
+export const workerProductionReleaseGateConcepts = Object.freeze([
+  'integration_active_claim_count',
+  'integration_expired_lease_count',
+  'integration_oldest_pending_age',
+] as const satisfies readonly MetricConcept[]);
 
 /** F061.3A health observation contracts only, not new metric dimensions.
  * No observation is collected, evaluated or used to control a worker here.

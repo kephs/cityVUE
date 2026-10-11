@@ -7,6 +7,8 @@ import {
   metricConcepts,
   metricDimensions,
   integrationDeadLetterReasonClasses,
+  integrationLeaseRecoveryClasses,
+  integrationOrderedBlockerClasses,
   workerHealthStates,
   workerHealthSeparation,
   forbiddenAttributes,
@@ -30,7 +32,7 @@ test('age-policy transition count exists once and remains distinct from dead-let
     ),
     ['integration_age_policy_transition_count'],
   );
-  assert.equal(Object.keys(metricConcepts).length, 19);
+  assert.equal(Object.keys(metricConcepts).length, 24);
 });
 
 test('four dead-letter classes are frozen, unique and separate age from attempt-budget exhaustion', () => {
@@ -78,8 +80,10 @@ test('existing reason mechanism is reused without adding a new dimension or dele
     'untrusted_forwarded_peer',
     'registry_unavailable',
     ...integrationDeadLetterReasonClasses,
+    ...integrationLeaseRecoveryClasses,
+    ...integrationOrderedBlockerClasses,
   ]);
-  assert.equal(new Set(metricDimensions.reason).size, 12);
+  assert.equal(new Set(metricDimensions.reason).size, 16);
   assert.deepEqual(
     validateMetricLabels({ deadLetterReason: 'pending_age_exhausted' }),
     { ok: false, reason: 'unknown_attribute' },
@@ -151,7 +155,7 @@ test('forbidden identifiers, private data and replica metadata stay outside metr
     );
 });
 
-test('the unchanged four-label and 256-combination limits account for all twelve reason values', () => {
+test('the unchanged four-label and 256-combination limits account for all sixteen reason values', () => {
   assert.deepEqual(metricLabelBudget, {
     maxLabels: 4,
     maxSeriesPerLabelSet: 256,
@@ -162,9 +166,9 @@ test('the unchanged four-label and 256-combination limits account for all twelve
     environment: 'production',
     service: 'cityvue-api',
   };
-  // 5 * 12 * 3 * 1 = 180, including all generic reasons rather than only four classes.
+  // 5 * 16 * 3 * 1 = 240, including the full reason vocabulary.
   assert.deepEqual(validateMetricLabels(labels), { ok: true, labels });
-  // Three labels can still exceed the Cartesian cap: 12 * 8 * 3 = 288.
+  // Three labels can still exceed the Cartesian cap: 16 * 8 * 3 = 384.
   assert.deepEqual(
     validateMetricLabels({
       reason: 'attempt_budget_exhausted',
