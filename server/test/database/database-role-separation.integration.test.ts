@@ -461,7 +461,7 @@ test(
       );
 
       await t.test(
-        'with SET ROLE the migration login applies all 54 migrations, owned by the owner',
+        'with SET ROLE the migration login applies all 55 migrations, owned by the owner',
         async () => {
           const assumed = connect(
             cluster,
@@ -487,12 +487,12 @@ test(
           const files = (await readdir(folder))
             .filter((file) => file.endsWith('.js'))
             .sort();
-          // 51 compiled migrations plus Migrations 48, 49 and 53, which are
-          // applied as text below, is the full inventory of 54. Those three
+          // 52 compiled migrations plus Migrations 48, 49 and 53, which are
+          // applied as text below, is the full inventory of 55. Those three
           // hardcode `public.` for their SECURITY DEFINER functions, so no
-          // test imports them and they are not compiled. Migration 54
-          // hardcodes no schema name, so it compiles like Migration 52.
-          assert.equal(files.length, 51);
+          // test imports them and they are not compiled. Migrations 54 and 55
+          // hardcode no schema name, so they compile like Migration 52.
+          assert.equal(files.length, 52);
           for (const file of files) {
             const migration = (await import(
               path

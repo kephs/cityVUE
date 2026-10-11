@@ -14,6 +14,7 @@ import { up as connectorUp } from '../../migrations/20261020000000-add-integrati
 import { up as outboxUp } from '../../migrations/20261021000000-add-integration-outbox.js';
 import { up as attemptUp } from '../../migrations/20261022000000-add-integration-delivery-attempt.js';
 import { up as leaseUp } from '../../migrations/20261024000000-add-integration-lease-recovery-evidence.js';
+import { up as orderingUp } from '../../migrations/20261025000000-add-integration-ordering-retry-eligibility.js';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import {
   attemptOutcomes,
@@ -131,6 +132,10 @@ async function withSchema(run: (f: Fixture) => Promise<void>): Promise<void> {
     // recovery-reason constraints, so the whole suite below runs against
     // them rather than against the pre-2C-1 schema.
     await leaseUp(db);
+    // F062.2D-2C-2, also in ordinal order. The worker API must keep working
+    // unchanged under the ordered-stream index, the pinned ordering
+    // derivation and the retry-schedule rules.
+    await orderingUp(db);
 
     const organizationA = randomUUID();
     const organizationB = randomUUID();
