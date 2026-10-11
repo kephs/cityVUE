@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Processing authentication</title>
+  </head>
+  <body>
+    <p>Processing authentication...</p>
+    <script type="module">
+      import { broadcastResponseToMainFrame } from "@azure/msal-browser/redirect-bridge";
+
+      broadcastResponseToMainFrame().catch(() => {
+        console.error("Authentication response could not be processed.");
+      });
+    </script>
+  </body>
+</html>

@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { assertClientServingConfig } from "./src/config/servingConfig.mjs";
 
@@ -14,6 +15,14 @@ export const privateFileDeny = [
 ];
 
 export default defineConfig({
+  build: {
+    rolldownOptions: {
+      input: {
+        main: resolve(import.meta.dirname, "index.html"),
+        redirect: resolve(import.meta.dirname, "redirect.html"),
+      },
+    },
+  },
   plugins: [
     {
       name: "reqro-serving-configuration",
