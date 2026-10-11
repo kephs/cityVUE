@@ -13,12 +13,14 @@ import type {
   SideEffectRisk,
 } from '../integration/connector-capabilities.js';
 import type {
+  AttemptOutcome,
   ConnectorLifecycleState,
   DeliveryState,
 } from '../integration/delivery-contract.js';
 import type {
   AggregateType,
   ContractKind,
+  IntegrationFailureCategory,
   IntegrationType,
 } from '../integration/integration-envelope.js';
 
@@ -738,7 +740,44 @@ interface IntegrationOutboxTable {
   created_at: Generated<Timestamp>;
 }
 
+/** F062.2D-2A delivery-attempt evidence. Vocabulary columns are typed by the
+ * F062.1 unions that define them, so the check constraints and the
+ * TypeScript types cannot drift.
+ *
+ * **Created open, settled at most once, immutable thereafter.** `outcome`
+ * and `completed_at` are null while open and are set together; the
+ * complete-once guard permits only that one transition and refuses any
+ * change to a settled row. `attempt_number`, `claim_generation`,
+ * `started_at` and `mutation_txid` are assigned by the database.
+ *
+ * **Only a digest of the claim token is stored.** No column holds a raw
+ * token, and nothing in this slice produces one. No response body, vendor
+ * error text, secret, URL or resident value appears here. */
+interface IntegrationDeliveryAttemptTable {
+  id: Generated<string>;
+  organization_id: string;
+  integration_outbox_id: string;
+  integration_connector_id: string;
+  /** Which attempt this is for the obligation. Database-assigned. */
+  attempt_number: Generated<number>;
+  /** Which claim owns it. Distinct from the ordinal; see the migration.
+   * Database-assigned. */
+  claim_generation: Generated<string>;
+  /** SHA-256 hex of the worker-held raw token. Never the token. */
+  claim_token_digest: string;
+  connector_configuration_revision: number;
+  capability_snapshot: JsonValue;
+  started_at: Generated<Timestamp>;
+  /** Null while open. */
+  completed_at: Timestamp | null;
+  /** Null while open. */
+  outcome: AttemptOutcome | null;
+  failure_category: IntegrationFailureCategory | null;
+  mutation_txid: Generated<string>;
+}
+
 export interface DatabaseSchema extends ResidentExperienceTables {
+  integration_delivery_attempt: IntegrationDeliveryAttemptTable;
   integration_outbox: IntegrationOutboxTable;
   integration_connector: IntegrationConnectorTable;
   integration_connector_audit: IntegrationConnectorAuditTable;
