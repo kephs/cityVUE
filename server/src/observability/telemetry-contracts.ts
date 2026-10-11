@@ -45,6 +45,19 @@ export const correlationPolicy = Object.freeze({
   outboundPropagation: 'future_approved_contract_only',
 } as const);
 
+/** F061.3B observability classes, not delivery states or raw semantic reason codes.
+ * A future explicit producer mapping must verify a settled dead-letter cause.
+ * other_approved is not a fallback for unknown input or unresolved ambiguity.
+ */
+export const integrationDeadLetterReasonClasses = Object.freeze([
+  'pending_age_exhausted',
+  'attempt_budget_exhausted',
+  'permanent_destination_outcome',
+  'other_approved',
+] as const);
+export type IntegrationDeadLetterReasonClass =
+  (typeof integrationDeadLetterReasonClasses)[number];
+
 /** Conservative starter set, not automatic discovery of every application route.
  * Additions require review. Release is a finite cohort, never a raw SHA/tag. */
 export const metricDimensions = Object.freeze({
@@ -108,6 +121,7 @@ export const metricDimensions = Object.freeze({
     'unknown_host',
     'untrusted_forwarded_peer',
     'registry_unavailable',
+    ...integrationDeadLetterReasonClasses,
   ] as const),
   endpointClass: Object.freeze([
     'resident',
@@ -220,6 +234,9 @@ export const metricConcepts = Object.freeze({
   integration_claim_count: 'count',
   // Currently unresolved ambiguous obligations, not ambiguous attempt events.
   integration_ambiguous_count: 'count',
+  // Obligations with a confirmed automatic-processing state change due to an
+  // approved age policy. Never age calculation, eligibility or mutation logic.
+  integration_age_policy_transition_count: 'count',
 } as const);
 export type MetricConcept = keyof typeof metricConcepts;
 
