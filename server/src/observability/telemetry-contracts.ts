@@ -129,6 +129,10 @@ export const metricDimensions = Object.freeze({
     'liveness',
     'database_readiness',
     'hostname_readiness',
+    'worker_liveness',
+    'worker_readiness',
+    'worker_draining',
+    'worker_progress',
   ] as const),
 });
 export type MetricDimension = keyof typeof metricDimensions;
@@ -206,8 +210,56 @@ export const metricConcepts = Object.freeze({
   integration_dead_letter_count: 'count',
   integration_reconciliation_failure: 'count',
   integration_connector_health: 'outcome',
+  // Backlog observations, not cumulative events; ready is a subset of pending.
+  integration_pending_count: 'count',
+  integration_ready_count: 'count',
+  // Age of the oldest eligible pending obligation, not its expiry threshold.
+  // Eligibility/original pending timestamp are owned by the delivery policy.
+  integration_oldest_pending_age: 'milliseconds',
+  // Successful claim events; claim rate is derived over a future approved window.
+  integration_claim_count: 'count',
+  // Currently unresolved ambiguous obligations, not ambiguous attempt events.
+  integration_ambiguous_count: 'count',
 } as const);
 export type MetricConcept = keyof typeof metricConcepts;
+
+/** F061.3A health observation contracts only, not new metric dimensions.
+ * No observation is collected, evaluated or used to control a worker here.
+ */
+export const workerHealthStates = Object.freeze({
+  worker_liveness: Object.freeze(['alive', 'not_alive', 'unknown'] as const),
+  worker_readiness: Object.freeze(['ready', 'not_ready', 'unknown'] as const),
+  worker_draining: Object.freeze([
+    'draining',
+    'not_draining',
+    'unknown',
+  ] as const),
+  worker_progress: Object.freeze([
+    'progressing',
+    'idle',
+    'stalled',
+    'unknown',
+  ] as const),
+});
+export type WorkerHealthSignal = keyof typeof workerHealthStates;
+export type WorkerHealthObservation = {
+  [K in WorkerHealthSignal]: {
+    readonly signal: K;
+    readonly state: (typeof workerHealthStates)[K][number];
+  };
+}[WorkerHealthSignal];
+
+/** Declarative separation requirements, never a health evaluator or restart rule. */
+export const workerHealthSeparation = Object.freeze({
+  workerHealthIsConnectorHealth: false,
+  workerHealthDeterminesApiReadiness: false,
+  connectorHealthDeterminesApiReadiness: false,
+  destinationOutageFailsWorkerLiveness: false,
+  stalledBacklogFailsWorkerLiveness: false,
+  stalledBacklogRequiresRestart: false,
+  drainingAllowsNewClaims: false,
+  drainingAllowsBoundedInflightCompletion: true,
+} as const);
 
 /** Design metadata, not telemetry attributes or a calculation engine.
  * No target percentages are assigned; approval references are not proof of authority. */
