@@ -172,11 +172,40 @@ The first run was 18/19 because the no-resource assertion matched the words
 "resource names" in a parameter description; the declaration-aware assertion was
 corrected and the full focused file rerun. No product invariant was weakened.
 
-The tests inspect source structure and selected unsafe mutations, not compiled ARM
-or cloud behavior. Local Azure CLI/Bicep tooling is unavailable; nothing was installed.
-**Bicep compilation is pending**, including compiler diagnostics for conditional-module
-references and provider types. No cloud what-if, deployment, login or live resource
-verification ran. Existing NGINX/image files and references were not changed, so their
+The tests inspect source structure and selected unsafe mutations, not cloud behavior.
+The initial commit had compilation pending because host tooling was unavailable.
+The final integration gate used the verified official container
+`mcr.microsoft.com/azure-cli:2.90.0-azurelinux3.0` (manifest digest
+`sha256:e3768dde8142efa45d8f356a317aaac77abd7da15ba3719b0a150e9453f251db`).
+Azure CLI reported `2.90.0`; Bicep `0.48.1 (cec7951cf6)` was installed only inside
+the disposable container. Only the Bicep directory was mounted, read-only; no host
+credentials were mounted and no tooling was installed on the host.
+
+Initial lint/build had zero errors and six BCP318 warnings at main lines 58, 74,
+75, 76, 85 and 86 for potentially null conditional-module output references.
+The minimal correction uses safe dereferencing with an empty-string fallback for
+absent modules. All consumers retain the same false deployment condition. Compiled
+ARM confirms each reference is guarded by that condition; no missing module is
+referenced when disabled. No null-forgiving operator or diagnostic suppression is
+used. The existing entry-point contract test now checks these six accesses.
+
+Final `az bicep lint --file /src/main.bicep` and
+`az bicep build --file /src/main.bicep --stdout` both pass with zero errors and zero
+warnings, including all four referenced modules. Installation emitted only the CLI
+notice that `bicep.use_binary_from_path` was set to false inside the container; no
+linter settings changed. The first temporary inspection harness had a newline-related
+Python error after successful compilation; the corrected harness passed. Generated
+ARM remained in container `/tmp` and was removed with the container.
+
+Compiled inspection verified the twelve resource declarations, stable API versions,
+false deployment conditions, guarded references, Premium, internal/disabled public
+networking, parameterized image without default, port 8080, both environment-targeted
+Private Link relationships, regional DNS/VNet link and disabled bounded routes.
+No auto-approval, roles, secrets, deployment scripts, API origin or F061/F062 resource
+was introduced. WAF policy and association remain a pre-deployment blocker.
+
+No cloud what-if, deployment, login or live resource verification ran.
+Existing NGINX/image files and references were not changed, so their
 runtime suites were not rerun. No frontend build, database or F062 suites ran.
 
 Changed-file formatting, documentation links/anchors/tables/headings, whitespace,
@@ -185,7 +214,7 @@ checks. They do not establish cloud readiness.
 
 ## Remaining approval gates
 
-Before a separately authorized deployment: compile every Bicep file; validate the
+Before a separately authorized deployment: recompile any revised Bicep; validate the
 actual region, subscription/resource group, names, CIDRs, capacity, CPU/memory and
 image inputs; resolve registry/pull authorization and artifact security gates; approve
 WAF, domain/DNS/certificates, routes/API isolation, probes/scaling, cache and header

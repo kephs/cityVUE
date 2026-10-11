@@ -55,6 +55,12 @@ test("entry point is source-disabled and all modules are gated", () => {
   for (const m of modules) assert.ok(files[m[1].replace(/^\.\//, "")]);
   assert.equal((main.match(/\bmodule\s/g) ?? []).length, modules.length);
   assert.doesNotMatch(main, /^\s*resource\s+\w+\s+'/m);
+  // Conditional outputs must not be evaluated when their modules are absent.
+  assert.doesNotMatch(main, /\b(?:network|origin)\.outputs\./);
+  assert.equal(
+    [...main.matchAll(/\b(?:network|origin)\.\?outputs\.\w+ \?\? ''/g)].length,
+    6,
+  );
 });
 test("all inputs have no defaults or committed deployment values", () => {
   for (const name of names)

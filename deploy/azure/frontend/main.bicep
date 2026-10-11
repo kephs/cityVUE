@@ -55,7 +55,7 @@ module origin './modules/static-origin.bicep' = if (deploymentEnabled) {
   params: {
     location: location
     namingPrefix: namingPrefix
-    infrastructureSubnetId: network.outputs.infrastructureSubnetId
+    infrastructureSubnetId: network.?outputs.infrastructureSubnetId ?? ''
     workloadProfileName: workloadProfileName
     workloadProfileType: workloadProfileType
     workloadProfileMinimumCount: workloadProfileMinimumCount
@@ -71,9 +71,9 @@ module connectivity './modules/private-connectivity.bicep' = if (deploymentEnabl
   params: {
     location: location
     namingPrefix: namingPrefix
-    vnetId: network.outputs.vnetId
-    privateEndpointSubnetId: network.outputs.privateEndpointSubnetId
-    environmentId: origin.outputs.environmentId
+    vnetId: network.?outputs.vnetId ?? ''
+    privateEndpointSubnetId: network.?outputs.privateEndpointSubnetId ?? ''
+    environmentId: origin.?outputs.environmentId ?? ''
   }
 }
 
@@ -82,8 +82,8 @@ module edge './modules/front-door.bicep' = if (deploymentEnabled) {
   params: {
     location: location
     namingPrefix: namingPrefix
-    environmentId: origin.outputs.environmentId
-    frontendFqdn: origin.outputs.frontendFqdn
+    environmentId: origin.?outputs.environmentId ?? ''
+    frontendFqdn: origin.?outputs.frontendFqdn ?? ''
   }
 }
 
