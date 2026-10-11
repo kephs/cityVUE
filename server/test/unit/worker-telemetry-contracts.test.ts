@@ -43,11 +43,16 @@ const retained = {
   integration_connector_health: 'outcome',
 } as const;
 
-test('F061.3A concepts are retained alongside the explicit F061.3B extension', () => {
+test('F061.3A concepts are retained alongside the explicit F061.3B/3C extensions', () => {
   assert.deepEqual(metricConcepts, {
     ...retained,
     ...additions,
     integration_age_policy_transition_count: 'count',
+    integration_active_claim_count: 'count',
+    integration_expired_lease_count: 'count',
+    integration_lease_recovery_count: 'count',
+    integration_oldest_retry_eligible_age: 'milliseconds',
+    integration_ordered_stream_blocked_count: 'count',
   });
   assert.ok(Object.isFrozen(metricConcepts));
   // @ts-expect-error No alias for an existing retry concept.
@@ -59,7 +64,7 @@ test('claim rate and reconciliation needs reuse concepts rather than duplicate a
   const integration = Object.keys(metricConcepts).filter((key) =>
     key.startsWith('integration_'),
   );
-  assert.equal(integration.length, 11);
+  assert.equal(integration.length, 16);
   for (const alias of [
     'integration_claim_rate',
     'integration_worker_delivery_latency',
