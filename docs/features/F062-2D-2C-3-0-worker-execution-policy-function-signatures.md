@@ -22,6 +22,14 @@ one document and changes no production source.
 > (§22, §28.1), the 3B policy ownership split (§6.2) and the observability
 > gate (§25). **No numerical value is selected anywhere.**
 
+> **AMENDED BY F062.2D-2C-3-0A — ordered-predecessor boundary.** F062.2D-2C-3A
+> correctly stopped before writing code because this document did not specify
+> how an ordered candidate interacts with an unresolved sibling pinned under an
+> earlier **unordered** connector revision, nor how a NULL `aggregate_revision`
+> orders. Both are now frozen in **§4**: §4.0 the predecessor boundary,
+> §4.0a the explicit NULL ordering, and §4.0b the ordering activation
+> barrier. §29 gains the twelve tests 3A must prove.
+
 Baseline: `origin/main` at `1584bc03d41e3b260621c9a5244b099e0ef4a6ba`, which
 carries F062.2D-2C-2 (`5015c20`) as a verified ancestor, merged as PR #33.
 
@@ -138,8 +146,131 @@ durable timestamp. **And must not accept a lease duration** (§6.3).
 | Element | Value |
 | --- | --- |
 | **Stream key** | `(organization_id, integration_connector_id, aggregate_type, aggregate_id)` — all four already `NOT NULL` |
-| **Sequence key** | `(aggregate_revision, created_at, id)` ascending. `aggregate_revision` is `NOT NULL` for ordered obligations by the Migration 55 constraint |
-| **"Earlier"** | a sibling whose sequence key sorts strictly before the candidate's |
+| **Sequence key** | **`aggregate_revision ASC NULLS FIRST, created_at ASC, id ASC`** — see §4.0a. Migration 55 guarantees `aggregate_revision` is `NOT NULL` only for **ordered** rows, so a sibling may carry NULL |
+| **"Earlier"** | a sibling whose sequence key sorts strictly before the candidate's, under exactly that ordering |
+| **Sibling's own ordering flag** | **irrelevant** — see §4.0 |
+
+### 4.0 The predecessor boundary — FROZEN BY F062.2D-2C-3-0A
+
+> **For a candidate B with `requires_ordered_delivery = true`, the FIFO
+> predecessor predicate considers unresolved siblings in the same stream
+> REGARDLESS of the sibling's own `requires_ordered_delivery` value.**
+
+An obligation pinned under a historical connector revision declaring
+`supports_ordering = none` **does not itself become an ordered obligation**.
+Nothing about it changes. But if it is **unresolved** and **precedes** an
+ordered candidate under the §4.0a sequence, **the ordered candidate may not
+overtake it.**
+
+**Reason, as accepted:** an ordered candidate must not be externally delivered
+ahead of unresolved work whose causal position cannot be proven to be later.
+
+> **Waiting is reversible. External reordering is not.**
+
+The asymmetry is deliberate and is stated plainly because it is easy to read
+as a bug: **only the ordered candidate receives the predecessor gate.** An
+unordered candidate's eligibility is unchanged by the existence of an ordered
+sibling, and gains no new gate (§4.0b).
+
+Why this was not already settled: every earlier formulation — F062.2D-2C-0
+§13.1, F062.2D-2C-0A §15.2 and the first draft of §4 — qualified the
+**candidate** by its ordering flag and described the predecessor only as “a
+sibling” in the same stream with an earlier sequence key and a non-terminal
+state. The sibling's own flag was never mentioned in any of them, so the
+mixed-stream case had no answer to implement against.
+
+### 4.0a Explicit sequence semantics — FROZEN BY F062.2D-2C-3-0A
+
+> ```
+> aggregate_revision ASC NULLS FIRST,
+> created_at         ASC,
+> id                 ASC
+> ```
+>
+> **`NULLS FIRST` is explicit and must not be left to PostgreSQL's default.**
+
+PostgreSQL's default for `ASC` is `NULLS LAST`, which produces the **opposite**
+of the required semantics. Measured on this repository's PostgreSQL, with an
+older unordered sibling carrying a NULL revision and a newer ordered candidate
+at revision 5:
+
+| Ordering | Result |
+| --- | --- |
+| `(aggregate_revision, created_at, id)` — PostgreSQL default | **the NEWER ordered candidate sorts FIRST**; a tuple comparison reports the older sibling is **not** “earlier” |
+| the same key with `NULLS FIRST` | the older sibling sorts first, as required |
+
+So the default would have silently permitted the exact overtake this predicate
+exists to prevent.
+
+#### What a NULL `aggregate_revision` means
+
+> **NULL means *unknown causal position*. It does NOT mean *latest*.**
+
+A NULL-revision unresolved sibling therefore **conservatively precedes**
+numbered revisions for FIFO-blocking purposes.
+
+**This is intentional, and it has a consequence worth stating outright: a
+NULL-revision sibling created *later* than an ordered candidate may still block
+that candidate**, because Reqro holds no causal evidence proving that
+overtaking it is safe. Fail-closed is the correct direction, since the cost of
+waiting is a delay and the cost of being wrong is an unrecoverable external
+reorder.
+
+`created_at` and `id` provide deterministic ordering among siblings whose
+revision position is otherwise equal, **including within the NULL cohort** —
+so two NULL-revision siblings are still totally ordered, and the predicate is
+never non-deterministic.
+
+> **Do NOT replace this with “if revision is NULL, compare only
+> `created_at`”.** That would silently treat enqueue chronology as causal
+> evidence Reqro does not possess: `created_at` records when Reqro accepted an
+> intent, not the order in which the underlying aggregate actually changed.
+
+### 4.0b Ordering activation barrier — FROZEN BY F062.2D-2C-3-0A
+
+When a connector changes `supports_ordering` from `none` to `per_aggregate`,
+**new ordered obligations may be blocked by unresolved obligations pinned under
+the earlier unordered revision.**
+
+> **This is a fail-closed ordering activation barrier, per aggregate stream.**
+
+It is a consequence of §4.0 rather than a separate mechanism, and it is the
+honest one: at the moment ordering is switched on, Reqro cannot know the causal
+position of work it accepted while making no ordering promise, so it declines
+to deliver ordered work past it.
+
+**What the barrier explicitly does NOT do:**
+
+| Does not | |
+| --- | --- |
+| rewrite legacy `requires_ordered_delivery` values | the pinned value is immutable evidence (Migration 55) |
+| fabricate an `aggregate_revision` | a revision Reqro never received is not inventable |
+| retroactively make legacy rows ordered | they keep the contract they were enqueued under |
+| change legacy candidate eligibility | an unordered candidate gains **no** predecessor gate merely because a newer sibling is ordered |
+
+Each aggregate stream clears its own barrier independently, as its legacy
+obligations reach a non-blocking state. One stuck legacy obligation blocks its
+own aggregate and nothing else — the stream key includes
+`aggregate_id`, so poison isolation still holds.
+
+#### The mutual-exclusion index is unchanged
+
+> **F062.2D-2C-3-0A proposes no index change.** Migration 55's
+> `integration_outbox_ordered_stream_in_flight` remains exactly as it is: it
+> applies only to rows with `requires_ordered_delivery = true` **and**
+> `state in ('dispatching','ambiguous')`, and it provides **mutual exclusion
+> only**.
+
+It does **not** replace the FIFO predecessor predicate, and the two differ in
+both scope and breadth — which is why both must coexist:
+
+| | Partial unique index | FIFO predecessor predicate |
+| --- | --- | --- |
+| **Guarantees** | mutual exclusion | strict FIFO sequence |
+| **Blocking states** | `dispatching`, `ambiguous` | **all five** of §4.1, including `dead_lettered` |
+| **Sibling scope** | only rows with `requires_ordered_delivery = true` | **every** unresolved sibling in the stream, flag-independent (§4.0) |
+| **Enforced by** | the database, unconditionally | the claim function |
+| **Fails by** | two concurrent dispatches | a newer obligation overtaking an older |
 
 ### 4.1 Which predecessor states block
 
@@ -154,6 +285,9 @@ durable timestamp. **And must not accept a lease duration** (§6.3).
 | `failed_permanent` | does not block | terminal |
 | `refused` | does not block | terminal |
 | **`dead_lettered`** | **BLOCKS** | **FROZEN BY REVIEW** — §4.3 |
+
+**These sets are unchanged by F062.2D-2C-3-0A**, and they apply to a sibling
+**whatever its own ordering flag** (§4.0).
 
 ### 4.2 Temporary ineligibility never permits overtaking
 
@@ -470,7 +604,7 @@ Both return the same deliberately undifferentiated `false`.
 | Category | Automatically retryable? |
 | --- | --- |
 | `destination_unavailable` | **Yes** |
-| `rate_limited` | **Yes**, with its own higher floor (§19) |
+| `rate_limited` | **Classified retryable, but automatic scheduling is BLOCKED** until reviewed destination retry-floor evidence exists (§19.2) |
 | every other category | **No** |
 
 `transientIntegrationFailures` is **exactly** `['destination_unavailable',
@@ -1223,6 +1357,57 @@ Tests 10, 11 and 14 need their **own concurrency coverage**: the predecessor
 predicate is function-enforced, so the ordered-stream index cannot catch a bug
 in it.
 
+### 29.1 Ordered-predecessor boundary tests — REQUIRED BY F062.2D-2C-3-0A
+
+**These twelve are additional to the table above and are mandatory for 3A.**
+They exist because §4.0, §4.0a and §4.0b are function-enforced semantics that
+no constraint can catch, and because the NULL-ordering rule is the opposite of
+PostgreSQL's default.
+
+| # | Must prove |
+| - | --- |
+| 1 | An **unresolved unordered NULL-revision** sibling **blocks** a newer ordered candidate |
+| 2 | An **`accepted`** unordered NULL-revision sibling does **not** block |
+| 3 | A **`dead_lettered`** unordered NULL-revision sibling **blocks** |
+| 4 | An unordered sibling with a **numbered revision sorting before** the ordered candidate **blocks** |
+| 5 | An unordered sibling with a **numbered revision sorting after** the candidate does **not** block merely by existing |
+| 6 | A **NULL-revision sibling sorts before numbered revisions even when its `created_at` is later** — the intentional fail-closed case, and the one PostgreSQL's default ordering would get wrong |
+| 7 | A different **Organization** does not block |
+| 8 | A different **connector** does not block |
+| 9 | A different **aggregate** does not block |
+| 10 | An **unordered candidate** remains governed by existing behaviour and receives **no** new predecessor gate |
+| 11 | A **locked** unresolved legacy/unordered predecessor **still blocks** an ordered candidate, despite candidate selection using `SKIP LOCKED` |
+| 12 | **Unrelated streams remain concurrently claimable** — the rule must not serialize a whole connector or tenant |
+
+**No sleeps in the concurrency tests.** Tests 11 and 12 must coordinate
+deterministically — by observing an ungranted lock request in `pg_locks` from
+a third connection, or by equivalent transaction coordination.
+
+Test 11 is the sharpest of the twelve. `SKIP LOCKED` applies to **candidate
+selection**; the predecessor predicate is a separate `not exists` over
+committed rows and **must still observe a locked older sibling**. A predicate
+written so that skipping the locked older row makes the newer one claimable
+would pass every single-connection test and reorder in production.
+
+Test 6 is the second sharpest: it fails under PostgreSQL's default
+`NULLS LAST`, so it is the regression test for §4.0a specifically.
+
+### 29.2 Operational implication — recorded, not implemented
+
+> **Before enabling `per_aggregate` ordering on a connector that already
+> carries traffic, operations should be able to identify the unresolved legacy
+> obligations that would form the ordering activation barrier** (§4.0b).
+
+Without that visibility, switching ordering on looks as though it silently
+stalled the newly ordered work, when in fact the barrier is doing exactly what
+it was designed to do. The obligations are queryable from existing evidence —
+unresolved rows in the stream with `requires_ordered_delivery = false` — so no
+new persistence is implied.
+
+**This operational tooling is NOT implemented here, and not in 3A.** It is a
+future production and configuration consideration, and belongs with the
+operator surface rather than with the worker function API.
+
 ---
 
 ## 30. Slice recommendation: **C**
@@ -1250,7 +1435,7 @@ alone does not resolve it.
 
 | Slice | Scope | Numerical policy required? |
 | --- | --- | --- |
-| **F062.2D-2C-3A** — strict FIFO, retry eligibility and dispatch-marker / function structural hardening | The §4 predecessor predicate with its own concurrency tests; `mark_integration_dispatch_started`; retry **eligibility** in the claim predicate (reading `next_attempt_at`, clearing it on the transition out of `retrying`); `aggregate_revision` as the intra-stream sequence; the §28.1a `DROP`/`CREATE` of the claim function | **None.** No timing policy required, and every input already exists in the schema |
+| **F062.2D-2C-3A** — strict FIFO, retry eligibility and dispatch-marker / function structural hardening | The §4 predecessor predicate with its own concurrency tests; `mark_integration_dispatch_started`; retry **eligibility** in the claim predicate (reading `next_attempt_at`, clearing it on the transition out of `retrying`); `aggregate_revision` as the intra-stream sequence; the §28.1a `DROP`/`CREATE` of the claim function; **the §4.0 flag-independent predecessor boundary with the §4.0a `NULLS FIRST` sequence, and the twelve §29.1 tests** | **None.** No timing policy required, and every input already exists in the schema |
 | **F062.2D-2C-3B** — execution-policy persistence and trust boundaries | The two authority classes of §6.2a: connector-pinned policy mirrored into the audit, and the operator-owned platform safety relation; the `min` evaluation with the §6.2a fail-closed lease rule; **and either the destination retry-floor evidence contract of §19.2 or an explicit decision to park `rate_limited`** | **None.** **No arbitrary numerical constants or defaults** — it stores a mechanism, and values are configuration |
 | **F062.2D-2C-3C** — claim lease authorship, retry scheduling and recovery | `claim_expires_at` authorship from persisted policy; `recover_expired_integration_claim`; `next_attempt_at` authorship in completion and recovery; budget, horizon and bounded exponential jitter, all **reading** policy from 3B | Reads policy; **no hardcoded constant** |
 | **F061.3D** — Integration Worker Runtime Telemetry Emission (**parallel**) | A producer for the §25 concepts, at minimum active claims and expired leases. **Must occur before worker activation or grants** | — |
