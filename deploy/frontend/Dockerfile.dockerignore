@@ -1,0 +1,8 @@
+**
+!dist-react/
+!dist-react/**
+!deploy/
+!deploy/frontend/
+!deploy/frontend/Dockerfile
+!deploy/frontend/nginx/
+!deploy/frontend/nginx/nginx.conf

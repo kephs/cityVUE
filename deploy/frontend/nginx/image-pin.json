@@ -1,0 +1,26 @@
+{
+  "registry": "ghcr.io",
+  "repository": "nginx/nginx-unprivileged",
+  "tag": "1.30.5-trixie",
+  "digest": "sha256:d715f7a85cdfea820fec743ea5aee8a22f91e00ff310ad6275d2638112d8cf8d",
+  "digestType": "multi-platform OCI image index",
+  "variant": "stable Debian Trixie, plain unprivileged",
+  "verifiedDate": "2026-10-11",
+  "verification": "docker buildx imagetools inspect",
+  "platforms": [
+    "linux/amd64",
+    "linux/arm/v7",
+    "linux/arm64",
+    "linux/386",
+    "linux/ppc64le",
+    "linux/riscv64",
+    "linux/s390x"
+  ],
+  "localValidationPlatform": "linux/amd64",
+  "localChildDigest": "sha256:35c16ddeb87a192a1fa2aaabff404f532aa4268367922277ed0bd28d3685974f",
+  "containerPort": 8080,
+  "uid": 101,
+  "gid": 101,
+  "requiresNonRoot": true,
+  "upgrades": "Explicit reviewed changes only; no automatic updater."
+}

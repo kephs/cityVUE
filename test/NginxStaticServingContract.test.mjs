@@ -68,11 +68,8 @@ const entries = (node) =>
   Object.fromEntries(node.children.map((n) => [n.name, n.args.join(" ")]));
 const all = (nodes) => nodes.flatMap((n) => [n, ...all(n.children ?? [])]);
 
-test("local unprivileged listener and fixed static root", () => {
-  assert.deepEqual(directive(server, "listen"), [
-    "127.0.0.1:8080",
-    "default_server",
-  ]);
+test("unprivileged container listener and fixed static root", () => {
+  assert.deepEqual(directive(server, "listen"), ["8080", "default_server"]);
   assert.deepEqual(directive(server, "root"), ["/usr/share/nginx/html"]);
   assert.deepEqual(directive(server, "index"), ["index.html"]);
   assert.deepEqual(directive(server, "autoindex"), ["off"]);
@@ -138,11 +135,16 @@ test("only navigation can fall back to exact index", () => {
     ).length,
     1,
   );
-  assert.equal(
-    all(tree).some((n) => n.name === "error_page"),
-    false,
-  );
-  assert.equal(locations.length, 8);
+  assert.deepEqual(directive(server, "error_page"), ["404", "=", "@not_found"]);
+  assert.deepEqual(directive(location("@not_found"), "default_type"), [
+    "text/plain",
+  ]);
+  assert.deepEqual(one(location("@not_found"), "types").children, []);
+  assert.deepEqual(directive(location("@not_found"), "return"), [
+    "404",
+    "Not found\n",
+  ]);
+  assert.equal(locations.length, 9);
 });
 test("COOP is same-origin with only the exact bridge omission", () => {
   assert.deepEqual(map("$frontend_coop").args, ["$uri", "$frontend_coop"]);
@@ -216,7 +218,7 @@ test("standard MIME mapping plus explicit mjs extension is required", () => {
   assert.deepEqual(directive(http, "default_type"), [
     "application/octet-stream",
   ]);
-  assert.equal(all(tree).filter((n) => n.name === "types").length, 1);
+  assert.equal(all(tree).filter((n) => n.name === "types").length, 2);
   // html/js/css mappings in the installed standard file require runtime validation.
 });
 test("no CSP HSTS numeric cache policy or API upstream introduced", () => {
