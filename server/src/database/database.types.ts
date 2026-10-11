@@ -16,6 +16,7 @@ import type {
   AttemptOutcome,
   ConnectorLifecycleState,
   DeliveryState,
+  IntegrationAttemptReasonCode,
 } from '../integration/delivery-contract.js';
 import type {
   AggregateType,
@@ -772,7 +773,25 @@ interface IntegrationDeliveryAttemptTable {
   completed_at: Timestamp | null;
   /** Null while open. */
   outcome: AttemptOutcome | null;
+  /** The destination taxonomy. Null for a success, and null for a
+   * Reqro-lifecycle settlement, which names no destination behaviour. */
   failure_category: IntegrationFailureCategory | null;
+  /** F062.2D-2C-1. The claim lease deadline, database-authored and written
+   * once at claim. Nullable through this slice because the claim function is
+   * deliberately unchanged and nothing populates it yet. Never a completion
+   * fence: expiry authorizes recovery, it does not invalidate a legitimate
+   * settlement. */
+  claim_expires_at: Timestamp | null;
+  /** F062.2D-2C-1. The dispatch boundary, database-authored and write-once.
+   * Null means no external transmission may yet have occurred under the
+   * reviewed protocol; non-null means it may have. It never asserts that the
+   * destination received or processed the request. A caller-supplied value is
+   * discarded by the guard. */
+  dispatch_started_at: Timestamp | null;
+  /** F062.2D-2C-1. The bounded Reqro-owned settlement reason. Null for an
+   * open attempt and for every adapter-derived settlement; set only by a
+   * database-authored lifecycle settlement. */
+  reason_code: IntegrationAttemptReasonCode | null;
   mutation_txid: Generated<string>;
 }
 
