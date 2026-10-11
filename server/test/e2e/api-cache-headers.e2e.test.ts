@@ -17,6 +17,8 @@ import type { Request, Response, NextFunction } from 'express';
 import request from 'supertest';
 import { DatabaseService } from '../../src/database/database.service.js';
 import { AttachmentService } from '../../src/attachments/attachment.service.js';
+import { StaffAttachmentController } from '../../src/attachments/attachment.controller.js';
+import type { StaffAccess } from '../../src/auth/auth.types.js';
 
 // Test-only routes exercise the real bootstrap/parser/filter/throttler lifecycle.
 // No production guard or authorization provider is replaced.
@@ -73,7 +75,56 @@ const baseline = {
   'x-content-type-options': 'nosniff',
   'referrer-policy': 'no-referrer',
 };
+// F060.4A-2C-2A describes the existing policy, not permanent policy approval.
+// A separately reviewed policy migration must intentionally update this contract.
+function parseCsp(value: unknown): Record<string, string[]> {
+  assert.equal(typeof value, 'string', 'enforcing CSP must be present');
+  const directives: Record<string, string[]> = {};
+  for (const part of (value as string).split(';')) {
+    const tokens = part.trim().split(/\s+/);
+    const name = tokens.shift();
+    if (!name) continue;
+    assert.match(name, /^[a-z][a-z-]*$/, 'invalid directive name');
+    assert.equal(Object.hasOwn(directives, name), false, 'duplicate directive');
+    assert.equal(new Set(tokens).size, tokens.length, 'duplicate source');
+    directives[name] = tokens.sort();
+  }
+  return directives;
+}
+
+function checkCsp(value: unknown) {
+  const directives = parseCsp(value);
+  for (const [name, sources] of Object.entries(directives)) {
+    assert.equal(sources.includes("'unsafe-eval'"), false, name);
+    assert.equal(
+      sources.some((source) => source.includes('*')),
+      false,
+      name,
+    );
+    // Descriptive style-only baseline, not approval of long-term retention.
+    assert.equal(
+      sources.includes("'unsafe-inline'"),
+      name === 'style-src',
+      name,
+    );
+  }
+  assert.deepEqual(directives, {
+    'default-src': ["'self'"],
+    'base-uri': ["'self'"],
+    'font-src': ["'self'", 'data:', 'https:'],
+    'form-action': ["'self'"],
+    'frame-ancestors': ["'self'"],
+    'img-src': ["'self'", 'data:'],
+    'object-src': ["'none'"],
+    'script-src': ["'self'"],
+    'script-src-attr': ["'none'"],
+    'style-src': ["'self'", "'unsafe-inline'", 'https:'],
+    'upgrade-insecure-requests': [],
+  });
+}
+
 function checkHeaders(headers: Record<string, unknown>, cache = 'no-store') {
+  checkCsp(headers['content-security-policy']);
   assert.equal(headers['cache-control'], cache);
   for (const [name, value] of Object.entries(baseline))
     assert.equal(headers[name], value, name);
@@ -112,6 +163,14 @@ before(async () => {
     .useValue({ status: async () => 'up' })
     .overrideProvider(AttachmentService)
     .useValue({
+      download: async () => ({
+        bytes,
+        metadata: {
+          mediaType: 'image/png',
+          byteSize: bytes.length,
+          filename: 'synthetic.png',
+        },
+      }),
       preview: async () => ({
         bytes,
         metadata: { mediaType: 'image/png', byteSize: bytes.length },
@@ -261,4 +320,87 @@ test('redirect and CORS preflight get no-store without changing their destinatio
     preflight.headers['access-control-allow-credentials'],
     undefined,
   );
+});
+
+test('CSP comparison normalizes whitespace but rejects missing, duplicate and broadened directives', () => {
+  checkCsp(csp.replaceAll(';', ';  ').replaceAll(' ', '  '));
+  for (const changed of [
+    undefined,
+    '',
+    csp + ";script-src 'self'",
+    csp + ';script-src *',
+    csp.replace("object-src 'none';", ''),
+    csp.replace("script-src 'self'", "script-src 'self' 'unsafe-eval'"),
+    csp.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'"),
+    csp.replace("script-src 'self'", 'script-src https://unexpected.example'),
+    ...['script-src', 'default-src', 'frame-ancestors'].flatMap((name) =>
+      ['*', 'https://*.example'].map((source) =>
+        csp.replace(name + " 'self'", name + ' ' + source),
+      ),
+    ),
+  ])
+    assert.throws(() => {
+      checkCsp(changed);
+    });
+});
+
+test('real download controller replaces general CSP with its independent sandbox policy', async () => {
+  // Controller boundary test, not authenticated download or storage proof.
+  // Seed with actual bootstrap headers; invoke the unchanged controller directly.
+  // Existing HTTP guard-refusal tests above remain intact without guard overrides.
+  const ordinary = await request(app.getHttpServer())
+    .get('/api/v1/health/live')
+    .expect(200);
+  checkHeaders(ordinary.headers);
+  const headers: Record<string, unknown> = { ...ordinary.headers };
+  const response = {
+    setHeader(name: string, value: unknown) {
+      headers[name.toLowerCase()] = value;
+      return this;
+    },
+  } as unknown as Response;
+  const access: StaffAccess = {
+    tenantId: null,
+    objectId: null,
+    staffIdentityId: '10000000-0000-4000-8000-000000000011',
+    organizationId: '10000000-0000-4000-8000-000000000001',
+    displayName: 'Synthetic staff',
+    scopes: [],
+    permissions: [],
+    departmentIds: [],
+    divisionIds: [],
+    development: false,
+  };
+  const file = await app
+    .get(StaffAttachmentController)
+    .download(
+      '10000000-0000-4000-8000-000000000021',
+      'REQUEST_EVIDENCE',
+      '10000000-0000-4000-8000-000000000022',
+      '10000000-0000-4000-8000-000000000023',
+      access,
+      response,
+    );
+  assert.equal(
+    headers['content-security-policy'],
+    "default-src 'none'; sandbox",
+  );
+  assert.deepEqual(parseCsp(headers['content-security-policy']), {
+    'default-src': ["'none'"],
+    sandbox: [],
+  });
+  assert.equal(headers['cache-control'], 'private, no-store');
+  for (const [name, value] of Object.entries(baseline))
+    if (name !== 'content-security-policy') assert.equal(headers[name], value);
+  assert.equal(headers['content-security-policy-report-only'], undefined);
+  assert.equal(headers['permissions-policy'], undefined);
+  assert.deepEqual(file.getHeaders(), {
+    type: 'image/png',
+    disposition: 'attachment; filename="synthetic.png"',
+    length: bytes.length,
+  });
+  const chunks: Buffer[] = [];
+  for await (const chunk of file.getStream())
+    chunks.push(Buffer.from(chunk as Uint8Array));
+  assert.deepEqual(Buffer.concat(chunks), bytes);
 });
