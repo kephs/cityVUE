@@ -70,6 +70,77 @@ export function isTerminalDeliveryState(state: DeliveryState): boolean {
 }
 
 /**
+ * The allowed **non-age** delivery-state transitions, declared as data.
+ *
+ * **This is the authority the database mirrors**, not a convenience. The
+ * durable state machine restates these pairs in SQL, and a parity test asserts
+ * the two agree in both directions — so adding an edge here without the
+ * migration, or in the migration without here, fails rather than diverging
+ * silently. F062.2A established that discipline for the state vocabulary; this
+ * extends it to the edges.
+ *
+ * **Age-based expiry is deliberately absent.** F062.2D-1A decided its
+ * semantics but left its threshold, ownership and measurability unresolved, so
+ * the `pending_age_exceeded` edge belongs to a later policy-implementation
+ * slice. A transition whose predicate nobody has set is a guessed edge.
+ *
+ * **`dead_lettered` has no outgoing edge here.** F062.2A requires an authorized
+ * replay to carry audit evidence in the same transaction, and no replay
+ * authorization record exists yet; enabling `dead_lettered -> pending` before
+ * it would permit an unaudited replay to a live external system.
+ *
+ * Two edges carry a precondition the pair alone cannot express, and the
+ * database enforces both from the connector snapshot pinned on the intent:
+ * `accepted -> acknowledged` only where the connector declares
+ * `reportsTerminalState`, mirroring ADR-026's rule that a non-reporting
+ * transport must never show delivery; and `ambiguous -> dispatching` only
+ * where it declares `supportsIdempotencyKey`, so an ambiguous mutation is
+ * never blind-retried.
+ */
+export const deliveryStateTransitions: Readonly<
+  Record<DeliveryState, readonly DeliveryState[]>
+> = {
+  pending: ['dispatching', 'refused'],
+  dispatching: [
+    'accepted',
+    'retrying',
+    'ambiguous',
+    'failed_permanent',
+    'dead_lettered',
+  ],
+  retrying: ['dispatching', 'dead_lettered'],
+  accepted: ['acknowledged'],
+  ambiguous: ['dispatching', 'accepted', 'failed_permanent', 'dead_lettered'],
+  acknowledged: [],
+  failed_permanent: [],
+  dead_lettered: [],
+  refused: [],
+};
+
+export function mayTransitionDeliveryState(
+  from: DeliveryState,
+  to: DeliveryState,
+): boolean {
+  return deliveryStateTransitions[from].includes(to);
+}
+
+/** Transitions whose pair is permitted only when the pinned connector
+ * capability named here is declared. Kept separate from the pair table so the
+ * precondition cannot be lost by reading the pairs alone. */
+export const transitionCapabilityPreconditions: readonly {
+  readonly from: DeliveryState;
+  readonly to: DeliveryState;
+  readonly requires: 'reportsTerminalState' | 'supportsIdempotencyKey';
+}[] = [
+  { from: 'accepted', to: 'acknowledged', requires: 'reportsTerminalState' },
+  {
+    from: 'ambiguous',
+    to: 'dispatching',
+    requires: 'supportsIdempotencyKey',
+  },
+];
+
+/**
  * Delivery states that must never be shown to a resident.
  *
  * Residents see Reqro's own request status, which Reqro owns and can always

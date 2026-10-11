@@ -336,7 +336,7 @@ test(
           const files = (await readdir(folder))
             .filter((file) => file.endsWith('.js'))
             .sort();
-          assert.equal(files.length, 49);
+          assert.equal(files.length, 50);
           for (const file of files) {
             const migration = (await import(
               path

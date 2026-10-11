@@ -346,7 +346,7 @@ test(
       );
 
       await t.test(
-        'with SET ROLE the migration login applies all 51 migrations, owned by the owner',
+        'with SET ROLE the migration login applies all 52 migrations, owned by the owner',
         async () => {
           const assumed = connect(
             cluster,
@@ -372,9 +372,9 @@ test(
           const files = (await readdir(folder))
             .filter((file) => file.endsWith('.js'))
             .sort();
-          // 49 compiled migrations plus Migrations 48 and 49, which are
-          // applied as text below, is the full inventory of 51.
-          assert.equal(files.length, 49);
+          // 50 compiled migrations plus Migrations 48 and 49, which are
+          // applied as text below, is the full inventory of 52.
+          assert.equal(files.length, 50);
           for (const file of files) {
             const migration = (await import(
               path
