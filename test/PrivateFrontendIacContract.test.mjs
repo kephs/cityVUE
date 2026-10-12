@@ -9,15 +9,16 @@ const names = [
   "modules/static-origin.bicep",
   "modules/private-connectivity.bicep",
   "modules/front-door.bicep",
+  "modules/waf.bicep",
 ];
 const files = Object.fromEntries(
   names.map((n) => [n, readFileSync(new URL(n, root), "utf8")]),
 );
 const code = (text) => text.replace(/\/\/[^\n]*/g, "");
-const [main, network, origin, connectivity, edge] = names.map((n) =>
+const [main, network, origin, connectivity, edge, waf] = names.map((n) =>
   code(files[n]),
 );
-const all = [main, network, origin, connectivity, edge].join("\n");
+const all = [main, network, origin, connectivity, edge, waf].join("\n");
 
 // Balanced source extraction, not a compiler or cloud validation.
 function block(text, expression) {
@@ -249,10 +250,10 @@ test("bounded frontend route cannot capture API", () => {
   assert.match(route, /forwardingProtocol:\s*'HttpsOnly'/);
   assert.match(route, /supportedProtocols:\s*\[\s*'Https'\s*\]/);
 });
-test("no edge cache header certificate or WAF policy invented", () => {
+test("no edge cache header or certificate policy invented", () => {
   assert.doesNotMatch(
     all,
-    /\b(cacheConfiguration|ruleSets|customDomains|certificates|managedRules|securityPolicies):/,
+    /\b(cacheConfiguration|ruleSets|customDomains|certificates):/,
   );
   assert.doesNotMatch(
     all,
@@ -278,6 +279,8 @@ test("resource inventory is exactly private frontend topology", () => {
       "Microsoft.Cdn/profiles/originGroups",
       "Microsoft.Cdn/profiles/originGroups/origins",
       "Microsoft.Cdn/profiles/afdEndpoints/routes",
+      "Microsoft.Network/FrontDoorWebApplicationFirewallPolicies",
+      "Microsoft.Cdn/profiles/securityPolicies",
     ].sort(),
   );
 });
@@ -300,6 +303,7 @@ test("unsafe boundary mutations are rejected", () => {
     assert.match(s, /publicNetworkAccess:\s*'Disabled'/);
     assert.match(s, /internal:\s*true/);
     assert.match(s, /name:\s*'Premium_AzureFrontDoor'/);
+    assert.doesNotMatch(s, /Standard_AzureFrontDoor/);
     assert.match(s, /linkToDefaultDomain:\s*'Disabled'/);
   };
   check(all);
@@ -310,4 +314,140 @@ test("unsafe boundary mutations are rejected", () => {
     ["linkToDefaultDomain: 'Disabled'", "linkToDefaultDomain: 'Enabled'"],
   ])
     assert.throws(() => check(all.replace(before, after)));
+});
+
+test("WAF uses stable API, Premium, Enabled Detection and body inspection", () => {
+  assert.match(
+    waf,
+    /resource wafPolicy 'Microsoft\.Network\/FrontDoorWebApplicationFirewallPolicies@2025-11-01'/,
+  );
+  const policy = resource(waf, "wafPolicy");
+  assert.match(policy, /location:\s*'global'/);
+  assert.match(property(policy, "sku"), /name:\s*'Premium_AzureFrontDoor'/);
+  const settings = property(policy, "policySettings");
+  assert.match(settings, /enabledState:\s*'Enabled'/);
+  assert.match(settings, /mode:\s*'Detection'/);
+  assert.match(settings, /requestBodyCheck:\s*'Enabled'/);
+  assert.deepEqual(
+    params(waf).map((m) => m[1]),
+    ["policyName"],
+  );
+  assert.doesNotMatch(waf, /Prevention|Disabled|Standard_AzureFrontDoor/);
+});
+
+function checkManagedRules(source) {
+  const rules = property(resource(source, "wafPolicy"), "managedRules");
+  assert.match(
+    rules,
+    /managedRuleSets:\s*\[\s*\{\s*ruleSetType:\s*'Microsoft_DefaultRuleSet'\s+ruleSetVersion:\s*'2\.2'\s*\}\s*\]/,
+  );
+  assert.equal([...rules.matchAll(/ruleSetType:/g)].length, 1);
+  assert.doesNotMatch(
+    source,
+    /exclusions|exceptionsList|ruleGroupOverrides|customRules|ruleSetAction|BotManager|RateLimit|CAPTCHA|JSChallenge|action:\s*'Allow'/i,
+  );
+}
+
+test("DRS 2.2 has no application overrides or custom bypass rules", () => {
+  checkManagedRules(waf);
+});
+
+function checkAssociation(source) {
+  assert.match(
+    source,
+    /resource securityPolicy 'Microsoft\.Cdn\/profiles\/securityPolicies@2025-04-15'/,
+  );
+  const policy = resource(source, "securityPolicy");
+  assert.match(policy, /parent:\s*profile/);
+  const parameters = property(policy, "parameters");
+  assert.match(parameters, /type:\s*'WebApplicationFirewall'/);
+  assert.match(
+    property(parameters, "wafPolicy"),
+    /id:\s*waf\.outputs\.policyId/,
+  );
+  assert.match(
+    parameters,
+    /associations:\s*\[\s*\{\s*domains:\s*\[\s*\{\s*id:\s*endpoint\.id\s*\}\s*\]\s*patternsToMatch:\s*\[\s*'\/\*'\s*\]\s*\}\s*\]/,
+  );
+}
+
+test("security association references the WAF output and current endpoint for all paths", () => {
+  checkAssociation(edge);
+  assert.match(edge, /module waf '\.\/waf\.bicep' =/);
+  assert.match(waf, /output policyId string = wafPolicy\.id/);
+  assert.equal(
+    [
+      ...all.matchAll(
+        /resource\s+\w+\s+'Microsoft\.Cdn\/profiles\/afdEndpoints@/g,
+      ),
+    ].length,
+    1,
+  );
+  assert.equal(
+    [
+      ...all.matchAll(
+        /resource\s+\w+\s+'Microsoft\.Cdn\/profiles\/securityPolicies@/g,
+      ),
+    ].length,
+    1,
+  );
+});
+
+test("WAF association does not expand the reviewed frontend routing surface", () => {
+  const route = resource(edge, "route");
+  const patterns = [
+    .../patternsToMatch:\s*\[([^\]]*)\]/.exec(route)[1].matchAll(/'([^']*)'/g),
+  ].map((m) => m[1]);
+  assert.deepEqual(patterns, [
+    "/",
+    "/index.html",
+    "/redirect.html",
+    "/assets/*",
+    "/staff",
+    "/staff/*",
+    "/admin",
+    "/admin/*",
+    "/map-preview",
+    "/track",
+    "/report",
+    "/issues",
+    "/issues/*",
+    "/dashboard",
+  ]);
+  assert.match(route, /linkToDefaultDomain:\s*'Disabled'/);
+});
+
+test("no diagnostic destination custom domain or additional policy surface is introduced", () => {
+  assert.doesNotMatch(
+    all,
+    /Microsoft\.(?:Insights|OperationalInsights|EventHub|Storage)\//i,
+  );
+  assert.doesNotMatch(
+    all,
+    /profiles\/customDomains|diagnosticSettings|logAnalytics|retentionInDays|rateLimit|geoMatch|CAPTCHA|JSChallenge|requestBodySize/i,
+  );
+  assert.doesNotMatch(
+    waf,
+    /\b(?:customRules|exclusions|exceptionsList|ruleGroupOverrides)\s*:/,
+  );
+});
+
+test("unsafe WAF and association mutations fail the contracts", () => {
+  for (const changed of [
+    waf.replace("'2.2'", "'2.1'"),
+    waf.replace("managedRules: {", "managedRules: { exclusions: []"),
+    waf.replace("managedRules: {", "managedRules: { ruleGroupOverrides: []"),
+    waf.replace(
+      "policySettings: {",
+      "customRules: { rules: [] } policySettings: {",
+    ),
+    waf.replace("Microsoft_DefaultRuleSet", "Microsoft_BotManagerRuleSet"),
+  ])
+    assert.throws(() => checkManagedRules(changed));
+  for (const changed of [
+    edge.replace("id: endpoint.id", "id: anotherEndpoint.id"),
+    edge.replace("id: waf.outputs.policyId", "id: unrelatedPolicyId"),
+    edge.replace("'/*'", "'/assets/*'"),
+  ])
+    assert.throws(() => checkAssociation(changed));
 });
