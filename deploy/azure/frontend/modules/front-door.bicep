@@ -83,9 +83,42 @@ resource route 'Microsoft.Cdn/profiles/afdEndpoints/routes@2025-04-15' = {
       '/dashboard'
     ]
     // Omit cacheConfiguration: edge caching is disabled by this schema.
-    // WAF, approved custom domains and API routing are pre-deployment blockers.
+    // WAF diagnostics/tuning, approved domains and API routing remain gated.
   }
   dependsOn: [
     origin
   ]
+}
+
+// Inherits the source-disabled edge module condition in main.bicep.
+module waf './waf.bicep' = {
+  name: 'frontend-waf'
+  params: {
+    policyName: '${replace(namingPrefix, '-', '')}frontendwaf'
+  }
+}
+
+resource securityPolicy 'Microsoft.Cdn/profiles/securityPolicies@2025-04-15' = {
+  parent: profile
+  name: 'frontend-waf'
+  properties: {
+    parameters: {
+      type: 'WebApplicationFirewall'
+      wafPolicy: {
+        id: waf.outputs.policyId
+      }
+      associations: [
+        {
+          domains: [
+            {
+              id: endpoint.id
+            }
+          ]
+          patternsToMatch: [
+            '/*'
+          ]
+        }
+      ]
+    }
+  }
 }
