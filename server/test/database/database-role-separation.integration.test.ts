@@ -34,6 +34,8 @@ const WORKER_ARTIFACT = 'integration-worker-role.sql';
 const MIGRATION_48 = '20261018000000-harden-tenant-domain-functions.ts';
 const MIGRATION_49 = '20261019000000-harden-runtime-reference-locks.ts';
 const MIGRATION_53 = '20261023000000-add-integration-worker-function-api.ts';
+const MIGRATION_56 =
+  '20261026000000-harden-integration-worker-claim-dispatch-api.ts';
 /** F062.2D-2B. The names are fixed in the artifacts rather than generated,
  * because the cluster helper's role names are fixed the same way. */
 const FUNCTION_OWNER = 'reqro_integration_function_owner';
@@ -50,6 +52,8 @@ const FUNCTION_OWNER_MATRIX: Readonly<Record<string, readonly string[]>> = {
 const WORKER_FUNCTIONS = [
   'claim_integration_intent',
   'complete_integration_attempt',
+  // F062.2D-2C-3A. Still no EXECUTE grant to any identity.
+  'mark_integration_dispatch_started',
 ];
 
 /** The canonical runtime table privilege matrix from F060.3C-2d-B, including
@@ -461,7 +465,7 @@ test(
       );
 
       await t.test(
-        'with SET ROLE the migration login applies all 55 migrations, owned by the owner',
+        'with SET ROLE the migration login applies all 56 migrations, owned by the owner',
         async () => {
           const assumed = connect(
             cluster,
@@ -487,8 +491,8 @@ test(
           const files = (await readdir(folder))
             .filter((file) => file.endsWith('.js'))
             .sort();
-          // 52 compiled migrations plus Migrations 48, 49 and 53, which are
-          // applied as text below, is the full inventory of 55. Those three
+          // 52 compiled migrations plus Migrations 48, 49, 53 and 56, which
+          // are applied as text below, is the full inventory of 56. Those four
           // hardcode `public.` for their SECURITY DEFINER functions, so no
           // test imports them and they are not compiled. Migrations 54 and 55
           // hardcode no schema name, so they compile like Migration 52.
@@ -514,6 +518,14 @@ test(
           // afterwards, so this connection stays usable.
           await sql
             .raw(await migrationSql(MIGRATION_53, 'up'))
+            .execute(assumed);
+          // Migration 56 replaces the claim function and adds the dispatch
+          // marker, assuming and restoring the function owner the same way. A
+          // DROP discards a function's ACL, so this is also where the
+          // recreated claim function's closed surface is proven on a real
+          // cluster rather than in a disposable schema.
+          await sql
+            .raw(await migrationSql(MIGRATION_56, 'up'))
             .execute(assumed);
           const restored = await sql<{ current_user: string }>`
             select current_user`.execute(assumed);
@@ -664,7 +676,7 @@ test(
           assert.deepEqual(
             functions.rows.map((row) => row.proname),
             WORKER_FUNCTIONS,
-            'the api schema holds exactly the two reviewed functions',
+            'the api schema holds exactly the three reviewed functions',
           );
           for (const row of functions.rows) {
             assert.equal(row.owner, FUNCTION_OWNER);
@@ -762,8 +774,10 @@ test(
             operator_usage: boolean;
             public_claim: boolean;
             public_complete: boolean;
+            public_mark: boolean;
             runtime_claim: boolean;
             runtime_complete: boolean;
+            runtime_mark: boolean;
           }>`
             select has_schema_privilege('public', ${API_SCHEMA}, 'USAGE') as public_usage,
                    has_schema_privilege(${cluster.runtime.user}, ${API_SCHEMA}, 'USAGE')
@@ -776,12 +790,18 @@ test(
                    has_function_privilege('public',
                      ${API_SCHEMA} || '.complete_integration_attempt(uuid,uuid,uuid,bigint,text,varchar,varchar)',
                      'EXECUTE') as public_complete,
+                   has_function_privilege('public',
+                     ${API_SCHEMA} || '.mark_integration_dispatch_started(uuid,uuid,bigint,text)',
+                     'EXECUTE') as public_mark,
                    has_function_privilege(${cluster.runtime.user},
                      ${API_SCHEMA} || '.claim_integration_intent(uuid,uuid,text)',
                      'EXECUTE') as runtime_claim,
                    has_function_privilege(${cluster.runtime.user},
                      ${API_SCHEMA} || '.complete_integration_attempt(uuid,uuid,uuid,bigint,text,varchar,varchar)',
-                     'EXECUTE') as runtime_complete`.execute(admin);
+                     'EXECUTE') as runtime_complete,
+                   has_function_privilege(${cluster.runtime.user},
+                     ${API_SCHEMA} || '.mark_integration_dispatch_started(uuid,uuid,bigint,text)',
+                     'EXECUTE') as runtime_mark`.execute(admin);
           assert.deepEqual(reach.rows, [
             {
               public_usage: false,
@@ -789,8 +809,10 @@ test(
               operator_usage: false,
               public_claim: false,
               public_complete: false,
+              public_mark: false,
               runtime_claim: false,
               runtime_complete: false,
+              runtime_mark: false,
             },
           ]);
 
