@@ -59,6 +59,20 @@ export const connectorChangeCategories = [
   'lifecycle_changed',
   'capabilities_changed',
   'credential_reference_rotated',
+  /**
+   * F062.2D-2C-3B-1. An execution-policy change.
+   *
+   * **Deliberately not folded into `capabilities_changed`.** An audit history
+   * that cannot distinguish a capability change from a timing change is
+   * useless to the reviewer of either, and the two have different reviewers.
+   *
+   * **Single concern, enforced by the database.** If any execution-policy
+   * field changes, no other change family may change in the same UPDATE, and
+   * the audit row must carry exactly this category; conversely this category
+   * is refused when no policy field changed. So the member has structural
+   * meaning here rather than being an application convention.
+   */
+  'execution_policy_changed',
 ] as const;
 export type ConnectorChangeCategory =
   (typeof connectorChangeCategories)[number];

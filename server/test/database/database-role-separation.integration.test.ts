@@ -491,12 +491,15 @@ test(
           const files = (await readdir(folder))
             .filter((file) => file.endsWith('.js'))
             .sort();
-          // 52 compiled migrations plus Migrations 48, 49, 53 and 56, which
-          // are applied as text below, is the full inventory of 56. Those four
+          // 53 compiled migrations plus Migrations 48, 49, 53 and 56, which
+          // are applied as text below, is the full inventory of 57. Those four
           // hardcode `public.` for their SECURITY DEFINER functions, so no
-          // test imports them and they are not compiled. Migrations 54 and 55
-          // hardcode no schema name, so they compile like Migration 52.
-          assert.equal(files.length, 52);
+          // test imports them and they are not compiled. Migrations 54, 55 and
+          // F062.2D-2C-3B-1's 57 hardcode no schema name, so they compile like
+          // Migration 52. Migration 57 sorts last and touches only tables and
+          // their guards, so applying it before the four text migrations is
+          // immaterial.
+          assert.equal(files.length, 53);
           for (const file of files) {
             const migration = (await import(
               path
@@ -744,6 +747,104 @@ test(
               db_create: false,
             },
           ]);
+
+          // F062.2D-2C-3B-1. The platform execution-safety policy table is
+          // granted to NOBODY. It exists so a future, separately reviewed
+          // operator-authoring boundary has somewhere to write; until then the
+          // only access is the owner's implicit ownership, which is why the
+          // ACL is expected to be null rather than merely small.
+          const policyAcl = await sql<{
+            relacl: string | null;
+            relowner: string;
+          }>`
+            select c.relacl::text as relacl,
+                   pg_get_userbyid(c.relowner) as relowner
+            from pg_class c
+            join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = ${cluster.schema}
+              and c.relname = 'integration_execution_safety_policy'`.execute(
+            admin,
+          );
+          assert.deepEqual(policyAcl.rows, [
+            { relacl: null, relowner: cluster.owner.user },
+          ]);
+
+          // Spelled out per identity, because "the ACL is null" is only
+          // reassuring if PUBLIC also has nothing by default.
+          const policyReach = await sql<{
+            runtime_select: boolean;
+            runtime_insert: boolean;
+            runtime_update: boolean;
+            owner_function_select: boolean;
+            owner_function_insert: boolean;
+            operator_select: boolean;
+            operator_insert: boolean;
+            public_select: boolean;
+            public_insert: boolean;
+          }>`
+            select has_table_privilege(${cluster.runtime.user},
+                     format('%I.%I', ${cluster.schema}::text,
+                       'integration_execution_safety_policy'), 'SELECT')
+                     as runtime_select,
+                   has_table_privilege(${cluster.runtime.user},
+                     format('%I.%I', ${cluster.schema}::text,
+                       'integration_execution_safety_policy'), 'INSERT')
+                     as runtime_insert,
+                   has_table_privilege(${cluster.runtime.user},
+                     format('%I.%I', ${cluster.schema}::text,
+                       'integration_execution_safety_policy'), 'UPDATE')
+                     as runtime_update,
+                   has_table_privilege(${FUNCTION_OWNER},
+                     format('%I.%I', ${cluster.schema}::text,
+                       'integration_execution_safety_policy'), 'SELECT')
+                     as owner_function_select,
+                   has_table_privilege(${FUNCTION_OWNER},
+                     format('%I.%I', ${cluster.schema}::text,
+                       'integration_execution_safety_policy'), 'INSERT')
+                     as owner_function_insert,
+                   has_table_privilege(${cluster.operator.user},
+                     format('%I.%I', ${cluster.schema}::text,
+                       'integration_execution_safety_policy'), 'SELECT')
+                     as operator_select,
+                   has_table_privilege(${cluster.operator.user},
+                     format('%I.%I', ${cluster.schema}::text,
+                       'integration_execution_safety_policy'), 'INSERT')
+                     as operator_insert,
+                   has_table_privilege('public',
+                     format('%I.%I', ${cluster.schema}::text,
+                       'integration_execution_safety_policy'), 'SELECT')
+                     as public_select,
+                   has_table_privilege('public',
+                     format('%I.%I', ${cluster.schema}::text,
+                       'integration_execution_safety_policy'), 'INSERT')
+                     as public_insert`.execute(admin);
+          assert.deepEqual(policyReach.rows, [
+            {
+              runtime_select: false,
+              runtime_insert: false,
+              runtime_update: false,
+              owner_function_select: false,
+              owner_function_insert: false,
+              operator_select: false,
+              operator_insert: false,
+              public_select: false,
+              public_insert: false,
+            },
+          ]);
+
+          // And the two new attempt columns add no column-level grant of
+          // their own: the function owner's table-wide privileges are the
+          // only reach, exactly as before this slice.
+          const pinColumns = await sql<{ attname: string }>`
+            select a.attname
+            from pg_attribute a
+            join pg_class c on c.oid = a.attrelid
+            join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = ${cluster.schema}
+              and c.relname = 'integration_delivery_attempt'
+              and a.attacl is not null
+            order by a.attname`.execute(admin);
+          assert.deepEqual(pinColumns.rows, []);
 
           // Nothing on any business table, and nothing on the operator family.
           const business = await sql<{ relname: string }>`

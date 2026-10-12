@@ -628,6 +628,18 @@ interface IntegrationConnectorTable {
   supports_current_state_sync: Generated<boolean>;
   reports_terminal_state: Generated<boolean>;
   side_effect_risk: Generated<SideEffectRisk>;
+  /** F062.2D-2C-3B-1. Connector-pinned execution policy, in integer
+   * seconds and counts. All four are nullable with **no default**, and the
+   * database refuses a partially configured revision: either all four are
+   * null (execution policy was never established for this revision) or all
+   * four are set. Nothing is backfilled, so every pre-3B-1 row reads null.
+   *
+   * These are **not** worker inputs and nothing reads them to execute yet;
+   * F062.2D-2C-3C consumes them from the pinned audit snapshot. */
+  request_execution_budget_seconds: number | null;
+  destination_retry_base_delay_seconds: number | null;
+  destination_retry_max_delay_seconds: number | null;
+  destination_retry_attempt_ceiling: number | null;
   credential_reference: string | null;
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
@@ -646,7 +658,11 @@ export type IntegrationConnectorChangeCategory =
   | 'registered'
   | 'lifecycle_changed'
   | 'capabilities_changed'
-  | 'credential_reference_rotated';
+  | 'credential_reference_rotated'
+  /** F062.2D-2C-3B-1. Bound structurally to an actual execution-policy
+   * delta: the database refuses this category when no policy field changed,
+   * and refuses any other category when one did. */
+  | 'execution_policy_changed';
 
 /** F062.2B per-revision connector history. Answers what configuration and
  * capabilities were authoritative at revision N, which F062.2A requires so a
@@ -684,6 +700,18 @@ interface IntegrationConnectorAuditTable {
   supports_current_state_sync: boolean;
   reports_terminal_state: boolean;
   side_effect_risk: SideEffectRisk;
+  /** F062.2D-2C-3B-1. Connector-pinned execution policy, in integer
+   * seconds and counts. All four are nullable with **no default**, and the
+   * database refuses a partially configured revision: either all four are
+   * null (execution policy was never established for this revision) or all
+   * four are set. Nothing is backfilled, so every pre-3B-1 row reads null.
+   *
+   * These are **not** worker inputs and nothing reads them to execute yet;
+   * F062.2D-2C-3C consumes them from the pinned audit snapshot. */
+  request_execution_budget_seconds: number | null;
+  destination_retry_base_delay_seconds: number | null;
+  destination_retry_max_delay_seconds: number | null;
+  destination_retry_attempt_ceiling: number | null;
   credential_reference_present: boolean;
   prior_configuration_revision: number | null;
   prior_lifecycle_state: ConnectorLifecycleState | null;
@@ -807,10 +835,56 @@ interface IntegrationDeliveryAttemptTable {
    * open attempt and for every adapter-derived settlement; set only by a
    * database-authored lifecycle settlement. */
   reason_code: IntegrationAttemptReasonCode | null;
+  /** F062.2D-2C-3B-1. Which platform safety-policy revision authorised this
+   * claim's lease. Write-once at creation and immutable afterwards. Nullable
+   * through this slice and the next because the claim function is
+   * deliberately unchanged: F062.2D-2C-3C supplies it. */
+  claim_policy_revision: string | null;
+  /** F062.2D-2C-3B-1. Which platform safety-policy revision authored the
+   * schedule or recovery consequence of this attempt's settlement. May only
+   * appear on a settled attempt, and a settled attempt may legitimately have
+   * none — every pre-3B-1 settlement does. */
+  settlement_policy_revision: string | null;
+  mutation_txid: Generated<string>;
+}
+
+/**
+ * F062.2D-2C-3B-1. Global platform execution-safety policy.
+ *
+ * **Never organization-scoped**: there is deliberately no `organization_id`,
+ * because these are Reqro's own safety ceilings rather than tenant
+ * configuration. Append-only and immutable by guard; "current policy" is the
+ * greatest committed `policy_revision`, with no `is_active` flag and no
+ * mutable pointer.
+ *
+ * **Carries no `actor`.** No trusted operator identity model exists for this
+ * write surface, so the row records `reason` and `correlation_id` and claims
+ * no attribution it cannot verify.
+ *
+ * The table ships with **zero rows** and no authoring path exists, so
+ * F062.2D-2C-3C fails closed until a separately reviewed operator path
+ * records a revision.
+ */
+interface IntegrationExecutionSafetyPolicyTable {
+  /** Database-authored identity. A caller cannot choose it, and gaps are
+   * acceptable because nothing depends on contiguity. */
+  policy_revision: Generated<string>;
+  max_claim_lease_seconds: number;
+  lease_safety_margin_seconds: number;
+  max_destination_retry_delay_seconds: number;
+  max_destination_retry_attempts: number;
+  max_retry_horizon_seconds: number;
+  max_pre_dispatch_recoveries: number;
+  recovery_delay_seconds: number;
+  max_recovery_batch_size: number;
+  reason: string;
+  correlation_id: string;
+  recorded_at: Generated<Timestamp>;
   mutation_txid: Generated<string>;
 }
 
 export interface DatabaseSchema extends ResidentExperienceTables {
+  integration_execution_safety_policy: IntegrationExecutionSafetyPolicyTable;
   integration_delivery_attempt: IntegrationDeliveryAttemptTable;
   integration_outbox: IntegrationOutboxTable;
   integration_connector: IntegrationConnectorTable;
