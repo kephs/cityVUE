@@ -2,12 +2,33 @@ param location string
 param namingPrefix string
 param environmentId string
 param frontendFqdn string
+param workspaceId string
 
 resource profile 'Microsoft.Cdn/profiles@2025-04-15' = {
   name: '${namingPrefix}-frontend-afd'
   location: 'global'
   sku: {
     name: 'Premium_AzureFrontDoor'
+  }
+}
+
+// Stable singleton extension API; workspace policy owns retention.
+resource diagnosticSetting 'Microsoft.Insights/diagnosticSettings@2016-09-01' = {
+  name: 'service'
+  scope: profile
+  location: 'global'
+  properties: {
+    workspaceId: workspaceId
+    logs: [
+      {
+        category: 'FrontDoorWebApplicationFirewallLog'
+        enabled: true
+      }
+      {
+        category: 'FrontDoorAccessLog'
+        enabled: true
+      }
+    ]
   }
 }
 

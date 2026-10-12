@@ -39,6 +39,28 @@ param frontendMemory string
 @minLength(74)
 param frontendImageReference string
 
+@description('Approved Log Analytics SKU; no production default.')
+param logAnalyticsSku string
+@description('Approved log retention duration; no production default.')
+param logRetentionInDays int
+@description('Approved workspace query-network posture; no default. Private querying needs separately approved infrastructure.')
+@allowed([
+  'Enabled'
+  'Disabled'
+])
+param logQueryPublicNetworkAccess string
+
+module diagnostics './modules/diagnostics.bicep' = if (deploymentEnabled) {
+  name: 'frontend-diagnostics'
+  params: {
+    location: location
+    namingPrefix: namingPrefix
+    logAnalyticsSku: logAnalyticsSku
+    logRetentionInDays: logRetentionInDays
+    logQueryPublicNetworkAccess: logQueryPublicNetworkAccess
+  }
+}
+
 module network './modules/network.bicep' = if (deploymentEnabled) {
   name: 'frontend-network'
   params: {
@@ -84,6 +106,7 @@ module edge './modules/front-door.bicep' = if (deploymentEnabled) {
     namingPrefix: namingPrefix
     environmentId: origin.?outputs.environmentId ?? ''
     frontendFqdn: origin.?outputs.frontendFqdn ?? ''
+    workspaceId: diagnostics.?outputs.workspaceId ?? ''
   }
 }
 
