@@ -10,15 +10,18 @@ const names = [
   "modules/private-connectivity.bicep",
   "modules/front-door.bicep",
   "modules/waf.bicep",
+  "modules/diagnostics.bicep",
 ];
 const files = Object.fromEntries(
   names.map((n) => [n, readFileSync(new URL(n, root), "utf8")]),
 );
 const code = (text) => text.replace(/\/\/[^\n]*/g, "");
-const [main, network, origin, connectivity, edge, waf] = names.map((n) =>
-  code(files[n]),
+const [main, network, origin, connectivity, edge, waf, diagnostics] = names.map(
+  (n) => code(files[n]),
 );
-const all = [main, network, origin, connectivity, edge, waf].join("\n");
+const all = [main, network, origin, connectivity, edge, waf, diagnostics].join(
+  "\n",
+);
 
 // Balanced source extraction, not a compiler or cloud validation.
 function block(text, expression) {
@@ -52,15 +55,19 @@ test("entry point is source-disabled and all modules are gated", () => {
       /module\s+\w+\s+'([^']+)'\s*=\s*if\s*\(deploymentEnabled\)/g,
     ),
   ];
-  assert.equal(modules.length, 4);
+  assert.equal(modules.length, 5);
   for (const m of modules) assert.ok(files[m[1].replace(/^\.\//, "")]);
   assert.equal((main.match(/\bmodule\s/g) ?? []).length, modules.length);
   assert.doesNotMatch(main, /^\s*resource\s+\w+\s+'/m);
   // Conditional outputs must not be evaluated when their modules are absent.
-  assert.doesNotMatch(main, /\b(?:network|origin)\.outputs\./);
+  assert.doesNotMatch(main, /\b(?:network|origin|diagnostics)\.outputs\./);
   assert.equal(
-    [...main.matchAll(/\b(?:network|origin)\.\?outputs\.\w+ \?\? ''/g)].length,
-    6,
+    [
+      ...main.matchAll(
+        /\b(?:network|origin|diagnostics)\.\?outputs\.\w+ \?\? ''/g,
+      ),
+    ].length,
+    7,
   );
 });
 test("all inputs have no defaults or committed deployment values", () => {
@@ -94,7 +101,8 @@ test("Premium SKU is fixed", () => {
     property(resource(edge, "profile"), "sku"),
     /name:\s*'Premium_AzureFrontDoor'/,
   );
-  assert.doesNotMatch(all, /Standard_AzureFrontDoor|\bparam\s+\w*sku/i);
+  assert.doesNotMatch(all, /Standard_AzureFrontDoor/i);
+  assert.doesNotMatch(edge + waf, /\bparam\s+\w*sku/i);
 });
 test("environment public access and internal VIP cannot be toggled", () => {
   const env = resource(origin, "environment");
@@ -281,6 +289,8 @@ test("resource inventory is exactly private frontend topology", () => {
       "Microsoft.Cdn/profiles/afdEndpoints/routes",
       "Microsoft.Network/FrontDoorWebApplicationFirewallPolicies",
       "Microsoft.Cdn/profiles/securityPolicies",
+      "Microsoft.OperationalInsights/workspaces",
+      "Microsoft.Insights/diagnosticSettings",
     ].sort(),
   );
 });
@@ -417,14 +427,11 @@ test("WAF association does not expand the reviewed frontend routing surface", ()
   assert.match(route, /linkToDefaultDomain:\s*'Disabled'/);
 });
 
-test("no diagnostic destination custom domain or additional policy surface is introduced", () => {
+test("no additional sink custom domain or WAF policy surface is introduced", () => {
+  assert.doesNotMatch(all, /Microsoft\.(?:EventHub|Storage)\//i);
   assert.doesNotMatch(
     all,
-    /Microsoft\.(?:Insights|OperationalInsights|EventHub|Storage)\//i,
-  );
-  assert.doesNotMatch(
-    all,
-    /profiles\/customDomains|diagnosticSettings|logAnalytics|retentionInDays|rateLimit|geoMatch|CAPTCHA|JSChallenge|requestBodySize/i,
+    /profiles\/customDomains|rateLimit|geoMatch|CAPTCHA|JSChallenge|requestBodySize/i,
   );
   assert.doesNotMatch(
     waf,
@@ -450,4 +457,130 @@ test("unsafe WAF and association mutations fail the contracts", () => {
     edge.replace("'/*'", "'/assets/*'"),
   ])
     assert.throws(() => checkAssociation(changed));
+});
+
+test("diagnostics API versions are pinned and no preview API is introduced", () => {
+  assert.match(
+    diagnostics,
+    /resource workspace 'Microsoft\.OperationalInsights\/workspaces@2026-03-01'/,
+  );
+  assert.match(
+    edge,
+    /resource diagnosticSetting 'Microsoft\.Insights\/diagnosticSettings@2016-09-01'/,
+  );
+  assert.doesNotMatch(all, /@[^'\n]*preview/i);
+});
+
+test("workspace is scoped by deployment naming and authoritative location", () => {
+  const workspace = resource(diagnostics, "workspace");
+  assert.ok(workspace.includes("name: '$" + "{namingPrefix}-frontend-logs'"));
+  assert.match(workspace, /location:\s*location/);
+  assert.match(
+    files["modules/diagnostics.bicep"],
+    /one client deployment and environment/,
+  );
+  const wiring = block(
+    main,
+    /module diagnostics '[^']+' = if \(deploymentEnabled\)/,
+  );
+  assert.match(wiring, /namingPrefix:\s*namingPrefix/);
+  assert.match(wiring, /location:\s*location/);
+});
+
+test("SKU retention and query-network posture are mandatory inputs without defaults", () => {
+  for (const source of [main, diagnostics]) {
+    for (const p of [
+      "logAnalyticsSku",
+      "logRetentionInDays",
+      "logQueryPublicNetworkAccess",
+    ]) {
+      const declaration = params(source).find((m) => m[1] === p);
+      assert.ok(declaration, p);
+      assert.equal(declaration[3].trim(), "");
+    }
+    assert.match(
+      source,
+      /@allowed\(\[\s*'Enabled'\s*'Disabled'\s*\]\)\s*param logQueryPublicNetworkAccess string/,
+    );
+  }
+  const workspace = resource(diagnostics, "workspace");
+  assert.match(property(workspace, "sku"), /name:\s*logAnalyticsSku/);
+  assert.match(workspace, /retentionInDays:\s*logRetentionInDays/);
+  assert.match(workspace, /publicNetworkAccessForIngestion:\s*'Disabled'/);
+  assert.match(
+    workspace,
+    /publicNetworkAccessForQuery:\s*logQueryPublicNetworkAccess/,
+  );
+});
+
+function checkDiagnosticSetting(source) {
+  const setting = resource(source, "diagnosticSetting");
+  assert.match(setting, /name:\s*'service'/);
+  assert.match(setting, /scope:\s*profile/);
+  assert.match(setting, /workspaceId:\s*workspaceId/);
+  assert.match(
+    setting,
+    /logs:\s*\[\s*\{\s*category:\s*'FrontDoorWebApplicationFirewallLog'\s*enabled:\s*true\s*\}\s*\{\s*category:\s*'FrontDoorAccessLog'\s*enabled:\s*true\s*\}\s*\]/,
+  );
+  assert.doesNotMatch(
+    setting,
+    /categoryGroup|allLogs|FrontDoorHealthProbeLog|metrics|retentionPolicy|storageAccountId|eventHub|marketplacePartnerId|logAnalyticsDestinationType/i,
+  );
+}
+
+test("exactly two log categories target the profile and expected workspace", () => {
+  checkDiagnosticSetting(edge);
+  assert.match(diagnostics, /output workspaceId string = workspace\.id/);
+  const wiring = block(main, /module edge '[^']+' = if \(deploymentEnabled\)/);
+  assert.match(
+    wiring,
+    /workspaceId:\s*diagnostics\.\?outputs\.workspaceId \?\? ''/,
+  );
+  assert.equal(
+    [
+      ...all.matchAll(
+        /resource\s+\w+\s+'Microsoft\.Insights\/diagnosticSettings@/g,
+      ),
+    ].length,
+    1,
+  );
+});
+
+test("diagnostics do not add monitoring networks identities keys transforms or alerts", () => {
+  assert.doesNotMatch(
+    all,
+    /listKeys|sharedKeys|dataExports|privateLinkScopes|dataCollectionEndpoints|dataCollectionRules|scheduledQueryRules|metricAlerts|actionGroups|roleAssignments|workspaceCapping/i,
+  );
+  assert.doesNotMatch(
+    all,
+    /\bparam\s+\w*(?:objectId|principalId|tenantId|adminId)\w*/i,
+  );
+  assert.doesNotMatch(
+    diagnostics,
+    /privateEndpoints|privateDnsZones|tables@|@secure|identity:/i,
+  );
+});
+
+test("diagnostic source mutations cannot widen scope categories or destinations", () => {
+  for (const changed of [
+    edge.replace("scope: profile", "scope: endpoint"),
+    edge.replace(
+      "category: 'FrontDoorAccessLog'",
+      "category: 'FrontDoorHealthProbeLog'",
+    ),
+    edge.replace("category: 'FrontDoorAccessLog'", "categoryGroup: 'allLogs'"),
+    edge.replace(
+      "workspaceId: workspaceId",
+      "workspaceId: unrelatedWorkspaceId",
+    ),
+    edge.replace(
+      "workspaceId: workspaceId",
+      "workspaceId: workspaceId metrics: []",
+    ),
+    edge.replace(
+      "workspaceId: workspaceId",
+      "workspaceId: workspaceId storageAccountId: otherId",
+    ),
+  ])
+    assert.throws(() => checkDiagnosticSetting(changed));
 });
