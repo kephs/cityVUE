@@ -461,9 +461,29 @@ function importsMigration(source: string, file: string): boolean {
 
 test('the hardcoded-public migrations are applied as text, so no test may import them', () => {
   const files = readdirSync(MIGRATIONS).filter((file) => file.endsWith('.ts'));
-  assert.equal(files.length, 56, 'the repository holds 56 migrations');
+  assert.equal(files.length, 57, 'the repository holds 57 migrations');
   for (const file of HARDCODED_PUBLIC)
     assert.ok(files.includes(file), `${file} is missing`);
+  // F062.2D-2C-3B-1's Migration 57 is deliberately NOT in the set above: it
+  // qualifies every object unqualified, so it is safe for a test to import
+  // and apply directly to a disposable schema. Asserted rather than assumed,
+  // because adding `public.` to it later must break this test instead of
+  // silently making the migration run against the wrong schema.
+  const POLICY_MIGRATION =
+    '20261027000000-add-integration-execution-policy-persistence.ts';
+  assert.ok(files.includes(POLICY_MIGRATION));
+  assert.equal(
+    HARDCODED_PUBLIC.includes(POLICY_MIGRATION),
+    false,
+    'Migration 57 must not be treated as a hardcoded-public migration',
+  );
+  assert.equal(
+    readFileSync(resolve(MIGRATIONS, POLICY_MIGRATION), 'utf8').includes(
+      'public.',
+    ),
+    false,
+    'Migration 57 must not hardcode the public schema',
+  );
   // Migrations are compiled into the test output only when a test imports
   // them statically, and a migration hardcoding `public.` must not be
   // imported, or it would run against a disposable schema unrewritten.
