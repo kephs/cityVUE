@@ -48,6 +48,10 @@ import type { DatabaseSchema } from '../../src/database/database.types.js';
  * `database-role-separation.integration.test.ts`.
  */
 const MIGRATION = '20261023000000-add-integration-worker-function-api.ts';
+/** F062.2D-2C-3A. Migration 56 hardcodes `public.` for the same reason
+ * Migration 53 does, so it is applied as text through the same rewrite. */
+const HARDENING =
+  '20261026000000-harden-integration-worker-claim-dispatch-api.ts';
 
 /** The per-schema replacement for the fixed deployment namespace. Kept short
  * because PostgreSQL identifiers are limited to 63 bytes. */
@@ -65,11 +69,32 @@ export async function workerFunctionSql(
   schema: string,
   section: 'up' | 'down',
 ): Promise<string> {
+  return rewritten(MIGRATION, schema, section);
+}
+
+/**
+ * F062.2D-2C-3A. Migration 56's SQL text, rewritten for a disposable schema.
+ *
+ * Exported for the same reason as `workerFunctionSql`: a test can then assert
+ * against what is actually executed rather than only against the source.
+ */
+export async function workerHardeningSql(
+  schema: string,
+  section: 'up' | 'down',
+): Promise<string> {
+  return rewritten(HARDENING, schema, section);
+}
+
+async function rewritten(
+  file: string,
+  schema: string,
+  section: 'up' | 'down',
+): Promise<string> {
   // The TypeScript source, not the compiled output: this reads the migration's
   // SQL text to rewrite it. From dist-test/test/helpers that is three levels
   // up, where the compiled migrations are only two.
   const source = await readFile(
-    path.resolve(__dirname, '../../../migrations', MIGRATION),
+    path.resolve(__dirname, '../../../migrations', file),
     'utf8',
   );
   const pattern = new RegExp(
@@ -77,7 +102,7 @@ export async function workerFunctionSql(
   );
   const body = pattern.exec(source)?.[1];
   if (body === undefined)
-    throw new Error(`Migration 53 ${section}() body not found`);
+    throw new Error(`${file} ${section}() body not found`);
   return (
     body
       .replace(/\breqro_integration_api\b/g, workerApiSchema(schema))
@@ -107,4 +132,22 @@ export async function rollbackIntegrationWorkerFunctions(
   schema: string,
 ): Promise<void> {
   await sql.raw(await workerFunctionSql(schema, 'down')).execute(database);
+}
+
+/** F062.2D-2C-3A. Applies Migration 56's `up()`. Requires Migrations 53, 54
+ * and 55 to have run in the same schema. */
+export async function applyIntegrationWorkerHardening(
+  database: Kysely<DatabaseSchema>,
+  schema: string,
+): Promise<void> {
+  await sql.raw(await workerHardeningSql(schema, 'up')).execute(database);
+}
+
+/** F062.2D-2C-3A. Applies Migration 56's `down()`, restoring the Migration 53
+ * claim function verbatim and removing the dispatch marker. */
+export async function rollbackIntegrationWorkerHardening(
+  database: Kysely<DatabaseSchema>,
+  schema: string,
+): Promise<void> {
+  await sql.raw(await workerHardeningSql(schema, 'down')).execute(database);
 }

@@ -26,6 +26,13 @@ import {
 
 const MIGRATIONS = resolve(__dirname, '../../../migrations');
 const MIGRATION = '20261023000000-add-integration-worker-function-api.ts';
+/** F062.2D-2C-3A's Migration 56 hardcodes `public.` for the same reason
+ * Migration 53 does, so the same import prohibition applies to it. */
+const HARDENING =
+  '20261026000000-harden-integration-worker-claim-dispatch-api.ts';
+/** Every migration that hardcodes `public.` and is therefore applied as
+ * rewritten text. Adding one here extends the guard below to it. */
+const HARDCODED_PUBLIC = [MIGRATION, HARDENING];
 const DEPLOY = resolve(__dirname, '../../../../deploy/database');
 
 function migration(): string {
@@ -441,13 +448,44 @@ test('no network, vendor, secret or resident behaviour exists in the migration',
     );
 });
 
-test('the migration is applied as text, so no test may import it', () => {
+/** True when `source` statically imports the compiled form of `file`, which
+ * is what would pull a hardcoded-`public.` migration into the test build. */
+function importsMigration(source: string, file: string): boolean {
+  const compiled = file.replace(/\.ts$/, '.js');
+  return (
+    source.includes(compiled) &&
+    /^import/m.test(source.slice(0, source.indexOf(compiled))) &&
+    source.includes(`from '../../migrations/${compiled}'`)
+  );
+}
+
+test('the hardcoded-public migrations are applied as text, so no test may import them', () => {
   const files = readdirSync(MIGRATIONS).filter((file) => file.endsWith('.ts'));
-  assert.equal(files.length, 55, 'the repository holds 55 migrations');
-  assert.ok(files.includes(MIGRATION));
+  assert.equal(files.length, 56, 'the repository holds 56 migrations');
+  for (const file of HARDCODED_PUBLIC)
+    assert.ok(files.includes(file), `${file} is missing`);
   // Migrations are compiled into the test output only when a test imports
   // them statically, and a migration hardcoding `public.` must not be
   // imported, or it would run against a disposable schema unrewritten.
+  //
+  // The detector is exercised against a synthetic source first, so a guard
+  // that silently stopped matching cannot pass by finding nothing.
+  for (const file of HARDCODED_PUBLIC) {
+    const compiled = file.replace(/\.ts$/, '.js');
+    assert.equal(
+      importsMigration(
+        `import { up } from '../../migrations/${compiled}';`,
+        file,
+      ),
+      true,
+      `the guard no longer detects an import of ${file}`,
+    );
+    assert.equal(
+      importsMigration(`const name = '${compiled}';`, file),
+      false,
+      `naming ${file} as a string must not be treated as an import`,
+    );
+  }
   const suites = resolve(__dirname, '..');
   const offenders: string[] = [];
   const walk = (directory: string) => {
@@ -456,16 +494,9 @@ test('the migration is applied as text, so no test may import it', () => {
       if (entry.isDirectory()) walk(path);
       else if (entry.name.endsWith('.ts')) {
         const source = readFileSync(path, 'utf8');
-        if (
-          source.includes(MIGRATION.replace(/\.ts$/, '.js')) &&
-          /^import/m.test(
-            source.slice(0, source.indexOf(MIGRATION.replace(/\.ts$/, '.js'))),
-          ) &&
-          source.includes(
-            `from '../../migrations/${MIGRATION.replace(/\.ts$/, '.js')}'`,
-          )
-        )
-          offenders.push(entry.name);
+        for (const file of HARDCODED_PUBLIC)
+          if (importsMigration(source, file))
+            offenders.push(`${entry.name} -> ${file}`);
       }
     }
   };
