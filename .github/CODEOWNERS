@@ -1,0 +1,17 @@
+# INACTIVE PREPARATION: no independent reviewer identities have been approved.
+# All candidate entries below remain comments. This file assigns NO owners.
+# Replace each placeholder with verified GitHub users/teams with write access,
+# uncomment the entries, and separately enable required code-owner review.
+# Never substitute the PR author merely to satisfy an ownership requirement.
+# Last matching rule wins; preserve coverage when adding narrower rules.
+# /deploy/azure/ <INFRASTRUCTURE_SECURITY_OWNER>
+# /server/azure-pipelines/ <CI_SECURITY_OWNER>
+# /scripts/validate-frontend-iac.mjs <CI_SECURITY_OWNER>
+# /test/*Iac*.test.mjs <INFRASTRUCTURE_SECURITY_OWNER>
+# /test/PrValidationPipelineContract.test.cjs <CI_SECURITY_OWNER>
+# /test/Nginx*.test.mjs <INFRASTRUCTURE_SECURITY_OWNER>
+# /package.json <CI_SECURITY_OWNER>
+# /server/package.json <CI_SECURITY_OWNER>
+# /server/package-lock.json <CI_SECURITY_OWNER>
+# /docs/features/F060* <INFRASTRUCTURE_SECURITY_OWNER>
+# /.github/CODEOWNERS <GOVERNANCE_OWNER>

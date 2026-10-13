@@ -2,6 +2,8 @@
 
 [F060.4A-2B-4A — ACR + Pull Identity IaC Foundation](F060-4A-2B-4A-acr-pull-identity-iac-foundation.md): reviewed repository-only private Premium ACR/ABAC, isolated pull UAMI and ACA wiring, based on integrated `786b50a`; includes mandatory fresh compilation validation. Local feature commit authorized; not integrated or deployed. Push and PR creation remain separately gated. The F058 checkpoint below remains historical.
 
+- [F060.4A-2B-4C — Azure DevOps PR Validation Foundation](F060-4A-2B-4C-azure-devops-pr-validation-foundation.md): repository-only PR pipeline, bounded private pool selection, negative contract tests and inactive CODEOWNERS preparation. Depends on PR #55's fresh-compilation validator; external enforcement, independent reviewers and CI activation remain unresolved and unauthorized.
+
 Current documentation state: [F058.4 — Delivered-work documentation and governance reconciliation](F058-4-delivered-work-documentation-reconciliation.md) records the verified as-built F058 state. **F058 is DELIVERED and synchronized on `main`.** `main` and `origin/main` are both `36f13d8a17f9c9e1defbceae82cb5d1cfdc85454` and there is **no outstanding unsynchronized feature work**. The F058 records below retain their original checkpoint statuses and evidence as historical fact; each carries a short current-state reconciliation line. **Do not read `not committed`, `not pushed`, `Synchronization is not authorized` or `Stop for manual visual review` in those records as current state.**
 
 | Slice | Capability | Commit | Manual UAT |
