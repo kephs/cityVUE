@@ -1,0 +1,56 @@
+# Do not add arbitrary step/job parameters or reuse operator/release templates.
+parameters:
+  - name: prAgentPool
+    type: string
+    default: reqro-pr-validation
+    values:
+      - reqro-pr-validation
+
+jobs:
+  - job: frontend_iac_validation
+    displayName: Frontend IaC security and freshness
+    timeoutInMinutes: 20
+    workspace:
+      clean: all
+    pool:
+      name: ${{ parameters.prAgentPool }}
+      demands:
+        - Agent.OS -equals Linux
+    steps:
+      - checkout: self
+        clean: true
+        persistCredentials: false
+        submodules: false
+        lfs: false
+        fetchDepth: 1
+      - task: UseNode@1
+        inputs:
+          version: '24.14.0'
+          checkLatest: false
+      - bash: |
+          set -euo pipefail
+          test "$BASH_VERSION" = "5.2.15(1)-release"
+          test "$(node --version)" = "v24.14.0"
+          npm --version
+          docker version
+          test "$(docker info --format '{{.OSType}}')" = "linux"
+          test -f scripts/validate-frontend-iac.mjs
+          node -e 'const p = require("./package.json"); if (p.scripts["validate:frontend:iac"] !== "node scripts/validate-frontend-iac.mjs") process.exit(1)'
+        displayName: Require toolchain and integrated fresh-compilation validator
+        workingDirectory: $(Build.SourcesDirectory)
+      - bash: |
+          set -euo pipefail
+          npm ci --prefix server --include=dev --ignore-scripts --no-audit --no-fund
+          node -e 'require("./server/node_modules/js-yaml")'
+        displayName: Install security-test dependencies from server lockfile
+        workingDirectory: $(Build.SourcesDirectory)
+      - bash: |
+          set -euo pipefail
+          npm run validate:frontend:iac
+        displayName: Compile current Bicep and validate security contracts
+        workingDirectory: $(Build.SourcesDirectory)
+      - bash: |
+          set -euo pipefail
+          REQRO_TEST_BASH="$BASH" node --test test/PrValidationPipelineContract.test.cjs
+        displayName: Validate PR pipeline security contracts
+        workingDirectory: $(Build.SourcesDirectory)
