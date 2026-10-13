@@ -461,7 +461,7 @@ function importsMigration(source: string, file: string): boolean {
 
 test('the hardcoded-public migrations are applied as text, so no test may import them', () => {
   const files = readdirSync(MIGRATIONS).filter((file) => file.endsWith('.ts'));
-  assert.equal(files.length, 57, 'the repository holds 57 migrations');
+  assert.equal(files.length, 58, 'the repository holds 58 migrations');
   for (const file of HARDCODED_PUBLIC)
     assert.ok(files.includes(file), `${file} is missing`);
   // F062.2D-2C-3B-1's Migration 57 is deliberately NOT in the set above: it
@@ -483,6 +483,24 @@ test('the hardcoded-public migrations are applied as text, so no test may import
     ),
     false,
     'Migration 57 must not hardcode the public schema',
+  );
+  // F062.2D-2C-3B-2's Migration 58 follows 57's precedent for the same
+  // reason: its destination retry-after suite imports and applies it to a
+  // disposable schema, which is only safe while it qualifies nothing.
+  const RETRY_AFTER_MIGRATION =
+    '20261028000000-add-integration-destination-retry-after-evidence.ts';
+  assert.ok(files.includes(RETRY_AFTER_MIGRATION));
+  assert.equal(
+    HARDCODED_PUBLIC.includes(RETRY_AFTER_MIGRATION),
+    false,
+    'Migration 58 must not be treated as a hardcoded-public migration',
+  );
+  assert.equal(
+    readFileSync(resolve(MIGRATIONS, RETRY_AFTER_MIGRATION), 'utf8').includes(
+      'public.',
+    ),
+    false,
+    'Migration 58 must not hardcode the public schema',
   );
   // Migrations are compiled into the test output only when a test imports
   // them statically, and a migration hardcoding `public.` must not be
@@ -527,6 +545,80 @@ test('the hardcoded-public migrations are applied as text, so no test may import
 // ---------------------------------------------------------------------------
 // The provisioning artifacts
 // ---------------------------------------------------------------------------
+
+/**
+ * F062.2D-2C-3B-2. The destination retry-after migration is persistence only.
+ *
+ * The behavioural proofs live in
+ * `test/database/integration-destination-retry-after-evidence.integration.test.ts`.
+ * This is the source-level containment proof: Migration 58 may touch the
+ * attempt table and its guard, and nothing else. Comments are stripped first,
+ * so the migration's own prose about `complete_integration_attempt` does not
+ * flag itself.
+ */
+test('Migration 58 adds retry evidence without touching a worker function', () => {
+  const RETRY_AFTER =
+    '20261028000000-add-integration-destination-retry-after-evidence.ts';
+  const code = executable(
+    readFileSync(resolve(MIGRATIONS, RETRY_AFTER), 'utf8'),
+  );
+
+  // No worker function is created, replaced, dropped or granted. This is what
+  // keeps the new column unwritable: the only function that settles an attempt
+  // is untouched, and its parameter list cannot carry the delay.
+  for (const token of [
+    'reqro_integration_api',
+    'complete_integration_attempt',
+    'claim_integration_intent',
+    'mark_integration_dispatch_started',
+    'recover_expired_integration_claim',
+    'security definer',
+    'grant ',
+    'revoke ',
+    'create role',
+    'create schema',
+    'set role',
+  ])
+    assert.equal(
+      code.includes(token),
+      false,
+      `Migration 58 references ${token}`,
+    );
+
+  // It creates no table and no default, and selects no policy number.
+  assert.equal(code.includes('create table'), false);
+  assert.equal(code.includes('default'), false, 'Migration 58 sets a default');
+
+  // The one column it adds, and the only table it alters.
+  assert.equal(
+    code.includes('add column destination_retry_after_seconds integer'),
+    true,
+  );
+  for (const table of [
+    'integration_connector',
+    'integration_outbox',
+    'integration_execution_safety_policy',
+  ])
+    assert.equal(
+      code.includes(`alter table ${table}`),
+      false,
+      `Migration 58 alters ${table}`,
+    );
+
+  // The rate-limited constraint must be NULL-safe. Written with `=`, it would
+  // evaluate to NULL for a successful settlement and PostgreSQL would satisfy
+  // the CHECK on unknown, admitting evidence onto a success.
+  assert.equal(
+    code.includes("failure_category is not distinct from 'rate_limited'"),
+    true,
+    'the rate_limited constraint must be null-safe',
+  );
+  assert.equal(
+    code.includes("or failure_category = 'rate_limited'"),
+    false,
+    'a three-valued equality must not gate the rate_limited constraint',
+  );
+});
 
 test('the bootstrap creates the function owner and exactly one new edge', () => {
   const code = artifact('bootstrap-roles.sql');

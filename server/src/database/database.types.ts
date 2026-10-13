@@ -845,6 +845,16 @@ interface IntegrationDeliveryAttemptTable {
    * appear on a settled attempt, and a settled attempt may legitimately have
    * none — every pre-3B-1 settlement does. */
   settlement_policy_revision: string | null;
+  /** F062.2D-2C-3B-2. The retry floor the destination stated, normalized by
+   * the adapter to a non-negative count of seconds. The raw `Retry-After`
+   * header is never persisted and no absolute instant is ever caller-supplied:
+   * the database authors timestamps, and F062.2D-2C-3C computes the floor at
+   * schedule time. Legal only on a `rate_limited` settlement, absent while
+   * the attempt is open, and immutable once settled. Zero is legal — a
+   * destination may state "retry immediately". **NULL on every row until
+   * F062.2D-2C-3C**, because `complete_integration_attempt` has no parameter
+   * that could carry it and its signature is deliberately unchanged. */
+  destination_retry_after_seconds: number | null;
   mutation_txid: Generated<string>;
 }
 
