@@ -46,8 +46,21 @@ import {
  */
 
 const SERVER = resolve(__dirname, '../../..');
+
+/**
+ * CRLF to LF, applied to every artifact this file reads.
+ *
+ * Git materializes these artifacts with CRLF on a Windows checkout
+ * (`core.autocrlf`), while every assertion below is written against the
+ * committed LF form. Normalizing once here makes each contract a property of
+ * what was committed rather than of the checkout's line-ending policy. It can
+ * only make the text match what is in the repository, so no assertion is
+ * loosened -- and a checkout policy must never be able to decide whether a
+ * security scan runs at all.
+ */
+const lf = (text: string) => text.replaceAll('\r\n', '\n');
 const source = (relative: string) =>
-  readFileSync(resolve(SERVER, relative), 'utf8');
+  lf(readFileSync(resolve(SERVER, relative), 'utf8'));
 
 const TENANT = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
 const OTHER_TENANT = '9f8e7d6c-5b4a-4938-8271-6a5b4c3d2e1f';
@@ -144,6 +157,58 @@ const TEMPLATES = [
 ] as const;
 const ALL_PIPELINE_FILES = [...PIPELINES, ...TEMPLATES];
 
+/**
+ * Every field whose value must come from the platform and never from a human.
+ *
+ * Hoisted out of the contract test so the line-ending and fail-closed tests
+ * below assert against this same list rather than a copy of it, which could
+ * drift from the contract it is supposed to be proving.
+ */
+const HUMAN_FORBIDDEN_PARAMETERS = [
+  'iamSubject',
+  'iamOrigin',
+  'iamOriginTenantId',
+  'operatorIdentity',
+  'requesterIdentity',
+  'requester',
+  'identity',
+  'subject',
+  'permissions',
+  'elevationRequestId',
+  'runnerIdentity',
+  'commitSha',
+  'imageDigest',
+  // ADR-029 provenance review: the artifact and its digest must never be
+  // human-fillable either, or the binding would be decorative.
+  'requestArtifact',
+  'requestArtifactJson',
+  'requestArtifactDigest',
+  'requestArtifactBase64',
+  'requestDigest',
+  'artifactDigest',
+  'jobRunId',
+  'originatingRunId',
+] as const;
+
+/**
+ * The names declared by a pipeline's own top-level `parameters:` block, or
+ * `null` when it declares none.
+ *
+ * Normalizes its input, so a fixture constructed with either line ending
+ * reads identically to the committed artifact. The block stays anchored at
+ * column zero, exactly as before: a `parameters:` key nested under another
+ * mapping is deliberately not accepted, so moving a human-fillable field one
+ * level down refuses here rather than passing unscanned.
+ */
+function declaredParameters(text: string): string[] | null {
+  const block =
+    /\nparameters:\n([\s\S]*?)\n(?:variables|stages|resources):/.exec(lf(text));
+  if (block?.[1] === undefined) return null;
+  return [...block[1].matchAll(/-\s+name:\s*(\S+)/g)].flatMap((match) =>
+    match[1] === undefined ? [] : [match[1]],
+  );
+}
+
 test('the acting human cannot be supplied by a pipeline parameter', () => {
   // The identity must come from the platform. A parameter for any trusted
   // field would hand the actor back to the human, so no pipeline may declare
@@ -151,39 +216,10 @@ test('the acting human cannot be supplied by a pipeline parameter', () => {
   // templates legitimately *receive* resolved values as parameters from the
   // identity step — what must not exist is a parameter a human can fill.
   for (const file of PIPELINES) {
-    const text = source(file);
-    const block =
-      /\nparameters:\n([\s\S]*?)\n(?:variables|stages|resources):/.exec(text);
-    assert.ok(block?.[1], `${file} must declare a parameters block`);
-    const names = [...block[1].matchAll(/-\s+name:\s*(\S+)/g)].map(
-      (match) => match[1],
-    );
+    const names = declaredParameters(source(file));
+    assert.ok(names, `${file} must declare a parameters block`);
     assert.ok(names.length > 0, `${file} declares no parameters`);
-    for (const forbidden of [
-      'iamSubject',
-      'iamOrigin',
-      'iamOriginTenantId',
-      'operatorIdentity',
-      'requesterIdentity',
-      'requester',
-      'identity',
-      'subject',
-      'permissions',
-      'elevationRequestId',
-      'runnerIdentity',
-      'commitSha',
-      'imageDigest',
-      // ADR-029 provenance review: the artifact and its digest must never be
-      // human-fillable either, or the binding would be decorative.
-      'requestArtifact',
-      'requestArtifactJson',
-      'requestArtifactDigest',
-      'requestArtifactBase64',
-      'requestDigest',
-      'artifactDigest',
-      'jobRunId',
-      'originatingRunId',
-    ])
+    for (const forbidden of HUMAN_FORBIDDEN_PARAMETERS)
       assert.ok(
         !names.includes(forbidden),
         `${file} must not expose ${forbidden} as a human-fillable parameter`,
@@ -199,6 +235,96 @@ test('the acting human cannot be supplied by a pipeline parameter', () => {
     ),
     'the identity template must not read the actor from a parameter',
   );
+});
+
+test('the parameters contract reads the artifact, not the checkout', () => {
+  // The regression this guards. Read with CRLF, the committed `parameters:`
+  // block failed to match at all, and the failure message then claimed the
+  // pipeline declared no block. The contract must be a property of the
+  // artifact, so both materializations have to yield the same declared names.
+  for (const file of PIPELINES) {
+    const committed = source(file);
+    const crlf = committed.replaceAll('\n', '\r\n');
+    assert.notEqual(crlf, committed, `${file} must have endings to vary`);
+    assert.deepEqual(
+      declaredParameters(crlf),
+      declaredParameters(committed),
+      `${file} must declare the same parameters under CRLF as under LF`,
+    );
+    // And the committed artifact really does declare one, so the parity above
+    // cannot be satisfied by both sides reading nothing.
+    assert.ok(
+      (declaredParameters(committed) ?? []).length > 0,
+      `${file} must declare a parameters block`,
+    );
+  }
+});
+
+test('a human-fillable identity parameter is refused under either line ending', () => {
+  // The negative control the normalization exists to keep. Planting each
+  // forbidden field has to be detected whichever way the file is
+  // materialized; were the match to regress to null, this fails loudly
+  // instead of the scan reading no parameters and passing vacuously.
+  for (const forbidden of HUMAN_FORBIDDEN_PARAMETERS)
+    for (const [label, ending] of [
+      ['LF', '\n'],
+      ['CRLF', '\r\n'],
+    ] as const) {
+      const planted = source(PIPELINES[0])
+        .replace(
+          '\nparameters:\n',
+          `\nparameters:\n  - name: ${forbidden}\n    type: string\n`,
+        )
+        .replaceAll('\n', ending);
+      const names = declaredParameters(planted);
+      assert.ok(names, `the ${label} fixture must still declare a block`);
+      assert.ok(
+        names.includes(forbidden),
+        `${forbidden} planted with ${label} endings must be detected`,
+      );
+    }
+});
+
+test('a missing, nested or empty parameters block fails closed', () => {
+  // Fail-closed in the one direction that matters: none of these may read as
+  // "scanned, and no forbidden parameter found". Asserted under both endings,
+  // so normalization cannot turn any of them into a vacuous pass.
+  const committed = source(PIPELINES[0]);
+  for (const ending of ['\n', '\r\n'] as const) {
+    const vary = (text: string) => text.replaceAll('\n', ending);
+
+    // Absent: there is no block, and the contract test refuses on null.
+    assert.equal(
+      declaredParameters(
+        vary(committed.replace('\nparameters:\n', '\nnot_parameters:\n')),
+      ),
+      null,
+      'a file with no parameters block must not read as scanned',
+    );
+
+    // Nested one level down, carrying a forbidden field: the column-zero
+    // anchor must refuse it rather than leave it unscanned.
+    assert.equal(
+      declaredParameters(
+        vary(
+          committed.replace(
+            '\nparameters:\n',
+            '\njob:\n  parameters:\n    - name: iamSubject\n',
+          ),
+        ),
+      ),
+      null,
+      'a nested parameters block must not satisfy the top-level contract',
+    );
+
+    // Declared but empty: zero names, which the contract test refuses on
+    // `names.length > 0`.
+    assert.deepEqual(
+      declaredParameters(vary('\nparameters:\n\nstages:\n')),
+      [],
+      'an empty parameters block must yield no names',
+    );
+  }
 });
 
 test('an Azure DevOps identity is resolved through Graph, not treated as an Entra oid', () => {
