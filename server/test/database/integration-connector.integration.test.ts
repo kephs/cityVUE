@@ -703,15 +703,28 @@ test(
   { skip: !url },
   async () => {
     await withSchema(async ({ db }) => {
+      // Pinned by OID rather than matched on `relname`. A name-only filter
+      // also matches the identically named table in every sibling schema of
+      // this shared database, so its rows would duplicate these and a sibling
+      // dropped mid-query would make `pg_get_constraintdef` dereference a
+      // vanishing relation. `::regclass` resolves through `search_path` to
+      // exactly one OID.
+      //
+      // The text match is applied below rather than in SQL, deliberately. A
+      // `pg_get_constraintdef` call in a WHERE clause is a predicate that
+      // competes with the OID restriction, so whether it could ever be handed
+      // another schema's row would rest on how the quals happen to be ordered.
+      // Here the function appears only in the select list, which SQL evaluates
+      // on the rows that already satisfied the qualification -- so no sibling
+      // schema's constraint can reach it, by construction rather than by plan.
       const definition = await sql<{ def: string }>`
         select pg_get_constraintdef(c.oid) as def
           from pg_constraint c
-          join pg_class t on t.oid = c.conrelid
-         where t.relname = 'integration_connector'
-           and pg_get_constraintdef(c.oid) like '%lifecycle_state%'
+         where c.conrelid = 'integration_connector'::regclass
            and c.contype = 'c'`.execute(db);
       const stated = definition.rows
         .map((row) => row.def)
+        .filter((def) => def.includes('lifecycle_state'))
         .join(' ')
         .match(/'[a-z_]+'::character varying/g)
         ?.map((literal) => literal.slice(1, literal.indexOf("'", 1)));

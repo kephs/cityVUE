@@ -273,12 +273,20 @@ test(
       // also matches the integration-type pairing constraint, whose literals
       // include 'event' and 'state_sync' — contract kinds, not delivery
       // states — which would make this assertion read them as a vocabulary.
+      // Pinned to this schema's relation by OID rather than matched on
+      // `relname`. These suites each run in their own schema of one shared
+      // database, so a name-only filter also matches every sibling schema's
+      // identically named table: its rows duplicate these, and a sibling
+      // being dropped mid-query makes `pg_get_constraintdef` dereference a
+      // relation that is going away. `::regclass` resolves through the
+      // session `search_path` to exactly one OID, so no other schema's
+      // constraint is ever a candidate row.
       const rows = await sql<{ def: string }>`
         select pg_get_constraintdef(c.oid) as def
           from pg_constraint c
-          join pg_class t on t.oid = c.conrelid
-          join pg_attribute a on a.attrelid = t.oid and a.attnum = any (c.conkey)
-         where t.relname = 'integration_outbox' and c.contype = 'c'
+          join pg_attribute a
+            on a.attrelid = c.conrelid and a.attnum = any (c.conkey)
+         where c.conrelid = 'integration_outbox'::regclass and c.contype = 'c'
          group by c.oid
         having count(*) = 1 and min(a.attname) = 'state'`.execute(db);
       const stated = new Set<string>(
@@ -313,10 +321,9 @@ test(
     await withSchema(async ({ db }) => {
       const rows = await sql<{ def: string }>`
         select pg_get_constraintdef(c.oid) as def
-          from pg_constraint c join pg_class t on t.oid = c.conrelid
-         where t.relname = 'integration_delivery_attempt' and c.contype = 'c'`.execute(
-        db,
-      );
+          from pg_constraint c
+         where c.conrelid = 'integration_delivery_attempt'::regclass
+           and c.contype = 'c'`.execute(db);
       const text = rows.rows.map((r) => r.def).join(' ');
       for (const outcome of [
         'succeeded',
@@ -499,10 +506,9 @@ test(
       // And the schema contains no age threshold to apply.
       const defs = await sql<{ def: string }>`
         select pg_get_constraintdef(c.oid) as def
-          from pg_constraint c join pg_class t on t.oid = c.conrelid
-         where t.relname in ('integration_outbox','integration_delivery_attempt')`.execute(
-        db,
-      );
+          from pg_constraint c
+         where c.conrelid in ('integration_outbox'::regclass,
+           'integration_delivery_attempt'::regclass)`.execute(db);
       const text = defs.rows
         .map((r) => r.def)
         .join(' ')
@@ -819,8 +825,9 @@ test(
       // No column anywhere in the integration schema holds a raw token.
       const columns = await sql<{ table_name: string; column_name: string }>`
         select table_name, column_name from information_schema.columns
-         where table_name in ('integration_delivery_attempt','integration_outbox',
-           'integration_connector','integration_connector_audit')
+         where table_schema = current_schema()
+           and table_name in ('integration_delivery_attempt','integration_outbox',
+             'integration_connector','integration_connector_audit')
            and column_name like '%token%'`.execute(db);
       assert.deepEqual(
         columns.rows.map((r) => r.column_name).sort(),
@@ -953,8 +960,8 @@ test(
       // ... and F062.2C's inert protections are restored exactly.
       const restored = await sql<{ def: string }>`
         select pg_get_constraintdef(c.oid) as def
-          from pg_constraint c join pg_class t on t.oid = c.conrelid
-         where t.relname = 'integration_outbox'
+          from pg_constraint c
+         where c.conrelid = 'integration_outbox'::regclass
            and c.conname = 'integration_outbox_state_inert'`.execute(db);
       assert.equal(
         restored.rows.length,
@@ -1023,7 +1030,8 @@ test(
     await withSchema(async ({ db }) => {
       const granted = await sql<{ grantee: string; privilege_type: string }>`
         select grantee, privilege_type from information_schema.role_table_grants
-         where table_name = 'integration_delivery_attempt'
+         where table_schema = current_schema()
+           and table_name = 'integration_delivery_attempt'
            and grantee = 'PUBLIC'`.execute(db);
       assert.deepEqual(granted.rows, [], 'PUBLIC must receive nothing');
 
