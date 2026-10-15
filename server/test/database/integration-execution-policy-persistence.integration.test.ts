@@ -196,6 +196,18 @@ async function withSchema(
     });
   } finally {
     await db.destroy();
+    // Migration 53's `up()` creates the worker API namespace, so applying it
+    // through `applyIntegrationWorkerFunctions` leaves this fixture owning a
+    // second schema. It is a SIBLING of the disposable schema rather than a
+    // child -- a function body is not a recorded dependency -- so the cascade
+    // below cannot reach it and it is dropped explicitly, first.
+    //
+    // `if exists` because the namespace is created inside the `try` above: a
+    // setup failure before that point leaves it absent, and an unguarded drop
+    // would then raise 3F000 from this `finally` and mask the real error.
+    await admin.query(
+      'drop schema if exists "' + workerApiSchema(schema) + '" cascade',
+    );
     await admin.query('drop schema "' + schema + '" cascade');
     await admin.end();
   }
