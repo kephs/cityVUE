@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 /**
- * F062.2D-2C-3B-2 NEW-a follow-up — the controlled disposable-PostgreSQL
- * validation launcher.
+ * F062 — the mandatory disposable-PostgreSQL validation gate.
  *
  * Provisions one disposable PostgreSQL 17 container, runs the database tier
  * and the database-dependent E2E tier against it SERIALLY, proves no schema
  * leaked, and tears the container and its anonymous volume down with
  * verification.
  *
- * This launcher is deliberately unforgiving. A missing or partial
- * configuration, a skipped required suite, an unparsable result, an
- * interrupted run or absent teardown evidence are each a FAILURE, because
- * each is a way for an incomplete validation to be mistaken for a passing
- * one. It never reports an incomplete tier as successful.
+ * The verdict is deliberately unforgiving, because every lenient reading is a
+ * way for an incomplete validation to be mistaken for a passing one. The two
+ * decisions that matter -- "did this tier really pass?" and "did this run
+ * really pass?" -- are PURE functions (`evaluateTier`, `evaluateRun`),
+ * exported so they can be proven against fabricated inputs rather than only
+ * exercised by a happy-path run.
+ *
+ * Importing this module has no side effects: `main()` runs only when the file
+ * is the process entry point, so the unit tests can load the verdict logic
+ * without provisioning anything.
  *
  * It does not print credentials. `TEST_DATABASE_URL` reaches the child
  * processes through the environment and is redacted wherever it is echoed.
@@ -27,298 +31,425 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const serverRoot = resolve(here, '..');
-const distTest = resolve(serverRoot, 'dist-test', 'test');
+/**
+ * The mandatory tiers and their floors. Held here rather than at the call
+ * site so a caller cannot pair a tier with the wrong floor, and so an
+ * unrecognised tier name is itself a refusal.
+ *
+ * The floors close a silent-success path: `node --test` over a directory
+ * holding no test files reports `# tests 0`, zero failures and exit 0, so a
+ * stale, emptied or mis-resolved compile directory would otherwise be
+ * indistinguishable from a clean pass. Floors rather than equalities, so
+ * legitimately added tests do not trip the gate while a collapse in coverage
+ * does. Reviewed against measured inventories of 1007 and 115.
+ */
+export const MANDATORY_TIERS = Object.freeze({
+  database: Object.freeze({ directory: 'database', minimum: 1000 }),
+  e2e: Object.freeze({ directory: 'e2e', minimum: 110 }),
+});
 
-const failures = [];
-const out = (text) => process.stdout.write(`${text}\n`);
-const errOut = (text) => process.stderr.write(`${text}\n`);
-const fail = (message) => {
-  failures.push(message);
-  errOut(`FAIL  ${message}`);
-};
-const ok = (message) => {
-  out(`ok    ${message}`);
-};
-const info = (message) => {
-  out(`info  ${message}`);
-};
+const SUMMARY_KEYS = ['tests', 'pass', 'fail', 'cancelled', 'skipped', 'todo'];
 
-/** Redacts the password in any URL before it is printed. */
-const redact = (text) =>
-  String(text).replace(/(postgresql:\/\/[^:]+:)[^@]*@/g, '$1***@');
-
-// ---------------------------------------------------------------------------
-// 1. Runtime prerequisites and the trusted image.
-// ---------------------------------------------------------------------------
-out('== 1. prerequisites ==');
-
-if (!process.argv.includes('--skip-compile')) {
-  const tsc = resolve(serverRoot, 'node_modules', 'typescript', 'bin', 'tsc');
-  if (!existsSync(tsc)) {
-    fail('the local TypeScript compiler is missing; run npm install');
-  } else {
-    const compiled = spawnSync(
-      process.execPath,
-      [tsc, '-p', 'tsconfig.test.json'],
-      { cwd: serverRoot, encoding: 'utf8' },
+/**
+ * Reads the TAP trailer as DATA. Reports ambiguity and truncation rather than
+ * silently taking a first match, because a duplicated or partial summary is
+ * not evidence.
+ */
+export function parseTapSummary(output) {
+  const text = typeof output === 'string' ? output : '';
+  const counts = {};
+  const ambiguous = [];
+  const missing = [];
+  for (const key of SUMMARY_KEYS) {
+    const found = [...text.matchAll(new RegExp(`^# ${key} (\\d+)$`, 'gm'))].map(
+      (match) => Number(match[1]),
     );
-    if (compiled.status !== 0) {
-      fail('test compilation failed');
-      errOut(compiled.stdout || compiled.stderr);
-    } else ok('test sources compiled');
+    const distinct = [...new Set(found)];
+    if (found.length === 0) {
+      missing.push(key);
+      counts[key] = null;
+    } else if (distinct.length > 1) {
+      ambiguous.push(key);
+      counts[key] = null;
+    } else {
+      counts[key] = distinct[0];
+    }
   }
-}
-
-if (failures.length > 0) {
-  errOut('\naborting before provisioning: prerequisites failed');
-  process.exit(1);
-}
-
-const clusterModule = resolve(
-  distTest,
-  'helpers',
-  'f0592-disposable-cluster.js',
-);
-if (!existsSync(clusterModule)) {
-  fail(`the compiled cluster helper is missing at ${clusterModule}`);
-  process.exit(1);
-}
-const { startDisposableCluster, dockerAvailable } = await import(
-  pathToFileURL(clusterModule).href
-);
-
-if (!dockerAvailable()) {
-  fail('Docker is unavailable, so no disposable instance can be provisioned');
-  process.exit(1);
-}
-ok('Docker control plane reachable');
-
-// ---------------------------------------------------------------------------
-// 2-3. Ephemeral identity, provisioning.
-// ---------------------------------------------------------------------------
-out('\n== 2-3. provisioning one disposable PostgreSQL 17 instance ==');
-
-let cluster;
-try {
-  cluster = await startDisposableCluster();
-} catch (error) {
-  fail(`provisioning failed: ${redact(error.message)}`);
-  process.exit(1);
-}
-ok(`container ${cluster.container} on 127.0.0.1:${cluster.port}`);
-info(`image pinned to ${cluster.imageId}`);
-
-let teardown = null;
-let skewMs = null;
-
-try {
-  // -------------------------------------------------------------------------
-  // 4. Verify the instance against the same predicate the suites use.
-  // -------------------------------------------------------------------------
-  out('\n== 4. disposable-instance evidence ==');
-  const evidenceModule = resolve(
-    distTest,
-    'helpers',
-    'disposable-cluster-evidence.js',
-  );
-  const { collectDisposableEvidence, refuseUnlessDisposable } = await import(
-    pathToFileURL(evidenceModule).href
-  );
-  const pgModule = await import('pg');
-  const PoolCtor = pgModule.default?.Pool ?? pgModule.Pool;
-
-  const admin = new PoolCtor({ connectionString: cluster.testUrl, max: 2 });
-  try {
-    const evidence = await collectDisposableEvidence(
-      admin,
-      cluster.testUrl,
-      cluster.expectations(),
-    );
-    const refusal = refuseUnlessDisposable(evidence);
-    if (refusal === null)
-      ok(
-        'database, role, loopback target, nonce, container identity, image digest, port binding, timestamps and anonymous storage all verified',
-      );
-    else fail(`evidence refused: ${refusal}`);
-
-    // NEW-b context only. Recorded, never corrected here: a container clock
-    // behind the host makes `occurred_at <= created_at` violable.
-    const before = Date.now();
-    const clock = await admin.query('select clock_timestamp() now');
-    const after = Date.now();
-    skewMs = new Date(clock.rows[0].now).getTime() - (before + after) / 2;
-    info(`host-to-container clock skew: ${skewMs.toFixed(0)} ms`);
-    if (skewMs < -250)
-      info(
-        'the container clock trails the host; NEW-b check violations are environmentally possible',
-      );
-  } catch (error) {
-    fail(`evidence collection failed: ${redact(error.message)}`);
-  } finally {
-    await admin.end().catch(() => undefined);
-  }
-
-  // -------------------------------------------------------------------------
-  // 5. Pre-test census.
-  // -------------------------------------------------------------------------
-  out('\n== 5. pre-test schema census ==');
-  const beforeCount = await cluster.census();
-  if (beforeCount === 0) ok('clean baseline: zero non-system schemas');
-  else fail(`expected a clean database, found ${beforeCount} schema(s)`);
-
-  // -------------------------------------------------------------------------
-  // 6-7. The tiers, serially.
-  // -------------------------------------------------------------------------
-  /**
-   * `minimum` closes a silent-success path. `node --test` over a directory
-   * holding no test files reports `# tests 0`, zero failures and exit 0, so a
-   * stale, emptied or mis-resolved compile directory would otherwise be
-   * indistinguishable from a clean pass. A floor makes "ran nothing" a
-   * failure. It is a floor rather than an equality so legitimately added
-   * tests do not break the harness, while a collapse in coverage does.
-   */
-  const runTier = (label, directory, minimum) => {
-    out(`\n== ${label} ==`);
-    const cwd = resolve(distTest, directory);
-    if (!existsSync(cwd)) {
-      fail(`${label}: compiled directory missing at ${cwd}`);
-      return null;
-    }
-    const result = spawnSync(
-      process.execPath,
-      ['--test', '--test-concurrency=1', '--test-reporter=tap'],
-      {
-        cwd,
-        encoding: 'utf8',
-        maxBuffer: 256 * 1024 * 1024,
-        env: { ...process.env, ...cluster.environment() },
-      },
-    );
-    if (result.error) {
-      fail(`${label}: runner could not start: ${result.error.message}`);
-      return null;
-    }
-    const output = `${result.stdout}\n${result.stderr}`;
-    const number = (key) => {
-      const match = output.match(new RegExp(`^# ${key} (\\d+)$`, 'm'));
-      return match === null ? null : Number(match[1]);
-    };
-    const counts = {
-      tests: number('tests'),
-      pass: number('pass'),
-      fail: number('fail'),
-      skipped: number('skipped'),
-      cancelled: number('cancelled'),
-      todo: number('todo'),
-    };
-    // An interrupted run has no summary. That is a failure, never a pass.
-    if (counts.tests === null || counts.pass === null || counts.fail === null) {
-      fail(`${label}: no parsable summary, so the run is not evidence`);
-      errOut(output.slice(-4000));
-      return null;
-    }
-    const notOk = [...output.matchAll(/^not ok \d+ - (.*)$/gm)].map(
-      (match) => match[1],
-    );
-    out(
-      `      tests ${counts.tests} | pass ${counts.pass} | fail ${counts.fail} | skipped ${counts.skipped} | cancelled ${counts.cancelled}`,
-    );
-    if (counts.tests < minimum)
-      fail(
-        `${label}: only ${counts.tests} test(s) ran, below the required floor of ${minimum}; the suite did not execute`,
-      );
-    if (counts.pass !== counts.tests)
-      fail(
-        `${label}: ${counts.pass} passed of ${counts.tests} run, so the tier is not fully green`,
-      );
-    if (counts.fail > 0) fail(`${label}: ${counts.fail} failing test(s)`);
-    if (counts.cancelled > 0)
-      fail(`${label}: ${counts.cancelled} cancelled test(s) — interrupted run`);
-    if (counts.skipped > 0)
-      fail(
-        `${label}: ${counts.skipped} skipped test(s); a required suite that did not execute is not a pass`,
-      );
-    if (
-      counts.fail === 0 &&
-      counts.skipped === 0 &&
-      counts.cancelled === 0 &&
-      counts.pass === counts.tests &&
-      counts.tests >= minimum
-    )
-      ok(`${label}: ${counts.pass}/${counts.tests}, zero skips`);
-    for (const name of notOk) out(`      not ok: ${name}`);
-    // SQLSTATE 23514 on the outbox clock constraint is NEW-b, out of scope
-    // here, and must be reported as itself rather than investigated as a
-    // disposable-instance defect.
-    if (/23514/.test(output) && /occurred_at/.test(output))
-      info(
-        `${label}: SQLSTATE 23514 on occurred_at observed — classified as NEW-b (timestamp race), not a disposable-instance failure`,
-      );
-    return counts;
+  return {
+    counts,
+    ambiguous,
+    missing,
+    // `# duration_ms` is the last line the reporter emits, so its absence
+    // alongside a present summary means the output was cut off.
+    complete: /^# duration_ms /m.test(text),
+    hasPlan: /^1\.\.\d+$/m.test(text),
   };
+}
 
-  // Floors set from the verified inventories (1007 database, 115 E2E), with
-  // headroom so adding tests does not trip the gate.
-  const database = runTier('6. database tier (serial)', 'database', 1000);
-  const e2e = runTier('7. E2E tier (serial)', 'e2e', 110);
+/**
+ * Pure. The verdict for one mandatory tier.
+ *
+ * `reasons` is empty exactly when the tier genuinely passed. Anything absent,
+ * inconsistent, partial, skipped or cancelled produces a reason.
+ */
+export function evaluateTier(input) {
+  const reasons = [];
+  const tier = input?.tier;
+  const spec = Object.prototype.hasOwnProperty.call(MANDATORY_TIERS, tier)
+    ? MANDATORY_TIERS[tier]
+    : undefined;
+  if (spec === undefined) {
+    reasons.push(
+      `unknown mandatory tier ${JSON.stringify(tier ?? null)}; refusing to treat it as validated`,
+    );
+    return { ok: false, tier, counts: null, reasons };
+  }
 
-  // -------------------------------------------------------------------------
-  // 8. Post-test census: the NEW-a leak proof.
-  // -------------------------------------------------------------------------
-  out('\n== 8. post-test schema census ==');
-  const afterCount = await cluster.census();
-  if (afterCount < 0) fail('the post-test census could not be read');
-  else if (afterCount === beforeCount)
-    ok(`zero leaked schemas (${beforeCount} before, ${afterCount} after)`);
-  else fail(`schema leak: ${beforeCount} before, ${afterCount} after`);
+  if (input.directoryPresent === false)
+    reasons.push(`${tier}: the compiled test directory is missing`);
+  if (input.spawnError)
+    reasons.push(
+      `${tier}: the test runner could not start (${input.spawnError})`,
+    );
+  // A non-zero runner status is independent evidence; it must not be excused
+  // by a summary that happens to look clean.
+  if (input.status !== 0)
+    reasons.push(
+      `${tier}: the test runner exited with status ${JSON.stringify(input.status ?? null)}`,
+    );
 
-  // -------------------------------------------------------------------------
-  // 9. Outcome record.
-  // -------------------------------------------------------------------------
-  out('\n== 9. recorded outcomes ==');
-  for (const [label, counts] of [
-    ['database', database],
-    ['e2e', e2e],
-  ]) {
-    if (counts === null) {
-      out(`      ${label}: NOT EXECUTED / UNPARSABLE`);
+  const summary = parseTapSummary(input.output);
+  const { counts } = summary;
+  if (summary.missing.length > 0)
+    reasons.push(
+      `${tier}: the TAP summary is missing ${summary.missing.join(', ')}, so the run is not evidence`,
+    );
+  if (summary.ambiguous.length > 0)
+    reasons.push(
+      `${tier}: the TAP summary reports conflicting values for ${summary.ambiguous.join(', ')}`,
+    );
+  if (!summary.complete)
+    reasons.push(`${tier}: the TAP output is truncated or interrupted`);
+  if (!summary.hasPlan) reasons.push(`${tier}: the TAP plan line is absent`);
+
+  if (counts.tests !== null) {
+    if (counts.tests <= 0)
+      reasons.push(
+        `${tier}: no tests were discovered, so nothing was validated`,
+      );
+    else if (counts.tests < spec.minimum)
+      reasons.push(
+        `${tier}: only ${counts.tests} test(s) ran, below the reviewed floor of ${spec.minimum}`,
+      );
+  }
+  if (counts.pass !== null && counts.pass < 0)
+    reasons.push(`${tier}: a negative pass count is not evidence`);
+  if (
+    counts.pass !== null &&
+    counts.tests !== null &&
+    counts.pass !== counts.tests
+  )
+    reasons.push(
+      `${tier}: ${counts.pass} passed of ${counts.tests} run, so the tier is not fully green`,
+    );
+  if (counts.fail !== null && counts.fail > 0)
+    reasons.push(`${tier}: ${counts.fail} failing test(s)`);
+  if (counts.cancelled !== null && counts.cancelled > 0)
+    reasons.push(
+      `${tier}: ${counts.cancelled} cancelled test(s) — interrupted run`,
+    );
+  if (counts.skipped !== null && counts.skipped > 0)
+    reasons.push(
+      `${tier}: ${counts.skipped} skipped test(s); a required suite that did not execute is not a pass`,
+    );
+
+  return { ok: reasons.length === 0, tier, counts, reasons };
+}
+
+/**
+ * Pure. The verdict for the whole run.
+ *
+ * Requires BOTH mandatory tiers to be present and passing, so a green unit
+ * suite -- or a tier that silently never ran -- can never stand in for
+ * database and E2E validation.
+ */
+export function evaluateRun(input) {
+  const reasons = [];
+
+  if (input?.evidence?.verified !== true)
+    reasons.push(
+      `disposable-instance evidence was not verified${
+        input?.evidence?.refusal ? `: ${input.evidence.refusal}` : ''
+      }`,
+    );
+
+  const before = input?.census?.before;
+  const after = input?.census?.after;
+  if (typeof before !== 'number' || before < 0)
+    reasons.push('the pre-test schema census is missing or unreadable');
+  else if (before !== 0)
+    reasons.push(`the database was not a clean baseline: ${before} schema(s)`);
+  if (typeof after !== 'number' || after < 0)
+    reasons.push('the post-test schema census is missing or unreadable');
+  else if (typeof before === 'number' && after > before)
+    reasons.push(`${after - before} schema(s) leaked during the run`);
+  else if (typeof before === 'number' && after !== before)
+    reasons.push(`the schema census changed from ${before} to ${after}`);
+
+  const verdicts = Array.isArray(input?.tiers) ? input.tiers : [];
+  for (const name of Object.keys(MANDATORY_TIERS)) {
+    const verdict = verdicts.find((candidate) => candidate?.tier === name);
+    if (verdict === undefined) {
+      reasons.push(`the mandatory ${name} tier did not run`);
       continue;
     }
-    out(
-      `      ${label}: tests=${counts.tests} pass=${counts.pass} fail=${counts.fail} skipped=${counts.skipped} cancelled=${counts.cancelled} todo=${counts.todo}`,
-    );
+    if (!verdict.ok)
+      reasons.push(...(verdict.reasons ?? [`the ${name} tier did not pass`]));
   }
-} catch (error) {
-  fail(`validation aborted: ${redact(error.stack ?? error.message)}`);
-} finally {
-  // -------------------------------------------------------------------------
-  // 10-11. Authorized teardown with removal evidence.
-  // -------------------------------------------------------------------------
-  out('\n== 10-11. teardown ==');
-  try {
-    teardown = await cluster.destroy();
-  } catch (error) {
-    fail(`teardown threw: ${redact(error.message)}`);
-  }
-  if (teardown === null) fail('no teardown evidence was produced');
-  else if (teardown.refusal !== null)
-    fail(`teardown refused: ${teardown.refusal}`);
+
+  const teardown = input?.teardown;
+  if (teardown === null || teardown === undefined)
+    reasons.push('no teardown evidence was produced');
+  else if (teardown.refusal)
+    reasons.push(`teardown refused: ${teardown.refusal}`);
   else {
-    if (teardown.containerRemoved) ok('container no longer exists');
-    else fail('the container still exists after teardown');
-    if (teardown.volumeRemoved) ok('anonymous volume no longer exists');
-    else fail(`the anonymous volume ${teardown.volumeName} still exists`);
+    if (teardown.containerRemoved !== true)
+      reasons.push('removal of the owned container was not verified');
+    if (teardown.volumeRemoved !== true)
+      reasons.push('removal of the owned anonymous volume was not verified');
   }
-  if (skewMs !== null) out(`      clock skew: ${skewMs.toFixed(0)} ms`);
+
+  return { ok: reasons.length === 0, reasons };
 }
 
-out('\n== result ==');
-if (failures.length === 0) {
-  out('PASS — complete disposable validation, zero skips, clean teardown');
-  process.exit(0);
+// ---------------------------------------------------------------------------
+// Orchestration. Runs only as the entry point.
+// ---------------------------------------------------------------------------
+
+async function main() {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const serverRoot = resolve(here, '..');
+  const distTest = resolve(serverRoot, 'dist-test', 'test');
+
+  const out = (text) => process.stdout.write(`${text}\n`);
+  const errOut = (text) => process.stderr.write(`${text}\n`);
+  const redact = (text) =>
+    String(text).replace(/(postgresql:\/\/[^:]+:)[^@]*@/g, '$1***@');
+
+  const hardFailures = [];
+  const fail = (message) => {
+    hardFailures.push(message);
+    errOut(`FAIL  ${message}`);
+  };
+  const ok = (message) => out(`ok    ${message}`);
+  const info = (message) => out(`info  ${message}`);
+
+  out('== 1. prerequisites ==');
+  if (!process.argv.includes('--skip-compile')) {
+    const tsc = resolve(serverRoot, 'node_modules', 'typescript', 'bin', 'tsc');
+    if (!existsSync(tsc)) {
+      fail('the local TypeScript compiler is missing; run npm install');
+    } else {
+      const compiled = spawnSync(
+        process.execPath,
+        [tsc, '-p', 'tsconfig.test.json'],
+        { cwd: serverRoot, encoding: 'utf8' },
+      );
+      if (compiled.status !== 0) {
+        fail('test compilation failed');
+        errOut(compiled.stdout || compiled.stderr);
+      } else ok('test sources compiled');
+    }
+  }
+  if (hardFailures.length > 0) {
+    errOut('\naborting before provisioning: prerequisites failed');
+    process.exit(1);
+  }
+
+  const clusterModule = resolve(
+    distTest,
+    'helpers',
+    'f0592-disposable-cluster.js',
+  );
+  if (!existsSync(clusterModule)) {
+    fail(`the compiled cluster helper is missing at ${clusterModule}`);
+    process.exit(1);
+  }
+  const { startDisposableCluster, dockerAvailable } = await import(
+    pathToFileURL(clusterModule).href
+  );
+  if (!dockerAvailable()) {
+    fail('Docker is unavailable, so no disposable instance can be provisioned');
+    process.exit(1);
+  }
+  ok('Docker control plane reachable');
+
+  out('\n== 2-3. provisioning one disposable PostgreSQL 17 instance ==');
+  let cluster;
+  try {
+    cluster = await startDisposableCluster();
+  } catch (error) {
+    fail(`provisioning failed: ${redact(error.message)}`);
+    process.exit(1);
+  }
+  ok(`container ${cluster.container} on 127.0.0.1:${cluster.port}`);
+  info(`image pinned to ${cluster.imageId}`);
+
+  const evidence = { verified: false, refusal: null };
+  const census = { before: null, after: null };
+  const tiers = [];
+  let teardown = null;
+  let skewMs = null;
+
+  try {
+    out('\n== 4. disposable-instance evidence ==');
+    const { collectDisposableEvidence, refuseUnlessDisposable } = await import(
+      pathToFileURL(
+        resolve(distTest, 'helpers', 'disposable-cluster-evidence.js'),
+      ).href
+    );
+    const pgModule = await import('pg');
+    const PoolCtor = pgModule.default?.Pool ?? pgModule.Pool;
+    const admin = new PoolCtor({ connectionString: cluster.testUrl, max: 2 });
+    try {
+      const collected = await collectDisposableEvidence(
+        admin,
+        cluster.testUrl,
+        cluster.expectations(),
+      );
+      evidence.refusal = refuseUnlessDisposable(collected);
+      evidence.verified = evidence.refusal === null;
+      if (evidence.verified)
+        ok(
+          'database, role, loopback target, nonce, container identity, image digest, port binding, timestamps and anonymous storage all verified',
+        );
+      else fail(`evidence refused: ${evidence.refusal}`);
+
+      // NEW-b context only. Recorded, never corrected here: a container clock
+      // behind the host makes `occurred_at <= created_at` violable.
+      const t0 = Date.now();
+      const clock = await admin.query('select clock_timestamp() now');
+      const t1 = Date.now();
+      skewMs = new Date(clock.rows[0].now).getTime() - (t0 + t1) / 2;
+      info(`host-to-container clock skew: ${skewMs.toFixed(0)} ms`);
+      if (skewMs < -250)
+        info(
+          'the container clock trails the host; NEW-b check violations are environmentally possible',
+        );
+    } catch (error) {
+      evidence.refusal = redact(error.message);
+      fail(`evidence collection failed: ${evidence.refusal}`);
+    } finally {
+      await admin.end().catch(() => undefined);
+    }
+
+    out('\n== 5. pre-test schema census ==');
+    census.before = await cluster.census();
+    if (census.before === 0) ok('clean baseline: zero non-system schemas');
+    else fail(`expected a clean database, found ${census.before} schema(s)`);
+
+    for (const [name, spec] of Object.entries(MANDATORY_TIERS)) {
+      out(`\n== ${name} tier (serial, floor ${spec.minimum}) ==`);
+      const cwd = resolve(distTest, spec.directory);
+      const directoryPresent = existsSync(cwd);
+      let status = null;
+      let spawnError = null;
+      let output = '';
+      if (directoryPresent) {
+        const result = spawnSync(
+          process.execPath,
+          ['--test', '--test-concurrency=1', '--test-reporter=tap'],
+          {
+            cwd,
+            encoding: 'utf8',
+            maxBuffer: 256 * 1024 * 1024,
+            env: { ...process.env, ...cluster.environment() },
+          },
+        );
+        status = result.status;
+        spawnError = result.error ? result.error.message : null;
+        output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+      }
+      const verdict = evaluateTier({
+        tier: name,
+        directoryPresent,
+        status,
+        spawnError,
+        output,
+      });
+      tiers.push(verdict);
+      const counts = verdict.counts;
+      if (counts !== null)
+        out(
+          `      tests ${counts.tests} | pass ${counts.pass} | fail ${counts.fail} | skipped ${counts.skipped} | cancelled ${counts.cancelled}`,
+        );
+      for (const name2 of [...output.matchAll(/^not ok \d+ - (.*)$/gm)].map(
+        (match) => match[1],
+      ))
+        out(`      not ok: ${name2}`);
+      if (verdict.ok) ok(`${name}: ${counts.pass}/${counts.tests}, zero skips`);
+      else for (const reason of verdict.reasons) fail(reason);
+      // SQLSTATE 23514 on the outbox clock constraint is NEW-b, out of scope
+      // here, and must be reported as itself rather than investigated as a
+      // disposable-instance defect.
+      if (/23514/.test(output) && /occurred_at/.test(output))
+        info(
+          `${name}: SQLSTATE 23514 on occurred_at observed — classified as NEW-b (timestamp race), not a disposable-instance failure`,
+        );
+    }
+
+    out('\n== post-test schema census ==');
+    census.after = await cluster.census();
+    if (census.after === census.before)
+      ok(
+        `zero leaked schemas (${census.before} before, ${census.after} after)`,
+      );
+    else fail(`schema census changed: ${census.before} -> ${census.after}`);
+  } catch (error) {
+    fail(`validation aborted: ${redact(error.stack ?? error.message)}`);
+  } finally {
+    // Cleanup is attempted on every outcome, including a failing tier.
+    out('\n== teardown ==');
+    try {
+      teardown = await cluster.destroy();
+    } catch (error) {
+      fail(`teardown threw: ${redact(error.message)}`);
+    }
+    if (teardown === null || teardown === undefined)
+      fail('no teardown evidence was produced');
+    else if (teardown.refusal !== null)
+      fail(`teardown refused: ${teardown.refusal}`);
+    else {
+      if (teardown.containerRemoved) ok('container no longer exists');
+      else fail('the container still exists after teardown');
+      if (teardown.volumeRemoved) ok('anonymous volume no longer exists');
+      else fail(`the anonymous volume ${teardown.volumeName} still exists`);
+    }
+  }
+
+  out('\n== recorded outcomes ==');
+  for (const verdict of tiers)
+    out(
+      verdict.counts === null
+        ? `      ${verdict.tier}: NOT EXECUTED`
+        : `      ${verdict.tier}: tests=${verdict.counts.tests} pass=${verdict.counts.pass} fail=${verdict.counts.fail} skipped=${verdict.counts.skipped} cancelled=${verdict.counts.cancelled}`,
+    );
+  if (skewMs !== null) out(`      clock skew: ${skewMs.toFixed(0)} ms`);
+
+  // The authoritative verdict. Independent of the running tally, so a missing
+  // tier or unverified teardown cannot pass by omission.
+  const run = evaluateRun({ evidence, census, tiers, teardown });
+  out('\n== result ==');
+  if (run.ok && hardFailures.length === 0) {
+    out('PASS — complete disposable validation, zero skips, clean teardown');
+    process.exit(0);
+  }
+  const reasons = [...new Set([...run.reasons, ...hardFailures])];
+  errOut(`FAILED — ${reasons.length} problem(s):`);
+  for (const reason of reasons) errOut(`  - ${reason}`);
+  process.exit(1);
 }
-errOut(`FAILED — ${failures.length} problem(s):`);
-for (const message of failures) errOut(`  - ${message}`);
-process.exit(1);
+
+const entry = process.argv[1];
+if (entry !== undefined && pathToFileURL(entry).href === import.meta.url)
+  await main();

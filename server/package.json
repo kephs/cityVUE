@@ -23,6 +23,8 @@
     "test": "npm run test:compile && cd dist-test/test/unit && node --test",
     "test:e2e": "npm run test:compile && cd dist-test/test/e2e && node --test --test-concurrency=1",
     "test:db": "npm run test:compile && cd dist-test/test/database && node --test",
+    "test:db:disposable": "node scripts/test-db-disposable.mjs",
+    "validate": "npm run typecheck && npm run lint && npm run build && npm test && npm run test:db:disposable",
     "lint": "eslint .",
     "format": "prettier --write \"{src,test,migrations}/**/*.{ts,json,md}\" \"scripts/*.mjs\" \"*.{json,md,yml}\"",
     "format:check": "prettier --check \"{src,test,migrations}/**/*.{ts,json,md}\" \"scripts/*.mjs\" \"*.{json,md,yml}\"",

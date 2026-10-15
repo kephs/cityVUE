@@ -43,6 +43,58 @@ Reqro is a client-neutral resident-engagement and staff-work platform: a React/V
 
 **ADR-024 status.** [ADR-024](architecture/decisions/ADR-024-transaction-time-request-authorization.md) remains **Proposed**. Its architecture is implemented on `main` and F058.1 is delivered, but implementation is not architectural approval; ratification is a separate reviewed decision.
 
+### Test validation commands
+
+There are two kinds of test command, and they are not interchangeable.
+
+**Developer discovery commands.** `npm test`, `npm run test:db` and
+`npm run test:e2e` (in `server/`) are for focused local work. They may
+legitimately omit or skip database-dependent tests — with `TEST_DATABASE_URL`
+unset, `npm run test:db` reports roughly 65 of the 1,007 tests that exist and
+**still exits 0**, because `node --test` exits 0 both when a required suite
+skips and when no test is discovered at all. **Their output must never be
+cited on its own as evidence of full validation.** This is not hypothetical:
+[F058.3](features/F058-3-workflow-activity-narrative.md) records a database
+tier that reported 20 tests, 0 passed and 20 skipped under a zero exit code.
+
+**Mandatory full validation.** `npm run validate` (in `server/`) is the
+authoritative gate. It chains, fail-closed, typecheck → lint → production
+build → unit tests → `npm run test:db:disposable`, which provisions a
+disposable PostgreSQL 17 instance and runs the database and E2E tiers against
+it serially. Because the disposable stage runs last, **a green unit suite can
+never stand in for database or E2E validation.**
+
+`npm run test:db:disposable` refuses to report success unless every one of the
+following holds: verified disposable-instance identity (database
+`reqro_f0592_test`, role `reqro_test_user`, loopback client connection, a
+matching out-of-band nonce, container ID, pinned image digest, loopback-only
+port binding, and anonymous storage only); a clean pre-test schema census; the
+database tier at **≥ 1,000 tests** and the E2E tier at **≥ 110**, each with
+zero failed, zero skipped and zero cancelled tests and a complete,
+unambiguous TAP summary; zero newly leaked schemas; and verified removal of
+the owned container and its anonymous volume. Cleanup is attempted on every
+outcome, and a cleanup failure is never reported as success.
+
+**Prerequisites.** A reachable Docker control plane and the pinned
+`postgres@sha256:b0f9560a…` image. Credentials are generated in memory per
+run, are never written to any `.env` and are never printed. The container is
+published to `127.0.0.1` on an ephemeral port — never 5432 — and is removed
+with its anonymous volume when the run ends. No persistent database is
+contacted: `reqro_dev`, `reqro_test` and the local PostgreSQL service are
+never used.
+
+**Known limitations.** The `occurred_at <= created_at` check compares a
+host-supplied timestamp against a database-generated one, so a container clock
+trailing the host can violate it. The launcher measures and reports clock skew
+and classifies SQLSTATE 23514 on `occurred_at` as that separate timestamp-race
+issue rather than a disposable-instance defect; it is **not fixed**. Default
+parallel database execution remains unresolved — see TEST-MAINT in section 5;
+the launcher always runs serially. **CI enforcement of this gate requires
+later platform authorization** and is not configured: no build or test
+pipeline exists, and running the disposable stage on an agent depends on
+unresolved private-runner and Docker-isolation decisions in the F060 CI
+records.
+
 ## 3. Delivered capability families
 
 Each linked record preserves its own test scope, UAT scope, limitations and deferred work. "Delivered" identifies an accepted implementation checkpoint in development; none of these statuses independently authorizes deployment.
@@ -118,13 +170,17 @@ Align database-test execution with the existing E2E test strategy by evaluating:
 
 Do not implement as part of tenant-resolution or Resident Experience feature work. Validate the test-runner change independently before adoption.
 
+The mandatory gate already sidesteps this: `npm run test:db:disposable` always
+passes `--test-concurrency=1`. TEST-MAINT remains open for the bare
+`npm run test:db` discovery command, which still runs in parallel by default.
+
 ## 6. Production readiness gaps
 
 None of the following is established by local feature work, and each is a separate authorization gate.
 
 | Gap | State |
 | --- | ----- |
-| **Disposable PostgreSQL test database** | **Available and validated.** A local disposable database (`reqro_f0592_test`) and dedicated role (`reqro_test_user`) exist, and the integration-test guard refuses any other database or user. With `TEST_DATABASE_URL` supplied, the `server/test/database` suite — which carries the Organization-isolation, authorization-scope, concurrency and audit-integrity proofs — executes in full, and serial execution passed 664/664. Default parallel execution still has an open cross-suite schema-isolation issue (661/664) tracked separately as TEST-MAINT in section 5 |
+| **Disposable PostgreSQL test database** | **Available on demand, not standing.** `reqro_f0592_test` and `reqro_test_user` do **not** exist persistently on any host; an earlier revision of this row claimed they did, which was wrong. They are provisioned inside a disposable PostgreSQL 17 container for the lifetime of one `npm run test:db:disposable` run and destroyed with it, so the suite is reproducible on any machine with Docker rather than dependent on a hand-built local database. Under that launcher the `server/test/database` tier — which carries the Organization-isolation, authorization-scope, concurrency and audit-integrity proofs — executes in full and serially, with zero skips, alongside the database-dependent E2E tier. See "Test validation commands" in section 2. Default parallel execution still has an open cross-suite schema-isolation issue tracked separately as TEST-MAINT in section 5 |
 | **Production bootstrap and recovery** | No production path to a first administrator exists; the operator command is restricted to a development profile and an approved local database. See F057.4 gaps G1 and G2 |
 | **Client identity activation** | Entra is validated against a personal tenant only. Administrator consent, operational lifecycle validation and production activation remain outstanding |
 | **Deployment architecture** | [F008](features/F008-production-backend-persistence-security-architecture.md) and [F016](features/F016-production-hosting-deployment-readiness-plan.md) describe Azure Container Apps, managed PostgreSQL, private Blob Storage and Key Vault as a *target*. Nothing is provisioned. Prefer isolated client environments initially; shared SaaS needs its own tenancy and operating-model decision |
