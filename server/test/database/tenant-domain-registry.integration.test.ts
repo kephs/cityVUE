@@ -9,6 +9,10 @@ import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
 import type { DatabaseSchema } from '../../src/database/database.types.js';
 import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
+import {
+  assertDisposableCluster,
+  disposableSkipReason,
+} from '../helpers/disposable-cluster-evidence.js';
 import { applyFunctionHardening } from '../helpers/tenant-domain-hardening.js';
 import { TenantResolverService } from '../../src/tenancy/tenant-resolver.service.js';
 import { TenantDomainRepository } from '../../src/tenancy/tenant-domain.repository.js';
@@ -48,7 +52,7 @@ async function refuses(
 
 test(
   'ADR-025 Slice 1a disposable tenant-domain registry invariants',
-  { skip: !process.env.TEST_DATABASE_URL && 'TEST_DATABASE_URL missing' },
+  { skip: disposableSkipReason() },
   async (t) => {
     const testUrl = process.env.TEST_DATABASE_URL;
     assert.ok(testUrl);
@@ -66,12 +70,13 @@ test(
           .rows,
         [{ db: 'reqro_f0592_test', usr: 'reqro_test_user' }],
       );
-      const address = await admin.query<{ address: string }>(
-        'select inet_server_addr()::text address',
-      );
-      assert.ok(
-        ['::1/128', '127.0.0.1/32'].includes(address.rows[0]?.address ?? ''),
-      );
+      // Formerly an `inet_server_addr()` loopback assertion, which cannot
+      // hold once PostgreSQL is reached through Docker's bridge: the client
+      // connects to host loopback while the server reports its bridge
+      // address. Proving ownership of a disposable instance is both
+      // satisfiable and strictly stronger than proving the address is
+      // private, which a managed database would also satisfy.
+      await assertDisposableCluster(admin, testUrl);
       await prepareDatabaseExtensions(admin);
       await admin.query(`create schema "${schema}"`);
       created = true;
