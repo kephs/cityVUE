@@ -1,6 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 export const TRACKING_MANAGE = 'service_request.tracking.manage' as const;
+/**
+ * F063.1: the bound on resident-visible correspondence returned by a single
+ * tracking read. A bearer credential must never be able to ask for an
+ * unbounded page, so this is a fixed server-side ceiling rather than a
+ * caller-supplied size. It matches the staff stream's page size.
+ */
+export const REQUESTER_UPDATE_PAGE_SIZE = 25;
 // 32 random bytes have a canonical unpadded base64url length of 43 characters.
 export function validTrackingCredential(value: unknown): value is string {
   return (

@@ -1286,11 +1286,25 @@ export async function checkAttachments(
                 'serviceLocation',
                 'status',
                 'submittedAt',
+                'updates',
               ]);
               assert.deepEqual(Object.keys(projected.issue).sort(), [
                 'icon',
                 'name',
               ]);
+              // F063.1 may surface resident-visible message text, but never
+              // attachment data: no entry carries an attachment field, and the
+              // populated Note/Communication filename stays absent entirely.
+              for (const update of projected.updates)
+                assert.deepEqual(Object.keys(update).sort(), [
+                  'body',
+                  'channel',
+                  'createdAt',
+                  'deliveryState',
+                  'direction',
+                  'id',
+                  'sender',
+                ]);
               assert.ok(!JSON.stringify(projected).includes(filename));
               throw rollback;
             }),

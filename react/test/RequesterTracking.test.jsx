@@ -15,6 +15,14 @@ const safe = {
   submittedAt: "2026-09-21T00:00:00Z",
   serviceLocation: "<script>fictional</script>",
   description: "Synthetic\n<script>text only</script>",
+  updates: [
+    {
+      id: "10000000-0000-4000-8000-000000000009",
+      body: "Crew scheduled\n<script>text only</script>",
+      createdAt: "2026-09-22T00:00:00Z",
+      sender: { displayName: "Service team" },
+    },
+  ],
 };
 test("F044 consumes a link arriving between bootstrap and page mount", async () => {
   window.history.replaceState(null, "", "/track");
@@ -24,8 +32,12 @@ test("F044 consumes a link arriving between bootstrap and page mount", async () 
   window.dispatchEvent(new HashChangeEvent("hashchange"));
   const release = session.retain();
   expect(window.location.hash).toBe("");
-  const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => safe });
-  await expect(session.load("/api/v1", undefined, fetcher)).resolves.toEqual(safe);
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue({ ok: true, json: async () => safe });
+  await expect(session.load("/api/v1", undefined, fetcher)).resolves.toEqual(
+    safe,
+  );
   expect(fetcher.mock.calls[0][1].headers["X-Requester-Tracking"]).toBe(secret);
   release();
   await Promise.resolve();
@@ -128,6 +140,145 @@ test("F044 requester page renders only explicit safe fields as text without staf
     "Staff Service Requests",
   ])
     expect(screen.queryByText(text)).not.toBeInTheDocument();
+});
+test("F063.1 service team updates render as text, newest first, beside existing tracking details", async () => {
+  const session = {
+    retain: vi.fn(() => vi.fn()),
+    load: vi.fn().mockResolvedValue({
+      ...safe,
+      updates: [
+        {
+          id: "b",
+          body: "Second\n<script>alert(1)</script>",
+          createdAt: "2026-09-23T00:00:00Z",
+          sender: { displayName: "Service team" },
+        },
+        {
+          id: "a",
+          body: "First update",
+          createdAt: "2026-09-22T00:00:00Z",
+          sender: { displayName: "Service team" },
+        },
+      ],
+    }),
+  };
+  const view = render(
+    <RequesterTrackingPage session={session} baseUrl="/api/v1" />,
+  );
+  expect(
+    await screen.findByRole("heading", {
+      level: 2,
+      name: "Updates from the Service Team",
+    }),
+  ).toBeInTheDocument();
+  const list = screen.getByRole("list", {
+    name: "Updates from the service team, newest first",
+  });
+  const entries = list.querySelectorAll("li");
+  expect(entries).toHaveLength(2);
+  expect(entries[0].querySelector("time")).toHaveAttribute(
+    "datetime",
+    "2026-09-23T00:00:00Z",
+  );
+  expect(entries[0].querySelector(".tracking-update-body").textContent).toBe(
+    "Second\n<script>alert(1)</script>",
+  );
+  expect(entries[1].textContent).toContain("First update");
+  expect(list.querySelectorAll("strong")[0]).toHaveTextContent("Service team");
+  // Script-looking content is text, never markup, and existing details remain.
+  expect(view.container.querySelector("img,script,svg")).toBeNull();
+  expect(screen.getByText("SYNTHETIC-44")).toBeInTheDocument();
+  expect(screen.getByText("In Progress")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Description" })).toBeVisible();
+  expect(view.container.textContent).not.toContain(secret);
+});
+test.each([[], undefined])(
+  "F063.1 an empty or absent update collection shows a clear empty state",
+  async (updates) => {
+    const session = {
+      retain: vi.fn(() => vi.fn()),
+      load: vi.fn().mockResolvedValue({ ...safe, updates }),
+    };
+    render(<RequesterTrackingPage session={session} baseUrl="/api/v1" />);
+    expect(
+      await screen.findByText(/There are no updates yet/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(screen.getByText("SYNTHETIC-44")).toBeInTheDocument();
+  },
+);
+test("F063.1 the session whitelists update fields, drops malformed entries and caps the page", async () => {
+  window.history.replaceState(null, "", `/track#${secret}`);
+  const session = createTrackingSession();
+  const release = session.retain();
+  const fetcher = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      ...safe,
+      updates: [
+        {
+          id: "keep",
+          body: "Kept",
+          createdAt: "2026-09-22T00:00:00Z",
+          sender: {
+            displayName: "Service team",
+            email: "staff@example.invalid",
+          },
+          authorDisplayName: "Fictional employee",
+          direction: "outbound",
+        },
+        {
+          id: "no-body",
+          createdAt: "2026-09-22T00:00:00Z",
+          sender: { displayName: "x" },
+        },
+        {
+          id: "bad-date",
+          body: "x",
+          createdAt: "not-a-date",
+          sender: { displayName: "x" },
+        },
+        { id: "no-sender", body: "x", createdAt: "2026-09-22T00:00:00Z" },
+        null,
+        ...Array.from({ length: 30 }, (_value, index) => ({
+          id: `extra-${index}`,
+          body: "Extra",
+          createdAt: "2026-09-21T00:00:00Z",
+          sender: { displayName: "Service team" },
+        })),
+      ],
+    }),
+  });
+  const data = await session.load("/api/v1", undefined, fetcher);
+  expect(data.updates).toHaveLength(25);
+  expect(data.updates[0]).toEqual({
+    id: "keep",
+    body: "Kept",
+    createdAt: "2026-09-22T00:00:00Z",
+    sender: { displayName: "Service team" },
+  });
+  expect(data.updates.map((update) => update.id)).not.toContain("no-body");
+  expect(JSON.stringify(data)).not.toContain("Fictional employee");
+  expect(JSON.stringify(data)).not.toContain("staff@example.invalid");
+  expect(JSON.stringify(data)).not.toContain(secret);
+  release();
+  await Promise.resolve();
+  window.history.replaceState(null, "", "/");
+});
+test("F063.1 a non-array update collection cannot break the tracking read", async () => {
+  window.history.replaceState(null, "", `/track#${secret}`);
+  const session = createTrackingSession();
+  const release = session.retain();
+  const fetcher = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ ...safe, updates: "x" }),
+  });
+  await expect(
+    session.load("/api/v1", undefined, fetcher),
+  ).resolves.toMatchObject({ reference: "SYNTHETIC-44", updates: [] });
+  release();
+  await Promise.resolve();
+  window.history.replaceState(null, "", "/");
 });
 test.each(["unavailable", "temporary"])(
   "F044 tracking %s is safe and retry only offered for temporary failure",

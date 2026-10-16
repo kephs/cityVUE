@@ -109,3 +109,70 @@ test('F044 actual HTTP rate limiting, privacy headers and sanitized failures pro
     delete process.env.RATE_LIMIT_TTL_MS;
   }
 });
+
+test('F063.1 a successful resident read carries updates with privacy headers intact and no staff identity', async () => {
+  process.env.NODE_ENV = 'test';
+  process.env.DATABASE_URL = 'postgresql://localhost:5432/cityvue_test';
+  process.env.DEVELOPMENT_ORGANIZATION_ID =
+    '10000000-0000-4000-8000-000000000001';
+  const [{ AppModule }, { configureApplication }] = await Promise.all([
+    import('../../src/app.module.js'),
+    import('../../src/bootstrap.js'),
+  ]);
+  const projection = {
+    reference: 'SYNTHETIC-63',
+    issue: { name: 'Fictional service', icon: null },
+    status: 'in_progress',
+    submittedAt: '2026-09-21T00:00:00.000Z',
+    serviceLocation: null,
+    description: 'Fictional description',
+    updates: [
+      {
+        id: '10000000-0000-4000-8000-000000000009',
+        body: 'Fictional update for the requester',
+        createdAt: '2026-09-21T01:00:00.000Z',
+        direction: 'outbound',
+        channel: 'portal',
+        deliveryState: 'recorded',
+        sender: { displayName: 'Service team' },
+      },
+    ],
+  };
+  const module = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(DatabaseService)
+    .useValue({ status: async () => 'up' })
+    .overrideProvider(RequestTrackingService)
+    .useValue({ track: async () => projection })
+    .compile();
+  const app = module.createNestApplication({ logger: false });
+  configureApplication(app);
+  await app.init();
+  try {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/requester-tracking')
+      .set('X-Requester-Tracking', 'A'.repeat(43))
+      .expect(200);
+    assert.equal(response.headers['cache-control'], 'no-store');
+    assert.equal(response.headers['referrer-policy'], 'no-referrer');
+    assert.equal(response.headers['x-robots-tag'], 'noindex, nofollow');
+    const body = response.body as typeof projection;
+    assert.deepEqual(body.updates, projection.updates);
+    assert.equal(body.updates.length, 1);
+    assert.equal(body.updates[0]?.sender.displayName, 'Service team');
+    const serialized = JSON.stringify(body);
+    for (const forbidden of [
+      'author_display_name',
+      'author_staff_identity_id',
+      'staffIdentityId',
+      'submission_key',
+      'organization_id',
+      'A'.repeat(43),
+    ])
+      assert.ok(
+        !serialized.includes(forbidden),
+        `${forbidden} must not appear in a resident response`,
+      );
+  } finally {
+    await app.close();
+  }
+});

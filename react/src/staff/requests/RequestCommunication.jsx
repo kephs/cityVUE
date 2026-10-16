@@ -229,7 +229,11 @@ function CommunicationStream({
               Reqro records these messages, but does not currently send them to
               the requester.
             </p>
-            <p>Do not include staff-only or sensitive information.</p>
+            <p id="requester-message-visibility">
+              This message will be visible to anyone with a valid tracking link
+              for this service request. Do not include internal notes,
+              confidential information, or sensitive personal details.
+            </p>
           </aside>
           {!canCreate && unavailableReason === "requester_inactive" && (
             <p>
@@ -322,7 +326,7 @@ function CommunicationStream({
                   setError("");
                 }}
                 aria-invalid={Boolean(error && bodyError(draft))}
-                aria-describedby={`requester-message-help requester-message-count${error ? " requester-message-error" : ""}`}
+                aria-describedby={`requester-message-visibility requester-message-help requester-message-count${error ? " requester-message-error" : ""}`}
               />
               <p id="requester-message-help" className="text-body-secondary">
                 Plain text only. Added messages cannot be edited or deleted.

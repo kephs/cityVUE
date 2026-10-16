@@ -5,7 +5,11 @@ import {
 import { Injectable } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
-import { requesterStatus } from './request-tracking.domain.js';
+import {
+  requesterStatus,
+  REQUESTER_UPDATE_PAGE_SIZE,
+} from './request-tracking.domain.js';
+import { requesterCommunicationProjection } from './requester-communication.projection.js';
 
 @Injectable()
 export class RequestTrackingRepository {
@@ -94,6 +98,31 @@ export class RequestTrackingRepository {
       .where('r.organization_id', '=', token.organization_id)
       .where('r.id', '=', token.service_request_id)
       .executeTakeFirstOrThrow();
+    // F063.1: resident-visible correspondence for the credential-authorized
+    // request only. The tenant/request pair comes from the token lookup above,
+    // never from a caller. Internal notes live in request_internal_note and are
+    // not reachable from here. Direction, channel and delivery state are
+    // filtered explicitly rather than inherited from the table CHECK
+    // constraints, so relaxing a constraint later cannot widen this projection.
+    const correspondence = await trx
+      .selectFrom('request_communication')
+      .select([
+        'id',
+        'body',
+        'direction',
+        'channel',
+        'delivery_state',
+        sql<string>`created_at::text`.as('created_at'),
+      ])
+      .where('organization_id', '=', token.organization_id)
+      .where('service_request_id', '=', token.service_request_id)
+      .where('direction', '=', 'outbound')
+      .where('channel', '=', 'portal')
+      .where('delivery_state', '=', 'recorded')
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(REQUESTER_UPDATE_PAGE_SIZE)
+      .execute();
     return {
       reference: row.reference_number,
       issue: { name: row.name, icon: row.icon_key },
@@ -101,6 +130,18 @@ export class RequestTrackingRepository {
       submittedAt: new Date(row.submitted_at).toISOString(),
       serviceLocation: row.service_location,
       description: row.description,
+      // Eligibility is carried from the row itself, never asserted here, so
+      // only what the query admitted can reach resident visibility.
+      updates: correspondence.map((message) =>
+        requesterCommunicationProjection({
+          id: message.id,
+          body: message.body,
+          createdAt: new Date(message.created_at).toISOString(),
+          direction: message.direction,
+          channel: message.channel,
+          deliveryState: message.delivery_state,
+        }),
+      ),
     };
   }
 }
