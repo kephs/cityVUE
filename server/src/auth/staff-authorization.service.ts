@@ -2,11 +2,51 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service.js';
 import type { EntraPrincipal } from './entra-token.service.js';
 import { effectivePermissions } from './effective-permissions.js';
-import { type Permission, type StaffAccess } from './auth.types.js';
+import {
+  type Permission,
+  type RequesterAccess,
+  type StaffAccess,
+} from './auth.types.js';
 
 @Injectable()
 export class StaffAuthorizationService {
   constructor(private readonly database: DatabaseService) {}
+
+  /**
+   * F064.1: resolve an authenticated principal to a requester identity.
+   *
+   * Reuses this service's identity lookup, but returns the narrow
+   * RequesterAccess instead of a StaffAccess, so no permission, department or
+   * division grant is ever loaded for a requester path. The organization comes
+   * from the provisioned row, never from the token, and both the identity and
+   * the organization must be active, so deactivating either revokes access
+   * here rather than deeper in a query.
+   */
+  async resolveRequesterIdentity(
+    principal: EntraPrincipal,
+  ): Promise<RequesterAccess> {
+    const row = await this.database.client
+      .selectFrom('staff_identity as identity')
+      .innerJoin(
+        'organization as organization',
+        'organization.id',
+        'identity.organization_id',
+      )
+      .select(['identity.id', 'identity.organization_id'])
+      .where('identity.entra_tenant_id', '=', principal.tenantId)
+      .where('identity.entra_object_id', '=', principal.objectId)
+      .where('identity.active', '=', true)
+      .where('organization.status', '=', 'active')
+      .executeTakeFirst();
+    if (!row)
+      throw new ForbiddenException('CityVUE access has not been provisioned');
+    return Object.freeze({
+      tenantId: principal.tenantId,
+      objectId: principal.objectId,
+      staffIdentityId: row.id,
+      organizationId: row.organization_id,
+    });
+  }
   async resolve(principal: EntraPrincipal): Promise<StaffAccess> {
     const staff = await this.database.client
       .selectFrom('staff_identity')

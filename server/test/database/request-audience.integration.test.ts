@@ -25,6 +25,7 @@ import {
 import { checkAttachments } from './attachment-checks.js';
 import { checkRequestCommunications } from './request-communication-checks.js';
 import { checkRequestTracking } from './request-tracking-checks.js';
+import { checkInternalRequester } from './internal-requester-checks.js';
 import { checkRequestOwnership } from './request-ownership-checks.js';
 import { checkRequestContact } from './request-contact-checks.js';
 import { checkPublicRequestContact } from './public-request-contact-checks.js';
@@ -2196,6 +2197,20 @@ test(
           otherOrg,
           otherStaff,
           department,
+          publicPayload: assisted,
+          internalPayload: internal,
+          logs: contactLogs,
+        });
+        await checkInternalRequester(t, {
+          app,
+          db,
+          org,
+          creator,
+          department,
+          targetDepartment,
+          otherInternal,
+          otherOrg,
+          otherStaff,
           publicPayload: assisted,
           internalPayload: internal,
           logs: contactLogs,
