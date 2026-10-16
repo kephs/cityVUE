@@ -826,6 +826,11 @@ test("protected saved preview reuses frozen content and intercepts links, calls,
     name: "Unpublished Preview",
   });
   expect(dialog.querySelectorAll(".reqro-action-card")).toHaveLength(3);
+  // The preview applies the document title from an effect. findBy resolves on
+  // the commit that adds the dialog, and async queries run with the act
+  // environment disabled, so the effect is still queued at this point; flush
+  // it instead of relying on the scheduler winning that race.
+  await act(async () => {});
   expect(document.title).toBe("Unpublished preview | Reqro Administration");
   expect(screen.getByRole("link", { name: "240-314-8567" })).toHaveAttribute(
     "href",

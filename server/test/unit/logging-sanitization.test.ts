@@ -329,8 +329,22 @@ test('migration, seed and API startup configuration failures never echo credenti
           DATABASE_SSL_CA_FILE: sentinel,
         },
         encoding: 'utf8',
-        timeout: 10000,
+        // The CLI entry points reject the configuration after a thin
+        // bootstrap, but main.js builds the whole application graph first, so
+        // it is the only child here that outgrew a shared budget once test
+        // files run concurrently. Measured on this host: the CLI children take
+        // 0.7s idle and 2.2s under 2.5x CPU oversubscription, main.js 3.7s and
+        // 7.7s. Allow main.js the budget development-startup.test.ts already
+        // allows a full bootstrap and keep the CLI children tightly bounded.
+        timeout: script === 'main.js' ? 60000 : 10000,
       },
+    );
+    // A killed child otherwise reports `null !== 1`, which reads like a
+    // redaction failure rather than a child that never finished.
+    assert.equal(
+      result.error === undefined,
+      true,
+      `${script}: ${result.error?.name ?? ''} ${result.error?.message ?? ''}`,
     );
     assert.equal(
       result.status,
