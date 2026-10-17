@@ -8,9 +8,12 @@ param workloadProfileMaximumCount int
 param frontendCpu string
 param frontendMemory string
 
-@description('Published Reqro image only: <approved-registry>/<reqro-image>@sha256:<64 lowercase hex>; registry and SBOM/vulnerability/publication gates must pass. Not the upstream NGINX base.')
-@minLength(74)
-param frontendImageReference string
+@description('Published Reqro frontend digest: exactly 64 lowercase hex, without prefix; SBOM, scan, signature and publication gates must pass.')
+@minLength(64)
+@maxLength(64)
+param frontendImageDigest string
+param registryLoginServer string
+param pullIdentityId string
 
 resource environment 'Microsoft.App/managedEnvironments@2026-07-01' = {
   name: '${namingPrefix}-frontend-env'
@@ -35,10 +38,28 @@ resource environment 'Microsoft.App/managedEnvironments@2026-07-01' = {
 resource frontend 'Microsoft.App/containerApps@2025-01-01' = {
   name: '${namingPrefix}-frontend'
   location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${pullIdentityId}': {}
+    }
+  }
   properties: {
     environmentId: environment.id
     workloadProfileName: workloadProfileName
     configuration: {
+      registries: [
+        {
+          server: registryLoginServer
+          identity: pullIdentityId
+        }
+      ]
+      identitySettings: [
+        {
+          identity: pullIdentityId
+          lifecycle: 'None'
+        }
+      ]
       ingress: {
         // External to this INTERNAL environment, never public environment access.
         external: true
@@ -51,7 +72,7 @@ resource frontend 'Microsoft.App/containerApps@2025-01-01' = {
       containers: [
         {
           name: 'frontend'
-          image: frontendImageReference
+          image: '${registryLoginServer}/reqro/frontend@sha256:${frontendImageDigest}'
           resources: {
             cpu: json(frontendCpu)
             memory: frontendMemory

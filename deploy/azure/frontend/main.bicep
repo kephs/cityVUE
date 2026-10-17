@@ -19,6 +19,12 @@ param vnetAddressPrefix string
 param infrastructureSubnetPrefix string
 @description('Approved distinct nondelegated private endpoint subnet CIDR.')
 param privateEndpointSubnetPrefix string
+@description('Approved distinct nondelegated ACR private endpoint subnet CIDR; never the ACA or CI subnet.')
+param acrPrivateEndpointSubnetPrefix string
+@description('Approved globally unique ACR name, alphanumeric only; no deployment default.')
+@minLength(5)
+@maxLength(50)
+param registryName string
 
 @description('Approved workload profile name; capacity is an explicit deployment decision.')
 param workloadProfileName string
@@ -35,9 +41,10 @@ param frontendCpu string
 @minLength(1)
 param frontendMemory string
 
-@description('REQUIRED: published Reqro runtime image <approved-registry>/<reqro-image>@sha256:<64 lowercase hex>. No floating tag or upstream NGINX base. Registry, SBOM, vulnerability review and verified immutable publication must precede supplying this value.')
-@minLength(74)
-param frontendImageReference string
+@description('REQUIRED: reviewed published Reqro frontend SHA-256 digest, exactly 64 lowercase hex characters without prefix. Registry, SBOM, scan and signature evidence must precede activation. Image registry and reqro/frontend repository are fixed by the modules.')
+@minLength(64)
+@maxLength(64)
+param frontendImageDigest string
 
 @description('Approved Log Analytics SKU; no production default.')
 param logAnalyticsSku string
@@ -69,6 +76,18 @@ module network './modules/network.bicep' = if (deploymentEnabled) {
     vnetAddressPrefix: vnetAddressPrefix
     infrastructureSubnetPrefix: infrastructureSubnetPrefix
     privateEndpointSubnetPrefix: privateEndpointSubnetPrefix
+    acrPrivateEndpointSubnetPrefix: acrPrivateEndpointSubnetPrefix
+  }
+}
+
+module registry './modules/registry.bicep' = if (deploymentEnabled) {
+  name: 'frontend-registry'
+  params: {
+    location: location
+    namingPrefix: namingPrefix
+    registryName: registryName
+    vnetId: network.?outputs.vnetId ?? ''
+    acrPrivateEndpointSubnetId: network.?outputs.acrPrivateEndpointSubnetId ?? ''
   }
 }
 
@@ -84,7 +103,9 @@ module origin './modules/static-origin.bicep' = if (deploymentEnabled) {
     workloadProfileMaximumCount: workloadProfileMaximumCount
     frontendCpu: frontendCpu
     frontendMemory: frontendMemory
-    frontendImageReference: frontendImageReference
+    frontendImageDigest: frontendImageDigest
+    registryLoginServer: registry.?outputs.loginServer ?? ''
+    pullIdentityId: registry.?outputs.pullIdentityId ?? ''
   }
 }
 

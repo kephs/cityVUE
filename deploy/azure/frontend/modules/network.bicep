@@ -3,6 +3,7 @@ param namingPrefix string
 param vnetAddressPrefix string
 param infrastructureSubnetPrefix string
 param privateEndpointSubnetPrefix string
+param acrPrivateEndpointSubnetPrefix string
 
 resource vnet 'Microsoft.Network/virtualNetworks@2025-01-01' = {
   name: '${namingPrefix}-frontend-vnet'
@@ -14,6 +15,14 @@ resource vnet 'Microsoft.Network/virtualNetworks@2025-01-01' = {
       ]
     }
     subnets: [
+      {
+        name: 'acr-private-endpoints'
+        properties: {
+          addressPrefix: acrPrivateEndpointSubnetPrefix
+          delegations: []
+          privateEndpointNetworkPolicies: 'Disabled'
+        }
+      }
       {
         name: 'aca-infrastructure'
         properties: {
@@ -43,3 +52,4 @@ resource vnet 'Microsoft.Network/virtualNetworks@2025-01-01' = {
 output vnetId string = vnet.id
 output infrastructureSubnetId string = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'aca-infrastructure')
 output privateEndpointSubnetId string = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'private-endpoints')
+output acrPrivateEndpointSubnetId string = resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'acr-private-endpoints')
