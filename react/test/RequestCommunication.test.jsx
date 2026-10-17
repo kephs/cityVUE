@@ -46,6 +46,45 @@ const props = (repo) => ({
   onAccessFailure: vi.fn(),
 });
 
+test("F063.1 the composer warns that correspondence is visible to a tracking-link holder", async () => {
+  const repo = repository();
+  render(<RequestCommunication {...props(repo)} />);
+  await screen.findByText("Fictional staff");
+  const warning = screen.getByText(
+    /This message will be visible to anyone with a valid tracking link for this service request\./,
+  );
+  expect(warning).toBeInTheDocument();
+  expect(warning).toHaveTextContent(
+    /Do not include internal notes, confidential information, or sensitive personal details\./,
+  );
+  // The warning sits in the authoring context and is announced with the field.
+  const composer = screen.getByLabelText("Message");
+  expect(composer.getAttribute("aria-describedby")?.split(" ")).toContain(
+    warning.id,
+  );
+  expect(
+    screen.getByRole("complementary", {
+      name: "About Requester Communication",
+    }),
+  ).toContainElement(warning);
+  // Internal notes remain a separate surface, and no permission is implied.
+  expect(
+    screen.queryByRole("heading", { name: "Internal Notes" }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Internal Note")).toBeNull();
+});
+test("F063.1 the visibility warning is shown without implying any new staff permission", async () => {
+  const repo = repository();
+  render(<RequestCommunication {...props(repo)} canCreate={false} />);
+  await screen.findByText("Fictional staff");
+  expect(
+    screen.getByText(/This message will be visible to anyone/),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /Add Message/ }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Message")).toBeNull();
+});
 test("F042 authorized stream renders plain multiline Unicode, safe author and semantic timestamp", async () => {
   const repo = repository();
   const { container } = render(<RequestCommunication {...props(repo)} />);

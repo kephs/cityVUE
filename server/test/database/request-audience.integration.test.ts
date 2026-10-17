@@ -2193,6 +2193,8 @@ test(
           org,
           creator,
           otherInternal,
+          otherOrg,
+          otherStaff,
           department,
           publicPayload: assisted,
           internalPayload: internal,

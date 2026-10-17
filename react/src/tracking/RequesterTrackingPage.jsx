@@ -100,6 +100,32 @@ export default function RequesterTrackingPage({
             <h2>Description</h2>
             <p className="tracking-description">{state.data.description}</p>
           </section>
+          <section>
+            <h2>Updates from the Service Team</h2>
+            {state.data.updates?.length ? (
+              <ol
+                className="tracking-updates"
+                aria-label="Updates from the service team, newest first"
+              >
+                {state.data.updates.map((update) => (
+                  <li key={update.id} className="tracking-update">
+                    <div className="tracking-update-attribution">
+                      <strong>{update.sender.displayName}</strong>
+                      <time dateTime={update.createdAt}>
+                        {new Date(update.createdAt).toLocaleString()}
+                      </time>
+                    </div>
+                    <p className="tracking-update-body">{update.body}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p>
+                There are no updates yet. Any updates the service team adds to
+                this request will appear here.
+              </p>
+            )}
+          </section>
         </article>
       )}
     </main>

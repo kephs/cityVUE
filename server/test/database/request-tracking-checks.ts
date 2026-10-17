@@ -29,6 +29,8 @@ export async function checkRequestTracking(
     org: string;
     creator: string;
     otherInternal: string;
+    otherOrg: string;
+    otherStaff: string;
     department: string;
     publicPayload: object;
     internalPayload: object;
@@ -321,6 +323,8 @@ export async function checkRequestTracking(
         'requesterGeography',
       ])
         assert.equal(field in result.body, false);
+      // F063.1 adds exactly one approved key. The assertion stays an exact
+      // whitelist, so any further field still fails here.
       assert.deepEqual(Object.keys(result.body).sort(), [
         'description',
         'issue',
@@ -328,6 +332,7 @@ export async function checkRequestTracking(
         'serviceLocation',
         'status',
         'submittedAt',
+        'updates',
       ]);
       assert.deepEqual(Object.keys(responseBody(result).issue).sort(), [
         'icon',
@@ -494,6 +499,169 @@ export async function checkRequestTracking(
             .execute(),
         );
       await assert.rejects(db.transaction().execute(down));
+    },
+  );
+  await t.test(
+    'F063.1 resident updates are bounded, ordered, request/tenant scoped and carry no staff or internal data',
+    async () => {
+      const issued = responseBody(
+        await change('issue', responseBody(await state()).version).expect(201),
+      );
+      const updatesFor = async (credential: string) => {
+        const response = await track(credential).expect(200);
+        const body = response.body as {
+          updates: {
+            id: string;
+            body: string;
+            createdAt: string;
+            sender: { displayName: string };
+          }[];
+        };
+        return { body, updates: body.updates, raw: JSON.stringify(body) };
+      };
+      // A request with no correspondence reports an empty collection, never a
+      // missing field the requester page would have to guess at.
+      assert.deepEqual((await updatesFor(issued.credential)).updates, []);
+      const correspond = async (
+        requestId: string,
+        organizationId: string,
+        author: string,
+        body: string,
+        minute: number,
+      ) => {
+        const messageId = randomUUID();
+        await sql`insert into request_communication(id,organization_id,service_request_id,author_staff_identity_id,author_display_name,submission_key,body,created_at)
+          values(${messageId},${organizationId},${requestId},${author},'Fictional employee',${randomUUID()},${body},${`2026-09-21T00:${String(minute).padStart(2, '0')}:00Z`}::timestamptz)`.execute(
+          db,
+        );
+        return messageId;
+      };
+      // One more than the ceiling, so the oldest must fall outside the page.
+      const authored: string[] = [];
+      for (let minute = 0; minute < 26; minute++)
+        authored.push(
+          await correspond(
+            id,
+            org,
+            full,
+            `Fictional update ${String(minute)}`,
+            minute,
+          ),
+        );
+      // Same tenant, a different request.
+      await correspond(internal, org, full, 'OTHER_REQUEST_BODY', 30);
+      // A different tenant entirely, authored by that tenant's own staff.
+      await correspond(
+        c.otherInternal,
+        c.otherOrg,
+        c.otherStaff,
+        'OTHER_TENANT_BODY',
+        31,
+      );
+      // An internal note on the very same request must stay unreachable.
+      await sql`insert into request_internal_note(id,organization_id,service_request_id,author_staff_identity_id,author_display_name,submission_key,body)
+        values(${randomUUID()},${org},${id},${full},'Fictional employee',${randomUUID()},'INTERNAL_NOTE_BODY')`.execute(
+        db,
+      );
+      const { updates, raw } = await updatesFor(issued.credential);
+      assert.equal(updates.length, 25, 'the fixed ceiling bounds the page');
+      assert.deepEqual(
+        updates.map((update) => update.id),
+        authored.slice(1).reverse(),
+        'newest first by created_at then id, oldest beyond the ceiling dropped',
+      );
+      assert.deepEqual(
+        updates.map((update) => update.sender.displayName),
+        Array.from({ length: 25 }, () => 'Service team'),
+        'staff identity stays masked behind a generic label',
+      );
+      for (const update of updates)
+        assert.deepEqual(
+          Object.keys(update).sort(),
+          [
+            'body',
+            'channel',
+            'createdAt',
+            'deliveryState',
+            'direction',
+            'id',
+            'sender',
+          ],
+          'each entry exposes only the agreed resident-safe fields',
+        );
+      for (const forbidden of [
+        'OTHER_REQUEST_BODY',
+        'OTHER_TENANT_BODY',
+        'INTERNAL_NOTE_BODY',
+        'Fictional employee',
+        'author_display_name',
+        'author_staff_identity_id',
+        'submission_key',
+        'organization_id',
+        'service_request_id',
+        full,
+        c.otherOrg,
+        c.otherStaff,
+        org,
+      ])
+        assert.ok(
+          !raw.includes(forbidden),
+          `${forbidden} must never reach a requester`,
+        );
+      // A revoked credential loses the correspondence with the request.
+      const live = responseBody(await state()).version;
+      await change('revoke', live).expect(201);
+      await track(issued.credential).expect(404);
+      // Reissue, confirm access returns, then prove the read mutated nothing.
+      const reissued = responseBody(
+        await change('issue', responseBody(await state()).version).expect(201),
+      );
+      const committed = JSON.stringify(
+        (await db.selectFrom('request_communication').selectAll().execute())
+          .map((row) => JSON.stringify(row))
+          .sort(),
+      );
+      await updatesFor(reissued.credential);
+      await updatesFor(reissued.credential);
+      assert.equal(
+        JSON.stringify(
+          (await db.selectFrom('request_communication').selectAll().execute())
+            .map((row) => JSON.stringify(row))
+            .sort(),
+        ),
+        committed,
+        'tracking reads never mutate correspondence',
+      );
+      // An internal-audience request stays unreachable even with a credential.
+      assert.equal(
+        (
+          await db
+            .selectFrom('request_tracking_credential')
+            .select('id')
+            .where('service_request_id', '=', internal)
+            .execute()
+        ).length,
+        0,
+        'no credential can exist for an internal request',
+      );
+      await change('revoke', responseBody(await state()).version).expect(201);
+      const evidence = JSON.stringify(
+        await db
+          .selectFrom('activity')
+          .selectAll()
+          .where('activity_type', 'like', 'requester_tracking_%')
+          .execute(),
+      );
+      for (const secret of [
+        issued.credential,
+        reissued.credential,
+        trackingDigest(issued.credential),
+        trackingDigest(reissued.credential),
+      ])
+        assert.ok(
+          !(evidence + c.logs.join('')).includes(secret),
+          'credentials and digests stay out of audit and logs',
+        );
     },
   );
 }

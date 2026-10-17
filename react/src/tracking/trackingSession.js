@@ -1,3 +1,30 @@
+/**
+ * F063.1: resident-visible updates are re-whitelisted here, so only the four
+ * fields the page renders can reach UI state even if the response carries more.
+ * A malformed entry is dropped rather than failing the whole read, because the
+ * status and reference remain useful on their own; the server bound of 25 is
+ * also enforced locally so a larger response cannot grow the page.
+ */
+const UPDATE_LIMIT = 25;
+function safeUpdates(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (update) =>
+        typeof update?.id === "string" &&
+        typeof update.body === "string" &&
+        typeof update.sender?.displayName === "string" &&
+        Number.isFinite(Date.parse(update.createdAt)),
+    )
+    .slice(0, UPDATE_LIMIT)
+    .map((update) => ({
+      id: update.id,
+      body: update.body,
+      createdAt: update.createdAt,
+      sender: { displayName: update.sender.displayName },
+    }));
+}
+
 // Evaluated before router construction. Never put this secret in router/global UI state.
 export function createTrackingSession(browser = window) {
   let credential =
@@ -95,6 +122,7 @@ export function createTrackingSession(browser = window) {
         submittedAt: data.submittedAt,
         description: data.description,
         serviceLocation: data.serviceLocation,
+        updates: safeUpdates(data.updates),
       };
     },
   };

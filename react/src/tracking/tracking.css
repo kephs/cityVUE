@@ -21,11 +21,39 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+.tracking-updates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.tracking-update {
+  border-left: 3px solid currentColor;
+  padding-left: 0.75rem;
+}
+.tracking-update-attribution {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.tracking-update-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-bottom: 0;
+}
 @media (max-width: 480px) {
   .requester-tracking-page {
     margin: 1rem auto;
   }
   .tracking-issue {
     align-items: flex-start;
+  }
+  .tracking-update-attribution {
+    flex-direction: column;
+    justify-content: flex-start;
   }
 }
