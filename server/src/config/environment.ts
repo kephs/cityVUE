@@ -43,6 +43,7 @@ export interface EnvironmentVariables {
   TENANT_TRUSTED_PROXY_CIDRS: string;
   DEVELOPMENT_ORGANIZATION_ID?: string;
   ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS: boolean;
+  REQRO_ENABLE_REQUESTER_INTAKE_TRACKING: boolean;
   ENABLE_DEVELOPMENT_STAFF_ACTIONS: boolean;
   DEVELOPMENT_STAFF_ACTOR_ID: string;
   LOCATION_ELIGIBILITY_PROVIDER: 'disabled' | 'development';
@@ -126,6 +127,12 @@ const environmentSchema = Joi.object<EnvironmentVariables>({
   RATE_LIMIT_MAX: Joi.number().integer().min(1).default(120),
   OTEL_SERVICE_NAME: Joi.string().trim().min(1).default('cityvue-api'),
   REQRO_REQUEST_METRICS_ENABLED: Joi.boolean()
+    .truthy('true')
+    .falsy('false')
+    .default(false),
+  // F065 automatic requester-intake tracking issuance. Absent means OFF; an
+  // uninterpretable value is refused at startup rather than guessed.
+  REQRO_ENABLE_REQUESTER_INTAKE_TRACKING: Joi.boolean()
     .truthy('true')
     .falsy('false')
     .default(false),

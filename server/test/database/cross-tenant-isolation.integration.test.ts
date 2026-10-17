@@ -227,6 +227,9 @@ test(
             credential_digest: trackingDigest(credential),
             status: 'active',
             created_by_staff_identity_id: staffIdentity,
+            // F065: issuer attribution is explicit. This fixture represents a
+            // staff-issued credential, so it keeps its staff author.
+            issuer_type: 'staff',
           } as never)
           .execute();
         return { org, category, service, version, request, area, credential };

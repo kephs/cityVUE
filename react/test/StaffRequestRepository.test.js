@@ -275,14 +275,23 @@ test("F044 tracking projection excludes raw secrets from state and scopes issuan
     }),
   };
   const repo = createStaffRequestRepository({ client });
+  // F065 adds safe management metadata. The private fields the response
+  // carried -- credentialDigest, actor -- are still excluded, and the
+  // credential reaches state only through an explicit mutation below.
   expect(await repo.trackingState(id)).toEqual({
     status: "active",
     version: id,
+    expired: false,
+    expiresAt: null,
+    issuerType: null,
   });
   expect(await repo.changeTracking(id, "rotate", id)).toEqual({
     status: "active",
     version: id,
     credential: secret,
+    expired: false,
+    expiresAt: null,
+    issuerType: null,
   });
   expect(client.post).toHaveBeenCalledWith(
     "/staff/service-requests/" + id + "/requester-tracking/rotate",
@@ -293,4 +302,42 @@ test("F044 tracking projection excludes raw secrets from state and scopes issuan
   await expect(repo.trackingState(id)).rejects.toThrow();
   client.post.mockResolvedValue({ status: "active", version: id });
   await expect(repo.changeTracking(id, "issue", null)).rejects.toThrow();
+});
+
+test("F065 the tracking projection admits only well-formed expiry metadata", async () => {
+  const client = {
+    get: vi.fn(),
+    post: vi.fn(),
+  };
+  const repo = createStaffRequestRepository({ client });
+  // A malformed expiry or an unknown issuer is dropped rather than shown.
+  client.get.mockResolvedValue({
+    status: "active",
+    version: id,
+    expired: "yes",
+    expiresAt: "not-a-date",
+    issuerType: "borrowed",
+  });
+  expect(await repo.trackingState(id)).toEqual({
+    status: "active",
+    version: id,
+    expired: false,
+    expiresAt: null,
+    issuerType: null,
+  });
+  // Well-formed values pass through unchanged.
+  client.get.mockResolvedValue({
+    status: "active",
+    version: id,
+    expired: true,
+    expiresAt: "2027-04-14T12:00:00.000Z",
+    issuerType: "requester_intake",
+  });
+  expect(await repo.trackingState(id)).toEqual({
+    status: "active",
+    version: id,
+    expired: true,
+    expiresAt: "2027-04-14T12:00:00.000Z",
+    issuerType: "requester_intake",
+  });
 });

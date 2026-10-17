@@ -151,6 +151,15 @@ export class CreateServiceRequestResponseDto {
   @ApiProperty({ example: 'SR-202609-000001' }) referenceNumber!: string;
   @ApiProperty({ enum: ['open'] }) status!: string;
   @ApiProperty({ format: 'date-time' }) createdAt!: Date;
+  /**
+   * F065: present only on a genuine first creation of a resident PUBLIC
+   * submission while intake issuance is enabled. Absent on an idempotent
+   * replay, on INTERNAL requests, on staff or provider intake, and whenever
+   * the feature is off. The raw credential is returned exactly once and is
+   * unrecoverable afterwards, because only its digest is stored.
+   */
+  @ApiPropertyOptional({ type: Object })
+  tracking?: { credential: string; expiresAt: string };
 }
 
 export class ServiceRequestDetailsResponseDto {

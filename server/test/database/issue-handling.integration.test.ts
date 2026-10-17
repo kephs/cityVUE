@@ -575,10 +575,10 @@ test(
         'resident and authorized staff contexts enforce availability independently of API channel',
         async () => {
           const creator = new CreateServiceRequestService(
-            { get: () => org } as unknown as ConfigService<
-              AppConfiguration,
-              true
-            >,
+            {
+              get: (key: string) =>
+                key === 'requesterTracking.intakeIssuanceEnabled' ? false : org,
+            } as unknown as ConfigService<AppConfiguration, true>,
             { client: db } as DatabaseService,
             new ServiceRequestRepository(),
             {
@@ -733,10 +733,10 @@ test(
             return result;
           };
           const creator = new CreateServiceRequestService(
-            { get: () => org } as unknown as ConfigService<
-              AppConfiguration,
-              true
-            >,
+            {
+              get: (key: string) =>
+                key === 'requesterTracking.intakeIssuanceEnabled' ? false : org,
+            } as unknown as ConfigService<AppConfiguration, true>,
             { client: db } as DatabaseService,
             repository,
             {

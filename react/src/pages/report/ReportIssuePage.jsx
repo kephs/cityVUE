@@ -19,6 +19,8 @@ import {
 import { createResidentIntakeRepositories } from "../../residentIntake/residentIntakeRepositories.js";
 import { resolveIssueIcon } from "../issues/issueIconPresentation.js";
 import IssueForm from "./IssueForm.jsx";
+import SubmissionTracking from "./SubmissionTracking.jsx";
+import { StatusBadge } from "../../components/ui/RequestPresentation.jsx";
 import ParticipationInput from "../../residentIntake/ParticipationInput.jsx";
 import "./report.css";
 
@@ -436,12 +438,21 @@ export default function ReportIssuePage({
               {result.referenceNumber}
             </p>
             <p>Save this reference for future communication.</p>
+            {result.status && (
+              <p>
+                <span className="visually-hidden">Current status</span>
+                <StatusBadge value={result.status} />
+              </p>
+            )}
             <p>{service?.name}</p>
             {values.location && (
               <dl>
                 <dt>Service Location</dt>
                 <dd>{values.location.trim()}</dd>
               </dl>
+            )}
+            {data.mode === "api" && (
+              <SubmissionTracking tracking={result.tracking} />
             )}
             {data.mode === "api" && data.detailsEnabled && result.id && (
               <button

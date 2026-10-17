@@ -341,8 +341,9 @@ test(
           // F062.2D-2C-3A's Migration 56 does hardcode `public.`, so like
           // Migrations 48, 49 and 53 it is applied as text and not compiled.
           // F062.2D-2C-3B-1's Migration 57 hardcodes no schema name either,
-          // so it compiles and is applied here with the rest.
-          assert.equal(files.length, 54);
+          // so it compiles and is applied here with the rest, as do
+          // F062.2D-2C-3B-2's Migration 58 and F065's Migration 59.
+          assert.equal(files.length, 55);
           for (const file of files) {
             const migration = (await import(
               path

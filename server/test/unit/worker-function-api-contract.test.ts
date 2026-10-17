@@ -461,7 +461,7 @@ function importsMigration(source: string, file: string): boolean {
 
 test('the hardcoded-public migrations are applied as text, so no test may import them', () => {
   const files = readdirSync(MIGRATIONS).filter((file) => file.endsWith('.ts'));
-  assert.equal(files.length, 58, 'the repository holds 58 migrations');
+  assert.equal(files.length, 59, 'the repository holds 59 migrations');
   for (const file of HARDCODED_PUBLIC)
     assert.ok(files.includes(file), `${file} is missing`);
   // F062.2D-2C-3B-1's Migration 57 is deliberately NOT in the set above: it
@@ -501,6 +501,25 @@ test('the hardcoded-public migrations are applied as text, so no test may import
     ),
     false,
     'Migration 58 must not hardcode the public schema',
+  );
+  // F065's Migration 59 follows the same precedent for the same reason: the
+  // requester tracking suite imports and applies it to a disposable schema,
+  // which is only safe while it qualifies nothing.
+  const INTAKE_TRACKING_MIGRATION =
+    '20261030000000-add-requester-intake-tracking-issuance.ts';
+  assert.ok(files.includes(INTAKE_TRACKING_MIGRATION));
+  assert.equal(
+    HARDCODED_PUBLIC.includes(INTAKE_TRACKING_MIGRATION),
+    false,
+    'Migration 59 must not be treated as a hardcoded-public migration',
+  );
+  assert.equal(
+    readFileSync(
+      resolve(MIGRATIONS, INTAKE_TRACKING_MIGRATION),
+      'utf8',
+    ).includes('public.'),
+    false,
+    'Migration 59 must not hardcode the public schema',
   );
   // Migrations are compiled into the test output only when a test imports
   // them statically, and a migration hardcoding `public.` must not be

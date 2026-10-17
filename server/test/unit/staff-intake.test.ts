@@ -34,7 +34,10 @@ const access: StaffAccess = {
 
 test('staff creation service rejects absent, fallback and insufficiently authorized principals before database access', async () => {
   const config = {
-    get: () => access.organizationId,
+    get: (key: string) =>
+      key === 'requesterTracking.intakeIssuanceEnabled'
+        ? false
+        : access.organizationId,
   } as unknown as ConfigService<AppConfiguration, true>;
   // An absent database deliberately makes any accidental persistence access fail.
   const service = new CreateServiceRequestService(

@@ -36,7 +36,23 @@ function trackingProjection(row, operation) {
       : !uuid.test(row.version))
   )
     throw invalid();
-  const result = { status: row.status, version: row.version };
+  const result = {
+    status: row.status,
+    version: row.version,
+    // F065 safe management metadata only -- never a digest or a usable link.
+    // Expiry is derived server-side from the database clock, so an expired
+    // credential still reports status "active": expiry is a predicate here,
+    // not a stored state.
+    expired: row.expired === true,
+    expiresAt:
+      typeof row.expiresAt === "string" &&
+      Number.isFinite(Date.parse(row.expiresAt))
+        ? row.expiresAt
+        : null,
+    issuerType: ["staff", "requester_intake"].includes(row.issuerType)
+      ? row.issuerType
+      : null,
+  };
   if (operation && operation !== "revoke") {
     if (
       row.status !== "active" ||

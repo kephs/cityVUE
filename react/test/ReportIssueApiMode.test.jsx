@@ -86,6 +86,87 @@ test("API mode loads asynchronously, submits once, and displays the API referenc
   expect(screen.getByText("100 Main Street")).toBeInTheDocument();
 });
 
+test("F065 a returned tracking credential becomes the one-time confirmation handoff", async () => {
+  const user = userEvent.setup();
+  const credential = `F065${"A".repeat(39)}`;
+  const create = vi.fn().mockResolvedValue({
+    id: "request",
+    referenceNumber: "SR-202609-000130",
+    status: "open",
+    createdAt: "2026-09-02T00:00:00Z",
+    tracking: { credential, expiresAt: "2027-04-14T12:00:00.000Z" },
+  });
+  render(
+    <MemoryRouter>
+      <ReportIssuePage repositories={apiRepositories(create)} />
+    </MemoryRouter>,
+  );
+  await completeRequest(user);
+  await user.click(screen.getByRole("button", { name: "Submit Request" }));
+  // Reference and requester-safe initial status.
+  expect(await screen.findByText("SR-202609-000130")).toBeInTheDocument();
+  expect(screen.getByText("Open")).toBeInTheDocument();
+  // The secure handoff, in the established fragment format.
+  expect(screen.getByLabelText("Your tracking link")).toHaveValue(
+    `${window.location.origin}/track#${credential}`,
+  );
+  expect(
+    screen.getByRole("button", { name: "Track Request" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Copy Tracking Link" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/stops working on/i)).toBeInTheDocument();
+  expect(screen.getByText(/shown only once/i)).toBeInTheDocument();
+  // The secret stays in component state: not in storage, the title or the URL.
+  for (const store of [window.localStorage, window.sessionStorage])
+    expect(JSON.stringify({ ...store })).not.toContain(credential);
+  expect(document.title).not.toContain(credential);
+  expect(window.location.href).not.toContain(credential);
+});
+
+test("F065 a response without a credential keeps the normal confirmation and invents no link", async () => {
+  const user = userEvent.setup();
+  const create = vi.fn().mockResolvedValue({
+    id: "request",
+    referenceNumber: "SR-202609-000131",
+    status: "open",
+    createdAt: "2026-09-02T00:00:00Z",
+  });
+  render(
+    <MemoryRouter>
+      <ReportIssuePage repositories={apiRepositories(create)} />
+    </MemoryRouter>,
+  );
+  await completeRequest(user);
+  await user.click(screen.getByRole("button", { name: "Submit Request" }));
+  expect(await screen.findByText("SR-202609-000131")).toBeInTheDocument();
+  expect(
+    screen.getByText(/not available for this submission/i),
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("Your tracking link")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Track Request" })).toBeNull();
+  expect(document.body.textContent).not.toContain("/track#");
+});
+
+test("F065 a failed submission produces no confirmation and no tracking claim", async () => {
+  const user = userEvent.setup();
+  const create = vi.fn().mockRejectedValue(new Error("network refused"));
+  render(
+    <MemoryRouter>
+      <ReportIssuePage repositories={apiRepositories(create)} />
+    </MemoryRouter>,
+  );
+  await completeRequest(user);
+  await user.click(screen.getByRole("button", { name: "Submit Request" }));
+  expect(await screen.findByText("network refused")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Request submitted successfully." }),
+  ).toBeNull();
+  expect(screen.queryByLabelText("Your tracking link")).toBeNull();
+  expect(screen.queryByText(/Track this request/)).toBeNull();
+});
+
 test("F049 required Issue hides anonymous choice and requires the existing Contact name", async () => {
   const user = userEvent.setup(),
     create = vi.fn(),

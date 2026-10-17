@@ -9,7 +9,15 @@ import {
   up,
   down,
 } from '../../migrations/20260922000000-add-requester-tracking.js';
-import { trackingDigest } from '../../src/service-request/request-tracking.domain.js';
+import {
+  up as f065Up,
+  down as f065Down,
+} from '../../migrations/20261030000000-add-requester-intake-tracking-issuance.js';
+import {
+  trackingDigest,
+  generateTrackingCredential,
+} from '../../src/service-request/request-tracking.domain.js';
+import { RequestTrackingRepository } from '../../src/service-request/request-tracking.repository.js';
 
 function responseBody(response: { body: unknown }) {
   return response.body as {
@@ -192,6 +200,101 @@ export async function checkRequestTracking(
     request(app.getHttpServer())
       .get('/api/v1/requester-tracking')
       .set('X-Requester-Tracking', credential);
+
+  // ===================================================================
+  // F065: the issuer-attribution and expiry schema is applied here, before
+  // the F044 management tests, because the application code under test now
+  // writes issuer_type and reads expires_at.
+  //
+  // Only assertions that create no credential are made here. Every F065
+  // assertion that inserts a credential is deferred to the end of this
+  // suite, because the F044 tests below count rows across the whole table.
+  // ===================================================================
+  await t.test(
+    'F065 migration gives every Organization a bounded lifetime policy and issues no credential',
+    async () => {
+      const before = await snapshot();
+      await db.transaction().execute(f065Up);
+      // Parent request data is untouched by this migration.
+      assert.deepEqual(await snapshot(), before);
+      // Migration issues nothing, which is also what keeps the F044
+      // whole-table counts below valid.
+      assert.equal(
+        (
+          await db
+            .selectFrom('request_tracking_credential')
+            .selectAll()
+            .execute()
+        ).length,
+        0,
+      );
+      const policies = await db
+        .selectFrom('request_tracking_policy')
+        .select(['credential_lifetime_days', 'revision'])
+        .execute();
+      const organizations = await db
+        .selectFrom('organization')
+        .select('id')
+        .execute();
+      assert.equal(policies.length, organizations.length);
+      for (const policy of policies) {
+        assert.equal(policy.credential_lifetime_days, 180);
+        assert.equal(policy.revision, 1);
+      }
+    },
+  );
+  await t.test(
+    'F065 a new Organization is initialized with a valid policy rather than relying on the backfill',
+    async () => {
+      const fresh = randomUUID();
+      await db
+        .insertInto('organization')
+        .values({
+          id: fresh,
+          name: 'Fictional F065 organization',
+          short_name: 'F065',
+          slug: fresh,
+          // Inactive, so this fixture cannot be resolved or served anywhere.
+          status: 'inactive',
+          default_business_timezone: 'Etc/UTC',
+        })
+        .execute();
+      const policy = await db
+        .selectFrom('request_tracking_policy')
+        .select(['credential_lifetime_days', 'revision'])
+        .where('organization_id', '=', fresh)
+        .executeTakeFirstOrThrow();
+      assert.equal(policy.credential_lifetime_days, 180);
+      assert.equal(policy.revision, 1);
+    },
+  );
+  await t.test(
+    'F065 the tenant lifetime policy is bounded at 30..365 by the database',
+    async () => {
+      for (const days of [30, 180, 365])
+        await db
+          .updateTable('request_tracking_policy')
+          .set({ credential_lifetime_days: days })
+          .where('organization_id', '=', org)
+          .execute();
+      for (const refused of [29, 366, 0, -1, 10000])
+        await assert.rejects(
+          db
+            .updateTable('request_tracking_policy')
+            .set({ credential_lifetime_days: refused })
+            .where('organization_id', '=', org)
+            .execute(),
+          /credential_lifetime_days/,
+          `${String(refused)} days must be refused by the database`,
+        );
+      // Restore the approved default, which rollback below also requires.
+      await db
+        .updateTable('request_tracking_policy')
+        .set({ credential_lifetime_days: 180 })
+        .where('organization_id', '=', org)
+        .execute();
+    },
+  );
   await t.test(
     'F044 parent/manage matrix, unrelated permissions, Organization/scope and INTERNAL are enforced',
     async () => {
@@ -234,7 +337,15 @@ export async function checkRequestTracking(
         organizationId: org,
       }).expect(400);
       const result = await state().expect(200);
-      assert.deepEqual(result.body, { status: 'not_issued', version: null });
+      assert.deepEqual(result.body, {
+        status: 'not_issued',
+        version: null,
+        // F065 safe management metadata. Nothing is issued, so there is no
+        // issuer, no expiry and nothing expired.
+        issuerType: null,
+        expired: false,
+        expiresAt: null,
+      });
     },
   );
   await t.test(
@@ -289,6 +400,11 @@ export async function checkRequestTracking(
       assert.deepEqual((await state().expect(200)).body, {
         status: 'active',
         version,
+        // F065: staff issuance, and non-expiring because the intake issuance
+        // feature is off by default, which is the shipped rollout state.
+        issuerType: 'staff',
+        expired: false,
+        expiresAt: null,
       });
       await assert.rejects(
         db
@@ -299,6 +415,8 @@ export async function checkRequestTracking(
             credential_digest: 'a'.repeat(64),
             status: 'active',
             created_by_staff_identity_id: full,
+            issuer_type: 'staff',
+            expires_at: null,
             revoked_at: null,
           })
           .execute(),
@@ -494,6 +612,8 @@ export async function checkRequestTracking(
               credential_digest: 'c'.repeat(64),
               status: 'active',
               created_by_staff_identity_id: full,
+              issuer_type: 'staff',
+              expires_at: null,
               revoked_at: null,
             })
             .execute(),
@@ -662,6 +782,248 @@ export async function checkRequestTracking(
           !(evidence + c.logs.join('')).includes(secret),
           'credentials and digests stay out of audit and logs',
         );
+    },
+  );
+
+  // ===================================================================
+  // F065 credential assertions, deliberately last: every F044 test above
+  // counts rows across the whole table, so nothing here may run earlier.
+  // ===================================================================
+  await t.test(
+    'F065 rollback preserves every credential and reapplying classifies them as staff-issued',
+    async () => {
+      const columns = [
+        'credential_digest',
+        'created_by_staff_identity_id',
+        'status',
+      ] as const;
+      const existing = await db
+        .selectFrom('request_tracking_credential')
+        .select(columns)
+        .orderBy('credential_digest', 'asc')
+        .execute();
+      assert.ok(
+        existing.length > 0,
+        'the F044 tests left real credentials for this to preserve',
+      );
+      const before = await snapshot();
+      // Rollback is allowed while nothing is requester-issued or expiring,
+      // and it discards no credential to make itself pass.
+      await db.transaction().execute(f065Down);
+      assert.deepEqual(
+        await db
+          .selectFrom('request_tracking_credential')
+          .select(columns)
+          .orderBy('credential_digest', 'asc')
+          .execute(),
+        existing,
+      );
+      // Reapplying classifies every pre-existing row as staff-issued and
+      // non-expiring, which is exactly what those rows are.
+      await db.transaction().execute(f065Up);
+      const restored = await db
+        .selectFrom('request_tracking_credential')
+        .select([...columns, 'issuer_type', 'expires_at'])
+        .orderBy('credential_digest', 'asc')
+        .execute();
+      assert.equal(restored.length, existing.length);
+      for (const [index, row] of restored.entries()) {
+        assert.equal(row.issuer_type, 'staff');
+        assert.equal(row.expires_at, null);
+        assert.equal(row.credential_digest, existing[index]?.credential_digest);
+        assert.equal(
+          row.created_by_staff_identity_id,
+          existing[index]?.created_by_staff_identity_id,
+        );
+        assert.equal(row.status, existing[index]?.status);
+        assert.ok(row.created_by_staff_identity_id);
+      }
+      assert.deepEqual(await snapshot(), before);
+    },
+  );
+  await t.test(
+    'F065 issuer attribution admits exactly the staff and requester-intake shapes',
+    async () => {
+      const parent = await create(c.publicPayload);
+      const insert = (values: Record<string, unknown>) =>
+        db
+          .insertInto('request_tracking_credential')
+          .values({
+            organization_id: org,
+            service_request_id: parent,
+            status: 'active',
+            revoked_at: null,
+            ...values,
+          } as never)
+          .execute();
+      // A staff row without an author is refused.
+      await assert.rejects(
+        insert({
+          credential_digest: 'b'.repeat(64),
+          created_by_staff_identity_id: null,
+          issuer_type: 'staff',
+        }),
+        /request_tracking_issuer_attribution/,
+      );
+      // A requester-intake row that borrows a staff author is refused.
+      await assert.rejects(
+        insert({
+          credential_digest: 'c'.repeat(64),
+          created_by_staff_identity_id: c.creator,
+          issuer_type: 'requester_intake',
+        }),
+        /request_tracking_issuer_attribution/,
+      );
+      // An unknown issuer classification is refused.
+      await assert.rejects(
+        insert({
+          credential_digest: 'd'.repeat(64),
+          created_by_staff_identity_id: null,
+          issuer_type: 'borrowed',
+        }),
+        /issuer_type/,
+      );
+      // An expiry at or before creation is refused.
+      await assert.rejects(
+        insert({
+          credential_digest: 'e'.repeat(64),
+          created_by_staff_identity_id: null,
+          issuer_type: 'requester_intake',
+          expires_at: sql`clock_timestamp() - interval '1 day'`,
+        }),
+        /request_tracking_expiry_after_issue/,
+      );
+      // The accepted requester-intake shape: no staff author, bounded expiry.
+      await insert({
+        credential_digest: 'f'.repeat(64),
+        created_by_staff_identity_id: null,
+        issuer_type: 'requester_intake',
+        expires_at: sql`clock_timestamp() + make_interval(days => 180)`,
+      });
+      const stored = await db
+        .selectFrom('request_tracking_credential')
+        .select([
+          'issuer_type',
+          'created_by_staff_identity_id',
+          sql<boolean>`expires_at > clock_timestamp()`.as('future'),
+        ])
+        .where('credential_digest', '=', 'f'.repeat(64))
+        .executeTakeFirstOrThrow();
+      assert.equal(stored.issuer_type, 'requester_intake');
+      assert.equal(stored.created_by_staff_identity_id, null);
+      assert.equal(stored.future, true);
+      // Issuer type and expiry join the immutable set; only revocation moves.
+      for (const mutation of [{ issuer_type: 'staff' }, { expires_at: null }])
+        await assert.rejects(
+          db
+            .updateTable('request_tracking_credential')
+            .set(mutation as never)
+            .where('credential_digest', '=', 'f'.repeat(64))
+            .execute(),
+          /immutable except revocation/,
+        );
+      // A second active credential for one parent is still impossible.
+      await assert.rejects(
+        insert({
+          credential_digest: '0'.repeat(64),
+          created_by_staff_identity_id: null,
+          issuer_type: 'requester_intake',
+          expires_at: sql`clock_timestamp() + make_interval(days => 180)`,
+        }),
+        /request_tracking_one_active/,
+      );
+    },
+  );
+  await t.test(
+    'F065 an INTERNAL parent refuses a requester-intake credential at the database',
+    async () => {
+      await assert.rejects(
+        db
+          .insertInto('request_tracking_credential')
+          .values({
+            organization_id: org,
+            service_request_id: internal,
+            credential_digest: '1'.repeat(64),
+            status: 'active',
+            created_by_staff_identity_id: null,
+            issuer_type: 'requester_intake',
+            expires_at: sql`clock_timestamp() + make_interval(days => 180)`,
+            revoked_at: null,
+          } as never)
+          .execute(),
+        /Tracking requires PUBLIC parent/,
+      );
+    },
+  );
+  await t.test(
+    'F065 expiry is enforced by the database clock, and no raw credential is stored',
+    async () => {
+      const live = generateTrackingCredential();
+      const dead = generateTrackingCredential();
+      const unknown = generateTrackingCredential();
+      const liveParent = await create(c.publicPayload);
+      const deadParent = await create(c.publicPayload);
+      await sql`insert into request_tracking_credential(organization_id,service_request_id,credential_digest,status,created_by_staff_identity_id,issuer_type,expires_at)
+        values(${org},${liveParent},${live.digest},'active',null,'requester_intake',clock_timestamp() + interval '180 days')`.execute(
+        db,
+      );
+      // Already lapsed. The CHECK only forbids expiry at or before creation,
+      // so a backdated pair is legitimate state for testing the predicate.
+      await sql`insert into request_tracking_credential(organization_id,service_request_id,credential_digest,status,created_by_staff_identity_id,issuer_type,expires_at,created_at)
+        values(${org},${deadParent},${dead.digest},'active',null,'requester_intake',clock_timestamp() - interval '1 day',clock_timestamp() - interval '2 days')`.execute(
+        db,
+      );
+      // Only digests are persisted; no column holds a usable credential.
+      for (const credential of [live.credential, dead.credential]) {
+        const found = await sql<{
+          hits: string;
+        }>`select count(*)::text as hits from request_tracking_credential where credential_digest = ${credential}`.execute(
+          db,
+        );
+        assert.equal(
+          found.rows[0]?.hits,
+          '0',
+          'a raw credential must never be stored',
+        );
+      }
+      const repository = new RequestTrackingRepository();
+      await db.transaction().execute(async (trx) => {
+        const resolved = await repository.resolve(trx, live.digest);
+        assert.ok(resolved, 'a live credential resolves');
+        assert.equal(typeof resolved.reference, 'string');
+      });
+      await db.transaction().execute(async (trx) => {
+        assert.equal(
+          await repository.resolve(trx, dead.digest),
+          null,
+          'an expired credential must not resolve',
+        );
+      });
+      // Expired and never-issued are indistinguishable over HTTP, and
+      // neither discloses that the request exists.
+      await track(live.credential).expect(200);
+      await track(dead.credential).expect(404);
+      await track(unknown.credential).expect(404);
+    },
+  );
+  await t.test(
+    'F065 rollback fails closed once requester-issued or expiring credentials exist',
+    async () => {
+      await assert.rejects(
+        db.transaction().execute(f065Down),
+        /Requester-issued or expiring tracking credentials prevent rollback/,
+      );
+      // Refusing left the schema intact rather than half-reverted, and
+      // deleted nothing to make itself pass.
+      assert.ok(
+        (
+          await db
+            .selectFrom('request_tracking_credential')
+            .select('credential_digest')
+            .where('issuer_type', '=', 'requester_intake')
+            .execute()
+        ).length > 0,
+      );
     },
   );
 }

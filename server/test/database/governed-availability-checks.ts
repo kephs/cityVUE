@@ -105,7 +105,10 @@ export async function governedAvailabilityChecks(
   };
   const creator = (repository = new ServiceRequestRepository()) =>
     new CreateServiceRequestService(
-      { get: () => org } as unknown as ConfigService<AppConfiguration, true>,
+      {
+        get: (key: string) =>
+          key === 'requesterTracking.intakeIssuanceEnabled' ? false : org,
+      } as unknown as ConfigService<AppConfiguration, true>,
       { client: db } as DatabaseService,
       repository,
       {
