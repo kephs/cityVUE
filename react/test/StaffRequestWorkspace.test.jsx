@@ -449,15 +449,19 @@ test.each([401, 404])(
     closeDialog();
     repository.notes.mockRejectedValue({ status });
     fireEvent.click(screen.getByRole("button", { name: "Refresh notes" }));
-    await waitFor(() =>
+    // Notes clear their own list first and only then propagate the denial to
+    // the workspace, which drops the parent and contact in a second commit, so
+    // all three have to be awaited together rather than the first one standing
+    // in for the rest.
+    await waitFor(() => {
       expect(
         screen.queryByText("F041 fictional collaboration"),
-      ).not.toBeInTheDocument(),
-    );
-    expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: row.issueName }),
-    ).not.toBeInTheDocument();
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("alex@example.com")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: row.issueName }),
+      ).not.toBeInTheDocument();
+    });
   },
 );
 
@@ -1953,7 +1957,20 @@ test.each([401, 403, 409])(
     fireEvent.submit(form);
     if (status === 409)
       await screen.findByText(/latest information has been loaded/);
-    else await screen.findByRole("alert");
+    // The narrative form renders an always-present role="alert", empty until
+    // it holds an error, so waiting for the role alone resolves immediately and
+    // the draft assertion below could run while the submission was still in
+    // flight. Wait for the message the failure actually produces.
+    else
+      await waitFor(() =>
+        expect(screen.getByRole("alert").textContent).toBe(
+          {
+            401: "Your staff session has expired. Please sign in again.",
+            403:
+              "You do not have permission to access or update these requests.",
+          }[status],
+        ),
+      );
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(repository.workflow).toHaveBeenCalledTimes(1);
   },
