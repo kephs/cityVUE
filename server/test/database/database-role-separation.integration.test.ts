@@ -491,15 +491,15 @@ test(
           const files = (await readdir(folder))
             .filter((file) => file.endsWith('.js'))
             .sort();
-          // 53 compiled migrations plus Migrations 48, 49, 53 and 56, which
-          // are applied as text below, is the full inventory of 57. Those four
+          // 54 compiled migrations plus Migrations 48, 49, 53 and 56, which
+          // are applied as text below, is the full inventory of 58. Those four
           // hardcode `public.` for their SECURITY DEFINER functions, so no
-          // test imports them and they are not compiled. Migrations 54, 55 and
-          // F062.2D-2C-3B-1's 57 hardcode no schema name, so they compile like
-          // Migration 52. Migration 57 sorts last and touches only tables and
-          // their guards, so applying it before the four text migrations is
-          // immaterial.
-          assert.equal(files.length, 53);
+          // test imports them and they are not compiled. Migrations 54, 55,
+          // F062.2D-2C-3B-1's 57 and F062.2D-2C-3B-2's 58 hardcode no schema
+          // name, so they compile like Migration 52. Migrations 57 and 58 sort
+          // last and touch only tables and their guards, so applying them
+          // before the four text migrations is immaterial.
+          assert.equal(files.length, 54);
           for (const file of files) {
             const migration = (await import(
               path
@@ -832,9 +832,13 @@ test(
             },
           ]);
 
-          // And the two new attempt columns add no column-level grant of
-          // their own: the function owner's table-wide privileges are the
-          // only reach, exactly as before this slice.
+          // And the new attempt columns add no column-level grant of their
+          // own -- the two F062.2D-2C-3B-1 policy pins and F062.2D-2C-3B-2's
+          // destination_retry_after_seconds alike. The function owner's
+          // table-wide privileges are the only reach, exactly as before these
+          // slices. The query is deliberately over every column of the table
+          // rather than a named list, so a future column cannot acquire a
+          // grant without failing here.
           const pinColumns = await sql<{ attname: string }>`
             select a.attname
             from pg_attribute a
