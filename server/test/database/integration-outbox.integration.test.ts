@@ -567,15 +567,32 @@ test(
   { skip: !url },
   async () => {
     await withSchema(async ({ db }) => {
+      // Pinned by OID, not matched on `relname`. Each suite owns a schema
+      // in one shared database, so a name-only filter also reads every
+      // sibling schema's identically named table: its rows would duplicate
+      // these, and a sibling dropped mid-query would make
+      // `pg_get_constraintdef` dereference a vanishing relation.
+      // `::regclass` resolves through `search_path` to exactly one OID.
+      //
+      // The text match is applied below rather than in SQL, deliberately. A
+      // `pg_get_constraintdef` call in a WHERE clause is a predicate that
+      // competes with the OID restriction, so whether it could ever be handed
+      // another schema's row would rest on how the quals happen to be ordered.
+      // Here the function appears only in the select list, which SQL evaluates
+      // on the rows that already satisfied the qualification -- so no sibling
+      // schema's constraint can reach it, by construction rather than by plan.
       const definition = await sql<{ def: string }>`
         select pg_get_constraintdef(c.oid) as def
           from pg_constraint c
-          join pg_class t on t.oid = c.conrelid
-         where t.relname = 'integration_outbox'
-           and c.contype = 'c'
-           and pg_get_constraintdef(c.oid) like '%integration_type%'
-           and pg_get_constraintdef(c.oid) like '%schema_version%'`.execute(db);
-      const text = definition.rows.map((row) => row.def).join(' ');
+         where c.conrelid = 'integration_outbox'::regclass
+           and c.contype = 'c'`.execute(db);
+      const text = definition.rows
+        .map((row) => row.def)
+        .filter(
+          (def) =>
+            def.includes('integration_type') && def.includes('schema_version'),
+        )
+        .join(' ');
       assert.ok(text.length > 0, 'the pairing constraint must exist');
 
       // Every declared type appears with exactly its declared kind, aggregate
@@ -620,13 +637,18 @@ test(
   { skip: !url },
   async () => {
     await withSchema(async ({ db, organizationA, connectorA }) => {
+      // Relation pinned by OID; the text match applied in TypeScript, so
+      // `pg_get_constraintdef` is a projection over already-qualified rows
+      // rather than a predicate racing the OID restriction.
       const definition = await sql<{ def: string }>`
         select pg_get_constraintdef(c.oid) as def
           from pg_constraint c
-          join pg_class t on t.oid = c.conrelid
-         where t.relname = 'integration_outbox' and c.contype = 'c'
-           and pg_get_constraintdef(c.oid) like '%state%'`.execute(db);
-      const text = definition.rows.map((row) => row.def).join(' ');
+         where c.conrelid = 'integration_outbox'::regclass
+           and c.contype = 'c'`.execute(db);
+      const text = definition.rows
+        .map((row) => row.def)
+        .filter((def) => def.includes('state'))
+        .join(' ');
       const stated = new Set(
         [...text.matchAll(/'([a-z_]+)'::character varying/g)].map(
           (match) => match[1],
