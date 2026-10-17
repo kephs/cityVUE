@@ -11,17 +11,24 @@ const names = [
   "modules/front-door.bicep",
   "modules/waf.bicep",
   "modules/diagnostics.bicep",
+  "modules/registry.bicep",
 ];
 const files = Object.fromEntries(
   names.map((n) => [n, readFileSync(new URL(n, root), "utf8")]),
 );
 const code = (text) => text.replace(/\/\/[^\n]*/g, "");
-const [main, network, origin, connectivity, edge, waf, diagnostics] = names.map(
-  (n) => code(files[n]),
-);
-const all = [main, network, origin, connectivity, edge, waf, diagnostics].join(
-  "\n",
-);
+const [main, network, origin, connectivity, edge, waf, diagnostics, registry] =
+  names.map((n) => code(files[n]));
+const all = [
+  main,
+  network,
+  origin,
+  connectivity,
+  edge,
+  waf,
+  diagnostics,
+  registry,
+].join("\n");
 
 // Balanced source extraction, not a compiler or cloud validation.
 function block(text, expression) {
@@ -55,19 +62,22 @@ test("entry point is source-disabled and all modules are gated", () => {
       /module\s+\w+\s+'([^']+)'\s*=\s*if\s*\(deploymentEnabled\)/g,
     ),
   ];
-  assert.equal(modules.length, 5);
+  assert.equal(modules.length, 6);
   for (const m of modules) assert.ok(files[m[1].replace(/^\.\//, "")]);
   assert.equal((main.match(/\bmodule\s/g) ?? []).length, modules.length);
   assert.doesNotMatch(main, /^\s*resource\s+\w+\s+'/m);
   // Conditional outputs must not be evaluated when their modules are absent.
-  assert.doesNotMatch(main, /\b(?:network|origin|diagnostics)\.outputs\./);
+  assert.doesNotMatch(
+    main,
+    /\b(?:network|origin|diagnostics|registry)\.outputs\./,
+  );
   assert.equal(
     [
       ...main.matchAll(
-        /\b(?:network|origin|diagnostics)\.\?outputs\.\w+ \?\? ''/g,
+        /\b(?:network|origin|diagnostics|registry)\.\?outputs\.\w+ \?\? ''/g,
       ),
     ].length,
-    7,
+    11,
   );
 });
 test("all inputs have no defaults or committed deployment values", () => {
@@ -83,7 +93,9 @@ test("all inputs have no defaults or committed deployment values", () => {
     "workloadProfileType",
     "workloadProfileMinimumCount",
     "workloadProfileMaximumCount",
-    "frontendImageReference",
+    "frontendImageDigest",
+    "registryName",
+    "acrPrivateEndpointSubnetPrefix",
     "frontendCpu",
     "frontendMemory",
   ])
@@ -123,10 +135,10 @@ test("workload profile capacity is supplied explicitly", () => {
   assert.match(env, /workloadProfiles:\s*\[/);
   assert.doesNotMatch(all, /'D4'|'E4'|'Consumption'/);
 });
-test("two distinct subnets use supplied CIDRs and correct delegation", () => {
+test("three distinct subnets use supplied CIDRs and correct delegation", () => {
   const vnet = resource(network, "vnet");
   assert.match(vnet, /addressPrefixes:\s*\[\s*vnetAddressPrefix\s*\]/);
-  const infrastructure = block(vnet, /subnets:\s*\[/);
+  const infrastructure = vnet.slice(vnet.indexOf("name: 'aca-infrastructure'"));
   assert.match(infrastructure, /name:\s*'aca-infrastructure'/);
   assert.match(infrastructure, /addressPrefix:\s*infrastructureSubnetPrefix/);
   assert.match(infrastructure, /serviceName:\s*'Microsoft.App\/environments'/);
@@ -136,18 +148,23 @@ test("two distinct subnets use supplied CIDRs and correct delegation", () => {
   assert.match(pe, /privateEndpointNetworkPolicies:\s*'Disabled'/);
   assert.doesNotMatch(all, /\b(?:10|172|192)\.\d+\.\d+\.\d+\/\d+/);
 });
-test("published Reqro digest input is required and described in both boundaries", () => {
+test("published Reqro digest is required and image authority is fixed", () => {
   for (const text of [
     files["main.bicep"],
     files["modules/static-origin.bicep"],
   ]) {
-    assert.match(text, /@sha256:<64 lowercase hex>/);
+    assert.match(text, /64 lowercase hex/);
     assert.match(
       text,
-      /@minLength\(74\)\s*param frontendImageReference string(?:\r?\n|$)/,
+      /@minLength\(64\)\s*@maxLength\(64\)\s*param frontendImageDigest string(?:\r?\n|$)/,
     );
   }
-  assert.match(resource(origin, "frontend"), /image:\s*frontendImageReference/);
+  assert.ok(
+    resource(origin, "frontend").includes(
+      "image: '${registryLoginServer}/reqro/frontend@sha256:${frontendImageDigest}'",
+    ),
+  );
+  assert.doesNotMatch(main + origin, /frontendImageReference/);
   assert.doesNotMatch(all, /ghcr\.io|:latest|:stable/);
   // The full input check is a required pre-deployment contract, not a decorator guarantee.
   const digest =
@@ -172,11 +189,8 @@ test("external app ingress stays relative to private environment on 8080", () =>
     /environmentId:\s*environment\.id/,
   );
 });
-test("no replica policy probes secrets or registry defaults", () => {
-  assert.doesNotMatch(
-    origin,
-    /\b(scale|probes|registries|secrets|env|identity|customDomains):/,
-  );
+test("no replica policy probes secrets or unrelated runtime configuration", () => {
+  assert.doesNotMatch(origin, /\b(scale|probes|secrets|env|customDomains):/);
   assert.doesNotMatch(
     all,
     /\b(minReplicas|maxReplicas|probeIntervalInSeconds|sampleSize|successfulSamplesRequired):/,
@@ -291,13 +305,20 @@ test("resource inventory is exactly private frontend topology", () => {
       "Microsoft.Cdn/profiles/securityPolicies",
       "Microsoft.OperationalInsights/workspaces",
       "Microsoft.Insights/diagnosticSettings",
+      "Microsoft.ContainerRegistry/registries",
+      "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "Microsoft.Authorization/roleAssignments",
+      "Microsoft.Network/privateEndpoints",
+      "Microsoft.Network/privateDnsZones",
+      "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
     ].sort(),
   );
 });
-test("no deployment commands auth roles secrets or unsupported security flags", () => {
+test("no deployment commands secrets or unrelated authority", () => {
   assert.doesNotMatch(
     all,
-    /roleAssignments|Microsoft\.ManagedIdentity|Microsoft\.ContainerRegistry|Microsoft\.KeyVault|F061|F062|Entra|proxy_pass|@secure|password|clientSecret|az deployment|az login|terraform apply/i,
+    /Microsoft\.KeyVault|F061|F062|Entra|proxy_pass|@secure|password|clientSecret|az deployment|az login|terraform apply/i,
   );
   assert.doesNotMatch(
     all,
@@ -311,6 +332,7 @@ test("no deployment commands auth roles secrets or unsupported security flags", 
 test("unsafe boundary mutations are rejected", () => {
   const check = (s) => {
     assert.match(s, /publicNetworkAccess:\s*'Disabled'/);
+    assert.doesNotMatch(s, /publicNetworkAccess:\s*'Enabled'/);
     assert.match(s, /internal:\s*true/);
     assert.match(s, /name:\s*'Premium_AzureFrontDoor'/);
     assert.doesNotMatch(s, /Standard_AzureFrontDoor/);
@@ -549,7 +571,16 @@ test("exactly two log categories target the profile and expected workspace", () 
 test("diagnostics do not add monitoring networks identities keys transforms or alerts", () => {
   assert.doesNotMatch(
     all,
-    /listKeys|sharedKeys|dataExports|privateLinkScopes|dataCollectionEndpoints|dataCollectionRules|scheduledQueryRules|metricAlerts|actionGroups|roleAssignments|workspaceCapping/i,
+    /listKeys|sharedKeys|dataExports|privateLinkScopes|dataCollectionEndpoints|dataCollectionRules|scheduledQueryRules|metricAlerts|actionGroups|workspaceCapping/i,
+  );
+  // Only the separately reviewed registry module may declare the pull assignment.
+  for (const [name, text] of Object.entries(files))
+    if (name !== "modules/registry.bicep")
+      assert.doesNotMatch(code(text), /roleAssignments/i);
+  assert.equal(
+    (registry.match(/Microsoft\.Authorization\/roleAssignments@/g) ?? [])
+      .length,
+    1,
   );
   assert.doesNotMatch(
     all,

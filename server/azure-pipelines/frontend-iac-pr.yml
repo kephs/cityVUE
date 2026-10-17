@@ -1,0 +1,23 @@
+# F060.4A-2B-4C: repository foundation only; registration is not authorized.
+# The named pool is a proposed PR-only binding, not an existing-resource claim.
+trigger: none
+pr:
+  autoCancel: true
+  drafts: true
+  branches:
+    include:
+      - main
+
+parameters:
+  - name: prAgentPool
+    type: string
+    default: reqro-pr-validation
+    values:
+      - reqro-pr-validation
+
+# A local extends template is reviewable structure, NOT external enforcement.
+# See the feature contract before registering this pipeline or enabling forks.
+extends:
+  template: templates/frontend-iac-pr.yml
+  parameters:
+    prAgentPool: ${{ parameters.prAgentPool }}
