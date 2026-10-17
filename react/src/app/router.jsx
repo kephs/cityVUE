@@ -16,6 +16,9 @@ const ServiceParticipationPage = lazy(
 const RequesterTrackingPage = lazy(
   () => import("../tracking/RequesterTrackingPage.jsx"),
 );
+const MyInternalRequestsPage = lazy(
+  () => import("../requester/MyInternalRequestsPage.jsx"),
+);
 const HomePage = lazy(() => import("../pages/HomePage.jsx"));
 const AIPreviewPage = lazy(() => import("../ai/AIPreviewPage.jsx"));
 const AdminPreviewPage = lazy(() => import("../admin/AdminPreviewPage.jsx"));
@@ -89,6 +92,7 @@ const router = createBrowserRouter([
         element: <ServiceParticipationPage />,
       },
       { path: "staff/requests", element: <StaffRequestsPage /> },
+      { path: "my/requests", element: <MyInternalRequestsPage /> },
       { path: "staff/requests/:requestId", element: <StaffRequestsPage /> },
       {
         path: "map-preview",

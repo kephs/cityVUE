@@ -1,0 +1,67 @@
+.my-internal-requests-page {
+  width: min(100% - 2rem, 54rem);
+  margin: 2rem auto;
+  overflow-wrap: anywhere;
+}
+.my-request-heading {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+.my-request-heading h1,
+.my-request-heading h2 {
+  min-width: 0;
+}
+.my-request-list,
+.my-request-updates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.my-request-summary {
+  border-top: 1px solid currentColor;
+  padding-top: 1rem;
+}
+.my-request-update {
+  border-left: 3px solid currentColor;
+  padding-left: 0.75rem;
+}
+.my-request-update-attribution {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.my-request-update-body,
+.my-request-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-bottom: 0;
+}
+.my-request-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1.5rem;
+}
+.my-request-pagination p {
+  margin: 0;
+}
+@media (max-width: 480px) {
+  .my-internal-requests-page {
+    margin: 1rem auto;
+  }
+  .my-request-heading {
+    align-items: flex-start;
+  }
+  .my-request-update-attribution {
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+}

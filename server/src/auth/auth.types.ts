@@ -52,3 +52,20 @@ export interface StaffAccess {
   divisionIds: string[];
   development: boolean;
 }
+
+/**
+ * F064.1: an authenticated requester asking about their own requests.
+ *
+ * Deliberately a different type from StaffAccess rather than a subset of it.
+ * It carries no permission, department, division or development field, so no
+ * requester code path can consult a staff grant even by mistake, and a staff
+ * helper that expects those fields will not compile against it. Ownership of
+ * the specific request is the only authorization; being authenticated is not.
+ * Only RequesterAccessGuard may produce one.
+ */
+export interface RequesterAccess {
+  tenantId: string;
+  objectId: string;
+  staffIdentityId: string;
+  organizationId: string;
+}

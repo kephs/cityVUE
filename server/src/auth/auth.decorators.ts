@@ -3,7 +3,7 @@ import {
   SetMetadata,
   type ExecutionContext,
 } from '@nestjs/common';
-import type { Permission, StaffAccess } from './auth.types.js';
+import type { Permission, RequesterAccess, StaffAccess } from './auth.types.js';
 
 export const PERMISSION_KEY = 'cityvue.permission';
 export const ANY_PERMISSION_KEY = 'cityvue.anyPermission';
@@ -18,4 +18,18 @@ export const CurrentStaff = createParamDecorator(
   (_data: unknown, context: ExecutionContext): StaffAccess =>
     context.switchToHttp().getRequest<{ staffAccess: StaffAccess }>()
       .staffAccess,
+);
+
+export const REQUESTER_IDENTITY_KEY = 'cityvue.requesterIdentity';
+/**
+ * F064.1: opt a route into requester admission. RequesterAccessGuard refuses
+ * any route that has not set this, so the guard can never be attached to a
+ * staff route by accident and silently admit a requester to it.
+ */
+export const RequireRequesterIdentity = () =>
+  SetMetadata(REQUESTER_IDENTITY_KEY, true);
+export const CurrentRequester = createParamDecorator(
+  (_data: unknown, context: ExecutionContext): RequesterAccess =>
+    context.switchToHttp().getRequest<{ requesterAccess: RequesterAccess }>()
+      .requesterAccess,
 );

@@ -37,6 +37,9 @@ import { StaffIntakeController } from './staff-intake.controller.js';
 import { InternalRequestController } from './internal-request.controller.js';
 import { InternalRequestRepository } from './internal-request.repository.js';
 import { StaffRequestController } from './staff-request.controller.js';
+import { InternalRequesterController } from './internal-requester.controller.js';
+import { InternalRequesterService } from './internal-requester.service.js';
+import { InternalRequesterRepository } from './internal-requester.repository.js';
 import {
   Module,
   type MiddlewareConsumer,
@@ -81,6 +84,7 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
     StaffRequestController,
     InternalRequestController,
     InternalRequestMutationsController,
+    InternalRequesterController,
   ],
   providers: [
     RequestAnswerService,
@@ -100,6 +104,8 @@ import { RequestNotePrivacyMiddleware } from './request-note-privacy.middleware.
     ReferenceConfigurationService,
     InternalRequestRepository,
     InternalRequestMutationsService,
+    InternalRequesterService,
+    InternalRequesterRepository,
     ServiceRequestRepository,
     CreateServiceRequestService,
     GetServiceRequestDetailsService,
@@ -113,9 +119,13 @@ export class ServiceRequestModule implements NestModule {
     consumer
       .apply(AttachmentPrivacyMiddleware)
       .forRoutes(IntakeAttachmentController, StaffAttachmentController);
-    consumer
-      .apply(RequestTrackingPrivacyMiddleware)
-      .forRoutes(StaffRequestTrackingController, RequesterTrackingController);
+    consumer.apply(RequestTrackingPrivacyMiddleware).forRoutes(
+      StaffRequestTrackingController,
+      RequesterTrackingController,
+      // F064.1: a requester's own request list carries the same privacy
+      // posture as guest tracking -- no-store, no-referrer, noindex.
+      InternalRequesterController,
+    );
     consumer
       .apply(RequestCommunicationPrivacyMiddleware)
       .forRoutes(RequestCommunicationController);
