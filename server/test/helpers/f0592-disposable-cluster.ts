@@ -3,7 +3,6 @@ import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { Pool } from 'pg';
 import {
-  inspectContainer,
   refuseUnlessOwnedCleanupTarget,
   type DisposableExpectations,
 } from './disposable-cluster-evidence.js';
@@ -50,15 +49,346 @@ export const DENIED_VOLUMES = [
   'server_cityvue-postgres-data',
 ] as const;
 
-function docker(args: readonly string[], timeout = 120_000) {
-  const result = spawnSync('docker', [...args], {
-    encoding: 'utf8',
-    timeout,
-  });
+/**
+ * One Docker CLI invocation, normalised so the four outcomes can be told
+ * apart: it answered, it answered with an error, it was killed, or it never
+ * ran. The original shape kept only `status`, which is precisely why a CLI
+ * that never answered was indistinguishable from one that answered "absent".
+ */
+export interface DockerResult {
+  /** `null` when the process was killed or never started. */
+  readonly status: number | null;
+  readonly signal: string | null;
+  /** The spawn or timeout failure, already summarised. */
+  readonly spawnError: string | null;
+  readonly timedOut: boolean;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+/** The subset of a `spawnSync` result this module reads. */
+export interface SpawnLikeResult {
+  readonly status?: number | null;
+  readonly signal?: string | null;
+  readonly error?:
+    { readonly message?: string; readonly code?: string } | undefined;
+  readonly stdout?: string | null;
+  readonly stderr?: string | null;
+}
+
+/**
+ * Pure. Normalises a `spawnSync` result.
+ *
+ * `stdout` and `stderr` are `null` rather than strings when the process never
+ * started, so they are defaulted here: the previous `result.stdout.trim()`
+ * would itself throw in exactly the case this module now has to report.
+ */
+export function normalizeDockerResult(
+  result: SpawnLikeResult | null | undefined,
+): DockerResult {
+  const message = result?.error?.message ?? null;
+  const signal = result?.signal ?? null;
   return {
-    status: result.status,
-    stdout: result.stdout.trim(),
-    stderr: result.stderr.trim(),
+    status: typeof result?.status === 'number' ? result.status : null,
+    signal: typeof signal === 'string' && signal !== '' ? signal : null,
+    spawnError: message === null ? null : summarizeDockerOutput(message),
+    // `spawnSync` enforces `timeout` by killing the child, which surfaces as
+    // ETIMEDOUT, as a SIGTERM signal, or as both depending on the platform.
+    timedOut: (result?.error?.code ?? null) === 'ETIMEDOUT',
+    stdout: (result?.stdout ?? '').trim(),
+    stderr: (result?.stderr ?? '').trim(),
+  };
+}
+
+function docker(args: readonly string[], timeout = 120_000): DockerResult {
+  return normalizeDockerResult(
+    spawnSync('docker', [...args], { encoding: 'utf8', timeout }),
+  );
+}
+
+/**
+ * Bounded, single-line, credential-free diagnostics. Docker's own messages
+ * carry only object names, but a message is echoed into the validation log
+ * and must not become a channel for anything else.
+ */
+export function summarizeDockerOutput(text: string, limit = 200): string {
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
+  const collapsed = firstLine
+    .replace(/(postgres(?:ql)?:\/\/[^\s:@/]+:)[^@\s]*@/gi, '$1[redacted]@')
+    .replace(
+      /\b([A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|NONCE)\s*[=:]\s*)\S+/g,
+      '$1[redacted]',
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+  return collapsed.length <= limit
+    ? collapsed
+    : `${collapsed.slice(0, limit)}...`;
+}
+
+export type CleanupOutcome = 'absent' | 'present' | 'unknown';
+
+export interface CleanupVerification {
+  readonly outcome: CleanupOutcome;
+  readonly detail: string;
+}
+
+/**
+ * Docker's not-found wording, as this CLI actually phrases it. Measured
+ * against Docker 29.7.2 / API 1.55 rather than assumed:
+ *
+ *   docker inspect <absent>           exit 1  "error: no such object: <id>"
+ *   docker container inspect <absent> exit 1  "Error response from daemon:
+ *                                              No such container: <id>"
+ *   docker volume inspect <absent>    exit 1  "Error response from daemon:
+ *                                              get <name>: no such volume"
+ *   docker inspect <present>          exit 0
+ *
+ * Also measured: `docker rm --force --volumes <absent>` exits 0 and prints
+ * nothing, so a successful removal command is NOT evidence of removal. The
+ * absence probe is the only authority.
+ */
+const NOT_FOUND_PATTERNS = [
+  /\bno such object\b/i,
+  /\bno such container\b/i,
+  /\bno such volume\b/i,
+] as const;
+
+/**
+ * Failures that must never be read as absence, however they exit. A daemon
+ * that cannot be reached, or a client that is not permitted to ask, has said
+ * nothing at all about whether the resource still exists.
+ */
+const INCONCLUSIVE_PATTERNS = [
+  /cannot connect to the docker daemon/i,
+  /error during connect/i,
+  /is the docker daemon running/i,
+  /permission denied/i,
+  /access is denied/i,
+  /\bunauthorized\b/i,
+  /\binternal server error\b/i,
+  /\bconnection refused\b/i,
+  /\bi\/o timeout\b/i,
+  /context deadline exceeded/i,
+] as const;
+
+/**
+ * Pure. Did Docker POSITIVELY establish that `name` is gone?
+ *
+ * The invariant: absence is reported only when a query succeeded and proved
+ * the resource missing, by way of a not-found response this function
+ * recognises. A timeout, a signal, a missing exit status, a failed spawn, a
+ * daemon error, an access error, or any exit code Docker did not explain in
+ * recognised words is `unknown` -- never `absent`.
+ *
+ * This is the correction. The previous expression
+ *
+ *   docker(['inspect', containerId]).status !== 0
+ *
+ * mapped every one of those cases to "removed", because `status` is `null`
+ * for a killed or unstarted process and `null !== 0` is true. A container
+ * that survived teardown was therefore reported as cleanly removed whenever
+ * the Docker CLI failed to answer.
+ */
+export function classifyResourceAbsence(
+  kind: 'container' | 'volume',
+  name: string,
+  probe: DockerResult | null | undefined,
+): CleanupVerification {
+  if (probe === null || probe === undefined)
+    return {
+      outcome: 'unknown',
+      detail: `the ${kind} ${name} was never queried, so its removal is unverified`,
+    };
+  if (probe.timedOut)
+    return {
+      outcome: 'unknown',
+      detail: `the ${kind} ${name} check timed out, so its removal is unverified`,
+    };
+  if (probe.spawnError !== null)
+    return {
+      outcome: 'unknown',
+      detail: `the docker CLI could not be run to check the ${kind} ${name}: ${probe.spawnError}`,
+    };
+  if (probe.signal !== null)
+    return {
+      outcome: 'unknown',
+      detail: `the ${kind} ${name} check was terminated by ${probe.signal}, so its removal is unverified`,
+    };
+  if (probe.status === null)
+    return {
+      outcome: 'unknown',
+      detail: `the ${kind} ${name} check reported no exit status, so its removal is unverified`,
+    };
+  if (probe.status === 0)
+    return {
+      outcome: 'present',
+      detail: `docker still reports the ${kind} ${name}, so it was not removed`,
+    };
+  // A non-zero exit only means "not a successful inspection". Which failure
+  // it was decides everything, so the wording is read before the code, and
+  // the inconclusive shapes are read before the not-found ones.
+  if (INCONCLUSIVE_PATTERNS.some((pattern) => pattern.test(probe.stderr)))
+    return {
+      outcome: 'unknown',
+      detail: `docker could not answer for the ${kind} ${name}: ${summarizeDockerOutput(probe.stderr)}`,
+    };
+  if (NOT_FOUND_PATTERNS.some((pattern) => pattern.test(probe.stderr)))
+    return {
+      outcome: 'absent',
+      detail: `docker reports no such ${kind}: ${name}`,
+    };
+  return {
+    outcome: 'unknown',
+    detail: `docker exited ${String(probe.status)} for the ${kind} ${name} without a recognised not-found response: ${
+      probe.stderr === '' ? '(no stderr)' : summarizeDockerOutput(probe.stderr)
+    }`,
+  };
+}
+
+/** The anonymous volume this run must remove, or why it is not known. */
+export type VolumeTarget =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'known'; readonly name: string }
+  | { readonly kind: 'unknown'; readonly detail: string };
+
+/**
+ * Pure. Reads the owned anonymous volume from a PRE-removal container
+ * inspection, because once the container is gone its mount list is gone too.
+ *
+ * The distinction that matters: "this container has no volume mount" is a
+ * legitimate nothing-to-do, whereas "the inspection did not answer" is not.
+ * The previous code collapsed both into `null`, and the subsequent
+ * `volume === null || ...` then made the volume check vacuously succeed.
+ */
+export function volumeTargetFromProbe(
+  containerId: string,
+  probe: DockerResult | null | undefined,
+): VolumeTarget {
+  const classified = classifyResourceAbsence('container', containerId, probe);
+  if (classified.outcome === 'unknown')
+    return { kind: 'unknown', detail: classified.detail };
+  if (classified.outcome === 'absent')
+    return {
+      kind: 'unknown',
+      detail: `the container ${containerId} was already absent before teardown, so its anonymous volume could not be identified`,
+    };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(probe?.stdout ?? '');
+  } catch {
+    return {
+      kind: 'unknown',
+      detail: `the container ${containerId} inspection was not valid JSON, so its anonymous volume could not be identified`,
+    };
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0)
+    return {
+      kind: 'unknown',
+      detail: `the container ${containerId} inspection returned no records, so its anonymous volume could not be identified`,
+    };
+  const raw = parsed[0] as {
+    Mounts?: { Type?: string; Name?: string }[];
+  };
+  const named = (raw.Mounts ?? []).filter(
+    (mount) => mount.Type === 'volume' && (mount.Name ?? '') !== '',
+  );
+  const [first] = named;
+  if (first?.Name === undefined || first.Name === '') return { kind: 'none' };
+  return { kind: 'known', name: first.Name };
+}
+
+/** Everything the cleanup verdict is computed from. */
+export interface CleanupProbes {
+  readonly containerId: string;
+  /** A pre-action authorization refusal, when teardown was never attempted. */
+  readonly refusal: string | null;
+  /** `null` when the removal command was not run. */
+  readonly removal: DockerResult | null;
+  readonly containerAbsence: DockerResult | null;
+  readonly volume: VolumeTarget;
+  readonly volumeAbsence: DockerResult | null;
+}
+
+/**
+ * The cleanup result. The four original fields keep their names, types and
+ * meaning so existing callers are unaffected; the rest are additive
+ * diagnostics.
+ */
+export interface CleanupResult {
+  readonly containerRemoved: boolean;
+  readonly volumeRemoved: boolean;
+  readonly volumeName: string | null;
+  readonly refusal: string | null;
+  readonly containerVerification: CleanupVerification;
+  readonly volumeVerification: CleanupVerification;
+  readonly removalExitStatus: number | null;
+  /** `null` when the removal command itself reported no problem. */
+  readonly removalDetail: string | null;
+}
+
+function removalDetailOf(removal: DockerResult | null): string | null {
+  if (removal === null) return 'the removal command was not attempted';
+  if (removal.timedOut) return 'the removal command timed out';
+  if (removal.spawnError !== null)
+    return `the removal command could not be run: ${removal.spawnError}`;
+  if (removal.signal !== null)
+    return `the removal command was terminated by ${removal.signal}`;
+  if (removal.status === null)
+    return 'the removal command reported no exit status';
+  if (removal.status !== 0)
+    return `the removal command exited ${String(removal.status)}: ${
+      removal.stderr === ''
+        ? '(no stderr)'
+        : summarizeDockerOutput(removal.stderr)
+    }`;
+  return null;
+}
+
+/**
+ * Pure. The cleanup verdict.
+ *
+ * `containerRemoved` and `volumeRemoved` are true ONLY on a positively
+ * verified absence, so an unverified teardown fails the mandatory validation
+ * gate instead of passing it.
+ *
+ * Both resources are judged independently and unconditionally: one
+ * inconclusive check never suppresses the other's result, and a failed
+ * removal command does not stop either absence check from being reported.
+ */
+export function verifyCleanup(probes: CleanupProbes): CleanupResult {
+  const containerVerification = classifyResourceAbsence(
+    'container',
+    probes.containerId,
+    probes.containerAbsence,
+  );
+
+  let volumeVerification: CleanupVerification;
+  if (probes.volume.kind === 'none')
+    volumeVerification = {
+      outcome: 'absent',
+      detail:
+        'no anonymous volume was attached, so there was nothing to remove',
+    };
+  else if (probes.volume.kind === 'unknown')
+    volumeVerification = { outcome: 'unknown', detail: probes.volume.detail };
+  else
+    volumeVerification = classifyResourceAbsence(
+      'volume',
+      probes.volume.name,
+      probes.volumeAbsence,
+    );
+
+  return {
+    containerRemoved: containerVerification.outcome === 'absent',
+    volumeRemoved: volumeVerification.outcome === 'absent',
+    volumeName: probes.volume.kind === 'known' ? probes.volume.name : null,
+    refusal: probes.refusal,
+    containerVerification,
+    volumeVerification,
+    removalExitStatus: probes.removal?.status ?? null,
+    removalDetail: removalDetailOf(probes.removal),
   };
 }
 
@@ -110,13 +440,12 @@ export interface DisposableCluster {
   environment(): Record<string, string>;
   /** Counts schemas that no test created. */
   census(): Promise<number>;
-  /** Authorized teardown. Returns removal evidence. */
-  destroy(): Promise<{
-    readonly containerRemoved: boolean;
-    readonly volumeRemoved: boolean;
-    readonly volumeName: string | null;
-    readonly refusal: string | null;
-  }>;
+  /**
+   * Authorized teardown. Returns removal evidence in which `containerRemoved`
+   * and `volumeRemoved` mean VERIFIED absence, never merely "docker did not
+   * say otherwise".
+   */
+  destroy(): Promise<CleanupResult>;
 }
 
 /** Confirms the pinned image is present locally and really is that digest. */
@@ -207,43 +536,53 @@ export async function startDisposableCluster(): Promise<DisposableCluster> {
     deniedVolumeNames: DENIED_VOLUMES,
   });
 
-  const volumeName = (): string | null => {
-    const facts = inspectContainer(containerId);
-    const mount = facts?.mounts[0];
-    return mount === undefined ? null : mount.name;
-  };
+  const destroy = async (): Promise<CleanupResult> => {
+    // Identify the anonymous volume BEFORE removal: `docker rm` takes the
+    // mount list with it, so afterwards there is nothing left to read.
+    const volume = volumeTargetFromProbe(
+      containerId,
+      docker(['inspect', containerId], 60_000),
+    );
 
-  const destroy = async (): Promise<{
-    containerRemoved: boolean;
-    volumeRemoved: boolean;
-    volumeName: string | null;
-    refusal: string | null;
-  }> => {
-    const volume = volumeName();
-    // Authorize before destroying, not after.
+    // Authorize before destroying, not after. An unidentified volume is not a
+    // teardown target, so it contributes no name to authorize -- it fails
+    // closed later, in the verdict, rather than widening what is removed.
     const refusal = refuseUnlessOwnedCleanupTarget(
       {
         containerId,
-        volumeNames: volume === null ? [] : [volume],
+        volumeNames: volume.kind === 'known' ? [volume.name] : [],
       },
       { containerId, deniedVolumeNames: DENIED_VOLUMES },
     );
     if (refusal !== null)
-      return {
-        containerRemoved: false,
-        volumeRemoved: false,
-        volumeName: volume,
+      return verifyCleanup({
+        containerId,
         refusal,
-      };
-    docker(['rm', '--force', '--volumes', containerId], 90_000);
+        removal: null,
+        containerAbsence: null,
+        volume,
+        volumeAbsence: null,
+      });
+
+    const removal = docker(['rm', '--force', '--volumes', containerId], 90_000);
     await Promise.resolve();
-    return {
-      containerRemoved: docker(['inspect', containerId]).status !== 0,
-      volumeRemoved:
-        volume === null || docker(['volume', 'inspect', volume]).status !== 0,
-      volumeName: volume,
+    // Both absence checks run however the removal went, so a failed step
+    // never hides the other resource's state. `docker rm --force` exits 0
+    // even for a container that was never there, which is exactly why the
+    // removal's own status is recorded but is not the evidence.
+    const containerAbsence = docker(['inspect', containerId], 60_000);
+    const volumeAbsence =
+      volume.kind === 'known'
+        ? docker(['volume', 'inspect', volume.name], 60_000)
+        : null;
+    return verifyCleanup({
+      containerId,
       refusal: null,
-    };
+      removal,
+      containerAbsence,
+      volume,
+      volumeAbsence,
+    });
   };
 
   try {
