@@ -464,6 +464,27 @@ export interface RequestInternalNoteTable {
   created_at: Timestamp;
 }
 
+/**
+ * F066. One committed submission per authorized scope and key.
+ *
+ * `expires_at` is required on insert because the retry window is computed from
+ * the database clock at reservation time rather than defaulted, so the value
+ * and the row's own `created_at` share one clock. There is deliberately no
+ * updatable column: the table is append-only and its triggers refuse update
+ * and delete, so a reservation cannot be repointed at another request.
+ */
+export interface RequestSubmissionIdempotencyTable {
+  id: Generated<string>;
+  organization_id: string;
+  submission_scope: string;
+  key_digest: string;
+  fingerprint: string;
+  service_request_id: string;
+  tracking_issued: boolean;
+  created_at: Generated<Timestamp>;
+  expires_at: Timestamp;
+}
+
 export interface RequestCommunicationTable {
   id: Generated<string>;
   organization_id: string;
@@ -731,9 +752,7 @@ interface IntegrationConnectorAuditTable {
 }
 
 export type IntegrationPayloadMode =
-  | 'historical_reference'
-  | 'approved_snapshot'
-  | 'current_state_projection';
+  'historical_reference' | 'approved_snapshot' | 'current_state_projection';
 
 /** F062.2C transactional outbox. Every vocabulary column is typed by the
  * F062.1 union that defines it, so the check constraint and the TypeScript
@@ -1127,6 +1146,7 @@ export interface DatabaseSchema extends ResidentExperienceTables {
   request_tracking_policy: RequestTrackingPolicyTable;
   request_communication: RequestCommunicationTable;
   request_internal_note: RequestInternalNoteTable;
+  request_submission_idempotency: RequestSubmissionIdempotencyTable;
   operational_role: OperationalRoleTable;
   operational_role_membership: OperationalRoleMembershipTable;
   service_request_watcher: ServiceRequestWatcherTable;

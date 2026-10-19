@@ -381,6 +381,7 @@ test(
       async () => {
         const created = await request(server)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .set('Host', HOST_A)
           .send({
             serviceDefinitionId: alpha.service,
@@ -406,6 +407,7 @@ test(
       async () => {
         const created = await request(server)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .set('Host', HOST_A)
           .send({
             organizationId: bravo.org,

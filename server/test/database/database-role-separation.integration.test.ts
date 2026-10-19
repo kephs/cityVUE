@@ -93,6 +93,9 @@ const RUNTIME_MATRIX: Readonly<Record<string, readonly string[]>> = {
   request_communication: ['INSERT', 'SELECT'],
   request_internal_note: ['INSERT', 'SELECT'],
   request_operational_activity: ['INSERT', 'SELECT'],
+  // F066. Append-only: the table's triggers refuse UPDATE and DELETE, so
+  // granting either would exceed what any code path can legitimately do.
+  request_submission_idempotency: ['INSERT', 'SELECT'],
   request_tracking_credential: ['INSERT', 'SELECT', 'UPDATE'],
   // F065: read-only. No application path writes the tenant lifetime policy,
   // because F065 added no administration endpoint.
@@ -494,15 +497,16 @@ test(
           const files = (await readdir(folder))
             .filter((file) => file.endsWith('.js'))
             .sort();
-          // 55 compiled migrations plus Migrations 48, 49, 53 and 56, which
-          // are applied as text below, is the full inventory of 59. Those four
+          // 56 compiled migrations plus Migrations 48, 49, 53 and 56, which
+          // are applied as text below, is the full inventory of 60. Those four
           // hardcode `public.` for their SECURITY DEFINER functions, so no
           // test imports them and they are not compiled. Migrations 54, 55,
-          // F062.2D-2C-3B-1's 57, F062.2D-2C-3B-2's 58 and F065's 59 hardcode
-          // no schema name, so they compile like Migration 52. Migrations 57,
-          // 58 and 59 sort last and touch only tables and their guards, so
-          // applying them before the four text migrations is immaterial.
-          assert.equal(files.length, 55);
+          // F062.2D-2C-3B-1's 57, F062.2D-2C-3B-2's 58, F065's 59 and F066's
+          // 60 hardcode no schema name, so they compile like Migration 52.
+          // Migrations 57 to 60 sort last and touch only tables and their
+          // guards, so applying them before the four text migrations is
+          // immaterial.
+          assert.equal(files.length, 56);
           for (const file of files) {
             const migration = (await import(
               path
@@ -1276,8 +1280,9 @@ test(
           // both fail, and a table added later is covered without being named
           // in a forbidden list.
           assert.deepEqual(actual, RUNTIME_MATRIX);
-          // 63 with F065's read-only request_tracking_policy.
-          assert.equal(Object.keys(actual).length, 63);
+          // 64: 63 plus F066's append-only
+          // request_submission_idempotency.
+          assert.equal(Object.keys(actual).length, 64);
         },
       );
 

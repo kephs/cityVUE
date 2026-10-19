@@ -300,6 +300,7 @@ export async function checkTrustedRequesterHistory(
       ]) {
         await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...input, ...extra })
           .expect(400);
         await request(api)

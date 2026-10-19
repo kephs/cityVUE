@@ -135,8 +135,9 @@ test(
           // Migrations 48, 49 and 53 it is applied as text and not compiled.
           // F062.2D-2C-3B-1's Migration 57 hardcodes no schema name either,
           // so it compiles and is applied here with the rest, as do
-          // F062.2D-2C-3B-2's Migration 58 and F065's Migration 59.
-          assert.equal(files.length, 55);
+          // F062.2D-2C-3B-2's Migration 58, F065's Migration 59 and F066's
+          // Migration 60.
+          assert.equal(files.length, 56);
           for (const file of files) {
             const migration = (await import(
               path

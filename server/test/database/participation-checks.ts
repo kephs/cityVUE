@@ -268,6 +268,7 @@ export async function checkParticipation(
       ])
         await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...input, participation })
           .expect(400);
       await request(api)
@@ -942,6 +943,7 @@ export async function checkParticipation(
       ]) {
         await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...anonymous, participation })
           .expect(400);
         await request(api)

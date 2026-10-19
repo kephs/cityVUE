@@ -473,6 +473,7 @@ export async function checkIssueDefaults(
       void _channel;
       const web = await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send(payload)
         .expect(201);
       assert.equal(
@@ -509,6 +510,7 @@ export async function checkIssueDefaults(
       ])
         await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...payload, ...forged })
           .expect(400);
     },

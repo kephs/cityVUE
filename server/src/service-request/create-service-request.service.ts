@@ -26,6 +26,16 @@ import {
   residentAuthority,
 } from '../attachments/attachment.service.js';
 import { checksum } from '../attachments/attachment.domain.js';
+import {
+  replayTrackingState,
+  submissionFingerprint,
+  submissionKeyDigest,
+  submissionScope,
+  SUBMISSION_IN_PROGRESS,
+  SUBMISSION_KEY_REUSED,
+  SUBMISSION_RETRY_WINDOW_CLOSED,
+} from './submission-idempotency.js';
+import { reserveSubmission } from './submission-reservation.js';
 import type { StaffAccess } from '../auth/auth.types.js';
 import { validServicePoint } from '../location-eligibility/service-location.domain.js';
 import {
@@ -139,6 +149,7 @@ export class CreateServiceRequestService {
     organizationId: string,
     input: CreateServiceRequestDto,
     now = new Date(),
+    submissionKey?: string,
   ): Promise<CreateServiceRequestResponseDto> {
     return this.create(
       input,
@@ -150,6 +161,12 @@ export class CreateServiceRequestService {
         // F065: the only path approved for automatic tracking issuance. Staff
         // intake and the trusted provider path deliberately do not set this.
         requesterIntake: true,
+        // F066. The resident controller rejects a missing or malformed key
+        // before this point, so every submission arriving over HTTP carries
+        // one. The parameter is optional only so the staff and trusted paths,
+        // whose published contracts are unchanged, can share this method's
+        // sibling entry points.
+        ...(submissionKey === undefined ? {} : { submissionKey }),
       },
       now,
     );
@@ -159,6 +176,7 @@ export class CreateServiceRequestService {
     input: CreateStaffServiceRequestDto,
     access: StaffAccess | undefined,
     now = new Date(),
+    submissionKey?: string,
   ): Promise<CreateServiceRequestResponseDto> {
     if (input.attachments)
       throw new BadRequestException(
@@ -194,6 +212,12 @@ export class CreateServiceRequestService {
         intakeChannel: input.intakeChannel,
         staffId: access.staffIdentityId,
         actor: access,
+        // F066. Opt-in for staff intake, so the existing staff contract keeps
+        // working unchanged while a staff client that supplies a key gets the
+        // same at-most-once guarantee. The key is scoped to the acting staff
+        // identity, so one staff member's key can neither collide with nor
+        // replay another's.
+        ...(submissionKey === undefined ? {} : { submissionKey }),
       },
       now,
     );
@@ -209,6 +233,7 @@ export class CreateServiceRequestService {
       requesterIntake?: boolean;
       trusted?: TrustedRequesterContext;
       actor?: StaffAccess;
+      submissionKey?: string;
     },
     now: Date,
   ): Promise<CreateServiceRequestResponseDto> {
@@ -332,6 +357,85 @@ export class CreateServiceRequestService {
           // A retry returns the original creation receipt, never current workflow state.
           status: 'open',
           createdAt: new Date(prior.created_at as unknown as string),
+        };
+      }
+      // F066. The reservation is taken here: after the attachment-batch replay
+      // check above, which can return an already-created request, and before
+      // any expensive validation. For an attachment-free submission `prepared`
+      // is undefined, so that check is skipped entirely and this becomes the
+      // first thing the transaction does after authorization -- a concurrent
+      // retry therefore blocks on the unique constraint before performing
+      // work, rather than after.
+      //
+      // The request identity is generated now so the reservation can name the
+      // request it is about to create. The foreign key is deferred, so that
+      // reference is still verified before commit and a committed reservation
+      // always resolves to a request that exists.
+      const requestId = randomUUID();
+      // Decided here rather than after issuance, because every input to the
+      // decision is already fixed: the feature flag, the audience and the
+      // intake path. If issuance later fails, the whole transaction rolls
+      // back, so a committed row can never disagree with what was issued.
+      const willIssueTracking =
+        this.intakeTrackingEnabled &&
+        context.audience === 'public' &&
+        context.requesterIntake === true;
+      const reservation =
+        context.submissionKey === undefined
+          ? undefined
+          : await reserveSubmission(trx, {
+              organizationId: context.organizationId,
+              scope: submissionScope(context),
+              keyDigest: submissionKeyDigest(context.submissionKey),
+              fingerprint: submissionFingerprint(
+                attachmentDigest,
+                input.attachments,
+              ),
+              requestId,
+              trackingIssued: willIssueTracking,
+            });
+      if (reservation !== undefined && reservation.kind !== 'first') {
+        if (reservation.kind === 'mismatch')
+          throw new ConflictException({
+            code: SUBMISSION_KEY_REUSED,
+            message:
+              'This submission was already sent with different details. Start a new submission.',
+          });
+        if (reservation.kind === 'expired')
+          throw new ConflictException({
+            code: SUBMISSION_RETRY_WINDOW_CLOSED,
+            message:
+              'The retry window for this submission has closed. Start a new submission.',
+          });
+        if (reservation.kind === 'in_progress')
+          throw new ConflictException({
+            code: SUBMISSION_IN_PROGRESS,
+            message:
+              'An earlier copy of this submission is still being processed. Wait a moment and try again.',
+          });
+        // An exact replay. The original request is read back rather than
+        // reconstructed, and the function returns before every creation side
+        // effect: no second request, no second F065 credential, no second
+        // tracking-issuance audit event, no second attachment association.
+        const replayed = await trx
+          .selectFrom('service_request')
+          .select(['id', 'reference_number', 'created_at'])
+          .where('organization_id', '=', context.organizationId)
+          .where('id', '=', reservation.serviceRequestId)
+          .executeTakeFirstOrThrow();
+        return {
+          id: replayed.id,
+          referenceNumber: replayed.reference_number,
+          // The original creation receipt, never current workflow state.
+          status: 'open',
+          createdAt: new Date(replayed.created_at as unknown as string),
+          replay: {
+            // The raw credential was returned exactly once and only its digest
+            // was stored, so no replay can return it. Saying that plainly is
+            // the honest answer; presenting replay as tracking-link recovery
+            // would not be.
+            tracking: replayTrackingState(reservation.trackingIssued),
+          },
         };
       }
       // Serialize action changes against final submission, including stale published versions.
@@ -597,6 +701,18 @@ export class CreateServiceRequestService {
       );
       batch = await prepareBatch();
       if (batch?.state === 'FINALIZED') {
+        // F066. A concurrent submission finalized this batch after the check
+        // above, under a different key -- the same key would have replayed.
+        // This transaction holds a reservation naming a request it will now
+        // never create, so returning the other submission's receipt here
+        // would leave that reservation dangling. It fails closed instead; the
+        // retry takes the early replay path and returns the original receipt.
+        if (reservation !== undefined)
+          throw new ConflictException({
+            code: SUBMISSION_IN_PROGRESS,
+            message:
+              'An earlier copy of this submission is still being processed. Wait a moment and try again.',
+          });
         if (!batch.service_request_id) throw new NotFoundException();
         const prior = await trx
           .selectFrom('service_request')
@@ -618,7 +734,6 @@ export class CreateServiceRequestService {
         now,
         definition.businessTimezone,
       );
-      const requestId = randomUUID();
       const requesterId = context.trusted
         ? await resolveTrustedRequester(trx, context.trusted)
         : null;

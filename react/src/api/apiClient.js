@@ -29,6 +29,19 @@ const accessMessages = {
   ACCESS_CONFIGURATION_INTEGRITY:
     "Access configuration needs administrative attention before changes can be saved.",
 };
+/**
+ * F066 submission-idempotency conflicts. Each is actionable: the first two
+ * mean "this is a different submission now, send it as one", the third means
+ * "your earlier copy is still being processed, so retrying is safe".
+ */
+const submissionMessages = {
+  SUBMISSION_IN_PROGRESS:
+    "This request is still being processed. Wait a moment and submit again - it will not be duplicated.",
+  SUBMISSION_KEY_REUSED:
+    "Your request details changed after it was first sent. Submit again to send this as a new request.",
+  SUBMISSION_RETRY_WINDOW_CLOSED:
+    "Too much time has passed to retry this request. Submit again to send it as a new request.",
+};
 function publicMessage(status, path, code) {
   if (
     path.startsWith("/admin/access") &&
@@ -99,6 +112,12 @@ function publicMessage(status, path, code) {
     ];
   if (status === 404 && path.startsWith("/service-requests/"))
     return ["not-found", "The requested service request is unavailable."];
+  // F066. These must be matched before the generic conflict mapping below.
+  // An unrecognised 409 from intake is treated as a stale catalog version,
+  // which discards the submission the resident just made -- the wrong
+  // recovery for a submission that may already have been accepted.
+  if (status === 409 && Object.hasOwn(submissionMessages, code))
+    return [code, submissionMessages[code]];
   if (status === 404 || status === 409)
     return [
       "catalog-version",

@@ -31,6 +31,7 @@ import { checkRequestContact } from './request-contact-checks.js';
 import { checkPublicRequestContact } from './public-request-contact-checks.js';
 import { checkStaffWorkspace } from './staff-workspace-checks.js';
 import { checkRequestNotes } from './request-note-checks.js';
+import { checkSubmissionIdempotency } from './submission-idempotency-checks.js';
 import {
   PinoLoggerService,
   createOperationalLogger,
@@ -64,6 +65,9 @@ import { Pool } from 'pg';
 import request, { type Response as TestResponse } from 'supertest';
 import { prepareDatabaseExtensions } from '../helpers/database-extensions.js';
 import { up as catalogUp } from '../../migrations/20260902000000-create-organization-service-catalog.js';
+// F066. Resident intake now requires an idempotency key, so every resident
+// submission below takes a reservation and this table must exist.
+import { up as submissionIdempotencyUp } from '../../migrations/20261031000000-add-submission-idempotency.js';
 import { up as requestUp } from '../../migrations/20260902010000-create-service-request-foundation.js';
 import { up as eligibilityUp } from '../../migrations/20260902030000-add-location-eligibility-snapshot.js';
 import { up as staffUp } from '../../migrations/20260903010000-add-staff-assignment-workflow-foundation.js';
@@ -118,6 +122,7 @@ test(
         eligibilityUp,
         staffUp,
         authUp,
+        submissionIdempotencyUp,
       ])
         await migrate(db);
       // F060.3C-2d: the converted reference-lock call sites need the
@@ -613,6 +618,7 @@ test(
           async () => {
             const response = await request(app.getHttpServer())
               .post(publicPath)
+              .set('Idempotency-Key', randomUUID())
               .send(base)
               .expect(201);
             const body = response.body as { id: string };
@@ -642,6 +648,7 @@ test(
             ])
               await request(app.getHttpServer())
                 .post(publicPath)
+                .set('Idempotency-Key', randomUUID())
                 .send({ ...base, ...extra })
                 .expect(400);
           },
@@ -1900,6 +1907,9 @@ test(
               ],
             ] as const) {
               const call = request(app.getHttpServer()).post(endpoint);
+              // F066: required on resident intake, accepted on the staff
+              // route, so one call shape serves both endpoints here.
+              call.set('Idempotency-Key', randomUUID());
               if (who) call.set('Authorization', `Bearer ${who}`);
               const result = await call.send(payload).expect(201);
               refs.push(
@@ -1917,6 +1927,7 @@ test(
             ])
               await request(app.getHttpServer())
                 .post(publicPath)
+                .set('Idempotency-Key', randomUUID())
                 .send({ ...submission, ...fields })
                 .expect(400);
           },
@@ -2186,6 +2197,14 @@ test(
           targetDivision,
           publicPayload: assisted,
           internalPayload: internal,
+          logs: contactLogs,
+        });
+        // F066 exercises the resident endpoint, so it takes the anonymous
+        // resident payload rather than the staff-assisted one.
+        await checkSubmissionIdempotency(t, {
+          app,
+          db,
+          publicPayload: base,
           logs: contactLogs,
         });
         await checkRequestTracking(t, {
@@ -2493,6 +2512,7 @@ test(
               .execute();
             await request(app.getHttpServer())
               .post(publicPath)
+              .set('Idempotency-Key', randomUUID())
               .send(handoffBase)
               .expect(409);
             for (const payload of [handoffAssisted, handoffInternal])
@@ -2504,6 +2524,7 @@ test(
             ]) {
               await request(app.getHttpServer())
                 .post(publicPath)
+                .set('Idempotency-Key', randomUUID())
                 .send({ ...handoffBase, ...extra })
                 .expect(400);
               await postAs(
@@ -2551,6 +2572,7 @@ test(
             );
             await request(app.getHttpServer())
               .post(publicPath)
+              .set('Idempotency-Key', randomUUID())
               .send({
                 ...handoffBase,
                 serviceDefinitionVersionId: actionVersion,

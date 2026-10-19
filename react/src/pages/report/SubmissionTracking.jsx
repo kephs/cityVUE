@@ -16,10 +16,26 @@ import "../../tracking/tracking.css";
  * `browser` is injectable so tests can observe navigation and clipboard
  * behavior without a real one.
  */
-export default function SubmissionTracking({ tracking, browser = window }) {
+export default function SubmissionTracking({
+  tracking,
+  replay,
+  browser = window,
+}) {
   const [feedback, setFeedback] = useState("");
   // No credential means no link. Never synthesize one from the reference.
-  if (!tracking || typeof tracking.credential !== "string")
+  if (!tracking || typeof tracking.credential !== "string") {
+    // F066. A replay cannot return the original link: only the credential's
+    // digest was stored, so the raw value is unrecoverable by design. Saying
+    // so plainly, and naming the one path that can help, is the honest
+    // answer -- presenting a replay as link recovery would not be.
+    if (replay?.tracking === "issued_unrecoverable")
+      return (
+        <p className="tracking-description">
+          A tracking link was created when this request was first submitted and
+          cannot be shown again. Save your reference above, and contact the
+          service team to have a new tracking link issued.
+        </p>
+      );
     return (
       <p className="tracking-description">
         A tracking link is not available for this submission. Save your
@@ -27,6 +43,7 @@ export default function SubmissionTracking({ tracking, browser = window }) {
         access.
       </p>
     );
+  }
   const link = `${browser.location.origin}/track#${tracking.credential}`;
   const expires = Number.isFinite(Date.parse(tracking.expiresAt))
     ? new Date(tracking.expiresAt).toLocaleDateString(undefined, {

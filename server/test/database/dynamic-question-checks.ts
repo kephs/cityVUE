@@ -566,14 +566,17 @@ export async function checkDynamicQuestions(
       const before = await snapshot();
       await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send({ ...input, answers: [] })
         .expect(400);
       await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send({ ...input, answers: [...input.answers, input.answers[0]] })
         .expect(400);
       await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send({
           ...input,
           answers: [{ questionId: randomUUID(), value: 'Unknown' }],
@@ -581,6 +584,7 @@ export async function checkDynamicQuestions(
         .expect(400);
       await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send({
           ...input,
           answers: [
@@ -593,6 +597,7 @@ export async function checkDynamicQuestions(
       // Each long answer is individually valid; only the aggregate limit rejects this.
       await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send({
           ...input,
           answers: qs.map((question) => ({
@@ -609,6 +614,7 @@ export async function checkDynamicQuestions(
       try {
         await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send(input)
           .expect(500);
         assert.deepEqual(await snapshot(), before);
@@ -619,6 +625,7 @@ export async function checkDynamicQuestions(
       }
       const created = await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send(input)
         .expect(201);
       const read = await request(api)
@@ -670,6 +677,7 @@ export async function checkDynamicQuestions(
       issue = (edited.body as { issue: typeof issue }).issue;
       await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send(input)
         .expect(409);
       const historical = await request(api)

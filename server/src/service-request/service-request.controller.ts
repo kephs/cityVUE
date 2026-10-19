@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Header,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -20,6 +22,7 @@ import {
   ApiOperation,
   ApiTags,
   ApiBearerAuth,
+  ApiHeader,
 } from '@nestjs/swagger';
 import { CurrentStaff, RequirePermission } from '../auth/auth.decorators.js';
 import { StaffAccessGuard } from '../auth/staff-access.guard.js';
@@ -42,6 +45,7 @@ import {
   StaffMutationResponseDto,
 } from './service-request.dto.js';
 import { StaffActionsService } from './staff-actions.service.js';
+import { validSubmissionKey } from './submission-idempotency.js';
 
 @ApiTags('service requests')
 @Controller('service-requests')
@@ -68,13 +72,35 @@ export class ServiceRequestController {
       'Published catalog version not found in the configured Organization',
   })
   @ApiConflictResponse({
-    description: 'Reference or concurrent persistence conflict',
+    description:
+      'Reference or concurrent persistence conflict, a submission key reused for a different payload, a closed retry window, or an earlier submission with this key still in progress',
+  })
+  // F066: required, so no resident submission can reach the creation path
+  // without an idempotency scope. A missing or malformed key is refused here
+  // rather than defaulted, because a server-generated key would make every
+  // retry look like a new submission -- which is the duplicate this prevents.
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description:
+      'Client-generated UUID. Reuse it for safe retries of the same submission; generate a new one for a new submission.',
+    schema: { type: 'string', format: 'uuid' },
   })
   create(
     @ResidentTenant() tenant: TenantContext,
     @Body() input: CreateServiceRequestDto,
+    @Headers('idempotency-key') submissionKey: string | undefined,
   ) {
-    return this.createRequest.execute(tenant.organizationId, input);
+    if (!validSubmissionKey(submissionKey))
+      throw new BadRequestException(
+        'A valid Idempotency-Key request header is required',
+      );
+    return this.createRequest.execute(
+      tenant.organizationId,
+      input,
+      undefined,
+      submissionKey,
+    );
   }
   @Get()
   @UseGuards(StaffAccessGuard)

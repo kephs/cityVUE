@@ -1,4 +1,5 @@
 import { AttachmentClaimDto } from '../attachments/attachment.controller.js';
+import type { ReplayTrackingState } from './submission-idempotency.js';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -160,6 +161,19 @@ export class CreateServiceRequestResponseDto {
    */
   @ApiPropertyOptional({ type: Object })
   tracking?: { credential: string; expiresAt: string };
+  /**
+   * F066: present only when this response replays an earlier committed
+   * submission rather than creating one. The identity, reference and creation
+   * timestamp above are the original request's.
+   *
+   * `tracking` states what became of the F065 link. `issued_unrecoverable`
+   * means the original submission minted a credential that cannot be returned
+   * again, because only its digest was stored -- the replay is a safe receipt,
+   * not link recovery. `not_issued` means no credential was ever minted for
+   * this submission.
+   */
+  @ApiPropertyOptional({ type: Object })
+  replay?: { tracking: ReplayTrackingState };
 }
 
 export class ServiceRequestDetailsResponseDto {

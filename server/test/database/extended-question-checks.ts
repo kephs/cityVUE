@@ -248,6 +248,7 @@ export async function checkExtendedQuestions(
   const post = (answers: object[], extra = {}) =>
     request(api)
       .post('/api/v1/service-requests')
+      .set('Idempotency-Key', randomUUID())
       .send({ ...input, ...extra, answers });
   const invalid: [string, object[]][] = [
     ['required omitted', []],
@@ -889,6 +890,7 @@ export async function checkExtendedQuestions(
             const before = await state();
             await request(api)
               .post('/api/v1/service-requests')
+              .set('Idempotency-Key', randomUUID())
               .send({ ...payload, attachments: claim })
               .expect(500);
             assert.deepEqual(await state(), before);
@@ -910,6 +912,7 @@ export async function checkExtendedQuestions(
         }
         const first = await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...payload, attachments: claim })
           .expect(201);
         const edited = await patch(issue.id, {
@@ -923,6 +926,7 @@ export async function checkExtendedQuestions(
         const before = await state();
         const retry = await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...payload, attachments: claim })
           .expect(201);
         assert.equal(
@@ -1030,6 +1034,7 @@ export async function checkExtendedQuestions(
           const before = await state();
           await request(api)
             .post('/api/v1/service-requests')
+            .set('Idempotency-Key', randomUUID())
             .send(payload)
             .expect(409);
           assert.deepEqual(await state(), before);
@@ -1041,6 +1046,7 @@ export async function checkExtendedQuestions(
           if (availability === 'INTERNAL_ONLY') {
             await request(api)
               .post('/api/v1/service-requests')
+              .set('Idempotency-Key', randomUUID())
               .send(payload)
               .expect(409);
             await request(api)
@@ -1050,6 +1056,7 @@ export async function checkExtendedQuestions(
             // A question identity from the source template is not a copied question identity.
             await request(api)
               .post('/api/v1/service-requests')
+              .set('Idempotency-Key', randomUUID())
               .send(payload)
               .expect(400);
             const redirect = await patch(copy.id, {
@@ -1071,6 +1078,7 @@ export async function checkExtendedQuestions(
             );
             await request(api)
               .post('/api/v1/service-requests')
+              .set('Idempotency-Key', randomUUID())
               .send(payload)
               .expect(409);
             assert.equal(

@@ -577,6 +577,7 @@ export async function checkAdminIssues(
       };
       const pending = request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send({
           serviceDefinitionId: issue.id,
           serviceDefinitionVersionId: version.current_published_version_id,
@@ -598,6 +599,7 @@ export async function checkAdminIssues(
         issue = (deactivated.body as { issue: IssueProjection }).issue;
         await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({
             serviceDefinitionId: issue.id,
             serviceDefinitionVersionId: version.current_published_version_id,
