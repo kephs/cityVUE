@@ -32,13 +32,43 @@ import {
  */
 
 /**
- * Pinned by digest, verified locally before use. `postgres:17-alpine` is
- * mutable and therefore not an identity.
+ * The approved PostgreSQL image is pinned to a registry manifest/index digest.
+ * RepoDigests establishes that identity; Docker's observed .Id is separate.
+ * Depending on the store and inspection context, .Id may identify an OCI
+ * index, a platform manifest or a configuration object. It is never evidence
+ * of an independently verified configuration digest. That digest remains
+ * unknown here. The container must report the same observed ID as this image.
  */
-const IMAGE_DIGEST =
+const IMAGE_REPOSITORY = 'postgres';
+const IMAGE_REPOSITORY_DIGEST =
   'sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24';
-const IMAGE_REFERENCE = `postgres@${IMAGE_DIGEST}`;
+const IMAGE_REFERENCE = `${IMAGE_REPOSITORY}@${IMAGE_REPOSITORY_DIGEST}`;
 const REQUIRED_MAJOR = 17;
+
+/** Exact Docker Hub spellings only; never strip an arbitrary registry host. */
+const APPROVED_REPOSITORIES = new Set([
+  'postgres',
+  'library/postgres',
+  'docker.io/library/postgres',
+  'registry-1.docker.io/library/postgres',
+]);
+
+/** A canonical content-addressable digest: `sha256:` and 64 lowercase hex. */
+const CANONICAL_DIGEST = /^sha256:[0-9a-f]{64}$/;
+
+/**
+ * The delimiter in the image-inspection template. `|` cannot occur in a
+ * digest, a repository reference or a tag, so a value can never contain it
+ * and splitting is unambiguous.
+ */
+const IDENTITY_DELIMITER = '|';
+
+/**
+ * The Go template the image probe uses. One invocation returns both
+ * identities, so they are read from a single consistent observation rather
+ * than from two inspections that could straddle a change.
+ */
+const IDENTITY_FORMAT = `{{.Id}}${IDENTITY_DELIMITER}{{join .RepoDigests ","}}`;
 
 export const TEST_DATABASE = 'reqro_f0592_test';
 export const TEST_ROLE = 'reqro_test_user';
@@ -430,7 +460,14 @@ export interface DisposableCluster {
   readonly nonce: string;
   readonly epoch: Date;
   readonly imageReference: string;
+  /**
+   * Docker's `.Id` for the running image: the Docker-observed image ID, not the
+   * approved registry digest. It is what binds this container to the image
+   * this run inspected.
+   */
   readonly imageId: string;
+  /** The approved REPOSITORY DIGEST, verified against `.RepoDigests`. */
+  readonly imageRepositoryDigest: string;
   /** The URL the suites receive as `TEST_DATABASE_URL`. */
   readonly testUrl: string;
   /** The expectations the evidence predicate is given. */
@@ -448,23 +485,138 @@ export interface DisposableCluster {
   destroy(): Promise<CleanupResult>;
 }
 
-/** Confirms the pinned image is present locally and really is that digest. */
-function verifyImage(): void {
-  const probe = docker([
-    'image',
-    'inspect',
-    IMAGE_REFERENCE,
-    '--format',
-    '{{.Id}}',
-  ]);
+/** The two identities of one approved local image, told apart. */
+export interface VerifiedImageIdentity {
+  /** The approved registry identity, matched against `.RepoDigests`. */
+  readonly repositoryDigest: string;
+  /**
+   * Docker's `.Id` for the resolved image. Store-dependent, recorded as
+   * evidence and bound to the container that runs it -- never treated as the
+   * registry identity.
+   */
+  readonly observedImageId: string;
+}
+
+export type ImageIdentityVerdict =
+  | { readonly ok: true; readonly identity: VerifiedImageIdentity }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * Pure. Decides whether one image probe proves the approved image is present,
+ * and separates the two identities it reports.
+ *
+ * Fail-closed by construction: every branch that is not an affirmative match
+ * refuses. A probe that did not run, was killed, answered non-zero, answered
+ * nothing, answered something unparseable, or carries only a mutable tag is a
+ * verification failure, not a soft pass. Being pure, each of those branches is
+ * provable against fabricated input, which is the only way the
+ * never-reached-in-practice ones get covered at all.
+ */
+export function evaluateImageIdentity(
+  probe: DockerResult,
+  expected: { readonly repository: string; readonly repositoryDigest: string },
+): ImageIdentityVerdict {
+  const refuse = (reason: string): ImageIdentityVerdict => ({
+    ok: false,
+    reason,
+  });
+
+  // 1. The probe must have run to completion and answered. A timeout is
+  //    checked first: `spawnSync` reports it as an ETIMEDOUT spawn error, a
+  //    signal, or both, and the timeout is the more precise cause.
+  if (probe.timedOut)
+    return refuse(
+      'Docker image inspection timed out, so the image is unverified',
+    );
+  if (probe.spawnError !== null)
+    return refuse(`Docker image inspection could not run: ${probe.spawnError}`);
+  if (probe.signal !== null)
+    return refuse(
+      `Docker image inspection was terminated by ${probe.signal}, so the image is unverified`,
+    );
   if (probe.status !== 0)
-    throw new Error(
-      `the pinned PostgreSQL image is unavailable locally: ${IMAGE_REFERENCE}`,
+    return refuse(
+      `the approved PostgreSQL image is unavailable locally: ${
+        probe.stderr === '' ? 'Docker reported no detail' : probe.stderr
+      }`,
     );
-  if (probe.stdout !== IMAGE_DIGEST)
-    throw new Error(
-      `the pinned image resolved to ${probe.stdout}, expected ${IMAGE_DIGEST}`,
+  if (probe.stdout === '')
+    return refuse('Docker image inspection returned no image metadata');
+
+  if (/\s/.test(probe.stdout))
+    return refuse('malformed image metadata contains whitespace');
+
+  // 2. The response must have the shape the template asks for. An absent
+  //    delimiter means the template did not render, not that there are no
+  //    repository digests -- those cases are distinguishable and only the
+  //    second is allowed to continue.
+  const split = probe.stdout.indexOf(IDENTITY_DELIMITER);
+  if (split === -1 || probe.stdout.lastIndexOf(IDENTITY_DELIMITER) !== split)
+    return refuse('Docker image inspection returned malformed image metadata');
+  const observedImageId = probe.stdout.slice(0, split);
+  const digestList = probe.stdout.slice(split + 1);
+
+  // 3. The Docker-observed image ID is recorded, so it must itself be well formed.
+  //    It is NOT compared with the approved repository digest.
+  if (!CANONICAL_DIGEST.test(observedImageId))
+    return refuse(
+      `the Docker-observed image ID is not a canonical sha256 digest: ${
+        observedImageId === '' ? 'empty' : observedImageId
+      }`,
     );
+
+  // Expectations come from the fixed launcher pin, never metadata or a tag.
+  if (
+    expected.repository !== IMAGE_REPOSITORY ||
+    !CANONICAL_DIGEST.test(expected.repositoryDigest)
+  )
+    return refuse('unsupported approved repository identity');
+
+  if (digestList === '')
+    return refuse(
+      'the local image carries no repository digest; mutable tags are refused',
+    );
+  const entries = digestList.split(',');
+  if (new Set(entries).size !== entries.length)
+    return refuse('duplicate repository digest metadata is ambiguous');
+  for (const entry of entries) {
+    const at = entry.indexOf('@');
+    if (at <= 0 || at !== entry.lastIndexOf('@'))
+      return refuse('malformed repository digest metadata');
+    const repository = entry.slice(0, at);
+    const repositoryDigest = entry.slice(at + 1);
+    if (!CANONICAL_DIGEST.test(repositoryDigest))
+      return refuse('malformed repository digest metadata');
+    if (!APPROVED_REPOSITORIES.has(repository))
+      return refuse('unexpected repository reference: ' + repository);
+    // Every entry must resolve to the same approved identity. An approved
+    // entry cannot rescue contradictory metadata or a foreign repository.
+    if (repositoryDigest !== expected.repositoryDigest)
+      return refuse(
+        'repository digest differs from approved ' + expected.repositoryDigest,
+      );
+  }
+
+  return {
+    ok: true,
+    identity: { repositoryDigest: expected.repositoryDigest, observedImageId },
+  };
+}
+
+/**
+ * Confirms the approved image is present locally and really carries the
+ * approved repository digest, and reports both identities for evidence.
+ */
+function verifyImage(): VerifiedImageIdentity {
+  const verdict = evaluateImageIdentity(
+    docker(['image', 'inspect', IMAGE_REFERENCE, '--format', IDENTITY_FORMAT]),
+    {
+      repository: IMAGE_REPOSITORY,
+      repositoryDigest: IMAGE_REPOSITORY_DIGEST,
+    },
+  );
+  if (!verdict.ok) throw new Error(verdict.reason);
+  return verdict.identity;
 }
 
 /**
@@ -472,7 +624,10 @@ function verifyImage(): void {
  * must be destroyed in a `finally`.
  */
 export async function startDisposableCluster(): Promise<DisposableCluster> {
-  verifyImage();
+  // Both identities come from this one verified observation. The container is
+  // created from `IMAGE_REFERENCE` alone, so the approved pinned reference
+  // remains the only thing that can be launched.
+  const image = verifyImage();
 
   const suffix = randomUUID().replaceAll('-', '').slice(0, 16);
   const container = `reqro-f0592-pg17-${suffix}`;
@@ -531,7 +686,8 @@ export async function startDisposableCluster(): Promise<DisposableCluster> {
     nonce,
     containerId,
     imageReference: IMAGE_REFERENCE,
-    imageId: IMAGE_DIGEST,
+    imageId: image.observedImageId,
+    imageRepositoryDigest: image.repositoryDigest,
     harnessEpoch: epoch,
     deniedVolumeNames: DENIED_VOLUMES,
   });
@@ -687,7 +843,8 @@ export async function startDisposableCluster(): Promise<DisposableCluster> {
     nonce,
     epoch,
     imageReference: IMAGE_REFERENCE,
-    imageId: IMAGE_DIGEST,
+    imageId: image.observedImageId,
+    imageRepositoryDigest: image.repositoryDigest,
     testUrl,
     expectations,
     environment: () => ({
@@ -695,7 +852,8 @@ export async function startDisposableCluster(): Promise<DisposableCluster> {
       REQRO_DISPOSABLE_NONCE: nonce,
       REQRO_DISPOSABLE_CONTAINER_ID: containerId,
       REQRO_DISPOSABLE_IMAGE_REFERENCE: IMAGE_REFERENCE,
-      REQRO_DISPOSABLE_IMAGE_ID: IMAGE_DIGEST,
+      REQRO_DISPOSABLE_IMAGE_ID: image.observedImageId,
+      REQRO_DISPOSABLE_IMAGE_REPOSITORY_DIGEST: image.repositoryDigest,
       REQRO_DISPOSABLE_EPOCH: epoch.toISOString(),
     }),
     census: async () => {

@@ -21,10 +21,16 @@ import {
 
 const NONCE = 'f0ba7c2d9e4b41a7bd3c5e8f10273645';
 const CONTAINER = 'c'.repeat(64);
-const IMAGE_REFERENCE =
-  'postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24';
-const IMAGE_ID =
+const IMAGE_REPOSITORY_DIGEST =
   'sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24';
+const IMAGE_REFERENCE = `postgres@${IMAGE_REPOSITORY_DIGEST}`;
+/**
+ * Deliberately NOT the repository digest. The two identities differ under the
+ * classic graphdriver image store, so the fixture that proves the predicate
+ * correct has to differ too -- an equal pair would pass even if the predicate
+ * went back to conflating them.
+ */
+const IMAGE_ID = `sha256:${'1d'.repeat(32)}`;
 const ANONYMOUS_VOLUME = 'a'.repeat(64);
 const EPOCH = new Date('2026-10-15T12:00:00.000Z');
 const AFTER = new Date('2026-10-15T12:00:30.000Z');
@@ -78,6 +84,7 @@ function evidence(): DisposableEvidence {
       containerId: CONTAINER,
       imageReference: IMAGE_REFERENCE,
       imageId: IMAGE_ID,
+      imageRepositoryDigest: IMAGE_REPOSITORY_DIGEST,
       harnessEpoch: EPOCH,
       deniedVolumeNames: ['cityvue-postgres-data'],
     },
@@ -238,8 +245,8 @@ const rejections: readonly {
     evidence: perturb({ container: { imageReference: 'postgres:17-alpine' } }),
   },
   {
-    name: 'a substituted resolved image',
-    reason: 'not the pinned image',
+    name: 'a substituted container Docker-observed image ID',
+    reason: 'not the image this run verified',
     evidence: perturb({ container: { imageId: 'sha256:' + 'e'.repeat(64) } }),
   },
   {
@@ -385,6 +392,7 @@ test('the predicate fails closed on empty evidence', () => {
       containerId: '',
       imageReference: '',
       imageId: '',
+      imageRepositoryDigest: '',
       harnessEpoch: new Date('nonsense'),
       deniedVolumeNames: [],
     },
@@ -401,6 +409,7 @@ const COMPLETE_ENV = {
   REQRO_DISPOSABLE_CONTAINER_ID: CONTAINER,
   REQRO_DISPOSABLE_IMAGE_REFERENCE: IMAGE_REFERENCE,
   REQRO_DISPOSABLE_IMAGE_ID: IMAGE_ID,
+  REQRO_DISPOSABLE_IMAGE_REPOSITORY_DIGEST: IMAGE_REPOSITORY_DIGEST,
   REQRO_DISPOSABLE_EPOCH: EPOCH.toISOString(),
 } as const;
 

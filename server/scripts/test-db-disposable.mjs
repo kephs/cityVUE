@@ -1102,7 +1102,11 @@ async function main() {
     process.exit(1);
   }
   ok(`container ${cluster.container} on 127.0.0.1:${cluster.port}`);
-  info(`image pinned to ${cluster.imageId}`);
+  // Both identities, each labelled. Printing one unlabelled value invited
+  // exactly the confusion this corrects: a repository digest and a
+  // Docker-observed image ID look alike and are not interchangeable.
+  info(`image pinned to ${cluster.imageRepositoryDigest} (repository digest)`);
+  info(`Docker-observed image ID ${cluster.imageId}`);
 
   if (captureRequested) {
     // Now that the generated values exist, teach the redactor exactly what to
@@ -1121,7 +1125,12 @@ async function main() {
     capture.instance = {
       containerShortId: cluster.containerId.slice(0, 12),
       containerName: cluster.container,
+      // imageId is Docker's observed .Id, whose meaning depends on the store.
+      // imageRepositoryDigest is the separately verified registry identity.
+      // No platform-manifest or configuration digest is inferred from .Id.
+      // These v2 additions require separate Azure reader compatibility approval.
       imageId: cluster.imageId,
+      imageRepositoryDigest: cluster.imageRepositoryDigest,
       port: cluster.port,
       epoch: cluster.epoch.toISOString(),
     };
