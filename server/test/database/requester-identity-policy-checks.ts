@@ -119,11 +119,13 @@ export async function checkRequesterIdentityPolicy(
       ])
         await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send(body)
           .expect(400);
       assert.deepEqual(await rows(), before);
       const result = await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send(anonymous)
         .expect(201);
       anonymousId = (result.body as { id: string }).id;
@@ -194,6 +196,7 @@ export async function checkRequesterIdentityPolicy(
       await set('IDENTIFIED_REQUIRED');
       await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send(anonymous)
         .expect(400);
       await request(api)
@@ -208,6 +211,7 @@ export async function checkRequesterIdentityPolicy(
       assert.deepEqual(await rows(), before);
       await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send({ ...publicPayload, contact: { name: 'F049 Fictional Name' } })
         .expect(201);
       await request(api)
@@ -393,7 +397,10 @@ export async function checkRequesterIdentityPolicy(
       const before = await rows();
       const [, response] = await Promise.all([
         set('IDENTIFIED_REQUIRED'),
-        request(api).post('/api/v1/service-requests').send(anonymous),
+        request(api)
+          .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
+          .send(anonymous),
       ]);
       assert.ok([201, 400].includes(response.status));
       const after = await rows(),
@@ -407,6 +414,7 @@ export async function checkRequesterIdentityPolicy(
       );
       await request(api)
         .post('/api/v1/service-requests')
+        .set('Idempotency-Key', randomUUID())
         .send(anonymous)
         .expect(400);
       await set('ANONYMOUS_ALLOWED');

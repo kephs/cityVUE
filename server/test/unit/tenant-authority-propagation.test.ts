@@ -153,11 +153,17 @@ test('anonymous request creation takes Organization from the resident tenant', a
   );
 
   // A forged Organization-looking body field must not influence the write.
-  await controller.create(tenant(ORGANIZATION_A), {
-    organizationId: ORGANIZATION_B,
-    organization_id: ORGANIZATION_B,
-    tenant: ORGANIZATION_B,
-  } as never);
+  // F066 requires an idempotency key, which is scoped to the resolved tenant
+  // and so cannot redirect the write either.
+  await controller.create(
+    tenant(ORGANIZATION_A),
+    {
+      organizationId: ORGANIZATION_B,
+      organization_id: ORGANIZATION_B,
+      tenant: ORGANIZATION_B,
+    } as never,
+    '3f8a1c42-9d5e-4b17-8a63-1c2d4e5f6a7b',
+  );
   assert.deepEqual(seen, [ORGANIZATION_A]);
 });
 
@@ -204,8 +210,10 @@ test('staff handlers accept no resident tenant argument', () => {
   assert.equal(ServiceRequestController.prototype.list.length, 2);
   assert.equal(ServiceRequestController.prototype.details.length, 2);
   assert.equal(ServiceRequestController.prototype.assignment.length, 3);
-  // Resident creation takes the tenant first, then the body.
-  assert.equal(ServiceRequestController.prototype.create.length, 2);
+  // Resident creation takes the tenant first, then the body, then F066's
+  // idempotency key header. The tenant stays first and the key is a header
+  // rather than a body field, so neither can be supplied by the payload.
+  assert.equal(ServiceRequestController.prototype.create.length, 3);
 });
 
 test('a resident handler fails closed when no tenant resolved', () => {

@@ -34,6 +34,14 @@ function createReceipt(response) {
     typeof tracking?.credential === "string" &&
     /^[A-Za-z0-9_-]{43}$/.test(tracking.credential) &&
     Number.isFinite(Date.parse(tracking?.expiresAt));
+  // F066: admitted only as one of the two known states, so an unexpected
+  // value cannot reach the confirmation and be rendered as a claim about a
+  // tracking link.
+  const replay = response?.replay?.tracking;
+  const replayed =
+    replay === "issued_unrecoverable" || replay === "not_issued"
+      ? replay
+      : undefined;
   return {
     id: response?.id,
     referenceNumber: response?.referenceNumber,
@@ -47,6 +55,7 @@ function createReceipt(response) {
           },
         }
       : {}),
+    ...(replayed ? { replay: { tracking: replayed } } : {}),
   };
 }
 

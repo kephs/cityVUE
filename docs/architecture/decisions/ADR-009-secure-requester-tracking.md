@@ -40,7 +40,7 @@ Activation is gated on a known weakness rather than on readiness alone. Submissi
 
 Activation prerequisites, all separately approved:
 
-1. All-submission idempotency implemented and validated.
+1. All-submission idempotency implemented and validated. Implemented by [F066](../../features/F066-all-submission-idempotency.md) under [ADR-031](ADR-031-submission-idempotency.md); this prerequisite remains **open** pending independent validation of that implementation.
 2. Migration safely applied under separate authorization.
 3. Credential lifecycle and recovery support accepted, noting that the raw credential is unrecoverable from its digest and that rotation by staff is the only replacement path.
 4. Security regression tests passed.

@@ -127,6 +127,21 @@ export default function ReportIssuePage({
   const handoffPending = useRef(false);
   const sequence = useRef(0);
   const submittingRef = useRef(false);
+  /**
+   * F066. The idempotency key for the submission currently being attempted.
+   *
+   * Minted when the submission's content changes and reused for every retry of
+   * the same content, so a timeout or a lost response can be retried without
+   * creating a second request. This mirrors the key handling the internal-note
+   * and correspondence clients already use.
+   *
+   * Held in memory only. It is never written to localStorage, sessionStorage,
+   * a query string, the document title or an analytics call. Persisting it
+   * would buy nothing: a reload also discards the in-progress form, so the
+   * stored key could no longer be paired with the submission it belonged to
+   * and the server would correctly refuse it as a different payload.
+   */
+  const submissionRef = useRef(null);
   const categories = useMemo(
     () => searchCategories(categoryQuery, categoryItems),
     [categoryQuery, categoryItems],
@@ -389,13 +404,27 @@ export default function ReportIssuePage({
     setSubmitting(true);
     setSaveError("");
     try {
-      const response = await data.requests.createServiceRequest({
+      const submission = {
         category,
         service,
         answers,
         ...values,
         ...(evidence.claim() ? { attachments: evidence.claim() } : {}),
+      };
+      // A new key only when the submission itself is different. An unchanged
+      // retry keeps its key, which is what makes the retry safe; a changed
+      // payload gets a new one, so an edited submission is never mistaken for
+      // a replay of the previous attempt.
+      const signature = JSON.stringify(submission);
+      if (
+        !submissionRef.current ||
+        submissionRef.current.signature !== signature
+      )
+        submissionRef.current = { signature, key: crypto.randomUUID() };
+      const response = await data.requests.createServiceRequest(submission, {
+        idempotencyKey: submissionRef.current.key,
       });
+      submissionRef.current = null;
       evidence.clear();
       setAnswers({});
       if (onSuccess) onSuccess(response);
@@ -411,6 +440,15 @@ export default function ReportIssuePage({
         move("service");
         await selectService(service.id);
       }
+      // F066. The submission is no longer a retry of the recorded one, so the
+      // next attempt must carry a new key. `SUBMISSION_IN_PROGRESS` is
+      // deliberately absent: there the key is kept, because retrying with it
+      // is exactly what returns the original request instead of a duplicate.
+      if (
+        error.code === "SUBMISSION_KEY_REUSED" ||
+        error.code === "SUBMISSION_RETRY_WINDOW_CLOSED"
+      )
+        submissionRef.current = null;
       setSaveError(
         data.mode === "legacy"
           ? "The issue could not be saved. Please try again."
@@ -427,7 +465,11 @@ export default function ReportIssuePage({
       <section className="report-issue-page">
         <div className="card report-form-card">
           <div className="card-body p-5 text-center">
-            <h1>Request submitted successfully.</h1>
+            <h1>
+              {result.replay
+                ? "This request was already submitted."
+                : "Request submitted successfully."}
+            </h1>
             <p>
               {values.reportingMode === "anonymous"
                 ? "Submitted anonymously. No requester contact information was collected."
@@ -452,7 +494,10 @@ export default function ReportIssuePage({
               </dl>
             )}
             {data.mode === "api" && (
-              <SubmissionTracking tracking={result.tracking} />
+              <SubmissionTracking
+                tracking={result.tracking}
+                replay={result.replay}
+              />
             )}
             {data.mode === "api" && data.detailsEnabled && result.id && (
               <button

@@ -725,6 +725,7 @@ export async function checkAttachments(
         await upload(claim, id, png, filename, false).expect(201);
         const result = await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...payload, attachments: claim })
           .expect(201);
         const requestId = (result.body as { id: string }).id;
@@ -763,6 +764,7 @@ export async function checkAttachments(
         );
         await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send(payload)
           .expect(400);
         await db
@@ -798,6 +800,7 @@ export async function checkAttachments(
           .execute();
         const retry = await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...payload, attachments: claim })
           .expect(201);
         assert.equal((retry.body as { id: string }).id, requestId);
@@ -826,6 +829,7 @@ export async function checkAttachments(
           [1, 2].map(() =>
             request(api)
               .post('/api/v1/service-requests')
+              .set('Idempotency-Key', randomUUID())
               .send({ ...payload, attachments: claim })
               .expect(201),
           ),
@@ -875,6 +879,7 @@ export async function checkAttachments(
           .execute();
         const manualRetry = await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...payload, attachments: claim })
           .expect(201);
         assert.deepEqual(manualRetry.body, result.body);
@@ -918,6 +923,7 @@ export async function checkAttachments(
         );
         const next = await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send(payload)
           .expect(201);
         assert.equal(
@@ -952,6 +958,7 @@ export async function checkAttachments(
         );
         await request(api)
           .post('/api/v1/service-requests')
+          .set('Idempotency-Key', randomUUID())
           .send({ ...payload, description: 'Changed', attachments: claim })
           .expect(409);
         const list = await staffGet(

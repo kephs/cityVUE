@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import test, { after, before } from 'node:test';
 import type { INestApplication } from '@nestjs/common';
@@ -269,6 +270,7 @@ after(async () => app.close());
 test('POST creates anonymous and identified requests with a resident-safe response', async () => {
   const anonymous = await request(app.getHttpServer())
     .post('/api/v1/service-requests')
+    .set('Idempotency-Key', randomUUID())
     .send(base)
     .expect(201);
   assert.deepEqual(anonymous.body, {
@@ -283,6 +285,7 @@ test('POST creates anonymous and identified requests with a resident-safe respon
   );
   await request(app.getHttpServer())
     .post('/api/v1/service-requests')
+    .set('Idempotency-Key', randomUUID())
     .send({
       ...base,
       reportingIdentity: 'identified',
@@ -294,6 +297,7 @@ test('F065 a creation response carrying a one-time credential is uncacheable, un
   const credential = `F065${'A'.repeat(39)}`;
   const carrying = await request(app.getHttpServer())
     .post('/api/v1/service-requests')
+    .set('Idempotency-Key', randomUUID())
     .send({ ...base, description: 'Road damage F065-TRACKING' })
     .expect(201);
   // A response holding a bearer credential must never be stored by a cache
@@ -308,6 +312,7 @@ test('F065 a creation response carrying a one-time credential is uncacheable, un
   // disabled rollout, a replay, an INTERNAL request and staff intake return.
   const plain = await request(app.getHttpServer())
     .post('/api/v1/service-requests')
+    .set('Idempotency-Key', randomUUID())
     .send(base)
     .expect(201);
   assert.equal('tracking' in (plain.body as Record<string, unknown>), false);
@@ -318,21 +323,25 @@ test('F065 a creation response carrying a one-time credential is uncacheable, un
 test('POST rejects malformed IDs and non-whitelisted fields safely', async () => {
   const malformed = await request(app.getHttpServer())
     .post('/api/v1/service-requests')
+    .set('Idempotency-Key', randomUUID())
     .send({ ...base, serviceDefinitionId: 'bad' })
     .expect(400);
   assert.equal('stack' in (malformed.body as Record<string, unknown>), false);
   await request(app.getHttpServer())
     .post('/api/v1/service-requests')
+    .set('Idempotency-Key', randomUUID())
     .send({ ...base, priority: 'urgent' })
     .expect(400);
 });
 test('POST returns safe policy and catalog errors', async () => {
   await request(app.getHttpServer())
     .post('/api/v1/service-requests')
+    .set('Idempotency-Key', randomUUID())
     .send({ ...base, location: undefined })
     .expect(400);
   await request(app.getHttpServer())
     .post('/api/v1/service-requests')
+    .set('Idempotency-Key', randomUUID())
     .send({
       ...base,
       serviceDefinitionId: '40000000-0000-4000-8000-000000000005',
@@ -340,6 +349,7 @@ test('POST returns safe policy and catalog errors', async () => {
     .expect(400);
   await request(app.getHttpServer())
     .post('/api/v1/service-requests')
+    .set('Idempotency-Key', randomUUID())
     .send({
       ...base,
       serviceDefinitionVersionId: '50000000-0000-4000-8000-000000000099',
@@ -355,6 +365,7 @@ test('POST exposes distinct resident-safe location eligibility outcomes', async 
   ] as const) {
     const response = await request(app.getHttpServer())
       .post('/api/v1/service-requests')
+      .set('Idempotency-Key', randomUUID())
       .send({ ...base, location: { enteredAddress } })
       .expect(400);
     const body = response.body as Record<string, unknown>;
@@ -450,6 +461,7 @@ test('F045 HTTP rejects malformed coordinates and device/provider metadata', asy
   ])
     await request(app.getHttpServer())
       .post('/api/v1/service-requests')
+      .set('Idempotency-Key', randomUUID())
       .send({ ...base, location })
       .expect(400);
   const unavailable = await request(app.getHttpServer())

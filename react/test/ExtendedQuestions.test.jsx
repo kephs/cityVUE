@@ -369,6 +369,9 @@ test("F056.2C Information-only schema retains Additional information but creates
   await user.click(screen.getByRole("button", { name: "Submit Request" }));
   expect(requests.createServiceRequest).toHaveBeenCalledWith(
     expect.objectContaining({ answers: {} }),
+    // F066: the submission now carries an idempotency key alongside the
+    // payload, so a retry of this submission cannot create a second request.
+    expect.objectContaining({ idempotencyKey: expect.any(String) }),
   );
 });
 test("F056.2C protected staff shows historical label list/date only after deliberate protected read", async () => {

@@ -124,6 +124,13 @@ grant select, insert on :"schema".question to :"runtime";
 grant select, insert on :"schema".question_option to :"runtime";
 grant select, insert on :"schema".request_communication to :"runtime";
 grant select, insert on :"schema".request_internal_note to :"runtime";
+-- F066 submission idempotency reservations. SELECT and INSERT only: the
+-- table is append-only and its triggers refuse UPDATE and DELETE, so
+-- granting either would exceed what any code path can legitimately do and
+-- would be the one privilege that could repoint a reservation at another
+-- request. Retention is a separately authorized concern; no DELETE is
+-- granted here for it.
+grant select, insert on :"schema".request_submission_idempotency to :"runtime";
 grant select, insert on :"schema".request_operational_activity to :"runtime";
 grant select, insert on :"schema".requester to :"runtime";
 grant select, insert on :"schema".requester_contact to :"runtime";

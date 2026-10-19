@@ -49,6 +49,13 @@ export function buildErrorResponse(
       'LOCATION_INELIGIBLE',
       'LOCATION_ELIGIBILITY_UNDETERMINED',
       'LOCATION_ELIGIBILITY_UNAVAILABLE',
+      // F066. Admitted so a submission conflict stays distinguishable from a
+      // stale catalog version, which the resident client recovers from by
+      // discarding the submission. Each one concerns only a key the caller
+      // supplied and names no request, reference or tenant.
+      'SUBMISSION_KEY_REUSED',
+      'SUBMISSION_RETRY_WINDOW_CLOSED',
+      'SUBMISSION_IN_PROGRESS',
     ]);
     if (
       candidateCode &&
