@@ -45,17 +45,11 @@ export interface DisposableExpectations {
   /** The pinned reference passed to `docker run`, e.g. `postgres@sha256:…`. */
   readonly imageReference: string;
   /**
-   * The image CONFIGURATION ID this run observed on the image it verified --
-   * Docker's `.Id`, e.g. `sha256:…`.
-   *
-   * This is NOT the approved repository digest, and the two are not
-   * interchangeable: `.Id` is the index digest under the containerd image
-   * store and the platform configuration digest under the graphdriver store.
-   * It is compared against the container's reported image, which the same
-   * daemon reports from the same store, so the comparison proves the
-   * container runs the very image this run inspected without depending on
-   * which store is in use. Approved provenance is carried by
-   * `imageRepositoryDigest` and `imageReference` instead.
+   * Docker's observed .Id for this run's verified image. Depending on the
+   * store/context it may be an index, manifest or configuration digest.
+   * The actual configuration digest is unknown unless independently verified.
+   * Compare only with the container's observed .Image from the same daemon.
+   * Approved registry identity is carried separately by imageRepositoryDigest.
    */
   readonly imageId: string;
   /**
@@ -102,8 +96,8 @@ export interface DisposableContainerFacts {
   /** `.Config.Image`: the reference the container was created from. */
   readonly imageReference: string;
   /**
-   * `.Image`: the image CONFIGURATION ID the daemon resolved the container
-   * to, not a repository digest.
+   * `.Image`: the Docker-observed image ID the daemon resolved the container
+   * to. Its meaning depends on the image store; it is not registry proof.
    */
   readonly imageId: string;
   readonly running: boolean;
@@ -143,11 +137,11 @@ export function refuseUnlessDisposable(
   if (expected.imageReference.trim() === '')
     return 'the expected image reference is empty';
   if (expected.imageId.trim() === '')
-    return 'the expected image configuration ID is empty';
+    return 'the expected Docker-observed image ID is empty';
   if (expected.imageRepositoryDigest.trim() === '')
     return 'the expected image repository digest is empty';
   // The approved provenance must actually be the thing that was launched.
-  // Without this, a correct configuration-ID match alone could satisfy the
+  // Without this, a correct observed-ID match alone could satisfy the
   // source check while the reference named some other digest.
   if (!expected.imageReference.endsWith(`@${expected.imageRepositoryDigest}`))
     return `the pinned reference ${expected.imageReference} does not carry the approved repository digest ${expected.imageRepositoryDigest}`;
@@ -199,12 +193,12 @@ export function refuseUnlessDisposable(
   if (container.imageReference !== expected.imageReference)
     return `the container image reference is not the pinned digest, got ${container.imageReference}`;
   // Same daemon, same image store, so this compares like with like: the
-  // container's reported image against the configuration ID observed on the
+  // container's reported image against the observed ID of the
   // image this run verified. It deliberately does not compare against the
   // repository digest, which is a different identity and would disagree
   // under the graphdriver store.
   if (container.imageId !== expected.imageId)
-    return 'the container image configuration ID is not the image this run verified';
+    return 'the container Docker-observed image ID is not the image this run verified';
   if (!container.running) return 'the container is not running';
   if (container.created === null)
     return 'the container creation time is missing';

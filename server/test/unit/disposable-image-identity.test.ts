@@ -12,32 +12,15 @@ import {
 } from '../helpers/disposable-cluster-evidence.js';
 
 /**
- * F060 — Docker image-identity hardening.
- *
- * A Docker image has two identities and they are not interchangeable:
- *
- * - the REPOSITORY DIGEST, the registry manifest/index digest that
- *   `postgres@sha256:…` names, reported in `.RepoDigests`; and
- * - the image CONFIGURATION ID, Docker's `.Id` for the resolved local image.
- *
- * The previous check compared `.Id` against the approved repository digest.
- * That equality holds only under Docker's containerd image store, where `.Id`
- * is reported as the OCI index digest. Under the classic graphdriver store
- * `.Id` is the platform configuration digest and never equals the repository
- * digest, so the approved image would have been refused -- and Azure's Linux
- * runtime preflight treats the two as separate identities for exactly this
- * reason.
- *
- * These tests fix the distinction in place. `evaluateImageIdentity` is pure,
- * so every refusal branch -- including the ones a healthy Docker never
- * produces -- is proven against fabricated probe results rather than left to
- * a happy-path run.
+ * Offline image-identity regressions. .Id is Docker-observed identity, not
+ * necessarily a configuration digest. Equal and differing synthetic values
+ * model containerd and graphdriver shapes without claiming real execution.
  */
 
 const REPOSITORY = 'postgres';
 const APPROVED_DIGEST = `sha256:${'b0'.repeat(32)}`;
-/** A legitimately different configuration ID, as a graphdriver host reports. */
-const CONFIG_ID = `sha256:${'1d'.repeat(32)}`;
+/** A legitimately different Docker-observed image ID, as a graphdriver host reports. */
+const OBSERVED_IMAGE_ID = `sha256:${'1d'.repeat(32)}`;
 const OTHER_DIGEST = `sha256:${'ee'.repeat(32)}`;
 const EXPECTED = { repository: REPOSITORY, repositoryDigest: APPROVED_DIGEST };
 
@@ -55,8 +38,11 @@ function probe(stdout: string, overrides: Partial<DockerResult> = {}) {
 }
 
 /** The template output shape: `{{.Id}}|{{join .RepoDigests ","}}`. */
-function rendered(configId: string, repoDigests: readonly string[]): string {
-  return `${configId}|${repoDigests.join(',')}`;
+function rendered(
+  observedImageId: string,
+  repoDigests: readonly string[],
+): string {
+  return `${observedImageId}|${repoDigests.join(',')}`;
 }
 
 function reasonOf(verdict: ReturnType<typeof evaluateImageIdentity>): string {
@@ -65,29 +51,29 @@ function reasonOf(verdict: ReturnType<typeof evaluateImageIdentity>): string {
 }
 
 // ---------------------------------------------------------------------------
-// 1-3. Positive: the approved digest, a separately recorded configuration ID,
+// 1-3. Positive: the approved digest, a separately recorded Docker-observed image ID,
 // and the two differing legitimately.
 // ---------------------------------------------------------------------------
 
 test('the approved repository digest verifies and both identities are reported', () => {
   const verdict = evaluateImageIdentity(
-    probe(rendered(CONFIG_ID, [`${REPOSITORY}@${APPROVED_DIGEST}`])),
+    probe(rendered(OBSERVED_IMAGE_ID, [`${REPOSITORY}@${APPROVED_DIGEST}`])),
     EXPECTED,
   );
   if (!verdict.ok) assert.fail(`expected approval, got: ${verdict.reason}`);
   assert.equal(verdict.identity.repositoryDigest, APPROVED_DIGEST);
-  assert.equal(verdict.identity.configId, CONFIG_ID);
-  // The whole point: the configuration ID is never returned as the registry
+  assert.equal(verdict.identity.observedImageId, OBSERVED_IMAGE_ID);
+  // The whole point: the Docker-observed image ID is never returned as the registry
   // identity, even though both are `sha256:`-shaped.
   assert.notEqual(
-    verdict.identity.configId,
+    verdict.identity.observedImageId,
     verdict.identity.repositoryDigest,
     'the two identities must stay distinct',
   );
 });
 
-test('a configuration ID equal to the repository digest is also accepted', () => {
-  // The containerd image store reports `.Id` as the index digest, so the two
+test('a Docker-observed image ID equal to the repository digest is also accepted', () => {
+  // A containerd observation may report `.Id` as the index digest, so the two
   // values coincide there. That must remain valid: the correction is that
   // equality is not REQUIRED, not that it is forbidden.
   const verdict = evaluateImageIdentity(
@@ -95,17 +81,19 @@ test('a configuration ID equal to the repository digest is also accepted', () =>
     EXPECTED,
   );
   if (!verdict.ok) assert.fail(`expected approval, got: ${verdict.reason}`);
-  assert.equal(verdict.identity.configId, APPROVED_DIGEST);
+  assert.equal(verdict.identity.observedImageId, APPROVED_DIGEST);
   assert.equal(verdict.identity.repositoryDigest, APPROVED_DIGEST);
 });
 
 test('a registry-qualified repository is the same repository', () => {
   for (const repository of [
+    'postgres',
+    'library/postgres',
     'docker.io/library/postgres',
     'registry-1.docker.io/library/postgres',
   ]) {
     const verdict = evaluateImageIdentity(
-      probe(rendered(CONFIG_ID, [`${repository}@${APPROVED_DIGEST}`])),
+      probe(rendered(OBSERVED_IMAGE_ID, [`${repository}@${APPROVED_DIGEST}`])),
       EXPECTED,
     );
     if (!verdict.ok)
@@ -114,18 +102,87 @@ test('a registry-qualified repository is the same repository', () => {
   }
 });
 
-test('the approved digest is found among several repository digests', () => {
-  const verdict = evaluateImageIdentity(
-    probe(
-      rendered(CONFIG_ID, [
-        `postgres@${OTHER_DIGEST}`,
-        `${REPOSITORY}@${APPROVED_DIGEST}`,
-      ]),
+test('conflicting repository digests cannot be rescued by the approved entry', () => {
+  assert.match(
+    reasonOf(
+      evaluateImageIdentity(
+        probe(
+          rendered(OBSERVED_IMAGE_ID, [
+            REPOSITORY + '@' + OTHER_DIGEST,
+            REPOSITORY + '@' + APPROVED_DIGEST,
+          ]),
+        ),
+        EXPECTED,
+      ),
     ),
-    EXPECTED,
+    /repository digest/,
   );
-  if (!verdict.ok) assert.fail(`expected approval, got: ${verdict.reason}`);
-  assert.equal(verdict.identity.repositoryDigest, APPROVED_DIGEST);
+});
+
+for (const repository of [
+  'evil.example/postgres',
+  'evil.example/library/postgres',
+  'localhost:5000/postgres',
+  'docker.io/attacker/postgres',
+  'attacker/postgres',
+  'docker.io.evil.example/library/postgres',
+  'docker.io:443/library/postgres',
+  'https://docker.io/library/postgres',
+  'docker.io/library/postgres:17-alpine',
+  'docker.io/library/../postgres',
+  'Docker.io/library/postgres',
+  'postgres ',
+  ' postgres',
+]) {
+  test('rejects unapproved repository ' + repository, () => {
+    for (const entries of [
+      [repository + '@' + APPROVED_DIGEST],
+      [REPOSITORY + '@' + APPROVED_DIGEST, repository + '@' + APPROVED_DIGEST],
+    ]) {
+      assert.equal(
+        evaluateImageIdentity(
+          probe(rendered(OBSERVED_IMAGE_ID, entries)),
+          EXPECTED,
+        ).ok,
+        false,
+      );
+    }
+  });
+}
+
+test('rejects empty entries, duplicates and malformed or ambiguous metadata', () => {
+  const approved = REPOSITORY + '@' + APPROVED_DIGEST;
+  for (const entries of [
+    [approved, ''],
+    ['', approved],
+    [approved, approved],
+    ['postgres@@' + APPROVED_DIGEST],
+    [approved + '|'],
+    [approved + '\n'],
+  ]) {
+    assert.equal(
+      evaluateImageIdentity(
+        probe(rendered(OBSERVED_IMAGE_ID, entries)),
+        EXPECTED,
+      ).ok,
+      false,
+    );
+  }
+});
+
+test('approved aliases may repeat one unambiguous registry identity', () => {
+  assert.equal(
+    evaluateImageIdentity(
+      probe(
+        rendered(OBSERVED_IMAGE_ID, [
+          'postgres@' + APPROVED_DIGEST,
+          'docker.io/library/postgres@' + APPROVED_DIGEST,
+        ]),
+      ),
+      EXPECTED,
+    ).ok,
+    true,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -135,7 +192,7 @@ test('the approved digest is found among several repository digests', () => {
 test('an incorrect repository digest is refused', () => {
   const reason = reasonOf(
     evaluateImageIdentity(
-      probe(rendered(CONFIG_ID, [`${REPOSITORY}@${OTHER_DIGEST}`])),
+      probe(rendered(OBSERVED_IMAGE_ID, [`${REPOSITORY}@${OTHER_DIGEST}`])),
       EXPECTED,
     ),
   );
@@ -143,7 +200,7 @@ test('an incorrect repository digest is refused', () => {
   assert.ok(reason.includes(APPROVED_DIGEST), 'must name what was expected');
 });
 
-test('a configuration ID matching the approved digest cannot stand in for it', () => {
+test('a Docker-observed image ID matching the approved digest cannot stand in for it', () => {
   // The exact substitution this corrects: `.Id` is right, provenance is
   // absent or wrong. Being `.Id`-correct must not rescue it.
   const reason = reasonOf(
@@ -157,7 +214,7 @@ test('a configuration ID matching the approved digest cannot stand in for it', (
 
 test('an absent repository digest is refused as a mutable tag', () => {
   const reason = reasonOf(
-    evaluateImageIdentity(probe(rendered(CONFIG_ID, [])), EXPECTED),
+    evaluateImageIdentity(probe(rendered(OBSERVED_IMAGE_ID, [])), EXPECTED),
   );
   assert.match(reason, /no repository digest|mutable tag/);
 });
@@ -166,7 +223,7 @@ test('a mutable tag without any approved digest is refused', () => {
   // What `docker image inspect postgres:17-alpine` looks like on a host that
   // built or loaded the image locally: tagged, never pulled, no digest.
   const reason = reasonOf(
-    evaluateImageIdentity(probe(`${CONFIG_ID}|`), EXPECTED),
+    evaluateImageIdentity(probe(`${OBSERVED_IMAGE_ID}|`), EXPECTED),
   );
   assert.match(reason, /mutable tag/);
 });
@@ -183,7 +240,10 @@ test('malformed digests are refused', () => {
   ];
   for (const entry of malformed) {
     const reason = reasonOf(
-      evaluateImageIdentity(probe(rendered(CONFIG_ID, [entry])), EXPECTED),
+      evaluateImageIdentity(
+        probe(rendered(OBSERVED_IMAGE_ID, [entry])),
+        EXPECTED,
+      ),
     );
     assert.match(
       reason,
@@ -193,22 +253,28 @@ test('malformed digests are refused', () => {
   }
 });
 
-test('a malformed configuration ID is refused', () => {
-  for (const configId of ['', 'not-a-digest', `sha256:${'b0'.repeat(31)}`]) {
+test('a malformed Docker-observed image ID is refused', () => {
+  for (const observedImageId of [
+    '',
+    'not-a-digest',
+    `sha256:${'b0'.repeat(31)}`,
+  ]) {
     const reason = reasonOf(
       evaluateImageIdentity(
-        probe(rendered(configId, [`${REPOSITORY}@${APPROVED_DIGEST}`])),
+        probe(rendered(observedImageId, [`${REPOSITORY}@${APPROVED_DIGEST}`])),
         EXPECTED,
       ),
     );
-    assert.match(reason, /configuration ID/);
+    assert.match(reason, /Docker-observed image ID/);
   }
 });
 
 test('an unexpected repository reference is refused', () => {
   const reason = reasonOf(
     evaluateImageIdentity(
-      probe(rendered(CONFIG_ID, [`attacker/postgres@${APPROVED_DIGEST}`])),
+      probe(
+        rendered(OBSERVED_IMAGE_ID, [`attacker/postgres@${APPROVED_DIGEST}`]),
+      ),
       EXPECTED,
     ),
   );
@@ -221,7 +287,7 @@ test('a repository that merely ends in the approved name is refused', () => {
   // path separator, not a suffix.
   const reason = reasonOf(
     evaluateImageIdentity(
-      probe(rendered(CONFIG_ID, [`notpostgres@${APPROVED_DIGEST}`])),
+      probe(rendered(OBSERVED_IMAGE_ID, [`notpostgres@${APPROVED_DIGEST}`])),
       EXPECTED,
     ),
   );
@@ -231,11 +297,11 @@ test('a repository that merely ends in the approved name is refused', () => {
 test('an unrelated local image never satisfies the check', () => {
   const reason = reasonOf(
     evaluateImageIdentity(
-      probe(rendered(CONFIG_ID, [`redis@${OTHER_DIGEST}`])),
+      probe(rendered(OBSERVED_IMAGE_ID, [`redis@${OTHER_DIGEST}`])),
       EXPECTED,
     ),
   );
-  assert.match(reason, /is not postgres@/);
+  assert.match(reason, /unexpected repository reference/);
 });
 
 // ---------------------------------------------------------------------------
@@ -298,7 +364,7 @@ test('a successful probe that answered nothing is a verification failure', () =>
 test('output that did not render the template is a verification failure', () => {
   // No delimiter: the template failed, which is NOT the same as "there are no
   // repository digests" and must not be read as it.
-  for (const stdout of [CONFIG_ID, 'null', '<no value>', '{}']) {
+  for (const stdout of [OBSERVED_IMAGE_ID, 'null', '<no value>', '{}']) {
     const reason = reasonOf(evaluateImageIdentity(probe(stdout), EXPECTED));
     assert.match(reason, /malformed image metadata/, `for ${stdout}`);
   }
@@ -310,7 +376,7 @@ test('contradictory metadata is refused rather than reconciled', () => {
   const reason = reasonOf(
     evaluateImageIdentity(
       probe(
-        rendered(CONFIG_ID, [
+        rendered(OBSERVED_IMAGE_ID, [
           `${REPOSITORY}@${OTHER_DIGEST}`,
           `${REPOSITORY}@sha256:${'cc'.repeat(32)}`,
         ]),
@@ -360,9 +426,8 @@ function containerFacts(): ContainerFacts {
   return {
     id: CONTAINER,
     imageReference: `${REPOSITORY}@${APPROVED_DIGEST}`,
-    // The daemon resolves the container to the configuration ID, not to the
-    // repository digest.
-    imageId: CONFIG_ID,
+    // This synthetic daemon reports a distinct observed image ID.
+    imageId: OBSERVED_IMAGE_ID,
     running: true,
     created: AFTER,
     portBindings: [{ hostIp: '127.0.0.1', hostPort: '62818' }],
@@ -400,7 +465,7 @@ function evidence(): DisposableEvidence {
       nonce: NONCE,
       containerId: CONTAINER,
       imageReference: `${REPOSITORY}@${APPROVED_DIGEST}`,
-      imageId: CONFIG_ID,
+      imageId: OBSERVED_IMAGE_ID,
       imageRepositoryDigest: APPROVED_DIGEST,
       harnessEpoch: EPOCH,
       deniedVolumeNames: ['cityvue-postgres-data'],
@@ -419,7 +484,7 @@ test('the container must run the image this run verified', () => {
     ...evidence(),
     container: { ...containerFacts(), imageId: OTHER_DIGEST },
   });
-  assert.match(String(refusal), /configuration ID/);
+  assert.match(String(refusal), /Docker-observed image ID/);
 });
 
 test('a container created from an unpinned reference is refused', () => {
@@ -431,7 +496,7 @@ test('a container created from an unpinned reference is refused', () => {
 });
 
 test('expectations whose reference omits the approved digest are refused', () => {
-  // Guards the one gap a configuration-ID comparison alone would leave: a
+  // Guards the one gap a observed-ID comparison alone would leave: a
   // consistent pair of values that are not the approved provenance.
   const base = evidence();
   const refusal = refuseUnlessDisposable({
@@ -464,7 +529,7 @@ test('the repository digest is a required part of the environment contract', () 
     REQRO_DISPOSABLE_NONCE: NONCE,
     REQRO_DISPOSABLE_CONTAINER_ID: CONTAINER,
     REQRO_DISPOSABLE_IMAGE_REFERENCE: `${REPOSITORY}@${APPROVED_DIGEST}`,
-    REQRO_DISPOSABLE_IMAGE_ID: CONFIG_ID,
+    REQRO_DISPOSABLE_IMAGE_ID: OBSERVED_IMAGE_ID,
     REQRO_DISPOSABLE_EPOCH: EPOCH.toISOString(),
   });
   if (state.kind !== 'partial')
@@ -480,13 +545,13 @@ test('a complete environment carries both identities separately', () => {
     REQRO_DISPOSABLE_NONCE: NONCE,
     REQRO_DISPOSABLE_CONTAINER_ID: CONTAINER,
     REQRO_DISPOSABLE_IMAGE_REFERENCE: `${REPOSITORY}@${APPROVED_DIGEST}`,
-    REQRO_DISPOSABLE_IMAGE_ID: CONFIG_ID,
+    REQRO_DISPOSABLE_IMAGE_ID: OBSERVED_IMAGE_ID,
     REQRO_DISPOSABLE_IMAGE_REPOSITORY_DIGEST: APPROVED_DIGEST,
     REQRO_DISPOSABLE_EPOCH: EPOCH.toISOString(),
   });
   if (state.kind !== 'configured')
     assert.fail(`expected configured, got ${state.kind}`);
-  assert.equal(state.expected.imageId, CONFIG_ID);
+  assert.equal(state.expected.imageId, OBSERVED_IMAGE_ID);
   assert.equal(state.expected.imageRepositoryDigest, APPROVED_DIGEST);
   assert.notEqual(
     state.expected.imageId,

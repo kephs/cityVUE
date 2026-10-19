@@ -245,7 +245,7 @@ const rejections: readonly {
     evidence: perturb({ container: { imageReference: 'postgres:17-alpine' } }),
   },
   {
-    name: 'a substituted container image configuration ID',
+    name: 'a substituted container Docker-observed image ID',
     reason: 'not the image this run verified',
     evidence: perturb({ container: { imageId: 'sha256:' + 'e'.repeat(64) } }),
   },

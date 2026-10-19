@@ -32,35 +32,26 @@ import {
  */
 
 /**
- * The approved image, pinned by its REPOSITORY DIGEST, verified locally
- * before use. `postgres:17-alpine` is mutable and therefore not an identity.
- *
- * A repository digest is not an image configuration ID, and the two must
- * never be substituted for one another.
- *
- * - The REPOSITORY DIGEST is the registry manifest -- here an OCI image
- *   INDEX -- digest that `postgres@sha256:…` names. It is the approved
- *   provenance, and Docker reports it in `.RepoDigests`.
- * - The IMAGE CONFIGURATION ID is `.Id` from image inspection: a local
- *   identifier for the resolved image object.
- *
- * Which value `.Id` carries depends on the image store, which is exactly why
- * comparing it to the approved digest is wrong. Under the containerd image
- * store `.Id` is the index digest, so it happens to equal this constant;
- * under the classic graphdriver store it is the platform image's
- * configuration digest and never will. Because this pin is a multi-platform
- * index, the index digest, the per-platform manifest digest and the
- * configuration digest are three distinct values.
- *
- * Verification therefore matches the approved digest against `.RepoDigests`,
- * which is the registry identity under either store, and records `.Id`
- * separately as independent evidence instead of asserting the two are equal.
+ * The approved PostgreSQL image is pinned to a registry manifest/index digest.
+ * RepoDigests establishes that identity; Docker's observed .Id is separate.
+ * Depending on the store and inspection context, .Id may identify an OCI
+ * index, a platform manifest or a configuration object. It is never evidence
+ * of an independently verified configuration digest. That digest remains
+ * unknown here. The container must report the same observed ID as this image.
  */
 const IMAGE_REPOSITORY = 'postgres';
 const IMAGE_REPOSITORY_DIGEST =
   'sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24';
 const IMAGE_REFERENCE = `${IMAGE_REPOSITORY}@${IMAGE_REPOSITORY_DIGEST}`;
 const REQUIRED_MAJOR = 17;
+
+/** Exact Docker Hub spellings only; never strip an arbitrary registry host. */
+const APPROVED_REPOSITORIES = new Set([
+  'postgres',
+  'library/postgres',
+  'docker.io/library/postgres',
+  'registry-1.docker.io/library/postgres',
+]);
 
 /** A canonical content-addressable digest: `sha256:` and 64 lowercase hex. */
 const CANONICAL_DIGEST = /^sha256:[0-9a-f]{64}$/;
@@ -470,7 +461,7 @@ export interface DisposableCluster {
   readonly epoch: Date;
   readonly imageReference: string;
   /**
-   * Docker's `.Id` for the running image: the image CONFIGURATION ID, not the
+   * Docker's `.Id` for the running image: the Docker-observed image ID, not the
    * approved registry digest. It is what binds this container to the image
    * this run inspected.
    */
@@ -503,7 +494,7 @@ export interface VerifiedImageIdentity {
    * evidence and bound to the container that runs it -- never treated as the
    * registry identity.
    */
-  readonly configId: string;
+  readonly observedImageId: string;
 }
 
 export type ImageIdentityVerdict =
@@ -552,96 +543,63 @@ export function evaluateImageIdentity(
   if (probe.stdout === '')
     return refuse('Docker image inspection returned no image metadata');
 
+  if (/\s/.test(probe.stdout))
+    return refuse('malformed image metadata contains whitespace');
+
   // 2. The response must have the shape the template asks for. An absent
   //    delimiter means the template did not render, not that there are no
   //    repository digests -- those cases are distinguishable and only the
   //    second is allowed to continue.
   const split = probe.stdout.indexOf(IDENTITY_DELIMITER);
-  if (split === -1)
+  if (split === -1 || probe.stdout.lastIndexOf(IDENTITY_DELIMITER) !== split)
     return refuse('Docker image inspection returned malformed image metadata');
-  const configId = probe.stdout.slice(0, split).trim();
-  const digestList = probe.stdout.slice(split + 1).trim();
+  const observedImageId = probe.stdout.slice(0, split);
+  const digestList = probe.stdout.slice(split + 1);
 
-  // 3. The configuration ID is recorded, so it must itself be well formed.
+  // 3. The Docker-observed image ID is recorded, so it must itself be well formed.
   //    It is NOT compared with the approved repository digest.
-  if (!CANONICAL_DIGEST.test(configId))
+  if (!CANONICAL_DIGEST.test(observedImageId))
     return refuse(
-      `the image configuration ID is not a canonical sha256 digest: ${
-        configId === '' ? 'empty' : configId
+      `the Docker-observed image ID is not a canonical sha256 digest: ${
+        observedImageId === '' ? 'empty' : observedImageId
       }`,
     );
 
-  // 4. Registry provenance. Without a repository digest the only identity is
-  //    a mutable tag, which is not provenance.
-  const entries = digestList
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== '');
-  if (entries.length === 0)
-    return refuse(
-      'the local image carries no repository digest, so only a mutable tag identifies it',
-    );
+  // Expectations come from the fixed launcher pin, never metadata or a tag.
+  if (
+    expected.repository !== IMAGE_REPOSITORY ||
+    !CANONICAL_DIGEST.test(expected.repositoryDigest)
+  )
+    return refuse('unsupported approved repository identity');
 
-  const parsed: { repository: string; digest: string }[] = [];
+  if (digestList === '')
+    return refuse(
+      'the local image carries no repository digest; mutable tags are refused',
+    );
+  const entries = digestList.split(',');
+  if (new Set(entries).size !== entries.length)
+    return refuse('duplicate repository digest metadata is ambiguous');
   for (const entry of entries) {
-    // `lastIndexOf`, because a registry reference may itself contain `@`
-    // nowhere but the digest separator is always the final one.
-    const at = entry.lastIndexOf('@');
-    if (at <= 0 || at === entry.length - 1)
-      return refuse(
-        `the local image carries a malformed repository digest: ${entry}`,
-      );
+    const at = entry.indexOf('@');
+    if (at <= 0 || at !== entry.lastIndexOf('@'))
+      return refuse('malformed repository digest metadata');
     const repository = entry.slice(0, at);
-    const digest = entry.slice(at + 1);
-    if (!CANONICAL_DIGEST.test(digest))
+    const repositoryDigest = entry.slice(at + 1);
+    if (!CANONICAL_DIGEST.test(repositoryDigest))
+      return refuse('malformed repository digest metadata');
+    if (!APPROVED_REPOSITORIES.has(repository))
+      return refuse('unexpected repository reference: ' + repository);
+    // Every entry must resolve to the same approved identity. An approved
+    // entry cannot rescue contradictory metadata or a foreign repository.
+    if (repositoryDigest !== expected.repositoryDigest)
       return refuse(
-        `the local image carries a malformed repository digest: ${entry}`,
+        'repository digest differs from approved ' + expected.repositoryDigest,
       );
-    parsed.push({ repository, digest });
-  }
-
-  // 5. The approved digest must appear under the approved repository.
-  //    `docker.io/library/postgres` is the same repository as `postgres`, so a
-  //    registry host and the `library/` namespace are both tolerated -- but a
-  //    suffix match is NOT the rule: `attacker/postgres` and `notpostgres`
-  //    must both be refused, so the host is stripped only when it really
-  //    looks like a host and the remainder must then match exactly.
-  const named = (repository: string): boolean => {
-    const slash = repository.indexOf('/');
-    const head = slash === -1 ? '' : repository.slice(0, slash);
-    const isHost =
-      head === 'localhost' || head.includes('.') || head.includes(':');
-    const path =
-      slash === -1 || !isHost ? repository : repository.slice(slash + 1);
-    return (
-      path === expected.repository || path === `library/${expected.repository}`
-    );
-  };
-  const match = parsed.find(
-    (entry) =>
-      named(entry.repository) && entry.digest === expected.repositoryDigest,
-  );
-  if (match === undefined) {
-    const elsewhere = parsed.find(
-      (entry) => entry.digest === expected.repositoryDigest,
-    );
-    if (elsewhere !== undefined)
-      return refuse(
-        `the approved digest appears under an unexpected repository reference: ${elsewhere.repository}`,
-      );
-    const sameRepository = parsed.find((entry) => named(entry.repository));
-    if (sameRepository !== undefined)
-      return refuse(
-        `the image resolved to repository digest ${sameRepository.digest}, expected ${expected.repositoryDigest}`,
-      );
-    return refuse(
-      `the local image is not ${expected.repository}@${expected.repositoryDigest}`,
-    );
   }
 
   return {
     ok: true,
-    identity: { repositoryDigest: match.digest, configId },
+    identity: { repositoryDigest: expected.repositoryDigest, observedImageId },
   };
 }
 
@@ -728,7 +686,7 @@ export async function startDisposableCluster(): Promise<DisposableCluster> {
     nonce,
     containerId,
     imageReference: IMAGE_REFERENCE,
-    imageId: image.configId,
+    imageId: image.observedImageId,
     imageRepositoryDigest: image.repositoryDigest,
     harnessEpoch: epoch,
     deniedVolumeNames: DENIED_VOLUMES,
@@ -885,7 +843,7 @@ export async function startDisposableCluster(): Promise<DisposableCluster> {
     nonce,
     epoch,
     imageReference: IMAGE_REFERENCE,
-    imageId: image.configId,
+    imageId: image.observedImageId,
     imageRepositoryDigest: image.repositoryDigest,
     testUrl,
     expectations,
@@ -894,7 +852,7 @@ export async function startDisposableCluster(): Promise<DisposableCluster> {
       REQRO_DISPOSABLE_NONCE: nonce,
       REQRO_DISPOSABLE_CONTAINER_ID: containerId,
       REQRO_DISPOSABLE_IMAGE_REFERENCE: IMAGE_REFERENCE,
-      REQRO_DISPOSABLE_IMAGE_ID: image.configId,
+      REQRO_DISPOSABLE_IMAGE_ID: image.observedImageId,
       REQRO_DISPOSABLE_IMAGE_REPOSITORY_DIGEST: image.repositoryDigest,
       REQRO_DISPOSABLE_EPOCH: epoch.toISOString(),
     }),
