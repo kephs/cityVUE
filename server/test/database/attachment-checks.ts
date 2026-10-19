@@ -1271,6 +1271,11 @@ export async function checkAttachments(
                   credential_digest: digest,
                   status: 'active',
                   created_by_staff_identity_id: full.id,
+                  // F065: a staff-issued fixture keeps its staff author. Left
+                  // non-expiring so this projection check stays about
+                  // attachment exposure rather than credential lifetime.
+                  issuer_type: 'staff',
+                  expires_at: null,
                   revoked_at: null,
                 })
                 .execute();

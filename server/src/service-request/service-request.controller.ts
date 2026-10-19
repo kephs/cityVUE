@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -53,6 +54,10 @@ export class ServiceRequestController {
   ) {}
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  // F065: this response may carry a one-time tracking credential, so it is
+  // never cached and never referred onward.
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
   @ApiOperation({ summary: 'Create a canonical resident service request' })
   @ApiCreatedResponse({ type: CreateServiceRequestResponseDto })
   @ApiBadRequestResponse({

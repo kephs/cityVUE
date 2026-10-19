@@ -7,6 +7,7 @@ import { sql, type Transaction } from 'kysely';
 import type { DatabaseSchema } from '../database/database.types.js';
 import {
   requesterStatus,
+  trackingLifetimeDays,
   REQUESTER_UPDATE_PAGE_SIZE,
 } from './request-tracking.domain.js';
 import { requesterCommunicationProjection } from './requester-communication.projection.js';
@@ -20,13 +21,51 @@ export class RequestTrackingRepository {
   ) {
     const row = await trx
       .selectFrom('request_tracking_credential')
-      .select(['id', 'status'])
+      .select([
+        'id',
+        'status',
+        'issuer_type',
+        sql<string | null>`expires_at::text`.as('expires_at'),
+        // F065: expiry is a predicate, not a stored status, so management
+        // derives it from the database clock instead of reading a column.
+        sql<boolean>`expires_at is not null and expires_at <= clock_timestamp()`.as(
+          'expired',
+        ),
+      ])
       .where('organization_id', '=', organizationId)
       .where('service_request_id', '=', requestId)
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .executeTakeFirst();
-    return { status: row?.status ?? 'not_issued', version: row?.id ?? null };
+    return {
+      status: row?.status ?? 'not_issued',
+      version: row?.id ?? null,
+      // Safe management metadata only -- never a digest or a recoverable link.
+      issuerType: row?.issuer_type ?? null,
+      expired: row?.expired ?? false,
+      expiresAt: row?.expires_at
+        ? new Date(row.expires_at).toISOString()
+        : null,
+    };
+  }
+
+  /**
+   * F065: the tenant's approved credential lifetime, read inside the
+   * authorizing transaction. Migration backfills every Organization and a
+   * trigger initializes new ones, so a missing row should be impossible; the
+   * domain clamp still bounds whatever is read.
+   */
+  async lifetimeDays(
+    trx: Transaction<DatabaseSchema>,
+    organizationId: string,
+  ): Promise<number> {
+    const row = await trx
+      .selectFrom('request_tracking_policy')
+      .select('credential_lifetime_days')
+      .where('organization_id', '=', organizationId)
+      .forShare()
+      .executeTakeFirst();
+    return trackingLifetimeDays(row?.credential_lifetime_days);
   }
 
   async resolve(trx: Transaction<DatabaseSchema>, digest: string) {
@@ -42,6 +81,14 @@ export class RequestTrackingRepository {
       .select(['token.organization_id', 'token.service_request_id'])
       .where('token.credential_digest', '=', digest)
       .where('token.status', '=', 'active')
+      // F065: expiry is evaluated against the database clock, never against
+      // application time, so a skewed server cannot admit a dead credential.
+      .where((eb) =>
+        eb.or([
+          eb('token.expires_at', 'is', null),
+          eb('token.expires_at', '>', sql<Date>`clock_timestamp()`),
+        ]),
+      )
       .where('request.audience', '=', 'public')
       .where('organization.status', '=', 'active')
       .executeTakeFirst();
@@ -72,6 +119,14 @@ export class RequestTrackingRepository {
       .where('service_request_id', '=', token.service_request_id)
       .where('credential_digest', '=', digest)
       .where('status', '=', 'active')
+      // Recheck expiry under the lock as well, so a credential that lapses
+      // between the lookup and the lock cannot still resolve.
+      .where((eb) =>
+        eb.or([
+          eb('expires_at', 'is', null),
+          eb('expires_at', '>', sql<Date>`clock_timestamp()`),
+        ]),
+      )
       .forShare()
       .executeTakeFirst();
     if (!active) return null;

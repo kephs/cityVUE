@@ -143,6 +143,15 @@ interface ReferenceConfigTable {
   revision: Generated<number>;
   updated_at: Generated<Timestamp>;
 }
+/** F065 tenant tracking-credential lifetime policy, bounded by the platform
+ * CHECK of 30..365 days. Every Organization has exactly one row: backfilled by
+ * migration and created by trigger for new tenants. */
+interface RequestTrackingPolicyTable {
+  organization_id: string;
+  credential_lifetime_days: Generated<number>;
+  revision: Generated<number>;
+  updated_at: Generated<Timestamp>;
+}
 interface ReferenceSequenceTable {
   organization_id: string;
   period_key: string;
@@ -1105,10 +1114,17 @@ export interface DatabaseSchema extends ResidentExperienceTables {
     service_request_id: string;
     credential_digest: string;
     status: 'active' | 'revoked';
-    created_by_staff_identity_id: string;
+    // F065: null for a requester-intake credential. A resident has no
+    // staff_identity row, and no staff author is fabricated to supply one.
+    created_by_staff_identity_id: string | null;
+    issuer_type: 'staff' | 'requester_intake';
+    // F065: absolute, immutable, and null for credentials issued before the
+    // expiry policy existed. Evaluated as a predicate, never as a status.
+    expires_at: Timestamp | null;
     created_at: Generated<Date>;
     revoked_at: Timestamp | null;
   };
+  request_tracking_policy: RequestTrackingPolicyTable;
   request_communication: RequestCommunicationTable;
   request_internal_note: RequestInternalNoteTable;
   operational_role: OperationalRoleTable;

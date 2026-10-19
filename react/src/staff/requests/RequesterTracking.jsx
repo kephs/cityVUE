@@ -5,8 +5,25 @@ import "../../tracking/tracking.css";
 const labels = {
   not_issued: "Not issued",
   active: "Active",
+  // F065: an expired credential is still stored as active, because expiry is
+  // a predicate rather than a status transition. Management presents it
+  // separately so staff are not told a dead link still works.
+  expired: "Expired",
   revoked: "Revoked",
 };
+function labelKey(state) {
+  if (!state) return null;
+  return state.status === "active" && state.expired ? "expired" : state.status;
+}
+function expiryNote(state) {
+  if (!state?.expiresAt) return null;
+  const when = new Date(state.expiresAt).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  return state.expired ? `Expired ${when}` : `Expires ${when}`;
+}
 export default function RequesterTracking({
   repository,
   id,
@@ -26,7 +43,7 @@ export default function RequesterTracking({
     summaryAbort.current = controller;
     repository.trackingState(id, controller.signal).then(
       (value) => {
-        if (!controller.signal.aborted) setSummary(value.status);
+        if (!controller.signal.aborted) setSummary(labelKey(value));
       },
       (problem) => {
         if (controller.signal.aborted) return;
@@ -122,7 +139,7 @@ function TrackingDialog({ repository, id, onClose, onState, onAccessFailure }) {
       .then((value) => {
         if (!controller.signal.aborted) {
           setState(value);
-          onState(value.status);
+          onState(labelKey(value));
         }
       })
       .catch((problem) => {
@@ -154,8 +171,17 @@ function TrackingDialog({ repository, id, onClose, onState, onAccessFailure }) {
         abort.current.signal,
       );
       if (!alive.current) return;
-      setState({ status: value.status, version: value.version });
-      onState(value.status);
+      // A credential that was just issued or rotated cannot be expired yet.
+      // The raw value is deliberately not copied into this state; only `link`
+      // holds it, for the one-time display below.
+      setState({
+        status: value.status,
+        version: value.version,
+        expired: false,
+        expiresAt: value.expiresAt ?? null,
+        issuerType: value.issuerType ?? null,
+      });
+      onState(labelKey({ status: value.status, expired: false }));
       setConfirm(null);
       if (value.credential)
         setLink(`${window.location.origin}/track#${value.credential}`);
@@ -216,12 +242,22 @@ function TrackingDialog({ repository, id, onClose, onState, onAccessFailure }) {
       )}
       {state && (
         <>
-          <p>{labels[state.status]}</p>
+          <p>{labels[labelKey(state)]}</p>
+          {expiryNote(state) && <p>{expiryNote(state)}</p>}
+          {state.issuerType === "requester_intake" && (
+            <p>Issued automatically when the requester submitted this request.</p>
+          )}
+          {labelKey(state) === "expired" && (
+            <p>
+              This link has expired and no longer works. Rotate it to give the
+              requester a new one.
+            </p>
+          )}
           {confirm ? (
             <section>
               <p>
                 {confirm === "rotate"
-                  ? "Creating a new tracking link will invalidate the current link."
+                  ? "Creating a new tracking link will invalidate the current link. The requester's existing link stops working immediately, so send them the new one or they lose tracking access."
                   : "The requester will no longer be able to use the current tracking link."}
               </p>
               <button

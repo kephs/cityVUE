@@ -278,10 +278,10 @@ test(
         ])
         .execute();
       const repository = new ServiceRequestRepository();
-      const config = { get: () => org } as unknown as ConfigService<
-        AppConfiguration,
-        true
-      >;
+      const config = {
+        get: (key: string) =>
+          key === 'requesterTracking.intakeIssuanceEnabled' ? false : org,
+      } as unknown as ConfigService<AppConfiguration, true>;
       const creator = new CreateServiceRequestService(
         config,
         { client: db } as DatabaseService,

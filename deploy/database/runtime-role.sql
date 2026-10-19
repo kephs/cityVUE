@@ -72,6 +72,11 @@ grant select on :"schema".department to :"runtime";
 grant select on :"schema".division to :"runtime";
 grant select on :"schema".operational_role to :"runtime";
 grant select on :"schema".operational_role_membership to :"runtime";
+-- F065 tenant tracking-credential lifetime policy. SELECT only: the runtime
+-- reads a tenant's approved lifetime when issuing, and no application path
+-- writes it. There is deliberately no administration surface, so granting
+-- INSERT or UPDATE here would exceed what any code can legitimately do.
+grant select on :"schema".request_tracking_policy to :"runtime";
 grant select on :"schema".resident_alert to :"runtime";
 grant select on :"schema".staff_department_membership to :"runtime";
 grant select on :"schema".staff_division_membership to :"runtime";

@@ -49,6 +49,11 @@ export interface AppConfiguration {
    * registry strategy, which the API refuses to serve. */
   catalog: { developmentOrganizationId: string };
   serviceRequestReads: { developmentEnabled: boolean };
+  /** F065. Automatic requester-intake tracking issuance. Server-side only and
+   * OFF unless the environment says exactly 'true', so a missing or
+   * unrecognized value never activates it. No client or tenant can override
+   * this, and applying the migration does not switch it on. */
+  requesterTracking: { intakeIssuanceEnabled: boolean };
   staffActions: { developmentEnabled: boolean; developmentActorId: string };
   entra: {
     enabled: boolean;
@@ -138,6 +143,10 @@ export function configuration(): AppConfiguration {
     serviceRequestReads: {
       developmentEnabled:
         process.env.ENABLE_DEVELOPMENT_SERVICE_REQUEST_READS === 'true',
+    },
+    requesterTracking: {
+      intakeIssuanceEnabled:
+        process.env.REQRO_ENABLE_REQUESTER_INTAKE_TRACKING === 'true',
     },
     staffActions: {
       developmentEnabled:

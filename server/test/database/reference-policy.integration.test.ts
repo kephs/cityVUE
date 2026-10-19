@@ -248,7 +248,12 @@ test(
       await identityPolicyUp(db);
       const create = (seed: typeof a, date = '2026-09-15T12:00:00Z') =>
         new CreateServiceRequestService(
-          { get: () => seed.org } as never,
+          {
+            get: (key: string) =>
+              key === 'requesterTracking.intakeIssuanceEnabled'
+                ? false
+                : seed.org,
+          } as never,
           database,
           repository,
           {

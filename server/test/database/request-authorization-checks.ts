@@ -1029,6 +1029,9 @@ export async function checkRequestAuthorization(
         new RequestTrackingService(
           { client } as DatabaseService,
           new RequestTrackingRepository(),
+          // F065 intake issuance is off, which is the shipped default, so
+          // staff issuance here stays non-expiring as it was before.
+          { get: () => false } as never,
         ).change(id, actor, 'issue', null),
     ],
     [

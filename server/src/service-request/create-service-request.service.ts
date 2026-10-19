@@ -54,6 +54,7 @@ import {
   type SupportedQuestionType,
 } from './service-request.domain.js';
 import { ServiceRequestRepository } from './service-request.repository.js';
+import { issueIntakeTrackingCredential } from './requester-intake-issuance.js';
 import { EvaluateLocationEligibilityService } from '../location-eligibility/evaluate-location-eligibility.service.js';
 
 interface Condition {
@@ -81,6 +82,14 @@ const supportedQuestionTypes = new Set<SupportedQuestionType>([
 @Injectable()
 export class CreateServiceRequestService {
   private readonly trustedDevelopment: boolean;
+  /**
+   * F065. OFF unless the environment says exactly 'true', so a missing or
+   * unrecognized value never activates it. There is no client override and no
+   * tenant bypass, and applying the migration does not switch it on. While
+   * disabled, a PUBLIC submission returns exactly the receipt it returned
+   * before this feature existed.
+   */
+  private readonly intakeTrackingEnabled: boolean;
   constructor(
     config: ConfigService<AppConfiguration, true>,
     private readonly database: DatabaseService,
@@ -92,6 +101,13 @@ export class CreateServiceRequestService {
       ['development', 'test'].includes(
         config.get('app.environment', { infer: true }),
       ) && config.get('deployment.profile', { infer: true }) === 'development';
+    // Validated configuration supplies a real boolean: `configuration()`
+    // derives it from an exact 'true', so a missing or malformed environment
+    // value arrives here as false.
+    this.intakeTrackingEnabled = config.get(
+      'requesterTracking.intakeIssuanceEnabled',
+      { infer: true },
+    );
   }
 
   /** No HTTP route calls this. Only a verified provider context may select identity. */
@@ -131,6 +147,9 @@ export class CreateServiceRequestService {
         audience: 'public',
         intakeChannel: 'web',
         staffId: null,
+        // F065: the only path approved for automatic tracking issuance. Staff
+        // intake and the trusted provider path deliberately do not set this.
+        requesterIntake: true,
       },
       now,
     );
@@ -187,6 +206,7 @@ export class CreateServiceRequestService {
       audience: 'public' | 'internal';
       intakeChannel: string;
       staffId: string | null;
+      requesterIntake?: boolean;
       trusted?: TrustedRequesterContext;
       actor?: StaffAccess;
     },
@@ -789,11 +809,31 @@ export class CreateServiceRequestService {
           requestId,
           initialAssignment.target,
         );
+      // F065: automatic tracking issuance, inside this same transaction, for a
+      // resident PUBLIC submission only. It returns undefined whenever the
+      // feature is disabled, so a disabled rollout returns exactly the receipt
+      // it returned before. The two idempotent replay paths above return
+      // earlier and never reach here, so a retry mints nothing: the raw
+      // credential is unrecoverable from its digest and is not re-derived.
+      const tracking =
+        this.intakeTrackingEnabled &&
+        context.audience === 'public' &&
+        context.requesterIntake
+          ? await issueIntakeTrackingCredential(
+              trx,
+              context.organizationId,
+              requestId,
+              input.reportingIdentity === 'anonymous'
+                ? 'anonymous_resident'
+                : 'identified_resident',
+            )
+          : undefined;
       return {
         id: created.id,
         referenceNumber: created.reference_number,
         status: created.status,
         createdAt: new Date(created.created_at as unknown as string),
+        ...(tracking ? { tracking } : {}),
       };
     });
   }

@@ -21,6 +21,35 @@ export function createLegacyIssueRepository({
   };
 }
 
+/**
+ * F065: the creation receipt is re-whitelisted here, so only the fields the
+ * confirmation renders can reach UI state even if the response carries more.
+ * The tracking object is admitted only when both parts are well formed, so a
+ * partial or malformed response produces the no-credential fallback rather
+ * than a broken link.
+ */
+function createReceipt(response) {
+  const tracking = response?.tracking;
+  const valid =
+    typeof tracking?.credential === "string" &&
+    /^[A-Za-z0-9_-]{43}$/.test(tracking.credential) &&
+    Number.isFinite(Date.parse(tracking?.expiresAt));
+  return {
+    id: response?.id,
+    referenceNumber: response?.referenceNumber,
+    status: response?.status,
+    createdAt: response?.createdAt,
+    ...(valid
+      ? {
+          tracking: {
+            credential: tracking.credential,
+            expiresAt: tracking.expiresAt,
+          },
+        }
+      : {}),
+  };
+}
+
 export function createApiServiceRequestRepository(
   apiClient,
   { authenticated = false } = {},
@@ -28,11 +57,9 @@ export function createApiServiceRequestRepository(
   return {
     mode: "api",
     createServiceRequest: (input, options) =>
-      apiClient.post(
-        "/service-requests",
-        mapIntakeToCreateServiceRequest(input),
-        options,
-      ),
+      apiClient
+        .post("/service-requests", mapIntakeToCreateServiceRequest(input), options)
+        .then(createReceipt),
     readAnswers: (id, options) =>
       apiClient.get(
         `/staff/service-requests/${encodeURIComponent(id)}/answers`,

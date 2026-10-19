@@ -106,6 +106,17 @@ before(async () => {
         referenceNumber: 'SR-202609-000001',
         status: 'open',
         createdAt: new Date('2026-09-02T12:00:00Z'),
+        // F065: the creation service decides whether a one-time credential is
+        // returned. This marker lets the HTTP layer be tested for both shapes
+        // without enabling the feature anywhere.
+        ...(input.description.includes('F065-TRACKING')
+          ? {
+              tracking: {
+                credential: `F065${'A'.repeat(39)}`,
+                expiresAt: '2027-04-14T12:00:00.000Z',
+              },
+            }
+          : {}),
       };
     },
   };
@@ -278,6 +289,31 @@ test('POST creates anonymous and identified requests with a resident-safe respon
       contact: { name: 'Resident', email: 'resident@example.test' },
     })
     .expect(201);
+});
+test('F065 a creation response carrying a one-time credential is uncacheable, unreferred and not logged', async () => {
+  const credential = `F065${'A'.repeat(39)}`;
+  const carrying = await request(app.getHttpServer())
+    .post('/api/v1/service-requests')
+    .send({ ...base, description: 'Road damage F065-TRACKING' })
+    .expect(201);
+  // A response holding a bearer credential must never be stored by a cache
+  // or leaked onward through a referrer.
+  assert.equal(carrying.headers['cache-control'], 'no-store');
+  assert.equal(carrying.headers['referrer-policy'], 'no-referrer');
+  assert.deepEqual((carrying.body as { tracking?: unknown }).tracking, {
+    credential,
+    expiresAt: '2027-04-14T12:00:00.000Z',
+  });
+  // The default shape carries no tracking object at all, which is what a
+  // disabled rollout, a replay, an INTERNAL request and staff intake return.
+  const plain = await request(app.getHttpServer())
+    .post('/api/v1/service-requests')
+    .send(base)
+    .expect(201);
+  assert.equal('tracking' in (plain.body as Record<string, unknown>), false);
+  assert.equal(plain.headers['cache-control'], 'no-store');
+  // Nothing echoed the credential back into a header or an error surface.
+  assert.equal(JSON.stringify(carrying.headers).includes(credential), false);
 });
 test('POST rejects malformed IDs and non-whitelisted fields safely', async () => {
   const malformed = await request(app.getHttpServer())

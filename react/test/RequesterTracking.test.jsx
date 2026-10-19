@@ -8,6 +8,12 @@ import { createTrackingSession } from "../src/tracking/trackingSession.js";
 
 const id = "10000000-0000-4000-8000-000000000001";
 const secret = "A".repeat(43);
+const longDate = (value) =>
+  new Date(value).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 const safe = {
   reference: "SYNTHETIC-44",
   issue: { name: "<img src=x onerror=alert(1)>", icon: "<svg>" },
@@ -364,6 +370,67 @@ test("F044 issue shows link once; close clears it; rotation/revocation require c
   await user.click(screen.getByRole("button", { name: "Confirm revocation" }));
   await screen.findByRole("button", { name: "Create new tracking link" });
   expect(screen.queryByLabelText("New tracking link")).toBeNull();
+});
+test("F065 management distinguishes expired from active and names the automatic issuer", async () => {
+  const user = userEvent.setup();
+  // Stored as active, because expiry is a predicate rather than a status.
+  const current = {
+    status: "active",
+    version: id,
+    expired: true,
+    expiresAt: "2026-10-01T00:00:00.000Z",
+    issuerType: "requester_intake",
+  };
+  const repository = {
+    trackingState: vi.fn(async () => current),
+    changeTracking: vi.fn(),
+  };
+  render(<RequesterTracking repository={repository} id={id} allowed />);
+  // The summary must not call a dead link Active.
+  expect(await screen.findByText(/Expired/)).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: "Manage request tracker" }),
+  );
+  expect(await screen.findByText("Expired")).toBeInTheDocument();
+  // Formatted for the viewer's locale and zone, so the expectation is derived
+  // rather than hard-coded to one calendar date.
+  expect(screen.getByText(`Expired ${longDate(current.expiresAt)}`)).toBeInTheDocument();
+  expect(
+    screen.getByText(/Issued automatically when the requester submitted/),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/no longer works/)).toBeInTheDocument();
+  // Rotation remains the action, because one active credential already exists.
+  expect(
+    screen.getByRole("button", { name: "Rotate tracking link" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Create tracking link" }),
+  ).toBeNull();
+  expect(repository.changeTracking).not.toHaveBeenCalled();
+});
+test("F065 a live credential reports its expiry without claiming it has expired", async () => {
+  const user = userEvent.setup();
+  const current = {
+    status: "active",
+    version: id,
+    expired: false,
+    expiresAt: "2027-04-14T00:00:00.000Z",
+    issuerType: "staff",
+  };
+  const repository = {
+    trackingState: vi.fn(async () => current),
+    changeTracking: vi.fn(),
+  };
+  render(<RequesterTracking repository={repository} id={id} allowed />);
+  await user.click(
+    screen.getByRole("button", { name: "Manage request tracker" }),
+  );
+  expect(await screen.findByText("Active")).toBeInTheDocument();
+  expect(screen.getByText(`Expires ${longDate(current.expiresAt)}`)).toBeInTheDocument();
+  expect(screen.queryByText(/no longer works/)).toBeNull();
+  expect(
+    screen.queryByText(/Issued automatically when the requester submitted/),
+  ).toBeNull();
 });
 test("F044 duplicate activation sends one mutation and denied result clears controls", async () => {
   let reject;
