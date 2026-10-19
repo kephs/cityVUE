@@ -1102,7 +1102,11 @@ async function main() {
     process.exit(1);
   }
   ok(`container ${cluster.container} on 127.0.0.1:${cluster.port}`);
-  info(`image pinned to ${cluster.imageId}`);
+  // Both identities, each labelled. Printing one unlabelled value invited
+  // exactly the confusion this corrects: a repository digest and an image
+  // configuration ID look alike and are not interchangeable.
+  info(`image pinned to ${cluster.imageRepositoryDigest} (repository digest)`);
+  info(`image configuration ID ${cluster.imageId}`);
 
   if (captureRequested) {
     // Now that the generated values exist, teach the redactor exactly what to
@@ -1121,7 +1125,15 @@ async function main() {
     capture.instance = {
       containerShortId: cluster.containerId.slice(0, 12),
       containerName: cluster.container,
+      // `imageId` keeps its name and type and now carries what that name
+      // always meant: Docker's `.Id`, the image CONFIGURATION ID.
+      // `imageRepositoryDigest` is additive and carries the approved registry
+      // identity that was previously reported under `imageId`. Both are
+      // `sha256:` + 64 hex; the manifest version is unchanged, no field is
+      // removed, and a consumer reading `imageId` still finds a digest-shaped
+      // value for the image this run actually launched.
       imageId: cluster.imageId,
+      imageRepositoryDigest: cluster.imageRepositoryDigest,
       port: cluster.port,
       epoch: cluster.epoch.toISOString(),
     };
