@@ -57,3 +57,73 @@
     justify-content: flex-start;
   }
 }
+
+/* F067: reference, status and date presentation on the resident tracking page. */
+.tracking-reference {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+}
+.tracking-feedback {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-small);
+  min-height: 1.5em;
+}
+.tracking-status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+/* Wording and an icon carry the lifecycle; color only reinforces it. */
+.tracking-lifecycle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  color: var(--text-secondary);
+  font-size: var(--font-small);
+  font-weight: 700;
+}
+.tracking-status-description {
+  margin: var(--space-3) 0 0;
+  color: var(--text-primary);
+}
+.tracking-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  margin: var(--space-4) 0 0;
+}
+.tracking-dates dt {
+  color: var(--text-muted);
+  font-size: var(--font-small);
+  font-weight: 700;
+}
+.tracking-dates dd {
+  margin: 0;
+}
+.tracking-update-count {
+  color: var(--text-secondary);
+  font-size: var(--font-small);
+}
+.tracking-footer {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+@media (max-width: 480px) {
+  .tracking-reference {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .tracking-dates {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+}
