@@ -30,12 +30,52 @@ import {
   SESSION_FILE,
   UAT_ENV_FILE,
   UAT_DATABASE,
+  UAT_DEVELOPMENT_ORGANIZATION_ID,
+  buildSeedEnvironment,
+  classifySubprocessFailure,
 } from './uat-f067-session-core.mjs';
 
 const LOCK_FILE = resolve(dirname(SESSION_FILE), 'uat-f067-session.lock');
 
 function dockerRun(args, timeout = 120_000) {
   return spawnSync('docker', args, { encoding: 'utf8', timeout });
+}
+
+export const SEED_SCRIPT = 'src/database/seed-development.ts';
+export const TRACKING_FIXTURE_SCRIPT =
+  'src/database/uat-f067-tracking-fixture-cli.ts';
+
+/**
+ * The two fixture subprocesses, in order, through an injected `run`.
+ *
+ * `run(script, env)` returns a `spawnSync` result; the live effects pass one
+ * that spawns `tsx`, and tests pass a recorder, so the ordering is provable
+ * without starting a process. The seed's settings are built before anything
+ * runs, so a refused environment runs nothing. Any failure throws, which the
+ * orchestrator turns into targeted teardown; the tracking fixture is never
+ * reached after a failed seed.
+ */
+export function runFixtureSubprocesses({ url, nonce, role, inherited, run }) {
+  const seedEnvironment = buildSeedEnvironment({ url, inherited });
+  if (!seedEnvironment.ok)
+    throw new Error(
+      `seed:development was not started: ${seedEnvironment.reasons.join('; ')}`,
+    );
+  const seeded = classifySubprocessFailure(
+    'seed:development',
+    run(SEED_SCRIPT, seedEnvironment.env),
+  );
+  if (!seeded.ok) throw new Error(seeded.message);
+  const provisioned = classifySubprocessFailure(
+    'the F067 tracking fixture',
+    run(TRACKING_FIXTURE_SCRIPT, {
+      DATABASE_URL: url,
+      TEST_DATABASE_URL: url,
+      REQRO_F067_UAT_DISPOSABLE_NONCE: nonce,
+      REQRO_F067_UAT_DISPOSABLE_ROLE: role,
+    }),
+  );
+  if (!provisioned.ok) throw new Error(provisioned.message);
 }
 
 /**
@@ -237,7 +277,8 @@ export async function createLiveEffects({ serverRoot }) {
      * `seed:development` runs unchanged: it reads DATABASE_URL rather than
      * pinning a target, so pointing it at the disposable URL needs no change
      * to it and no weakening of `assertDevelopmentDatabaseUrl`. It provisions
-     * the Organization, catalog and development staff.
+     * the Organization, catalog and development staff. Its tenant settings
+     * come from `buildSeedEnvironment`, which states them explicitly.
      *
      * `uat-f067-tracking-fixture-cli.ts` then adds what resident tracking UAT
      * needs and seeding does not create: two PUBLIC Service Requests, the
@@ -252,38 +293,26 @@ export async function createLiveEffects({ serverRoot }) {
      * with the existing staff endpoint under its own authorization.
      */
     applyFixtures: async (url, nonce) => {
-      const tsx = (script, env) =>
-        spawnSync(
-          process.execPath,
-          [
-            resolve(serverRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
-            script,
-          ],
-          {
-            cwd: serverRoot,
-            encoding: 'utf8',
-            timeout: 300_000,
-            env: { ...process.env, ...env },
-          },
-        );
-      const seeded = tsx('src/database/seed-development.ts', {
-        DATABASE_URL: url,
-        TEST_DATABASE_URL: url,
+      runFixtureSubprocesses({
+        url,
+        nonce,
+        role: TEST_ROLE,
+        inherited: process.env,
+        run: (script, env) =>
+          spawnSync(
+            process.execPath,
+            [
+              resolve(serverRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+              script,
+            ],
+            {
+              cwd: serverRoot,
+              encoding: 'utf8',
+              timeout: 300_000,
+              env: { ...process.env, ...env },
+            },
+          ),
       });
-      if (seeded.status !== 0)
-        throw new Error(
-          `seed:development failed with status ${String(seeded.status)}`,
-        );
-      const provisioned = tsx('src/database/uat-f067-tracking-fixture-cli.ts', {
-        DATABASE_URL: url,
-        TEST_DATABASE_URL: url,
-        REQRO_F067_UAT_DISPOSABLE_NONCE: nonce,
-        REQRO_F067_UAT_DISPOSABLE_ROLE: TEST_ROLE,
-      });
-      if (provisioned.status !== 0)
-        throw new Error(
-          `the F067 tracking fixture failed with status ${String(provisioned.status)}`,
-        );
       return fixtureCensus(url);
     },
 
@@ -458,7 +487,7 @@ export async function createLiveEffects({ serverRoot }) {
             'CORS_ORIGINS=http://localhost:5174',
             'NODE_ENV=development',
             'CITYVUE_DEPLOYMENT_PROFILE=development',
-            `DEVELOPMENT_ORGANIZATION_ID=10000000-0000-4000-8000-000000000001`,
+            `DEVELOPMENT_ORGANIZATION_ID=${UAT_DEVELOPMENT_ORGANIZATION_ID}`,
             '',
           ].join('\n'),
         );

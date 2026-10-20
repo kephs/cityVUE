@@ -677,6 +677,55 @@ test('F067 a cluster that fails to start leaves nothing to clean up', async () =
   assert.equal(mock.calls.releaseLock, 1);
 });
 
+test('F067 a refused seed configuration aborts with a sanitized reason and targeted teardown', async () => {
+  // The live failure, end to end through the real subprocess sequencing: the
+  // seed refuses its configuration, the tracking fixture is never started,
+  // no secret file is written and only this session's container is removed.
+  const { runStart } = await orchestrator();
+  const { runFixtureSubprocesses, SEED_SCRIPT } = (await import(
+    pathToFileURL(resolve(scripts, 'uat-f067-effects.mjs')).href
+  )) as {
+    runFixtureSubprocesses: (input: unknown) => void;
+    SEED_SCRIPT: string;
+  };
+  const started: string[] = [];
+  const mock = effects({
+    applyFixtures: async (url: string, nonce: string) => {
+      runFixtureSubprocesses({
+        url,
+        nonce,
+        role: 'reqro_test_user',
+        inherited: {},
+        run: (script: string) => {
+          started.push(script);
+          return {
+            status: 1,
+            signal: null,
+            stdout: '',
+            stderr: `${url}\n${JSON.stringify({ errorName: 'Error', errorCode: 'unknown', classification: 'Invalid server configuration' })}\n`,
+          };
+        },
+      });
+      return READY_CENSUS;
+    },
+  });
+  const result = await runStart(mock, { inventory: INVENTORY });
+  assert.equal(result.ok, false);
+  assert.deepEqual(started, [SEED_SCRIPT]);
+  assert.ok(
+    result.reasons.some((r) =>
+      r.includes(
+        'fixture initialization failed: seed:development refused its configuration (status 1',
+      ),
+    ),
+    result.reasons.join('; '),
+  );
+  assert.equal(JSON.stringify(result.reasons).includes('S3cret'), false);
+  assert.equal(JSON.stringify(result.reasons).includes('postgres'), false);
+  assert.equal(mock.calls.writeSecret, undefined);
+  assert.equal(mock.calls.removeContainerAndVolume, 1);
+});
+
 test('F067 an unavailable Docker refuses before the lock is taken', async () => {
   const { runStart } = await orchestrator();
   const mock = effects({ dockerAvailable: () => false });
@@ -947,7 +996,10 @@ test('F067 the fixture step invokes the F067 tracking fixture with the nonce and
   const text = readFileSync(resolve(scripts, 'uat-f067-effects.mjs'), 'utf8');
   assert.ok(text.includes('src/database/uat-f067-tracking-fixture-cli.ts'));
   assert.ok(text.includes('REQRO_F067_UAT_DISPOSABLE_NONCE: nonce'));
-  assert.ok(text.includes('REQRO_F067_UAT_DISPOSABLE_ROLE: TEST_ROLE'));
+  // The role is passed through `runFixtureSubprocesses`; the behaviour is
+  // proven in uat-f067-seed-environment.test.ts with a recording runner.
+  assert.ok(text.includes('REQRO_F067_UAT_DISPOSABLE_ROLE: role'));
+  assert.ok(text.includes('role: TEST_ROLE'));
   // The grant the UAT scenario needs is measured, not assumed.
   assert.ok(text.includes('trackingManageGrants'));
   assert.ok(text.includes("permission_key='service_request.tracking.manage'"));

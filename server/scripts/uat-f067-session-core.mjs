@@ -22,7 +22,7 @@
  * no module imports the entry, and child-process tests run the real CLI.
  */
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { URL, fileURLToPath } from 'node:url';
 
 /** The native PostgreSQL service port. A disposable session must never use it. */
 export const NATIVE_POSTGRES_PORT = 5432;
@@ -680,6 +680,197 @@ export function describeSession(record, { identityRefusal, fixtures } = {}) {
   // No credential is ever part of a status report; the redactor is applied
   // anyway so a future field cannot leak one by being added carelessly.
   return { state: session.state, reasons: [], lines: lines.map(redactUrl) };
+}
+
+// --- development seed ------------------------------------------------------
+
+/**
+ * The synthetic Organization `seed-development.ts` provisions. The seed
+ * hard-codes this ID; it is named here only so the seed subprocess and the
+ * UAT backend file can state it explicitly. It is never a global default:
+ * `validateEnvironment` still requires every caller to supply one.
+ */
+export const UAT_DEVELOPMENT_ORGANIZATION_ID =
+  '10000000-0000-4000-8000-000000000001';
+
+/**
+ * The tenant settings the seed subprocess is given, each set explicitly.
+ *
+ * The seed validates its own environment with `validateEnvironment`, whose
+ * default tenant strategy is `development`, and that strategy requires an
+ * explicit `DEVELOPMENT_ORGANIZATION_ID` with no default. A harness that
+ * passed only the database URL therefore failed validation before it
+ * connected. F065 automatic issuance is stated as OFF rather than left to a
+ * default.
+ */
+const SEED_SETTINGS = Object.freeze({
+  NODE_ENV: 'development',
+  CITYVUE_DEPLOYMENT_PROFILE: 'development',
+  TENANT_RESOLUTION_STRATEGY: 'development',
+  DEVELOPMENT_ORGANIZATION_ID: UAT_DEVELOPMENT_ORGANIZATION_ID,
+  REQRO_ENABLE_REQUESTER_INTAKE_TRACKING: 'false',
+});
+
+/**
+ * Builds the seed subprocess's own settings, or refuses.
+ *
+ * An inherited value that disagrees with a setting above refuses rather than
+ * being silently overridden: a parent configured for another Organization or
+ * profile is a misconfiguration worth stopping on, not one to paper over. The
+ * URL is rechecked by shape as well, so the seed can only ever be pointed at
+ * a loopback, non-5432 `reqro_f0592_test` database. That is in addition to,
+ * not instead of, the instance-identity gate the orchestrator has already run.
+ */
+export function buildSeedEnvironment({ url, inherited }) {
+  const reasons = [];
+  let parsed = null;
+  try {
+    parsed = new URL(String(url));
+  } catch {
+    reasons.push('the seed database URL is not a valid URL');
+  }
+  if (parsed) {
+    if (!['postgres:', 'postgresql:'].includes(parsed.protocol))
+      reasons.push('the seed database URL is not a PostgreSQL URL');
+    if (parsed.hostname !== '127.0.0.1')
+      reasons.push(
+        `the seed database host must be 127.0.0.1, got ${parsed.hostname}`,
+      );
+    const port = Number(parsed.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535)
+      reasons.push('the seed database port is not a valid TCP port');
+    else if (port === NATIVE_POSTGRES_PORT)
+      reasons.push(
+        `refusing to seed on port ${String(NATIVE_POSTGRES_PORT)}, the native PostgreSQL service port`,
+      );
+    const database = decodeURIComponent(parsed.pathname.replace(/^\//, ''));
+    if (PERSISTENT_DATABASES.includes(database))
+      reasons.push(`refusing to seed the persistent database ${database}`);
+    else if (database !== UAT_DATABASE)
+      reasons.push(
+        `the seed database must be ${UAT_DATABASE}, got ${database || '(none)'}`,
+      );
+    if (parsed.search || parsed.hash)
+      reasons.push('the seed database URL carries unexpected parameters');
+  }
+  const parent =
+    inherited !== null && typeof inherited === 'object' ? inherited : {};
+  for (const [key, value] of Object.entries(SEED_SETTINGS)) {
+    const present = parent[key];
+    if (present !== undefined && present !== '' && present !== value)
+      reasons.push(
+        `the inherited ${key} conflicts with the disposable seed setting; unset it before starting a session`,
+      );
+  }
+  if (reasons.length) return { ok: false, reasons, env: null };
+  const target = String(url);
+  return {
+    ok: true,
+    reasons: [],
+    env: { ...SEED_SETTINGS, DATABASE_URL: target, TEST_DATABASE_URL: target },
+  };
+}
+
+/** A field the seed's sanitized log may carry, accepted only in this shape. */
+const SAFE_TOKEN = /^[A-Za-z0-9_]{1,64}$/;
+const SAFE_SIGNAL = /^SIG[A-Z0-9]{1,16}$/;
+/** Only the final stderr line is examined, and only up to this length. */
+const MAX_DIAGNOSTIC_LINE = 4096;
+
+/**
+ * Reads the one structured line `commandFailure` writes, and nothing else.
+ *
+ * The seed already sanitizes its failure into `errorName`, `errorCode` and an
+ * optional `classification`, each from an allowlist. That line is parsed;
+ * every other byte of stderr and stdout is discarded unread, so no URL, SQL
+ * parameter or token can be echoed through here. A value outside the
+ * expected shape is dropped rather than shown.
+ */
+function readSanitizedFailure(stderr) {
+  const lines = String(stderr ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const last = lines[lines.length - 1];
+  if (!last || last.length > MAX_DIAGNOSTIC_LINE) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(last);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+    return null;
+  const safe = (value) =>
+    typeof value === 'string' && SAFE_TOKEN.test(value) ? value : undefined;
+  return {
+    configuration: parsed.classification === 'Invalid server configuration',
+    errorName: safe(parsed.errorName),
+    errorCode: safe(parsed.errorCode),
+  };
+}
+
+/**
+ * Classifies a finished fixture subprocess from its synchronous spawn result.
+ *
+ * Distinguishes a spawn failure, a timeout, a signal, a configuration
+ * refusal and any other nonzero exit. The exit status is always preserved.
+ * The seed's log does not name which configuration key failed, so the
+ * message names the keys this harness supplies rather than inventing one.
+ */
+export function classifySubprocessFailure(step, result) {
+  const name = String(step);
+  const input = result !== null && typeof result === 'object' ? result : {};
+  const status = Number.isInteger(input.status) ? input.status : null;
+  const errorCode =
+    input.error && typeof input.error.code === 'string'
+      ? input.error.code
+      : null;
+  const signal =
+    typeof input.signal === 'string' && SAFE_SIGNAL.test(input.signal)
+      ? input.signal
+      : null;
+  if (status === 0 && !input.error) return { ok: true, kind: 'success' };
+
+  if (errorCode === 'ETIMEDOUT')
+    return {
+      ok: false,
+      kind: 'timeout',
+      status,
+      message: `${name} timed out${signal ? ` and was terminated with ${signal}` : ''}`,
+    };
+  if (input.error)
+    return {
+      ok: false,
+      kind: 'spawn-failure',
+      status,
+      message: `${name} could not be started${errorCode && SAFE_TOKEN.test(errorCode) ? ` (${errorCode})` : ''}`,
+    };
+  if (status === null)
+    return {
+      ok: false,
+      kind: 'terminated',
+      status,
+      message: `${name} was terminated${signal ? ` by ${signal}` : ''} before reporting an exit status`,
+    };
+
+  const detail = readSanitizedFailure(input.stderr);
+  const fields = [`status ${String(status)}`];
+  if (detail?.errorName) fields.push(`errorName=${detail.errorName}`);
+  if (detail?.errorCode) fields.push(`errorCode=${detail.errorCode}`);
+  if (detail?.configuration)
+    return {
+      ok: false,
+      kind: 'configuration-invalid',
+      status,
+      message: `${name} refused its configuration (${fields.join(', ')}); the harness supplies ${Object.keys(SEED_SETTINGS).join(', ')} and DATABASE_URL`,
+    };
+  return {
+    ok: false,
+    kind: 'subprocess-failure',
+    status,
+    message: `${name} failed (${fields.join(', ')})${detail ? '' : '; it reported no sanitized diagnostic'}`,
+  };
 }
 
 // --- locations -------------------------------------------------------------
