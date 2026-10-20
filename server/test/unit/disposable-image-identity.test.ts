@@ -457,6 +457,8 @@ function evidence(): DisposableEvidence {
       nonce: NONCE,
       postmasterStart: AFTER,
       unexpectedSchemaCount: 0,
+      schemas: [],
+      appliedMigrations: [],
     },
     container: containerFacts(),
     expected: {

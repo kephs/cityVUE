@@ -3,6 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { Pool } from 'pg';
 import {
+  APPLICATION_SCHEMAS,
+  classifyApplicationSchemas,
   refuseUnlessOwnedCleanupTarget,
   type DisposableExpectations,
 } from './disposable-cluster-evidence.js';
@@ -78,6 +80,96 @@ export const DENIED_VOLUMES = [
   'cityvue-postgres-data',
   'server_cityvue-postgres-data',
 ] as const;
+
+/**
+ * The application-schema policy, re-exported from the evidence module where
+ * it is defined. It lives there because this module imports that one: the
+ * post-migration identity check and this run-level census must classify
+ * through one policy, and defining it here would have required the evidence
+ * module to import back into this one.
+ *
+ * The census exists to catch a test that left a scratch schema behind. It
+ * predates any test applying the complete migration sequence, so it treated
+ * every non-system schema as a leak, including `reqro_integration_api`, which
+ * migration 51 creates by design.
+ */
+export { APPLICATION_SCHEMAS };
+
+/** Observed schemas, with the migration history that may justify them. */
+export interface SchemaInventory {
+  /** Non-system schemas, excluding `public` and `information_schema`. */
+  readonly schemas: readonly string[];
+  /** Migration names the database records as applied, or `[]` if none. */
+  readonly appliedMigrations: readonly string[];
+}
+
+export interface SchemaCensusVerdict {
+  readonly ok: boolean;
+  readonly reasons: readonly string[];
+  /** Application schemas justified by their migration. */
+  readonly allowed: readonly string[];
+  /** Everything else: a leak, named. */
+  readonly unexpected: readonly string[];
+}
+
+const schemaList = (value: unknown): string[] | null =>
+  Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : null;
+
+/**
+ * Decides whether the schemas present after a run are accounted for.
+ *
+ * Pure, so every rejection is proven against fabricated input: no container is
+ * provisioned and no database is contacted to show that an unexplained schema
+ * is refused.
+ */
+export function evaluateSchemaCensus(input: {
+  readonly before?: SchemaInventory | null;
+  readonly after?: SchemaInventory | null;
+}): SchemaCensusVerdict {
+  const empty = { allowed: [] as readonly string[] };
+  const beforeSchemas = schemaList(input.before?.schemas);
+  const afterSchemas = schemaList(input.after?.schemas);
+  if (beforeSchemas === null)
+    return {
+      ...empty,
+      ok: false,
+      unexpected: [],
+      reasons: ['the pre-test schema inventory is missing or unreadable'],
+    };
+  if (afterSchemas === null)
+    return {
+      ...empty,
+      ok: false,
+      unexpected: [],
+      reasons: ['the post-test schema inventory is missing or unreadable'],
+    };
+  const applied = schemaList(input.after?.appliedMigrations) ?? [];
+  const reasons: string[] = [];
+  if (beforeSchemas.length)
+    reasons.push(
+      `the database was not a clean baseline: ${beforeSchemas.sort().join(', ')}`,
+    );
+
+  // The same classifier the post-migration identity check uses.
+  const classified = classifyApplicationSchemas(afterSchemas, applied);
+  for (const { schema, migration } of classified.unjustified)
+    // The schema exists but the migration that owns it did not run, so
+    // something else created it. That is exactly what the census is for.
+    reasons.push(
+      `the schema ${schema} exists without evidence that migration ${migration} was applied`,
+    );
+  if (classified.foreign.length)
+    reasons.push(
+      `${String(classified.foreign.length)} schema(s) leaked during the run: ${classified.foreign.join(', ')}`,
+    );
+  const allowed = [...classified.allowed];
+  const unexpected = [...afterSchemas]
+    .sort()
+    .filter((schema) => !allowed.includes(schema));
+  return { ok: reasons.length === 0, reasons, allowed, unexpected };
+}
 
 /**
  * One Docker CLI invocation, normalised so the four outcomes can be told
@@ -478,6 +570,12 @@ export interface DisposableCluster {
   /** Counts schemas that no test created. */
   census(): Promise<number>;
   /**
+   * Names those schemas, alongside the migrations the database records as
+   * applied. A count alone cannot tell an application schema that an approved
+   * migration created from a scratch schema a test forgot to drop.
+   */
+  schemaInventory(): Promise<SchemaInventory>;
+  /**
    * Authorized teardown. Returns removal evidence in which `containerRemoved`
    * and `volumeRemoved` mean VERIFIED absence, never merely "docker did not
    * say otherwise".
@@ -865,6 +963,38 @@ export async function startDisposableCluster(): Promise<DisposableCluster> {
               and nspname not in ('information_schema', 'public')`,
         );
         return result.rows[0]?.count ?? -1;
+      } finally {
+        await pool.end();
+      }
+    },
+    schemaInventory: async () => {
+      const pool = new Pool({ connectionString: testUrl, max: 1 });
+      try {
+        const schemas = await pool.query<{ nspname: string }>(
+          `select nspname from pg_namespace
+            where nspname not like 'pg_%'
+              and nspname not in ('information_schema', 'public')
+            order by nspname`,
+        );
+        // The migration history lives in `public` and exists only once some
+        // test has migrated the database itself. Its absence is normal and
+        // means no application schema can be justified.
+        const present = await pool.query(
+          `select 1 from pg_tables
+            where schemaname = 'public' and tablename = 'kysely_migration'`,
+        );
+        const appliedMigrations =
+          present.rowCount === 0
+            ? []
+            : (
+                await pool.query<{ name: string }>(
+                  'select name from kysely_migration order by name',
+                )
+              ).rows.map((row) => row.name);
+        return {
+          schemas: schemas.rows.map((row) => row.nspname),
+          appliedMigrations,
+        };
       } finally {
         await pool.end();
       }

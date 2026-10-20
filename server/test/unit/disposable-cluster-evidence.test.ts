@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  APPLICATION_SCHEMAS,
+  classifyApplicationSchemas,
   disposableConfigFromEnv,
   refuseUnlessDisposable,
   refuseUnlessOwnedCleanupTarget,
   type DisposableEvidence,
 } from '../helpers/disposable-cluster-evidence.js';
+import {
+  APPLICATION_SCHEMAS as CENSUS_APPLICATION_SCHEMAS,
+  evaluateSchemaCensus,
+} from '../helpers/f0592-disposable-cluster.js';
 
 /**
  * F062.2D-2C-3B-2 NEW-a follow-up — the disposable-instance predicate.
@@ -75,6 +81,8 @@ function evidence(): DisposableEvidence {
       nonce: NONCE,
       postmasterStart: AFTER,
       unexpectedSchemaCount: 0,
+      schemas: [],
+      appliedMigrations: [],
     },
     container: containerFacts(),
     expected: {
@@ -383,6 +391,8 @@ test('the predicate fails closed on empty evidence', () => {
       nonce: null,
       postmasterStart: null,
       unexpectedSchemaCount: null,
+      schemas: null,
+      appliedMigrations: null,
     },
     container: null,
     expected: {
@@ -510,5 +520,385 @@ test('teardown accepts only resources this run created', () => {
       { containerId: CONTAINER, volumeNames: [] },
       { containerId: '', deniedVolumeNames: [] },
     ) !== null,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// F067 — fresh versus post-migration identity.
+//
+// The live lifecycle run created a verified container, applied all sixty
+// migrations, then refused its own pre-fixture recheck: "the database already
+// holds 1 unexpected schema(s)". Migration 51 creates `reqro_integration_api`,
+// and step 6 demanded zero schemas on every call, so a complete schema could
+// never pass. The correction distinguishes the fresh precondition, which stays
+// exactly as strict, from post-migration verification, which accepts that one
+// schema only on live migration-history evidence from the same connection.
+// ---------------------------------------------------------------------------
+
+const APP_SCHEMA = 'reqro_integration_api';
+const APP_MIGRATION = '20261023000000-add-integration-worker-function-api';
+/** A plausible applied history: sixty names including migration 51. */
+const FULL_HISTORY = [
+  ...Array.from(
+    { length: 59 },
+    (_, index) =>
+      `202609${String(index).padStart(8, '0')}-synthetic-${String(index)}`,
+  ),
+  APP_MIGRATION,
+].sort();
+const HISTORY_WITHOUT_51 = FULL_HISTORY.filter(
+  (name) => name !== APP_MIGRATION,
+);
+
+/** A correct post-migration evidence set: one application schema, justified. */
+function migrated(
+  sql: Partial<DisposableEvidence['sql']> = {},
+): DisposableEvidence {
+  return perturb({
+    sql: {
+      unexpectedSchemaCount: 1,
+      schemas: [APP_SCHEMA],
+      appliedMigrations: FULL_HISTORY,
+      ...sql,
+    },
+  });
+}
+
+test('F067 a fresh database with no schemas and no history passes the fresh check', () => {
+  assert.equal(refuseUnlessDisposable(evidence(), { phase: 'fresh' }), null);
+  // And the default is the fresh rule, so existing callers are unchanged.
+  assert.equal(refuseUnlessDisposable(evidence()), null);
+});
+
+test('F067 a fresh database already holding the application schema is refused', () => {
+  // Even the approved schema refuses before migrations, and even with history
+  // claiming its migration: a fresh database that already has it was not fresh.
+  for (const [label, refusal] of [
+    ['default', refuseUnlessDisposable(migrated())],
+    ['fresh', refuseUnlessDisposable(migrated(), { phase: 'fresh' })],
+  ] as const) {
+    assert.ok(refusal !== null, label);
+    assert.match(refusal, /already holds 1 unexpected schema/, label);
+  }
+});
+
+test('F067 a fresh database with migration history but no schemas is refused', () => {
+  // Migration history is not acceptable fresh-state evidence.
+  const refusal = refuseUnlessDisposable(
+    perturb({ sql: { appliedMigrations: FULL_HISTORY } }),
+    { phase: 'fresh' },
+  );
+  assert.ok(refusal !== null);
+  assert.match(refusal, /already records 60 applied migration/);
+});
+
+test('F067 a fresh check with an unreadable history is refused', () => {
+  const refusal = refuseUnlessDisposable(
+    perturb({ sql: { appliedMigrations: null } }),
+    { phase: 'fresh' },
+  );
+  assert.match(String(refusal), /history could not be read/);
+});
+
+test('F067 a post-migration database with the schema and its creating migration passes', () => {
+  assert.equal(refuseUnlessDisposable(migrated(), { phase: 'migrated' }), null);
+});
+
+test('F067 a post-migration database with no schemas at all also passes', () => {
+  // A session mid-start, or one whose status is read before migrations,
+  // carries no application schema, so there is nothing to justify.
+  assert.equal(refuseUnlessDisposable(evidence(), { phase: 'migrated' }), null);
+});
+
+test('F067 the application schema without its creating migration is refused', () => {
+  const refusal = refuseUnlessDisposable(
+    migrated({ appliedMigrations: HISTORY_WITHOUT_51 }),
+    { phase: 'migrated' },
+  );
+  assert.ok(refusal !== null);
+  assert.ok(refusal.includes(APP_SCHEMA));
+  assert.ok(refusal.includes(APP_MIGRATION));
+  assert.match(refusal, /without evidence that migration/);
+  // An empty history justifies nothing either.
+  assert.match(
+    String(
+      refuseUnlessDisposable(migrated({ appliedMigrations: [] }), {
+        phase: 'migrated',
+      }),
+    ),
+    /without evidence that migration/,
+  );
+});
+
+test('F067 a migration the caller believes ran but live history lacks is refused', () => {
+  // Nothing the caller says is evidence. The expectations, the phase flag and
+  // any persisted session record carry no migration list into the predicate;
+  // only `sql.appliedMigrations`, read in band, can justify the schema. So a
+  // caller convinced migration 51 ran, facing a live history without it, is
+  // refused exactly as if it had made no claim.
+  const evidenceWithClaims = migrated({
+    appliedMigrations: HISTORY_WITHOUT_51,
+  });
+  const refusal = refuseUnlessDisposable(evidenceWithClaims, {
+    phase: 'migrated',
+  });
+  assert.match(String(refusal), /without evidence that migration/);
+  // The predicate's options accept a phase and nothing else that could
+  // smuggle a migration name in.
+  assert.equal(
+    refuseUnlessDisposable(evidenceWithClaims, {
+      phase: 'migrated',
+      ...({ appliedMigrations: FULL_HISTORY } as object),
+    }),
+    refusal,
+  );
+});
+
+test('F067 an unreadable schema inventory or history is refused after migrations', () => {
+  assert.match(
+    String(
+      refuseUnlessDisposable(migrated({ schemas: null }), {
+        phase: 'migrated',
+      }),
+    ),
+    /schema inventory could not be read/,
+  );
+  assert.match(
+    String(
+      refuseUnlessDisposable(migrated({ appliedMigrations: null }), {
+        phase: 'migrated',
+      }),
+    ),
+    /history could not be read/,
+  );
+  assert.match(
+    String(
+      refuseUnlessDisposable(migrated({ unexpectedSchemaCount: null }), {
+        phase: 'migrated',
+      }),
+    ),
+    /census is missing/,
+  );
+});
+
+test('F067 a count that disagrees with the named inventory is refused', () => {
+  // No schema can hide behind a count: if the names and the count disagree,
+  // neither is trusted.
+  for (const count of [0, 2, 380]) {
+    const refusal = refuseUnlessDisposable(
+      migrated({ unexpectedSchemaCount: count }),
+      { phase: 'migrated' },
+    );
+    assert.match(String(refusal), /evidence is contradictory/, String(count));
+  }
+});
+
+test('F067 the application schema plus a scratch schema is refused, naming the scratch one', () => {
+  const refusal = refuseUnlessDisposable(
+    migrated({
+      unexpectedSchemaCount: 2,
+      schemas: [APP_SCHEMA, 'idempotency_9f2c'],
+    }),
+    { phase: 'migrated' },
+  );
+  assert.ok(refusal !== null);
+  assert.match(refusal, /1 unexpected schema\(s\): idempotency_9f2c/);
+  assert.ok(!refusal.includes(APP_SCHEMA), 'the approved schema is not blamed');
+});
+
+test('F067 a scratch schema alone is refused after migrations', () => {
+  const refusal = refuseUnlessDisposable(
+    migrated({ unexpectedSchemaCount: 1, schemas: ['uat_f067_scratch'] }),
+    { phase: 'migrated' },
+  );
+  assert.match(String(refusal), /unexpected schema\(s\): uat_f067_scratch/);
+});
+
+test('F067 an unrecognised phase is refused rather than degrading to either rule', () => {
+  for (const phase of ['', 'post', 'MIGRATED', 'anything'])
+    assert.match(
+      String(
+        refuseUnlessDisposable(migrated(), {
+          phase: phase as 'fresh',
+        }),
+      ),
+      /not recognised/,
+      phase,
+    );
+});
+
+test('F067 every other identity safeguard still refuses in the post-migration phase', () => {
+  // The phase changes only step 6. Each of these perturbs exactly one other
+  // fact of a valid post-migration evidence set.
+  const cases: [string, DisposableEvidence, RegExp][] = [
+    [
+      'the persistent reqro_dev database',
+      perturb({
+        url: { database: 'reqro_dev' },
+        sql: {
+          database: 'reqro_dev',
+          unexpectedSchemaCount: 1,
+          schemas: [APP_SCHEMA],
+          appliedMigrations: FULL_HISTORY,
+        },
+      }),
+      /database must be reqro_f0592_test/,
+    ],
+    [
+      'a non-loopback host',
+      perturb({
+        url: { hostname: 'db.example.test' },
+        sql: {
+          unexpectedSchemaCount: 1,
+          schemas: [APP_SCHEMA],
+          appliedMigrations: FULL_HISTORY,
+        },
+      }),
+      /must be loopback/,
+    ],
+    [
+      'an incorrect nonce',
+      migrated({ nonce: 'e'.repeat(32) }),
+      /nonce does not match/,
+    ],
+    [
+      'a missing nonce',
+      migrated({ nonce: null }),
+      /does not expose a disposable-instance nonce/,
+    ],
+    [
+      'a server that predates the harness',
+      migrated({ postmasterStart: BEFORE }),
+      /started before this harness run/,
+    ],
+    [
+      'the wrong role',
+      migrated({ user: 'reqro_dev_user' }),
+      /server reports role/,
+    ],
+  ];
+  for (const [label, candidate, reason] of cases)
+    assert.match(
+      String(refuseUnlessDisposable(candidate, { phase: 'migrated' })),
+      reason,
+      label,
+    );
+  // Container identity, labels, image and storage are checked after step 6,
+  // so they are exercised on an otherwise passing post-migration set.
+  const containerCases: [string, Partial<ContainerFacts> | null, RegExp][] = [
+    ['an absent container', null, /Docker does not account/],
+    [
+      'another container ID',
+      { id: 'd'.repeat(64) },
+      /container ID does not match the one created by this run/,
+    ],
+    [
+      'a mismatched ownership label',
+      { labels: { 'com.reqro.disposable': 'e'.repeat(32) } },
+      /container label and the server nonce disagree/,
+    ],
+    [
+      'a missing ownership label',
+      { labels: {} },
+      /carries no com\.reqro\.disposable label/,
+    ],
+    [
+      'a denied persistent volume',
+      {
+        mounts: [
+          {
+            type: 'volume',
+            name: 'cityvue-postgres-data',
+            destination: '/var/lib/postgresql/data',
+          },
+        ],
+      },
+      /mounts the persistent volume cityvue-postgres-data/,
+    ],
+    [
+      'the native port 5432',
+      { portBindings: [{ hostIp: '127.0.0.1', hostPort: '5432' }] },
+      /published port 5432 is not the connected port/,
+    ],
+    [
+      'an unapproved image',
+      { imageReference: 'postgres:latest' },
+      /image reference is not the pinned digest/,
+    ],
+  ];
+  for (const [label, container, reason] of containerCases) {
+    const candidate: DisposableEvidence = {
+      ...migrated(),
+      container:
+        container === null ? null : { ...containerFacts(), ...container },
+    };
+    assert.match(
+      String(refuseUnlessDisposable(candidate, { phase: 'migrated' })),
+      reason,
+      label,
+    );
+  }
+});
+
+test('F067 the identity check and the run census share one schema policy', () => {
+  // One object, not two that happen to agree.
+  assert.equal(CENSUS_APPLICATION_SCHEMAS, APPLICATION_SCHEMAS);
+  assert.deepEqual(Object.keys(APPLICATION_SCHEMAS), [APP_SCHEMA]);
+  assert.equal(APPLICATION_SCHEMAS[APP_SCHEMA], APP_MIGRATION);
+  assert.equal(Object.isFrozen(APPLICATION_SCHEMAS), true);
+  // And they reach the same verdict on the same facts.
+  for (const [schemas, history, accepted] of [
+    [[APP_SCHEMA], FULL_HISTORY, true],
+    [[APP_SCHEMA], HISTORY_WITHOUT_51, false],
+    [[APP_SCHEMA, 'idempotency_9f2c'], FULL_HISTORY, false],
+    [['uat_f067_scratch'], FULL_HISTORY, false],
+    [[], [], true],
+  ] as [string[], string[], boolean][]) {
+    const identity =
+      refuseUnlessDisposable(
+        migrated({
+          unexpectedSchemaCount: schemas.length,
+          schemas,
+          appliedMigrations: history,
+        }),
+        { phase: 'migrated' },
+      ) === null;
+    const census = evaluateSchemaCensus({
+      before: { schemas: [], appliedMigrations: [] },
+      after: { schemas, appliedMigrations: history },
+    }).ok;
+    assert.equal(identity, accepted, `identity ${JSON.stringify(schemas)}`);
+    assert.equal(census, accepted, `census ${JSON.stringify(schemas)}`);
+  }
+});
+
+test('F067 the shared classifier sorts allowed, unjustified and foreign schemas', () => {
+  assert.deepEqual(classifyApplicationSchemas([APP_SCHEMA], FULL_HISTORY), {
+    allowed: [APP_SCHEMA],
+    unjustified: [],
+    foreign: [],
+  });
+  assert.deepEqual(
+    classifyApplicationSchemas(
+      [APP_SCHEMA, 'zeta', 'alpha'],
+      HISTORY_WITHOUT_51,
+    ),
+    {
+      allowed: [],
+      unjustified: [{ schema: APP_SCHEMA, migration: APP_MIGRATION }],
+      foreign: ['alpha', 'zeta'],
+    },
+  );
+  // A prefix or near-miss earns nothing.
+  assert.deepEqual(
+    classifyApplicationSchemas(
+      [
+        'reqro_integration_api_old',
+        'reqro_integration',
+        'REQRO_INTEGRATION_API',
+      ],
+      FULL_HISTORY,
+    ).allowed,
+    [],
   );
 });
