@@ -175,7 +175,10 @@ export async function runStart(effects, { inventory }) {
 
     let migrated;
     try {
-      migrated = await effects.applyMigrations(url, inventory);
+      // The nonce goes with it: the migration process re-proves the
+      // destination in band before it applies a single statement, and it
+      // reads the declared inventory from source rather than trusting ours.
+      migrated = await effects.applyMigrations(url, cluster.nonce);
     } catch (error) {
       await teardown(effects, cluster.containerId, cluster.nonce);
       return failure('failed', [

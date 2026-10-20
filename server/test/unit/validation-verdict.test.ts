@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 import {
+  APPLICATION_SCHEMAS,
+  evaluateSchemaCensus,
   verifyCleanup,
   type CleanupProbes,
   type DockerResult,
@@ -2058,4 +2060,266 @@ test('a null cleanup result maps to a null teardown section', async () => {
   const verdict = evaluateCapture(captureInput({ teardown: null }));
   assert.deepEqual(verdict.reasons, []);
   assert.equal(verdict.ok, true);
+});
+
+// ---------------------------------------------------------------------------
+// evaluateSchemaCensus.
+//
+// The census exists to catch a test that left a scratch schema behind. It
+// predates any test applying the complete migration sequence, so it counted
+// every non-system schema as a leak -- including `reqro_integration_api`,
+// which migration 51 creates by design. The allowance is conditional on that
+// migration being recorded as applied, so the detector keeps its teeth: a
+// scratch schema still fails, and the application schema without its
+// migration still fails, because then something else created it.
+// ---------------------------------------------------------------------------
+
+const APPROVED_SCHEMA = 'reqro_integration_api';
+const APPROVED_MIGRATION = '20261023000000-add-integration-worker-function-api';
+
+test('F067 the schema allowance is one named schema bound to one migration', () => {
+  assert.deepEqual(Object.keys(APPLICATION_SCHEMAS), [APPROVED_SCHEMA]);
+  assert.equal(APPLICATION_SCHEMAS[APPROVED_SCHEMA], APPROVED_MIGRATION);
+  // Narrow by construction: no pattern, prefix or wildcard can widen it.
+  assert.equal(Object.isFrozen(APPLICATION_SCHEMAS), true);
+});
+
+test('F067 an empty database before and after passes the census', () => {
+  assert.deepEqual(
+    evaluateSchemaCensus({
+      before: { schemas: [], appliedMigrations: [] },
+      after: { schemas: [], appliedMigrations: [] },
+    }),
+    { ok: true, reasons: [], allowed: [], unexpected: [] },
+  );
+});
+
+test('F067 the approved application schema passes when its migration is applied', () => {
+  const verdict = evaluateSchemaCensus({
+    before: { schemas: [], appliedMigrations: [] },
+    after: {
+      schemas: [APPROVED_SCHEMA],
+      appliedMigrations: ['20260902000000-create-catalog', APPROVED_MIGRATION],
+    },
+  });
+  assert.equal(verdict.ok, true);
+  assert.deepEqual(verdict.reasons, []);
+  assert.deepEqual([...verdict.allowed], [APPROVED_SCHEMA]);
+  assert.deepEqual([...verdict.unexpected], []);
+});
+
+test('F067 the approved schema plus a scratch schema fails and names the scratch one', () => {
+  const verdict = evaluateSchemaCensus({
+    before: { schemas: [], appliedMigrations: [] },
+    after: {
+      schemas: [APPROVED_SCHEMA, 'idempotency_9f2c'],
+      appliedMigrations: [APPROVED_MIGRATION],
+    },
+  });
+  assert.equal(verdict.ok, false);
+  assert.deepEqual([...verdict.allowed], [APPROVED_SCHEMA]);
+  assert.ok(verdict.unexpected.includes('idempotency_9f2c'));
+  assert.ok(
+    verdict.reasons.some((reason) => reason.includes('idempotency_9f2c')),
+    verdict.reasons.join('; '),
+  );
+  assert.ok(verdict.reasons.some((reason) => reason.includes('leaked')));
+  // The allowance must never launder the schema beside it.
+  assert.ok(
+    !verdict.reasons.some((reason) => reason.includes(APPROVED_SCHEMA)),
+  );
+});
+
+test('F067 the approved schema without its migration evidence fails', () => {
+  const verdict = evaluateSchemaCensus({
+    before: { schemas: [], appliedMigrations: [] },
+    after: { schemas: [APPROVED_SCHEMA], appliedMigrations: [] },
+  });
+  assert.equal(verdict.ok, false);
+  assert.deepEqual([...verdict.allowed], []);
+  assert.deepEqual([...verdict.unexpected], [APPROVED_SCHEMA]);
+  assert.ok(
+    verdict.reasons.some(
+      (reason) =>
+        reason.includes(APPROVED_SCHEMA) && reason.includes(APPROVED_MIGRATION),
+    ),
+    verdict.reasons.join('; '),
+  );
+  // A history that omits this migration specifically is not evidence either.
+  assert.equal(
+    evaluateSchemaCensus({
+      before: { schemas: [], appliedMigrations: [] },
+      after: {
+        schemas: [APPROVED_SCHEMA],
+        appliedMigrations: ['20261031000000-add-submission-idempotency'],
+      },
+    }).ok,
+    false,
+  );
+});
+
+test('F067 an unexpected schema alone fails even with a full migration history', () => {
+  const verdict = evaluateSchemaCensus({
+    before: { schemas: [], appliedMigrations: [] },
+    after: {
+      schemas: ['uat_f067_scratch'],
+      appliedMigrations: [APPROVED_MIGRATION],
+    },
+  });
+  assert.equal(verdict.ok, false);
+  assert.deepEqual([...verdict.unexpected], ['uat_f067_scratch']);
+  assert.ok(
+    verdict.reasons.some((reason) => reason.includes('uat_f067_scratch')),
+  );
+});
+
+test('F067 schema-isolated test leaks remain detectable, several at once', () => {
+  // The exact shape the schema-isolated suites would leave behind.
+  const leaks = ['development_staff_a1', 'idempotency_b2', 'access_c3'];
+  const verdict = evaluateSchemaCensus({
+    before: { schemas: [], appliedMigrations: [] },
+    after: { schemas: leaks, appliedMigrations: [] },
+  });
+  assert.equal(verdict.ok, false);
+  assert.deepEqual([...verdict.unexpected].sort(), [...leaks].sort());
+  for (const leak of leaks)
+    assert.ok(
+      verdict.reasons.some((reason) => reason.includes(leak)),
+      leak,
+    );
+});
+
+test('F067 a dirty baseline and an unreadable inventory are both refused', () => {
+  const dirty = evaluateSchemaCensus({
+    before: { schemas: ['left_over'], appliedMigrations: [] },
+    after: { schemas: [], appliedMigrations: [] },
+  });
+  assert.equal(dirty.ok, false);
+  assert.ok(dirty.reasons.some((reason) => reason.includes('clean baseline')));
+  assert.ok(dirty.reasons.some((reason) => reason.includes('left_over')));
+  assert.equal(
+    evaluateSchemaCensus({
+      before: null,
+      after: { schemas: [], appliedMigrations: [] },
+    }).ok,
+    false,
+  );
+  assert.equal(
+    evaluateSchemaCensus({
+      before: { schemas: [], appliedMigrations: [] },
+      after: null,
+    }).ok,
+    false,
+  );
+  assert.equal(evaluateSchemaCensus({}).ok, false);
+});
+
+test('F067 the run verdict accepts an accounted-for schema and refuses an unexplained one', async () => {
+  const { evaluateRun } = await launcher();
+  const accepted = evaluateRun(
+    runInput({
+      census: {
+        before: 0,
+        after: 1,
+        allowed: [APPROVED_SCHEMA],
+        unexpected: [],
+        verdict: { ok: true, reasons: [] },
+      },
+    }),
+  );
+  assert.deepEqual(accepted.reasons, []);
+  assert.equal(accepted.ok, true);
+  // A refused census is carried verbatim into the run verdict.
+  const refused = evaluateRun(
+    runInput({
+      census: {
+        before: 0,
+        after: 2,
+        allowed: [APPROVED_SCHEMA],
+        unexpected: ['idempotency_9f2c'],
+        verdict: {
+          ok: false,
+          reasons: ['1 schema(s) leaked during the run: idempotency_9f2c'],
+        },
+      },
+    }),
+  );
+  assert.equal(refused.ok, false);
+  assert.ok(
+    refused.reasons.some((reason) => reason.includes('idempotency_9f2c')),
+  );
+});
+
+test('F067 a passing census that does not add up is still refused', async () => {
+  const { evaluateRun } = await launcher();
+  const mismatch = evaluateRun(
+    runInput({
+      census: {
+        before: 0,
+        after: 3,
+        allowed: [APPROVED_SCHEMA],
+        unexpected: [],
+        verdict: { ok: true, reasons: [] },
+      },
+    }),
+  );
+  assert.equal(mismatch.ok, false);
+  assert.ok(
+    mismatch.reasons.some((reason) => reason.includes('do not explain')),
+  );
+  const contradiction = evaluateRun(
+    runInput({
+      census: {
+        before: 0,
+        after: 1,
+        allowed: [],
+        unexpected: ['idempotency_9f2c'],
+        verdict: { ok: true, reasons: [] },
+      },
+    }),
+  );
+  assert.equal(contradiction.ok, false);
+  assert.ok(
+    contradiction.reasons.some((reason) =>
+      reason.includes('despite a passing census'),
+    ),
+  );
+  const silent = evaluateRun(
+    runInput({
+      census: {
+        before: 0,
+        after: 0,
+        allowed: [],
+        unexpected: [],
+        verdict: { ok: false, reasons: [] },
+      },
+    }),
+  );
+  assert.equal(silent.ok, false);
+  assert.ok(
+    silent.reasons.some((reason) => reason.includes('without a reason')),
+  );
+});
+
+test('F067 a run that recorded no named verdict keeps the original count rule', async () => {
+  const { evaluateRun } = await launcher();
+  // Backward compatibility: silence must not become permission.
+  const grown = evaluateRun(runInput({ census: { before: 0, after: 1 } }));
+  assert.equal(grown.ok, false);
+  assert.ok(
+    grown.reasons.some((reason) => reason.includes('leaked during the run')),
+  );
+  assert.equal(
+    evaluateRun(runInput({ census: { before: 0, after: 0 } })).ok,
+    true,
+  );
+});
+
+test('F067 the census correction touches no identity, nonce or cleanup contract', () => {
+  // Cleanup verification keeps its own dedicated suite; what matters here is
+  // that the allowance is about schemas and names no other resource concept.
+  assert.equal(typeof verifyCleanup, 'function');
+  const allowance = `${Object.keys(APPLICATION_SCHEMAS).join(',')}|${Object.values(APPLICATION_SCHEMAS).join(',')}`;
+  for (const unrelated of ['container', 'nonce', 'image', 'volume', 'digest'])
+    assert.ok(!allowance.includes(unrelated), unrelated);
 });

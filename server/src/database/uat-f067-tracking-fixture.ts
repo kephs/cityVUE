@@ -331,7 +331,15 @@ export interface FixtureSnapshot {
   readonly rolePresent: boolean;
   readonly roleMatches: boolean;
   readonly rolePermissions: readonly string[];
+  /**
+   * Read by the assignment's real primary key, `(staff_identity_id, role_id)`,
+   * with no status predicate. Reading only active rows would report an
+   * inactive assignment as absent and the plan would then attempt an insert
+   * that the primary key refuses, so presence and activity are separate facts.
+   */
   readonly assignmentPresent: boolean;
+  readonly assignmentActive: boolean;
+  readonly assignmentMatches: boolean;
   readonly requestsPresent: readonly string[];
   readonly activityPresent: readonly string[];
   readonly operationalPresent: readonly string[];
@@ -345,6 +353,9 @@ export interface FixturePlan {
   readonly createRole: boolean;
   readonly grantPermissions: readonly string[];
   readonly createAssignment: boolean;
+  /** An existing assignment that is merely inactive is reactivated in place,
+   * which is the only update this fixture performs. */
+  readonly reactivateAssignment: boolean;
   readonly createRequests: readonly string[];
   readonly createActivity: readonly string[];
   readonly createOperational: readonly string[];
@@ -378,6 +389,7 @@ export function planFixtureWrites(
     createRole: false,
     grantPermissions: [] as readonly string[],
     createAssignment: false,
+    reactivateAssignment: false,
     createRequests: [] as readonly string[],
     createActivity: [] as readonly string[],
     createOperational: [] as readonly string[],
@@ -413,6 +425,10 @@ export function planFixtureWrites(
     reasons.push(
       `the fixture role holds ${String(unexpected.length)} permission(s) outside the approved fixture scope`,
     );
+  if (snapshot.assignmentPresent && !snapshot.assignmentMatches)
+    reasons.push(
+      'the fixture role assignment exists against another Organization; no adoption or repair is permitted',
+    );
   if (reasons.length) return { ...empty, ok: false, reasons };
 
   const ids = trackingUatFixture.requests.map((request) => request.id);
@@ -431,7 +447,12 @@ export function planFixtureWrites(
   const createLocation = missing(stringList(snapshot.locationPresent));
   const createStaff = !snapshot.staffPresent;
   const createRole = !snapshot.rolePresent;
+  // The assignment's primary key is `(staff_identity_id, role_id)`, so an
+  // inactive row occupies the key an insert would need. It is reactivated in
+  // place instead, which keeps the grant exactly as narrow as it was.
   const createAssignment = !snapshot.assignmentPresent;
+  const reactivateAssignment =
+    snapshot.assignmentPresent && !snapshot.assignmentActive;
   return {
     ok: true,
     reasons: [],
@@ -439,6 +460,7 @@ export function planFixtureWrites(
     createRole,
     grantPermissions,
     createAssignment,
+    reactivateAssignment,
     createRequests,
     createActivity,
     createOperational,
@@ -449,6 +471,7 @@ export function planFixtureWrites(
       createStaff ||
       createRole ||
       createAssignment ||
+      reactivateAssignment ||
       grantPermissions.length > 0 ||
       createRequests.length > 0 ||
       createActivity.length > 0 ||
@@ -598,13 +621,13 @@ async function readSnapshot(trx: Trx): Promise<FixtureSnapshot> {
     .where('organization_id', '=', organizationId)
     .where('role_id', '=', trackingUatFixture.roleId)
     .execute();
+  // By the real primary key, `(staff_identity_id, role_id)`, and with no
+  // status predicate: an inactive row still occupies that key.
   const assignment = await trx
     .selectFrom('staff_role_assignment')
-    .select('role_id')
-    .where('organization_id', '=', organizationId)
-    .where('role_id', '=', trackingUatFixture.roleId)
+    .select(['role_id', 'active', 'organization_id'])
     .where('staff_identity_id', '=', trackingUatFixture.staffId)
-    .where('active', '=', true)
+    .where('role_id', '=', trackingUatFixture.roleId)
     .executeTakeFirst();
   const requests = await trx
     .selectFrom('service_request')
@@ -654,6 +677,8 @@ async function readSnapshot(trx: Trx): Promise<FixtureSnapshot> {
       role.active,
     rolePermissions: permissions.map((row) => row.permission_key),
     assignmentPresent: assignment !== undefined,
+    assignmentActive: assignment?.active === true,
+    assignmentMatches: assignment?.organization_id === organizationId,
     requestsPresent: requests.map((row) => row.id),
     activityPresent: activity.map((row) => row.service_request_id),
     operationalPresent: operational.map((row) => row.service_request_id),
@@ -816,6 +841,17 @@ export async function provisionTrackingUatFixture(
         role_id: trackingUatFixture.roleId,
         active: true,
       })
+      .execute();
+  else if (plan.reactivateAssignment)
+    // Scoped to this one primary key and to the `active` column alone. The
+    // role's permissions are not touched, so reactivation cannot broaden the
+    // grant; it restores exactly the assignment the fixture already owned.
+    await trx
+      .updateTable('staff_role_assignment')
+      .set({ active: true })
+      .where('staff_identity_id', '=', trackingUatFixture.staffId)
+      .where('role_id', '=', trackingUatFixture.roleId)
+      .where('organization_id', '=', organizationId)
       .execute();
 
   const references: Record<string, string> = {};

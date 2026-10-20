@@ -167,36 +167,66 @@ export async function createLiveEffects({ serverRoot }) {
       }
     },
 
-    applyMigrations: async (url) => {
-      const { Pool } = await import('pg');
-      const { Kysely, Migrator, PostgresDialect, FileMigrationProvider } =
-        await import('kysely');
-      const fs = await import('node:fs/promises');
-      const path = await import('node:path');
-      const extensions = await load('database-extensions.js').catch(() => null);
-      const pool = new Pool({ connectionString: url });
+    /**
+     * Migrations, run through the TypeScript-aware entry point.
+     *
+     * This file is plain `.mjs` under Node 20, which cannot import a `.ts`
+     * migration, so driving Kysely's `Migrator` here over `migrations/` could
+     * never have worked. `tsx` is what makes the source directory loadable,
+     * exactly as the application's own `migration:up` script does, and it is
+     * also what makes all sixty migrations discoverable rather than the
+     * fifty-six that happen to be compiled into `dist-test`.
+     *
+     * The spawned CLI reads its target from `REQRO_F067_UAT_DATABASE_URL`
+     * only and re-proves the disposable identity in band before applying
+     * anything, so this process cannot talk it into a persistent database.
+     * Its verdict is returned as-is: a refusal is an error, never an empty
+     * success.
+     */
+    applyMigrations: async (url, nonce) => {
+      const spawned = spawnSync(
+        process.execPath,
+        [
+          resolve(serverRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+          'src/database/uat-f067-disposable-migration-cli.ts',
+        ],
+        {
+          cwd: serverRoot,
+          encoding: 'utf8',
+          timeout: 900_000,
+          env: {
+            ...process.env,
+            REQRO_F067_UAT_DATABASE_URL: url,
+            REQRO_F067_UAT_DISPOSABLE_NONCE: nonce,
+            REQRO_F067_UAT_DISPOSABLE_ROLE: TEST_ROLE,
+          },
+        },
+      );
+      const text = String(spawned.stdout ?? '').trim();
+      const line = text.split('\n').pop() ?? '';
+      let report;
       try {
-        if (extensions?.prepareDatabaseExtensions)
-          await extensions.prepareDatabaseExtensions(pool);
-        const db = new Kysely({ dialect: new PostgresDialect({ pool }) });
-        const migrator = new Migrator({
-          db,
-          provider: new FileMigrationProvider({
-            fs,
-            path,
-            migrationFolder: resolve(serverRoot, 'migrations'),
-          }),
-        });
-        const result = await migrator.migrateToLatest();
-        return {
-          applied: (result.results ?? [])
-            .filter((entry) => entry.status === 'Success')
-            .map((entry) => String(entry.migrationName)),
-          error: result.error ? String(result.error) : null,
-        };
-      } finally {
-        await pool.end();
+        report = JSON.parse(line);
+      } catch {
+        report = null;
       }
+      if (report === null)
+        return {
+          applied: [],
+          error: `the migration runner produced no readable report (status ${String(spawned.status)})`,
+        };
+      return {
+        applied: Array.isArray(report.applied)
+          ? report.applied.map(String)
+          : [],
+        error:
+          report.ok === true && spawned.status === 0
+            ? null
+            : (Array.isArray(report.reasons) ? report.reasons : []).join(
+                '; ',
+              ) ||
+              `the migration runner exited with status ${String(spawned.status)}`,
+      };
     },
 
     /**

@@ -833,10 +833,42 @@ export function evaluateRun(input) {
     reasons.push(`the database was not a clean baseline: ${before} schema(s)`);
   if (typeof after !== 'number' || after < 0)
     reasons.push('the post-test schema census is missing or unreadable');
-  else if (typeof before === 'number' && after > before)
-    reasons.push(`${after - before} schema(s) leaked during the run`);
-  else if (typeof before === 'number' && after !== before)
-    reasons.push(`the schema census changed from ${before} to ${after}`);
+  else {
+    // When a named verdict was recorded it decides, because only it can tell
+    // an application schema created by an approved migration from a scratch
+    // schema a test left behind. Its refusals are carried verbatim.
+    const verdict = input?.census?.verdict;
+    if (verdict === null || verdict === undefined) {
+      // No verdict recorded: the original count rule, unchanged, so a run
+      // that never measured names cannot pass on silence.
+      if (typeof before === 'number' && after > before)
+        reasons.push(`${after - before} schema(s) leaked during the run`);
+      else if (typeof before === 'number' && after !== before)
+        reasons.push(`the schema census changed from ${before} to ${after}`);
+    } else if (verdict.ok !== true) {
+      const recorded = Array.isArray(verdict.reasons) ? verdict.reasons : [];
+      if (recorded.length) reasons.push(...recorded.map(String));
+      else
+        reasons.push('the schema census verdict was refused without a reason');
+    } else {
+      // A passing verdict still has to add up: the growth must be exactly the
+      // schemas it justified, and nothing may be listed as unexpected.
+      const allowed = Array.isArray(input?.census?.allowed)
+        ? input.census.allowed
+        : [];
+      const unexpected = Array.isArray(input?.census?.unexpected)
+        ? input.census.unexpected
+        : [];
+      if (unexpected.length)
+        reasons.push(
+          `${String(unexpected.length)} unexpected schema(s) recorded despite a passing census: ${unexpected.map(String).join(', ')}`,
+        );
+      if (typeof before === 'number' && after - before !== allowed.length)
+        reasons.push(
+          `the schema census changed from ${before} to ${after}, which ${String(allowed.length)} accounted-for schema(s) do not explain`,
+        );
+    }
+  }
 
   const verdicts = Array.isArray(input?.tiers) ? input.tiers : [];
   for (const name of Object.keys(MANDATORY_TIERS)) {
@@ -1082,9 +1114,8 @@ async function main() {
     flushEvidence();
     process.exit(1);
   }
-  const { startDisposableCluster, dockerAvailable } = await import(
-    pathToFileURL(clusterModule).href
-  );
+  const { startDisposableCluster, dockerAvailable, evaluateSchemaCensus } =
+    await import(pathToFileURL(clusterModule).href);
   if (!dockerAvailable()) {
     fail('Docker is unavailable, so no disposable instance can be provisioned');
     flushEvidence();
@@ -1137,7 +1168,17 @@ async function main() {
   }
 
   const evidence = { verified: false, refusal: null };
-  const census = { before: null, after: null };
+  // `before`/`after` stay counts for the recorded evidence shape; the verdict
+  // and the named schemas are what decide, because a count cannot tell an
+  // application schema an approved migration created from a leaked one.
+  const census = {
+    before: null,
+    after: null,
+    allowed: [],
+    unexpected: [],
+    verdict: null,
+  };
+  let inventoryBefore;
   const tiers = [];
   let teardown = null;
   let skewMs = null;
@@ -1185,9 +1226,13 @@ async function main() {
     }
 
     out('\n== 5. pre-test schema census ==');
-    census.before = await cluster.census();
+    inventoryBefore = await cluster.schemaInventory();
+    census.before = inventoryBefore.schemas.length;
     if (census.before === 0) ok('clean baseline: zero non-system schemas');
-    else fail(`expected a clean database, found ${census.before} schema(s)`);
+    else
+      fail(
+        `expected a clean database, found ${census.before} schema(s): ${inventoryBefore.schemas.join(', ')}`,
+      );
 
     for (const [name, spec] of Object.entries(MANDATORY_TIERS)) {
       out(`\n== ${name} tier (serial, floor ${spec.minimum}) ==`);
@@ -1262,12 +1307,25 @@ async function main() {
     }
 
     out('\n== post-test schema census ==');
-    census.after = await cluster.census();
-    if (census.after === census.before)
-      ok(
-        `zero leaked schemas (${census.before} before, ${census.after} after)`,
-      );
-    else fail(`schema census changed: ${census.before} -> ${census.after}`);
+    const inventoryAfter = await cluster.schemaInventory();
+    census.after = inventoryAfter.schemas.length;
+    const verdict = evaluateSchemaCensus({
+      before: inventoryBefore,
+      after: inventoryAfter,
+    });
+    census.allowed = [...verdict.allowed];
+    census.unexpected = [...verdict.unexpected];
+    census.verdict = { ok: verdict.ok, reasons: [...verdict.reasons] };
+    if (verdict.ok) {
+      if (verdict.allowed.length)
+        ok(
+          `no leaked schemas; ${verdict.allowed.join(', ')} accounted for by its migration`,
+        );
+      else
+        ok(
+          `zero leaked schemas (${census.before} before, ${census.after} after)`,
+        );
+    } else for (const reason of verdict.reasons) fail(reason);
   } catch (error) {
     fail(`validation aborted: ${redact(error.stack ?? error.message)}`);
   } finally {
@@ -1314,11 +1372,21 @@ async function main() {
       before: census.before,
       after: census.after,
       cleanBaseline: census.before === 0,
-      leaked:
-        typeof census.before === 'number' && typeof census.after === 'number'
-          ? census.after - census.before
-          : null,
-      noLeak: census.after === census.before,
+      // `leaked` counts schemas nothing accounts for, not raw growth: a
+      // schema an approved migration created is not a leak, and recording it
+      // as one would make the evidence contradict the verdict.
+      leaked: Array.isArray(census.unexpected)
+        ? census.unexpected.length
+        : null,
+      noLeak:
+        census.verdict === null
+          ? census.after === census.before
+          : census.verdict.ok === true,
+      allowed: Array.isArray(census.allowed) ? [...census.allowed] : [],
+      unexpected: Array.isArray(census.unexpected)
+        ? [...census.unexpected]
+        : [],
+      verdict: census.verdict,
     };
     capture.teardown = buildTeardownEvidence(teardown, secrets);
   }

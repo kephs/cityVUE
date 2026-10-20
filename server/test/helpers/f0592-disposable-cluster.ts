@@ -80,6 +80,120 @@ export const DENIED_VOLUMES = [
 ] as const;
 
 /**
+ * Schemas the application's own migrations create, mapped to the migration
+ * that creates each one.
+ *
+ * The schema census exists to catch a test that left a scratch schema behind.
+ * It predates any test applying the complete migration sequence, so it treated
+ * every non-system schema as a leak. Migration 51 runs
+ * `create schema if not exists reqro_integration_api` — it is the only
+ * migration in the repository that creates a schema — so once a test migrates
+ * the disposable database itself, that schema legitimately exists.
+ *
+ * The allowance is deliberately narrow in three ways: it names one schema
+ * rather than a prefix or pattern; it is conditional on the database recording
+ * the exact migration that creates it as applied; and it grants nothing to any
+ * other schema. A scratch schema is still a leak, and this schema without its
+ * migration is still a leak, because then something other than that migration
+ * created it.
+ */
+export const APPLICATION_SCHEMAS: Readonly<Record<string, string>> =
+  Object.freeze({
+    reqro_integration_api: '20261023000000-add-integration-worker-function-api',
+  });
+
+/** Observed schemas, with the migration history that may justify them. */
+export interface SchemaInventory {
+  /** Non-system schemas, excluding `public` and `information_schema`. */
+  readonly schemas: readonly string[];
+  /** Migration names the database records as applied, or `[]` if none. */
+  readonly appliedMigrations: readonly string[];
+}
+
+export interface SchemaCensusVerdict {
+  readonly ok: boolean;
+  readonly reasons: readonly string[];
+  /** Application schemas justified by their migration. */
+  readonly allowed: readonly string[];
+  /** Everything else: a leak, named. */
+  readonly unexpected: readonly string[];
+}
+
+const schemaList = (value: unknown): string[] | null =>
+  Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : null;
+
+/**
+ * Decides whether the schemas present after a run are accounted for.
+ *
+ * Pure, so every rejection is proven against fabricated input: no container is
+ * provisioned and no database is contacted to show that an unexplained schema
+ * is refused.
+ */
+export function evaluateSchemaCensus(input: {
+  readonly before?: SchemaInventory | null;
+  readonly after?: SchemaInventory | null;
+}): SchemaCensusVerdict {
+  const empty = { allowed: [] as readonly string[] };
+  const beforeSchemas = schemaList(input.before?.schemas);
+  const afterSchemas = schemaList(input.after?.schemas);
+  if (beforeSchemas === null)
+    return {
+      ...empty,
+      ok: false,
+      unexpected: [],
+      reasons: ['the pre-test schema inventory is missing or unreadable'],
+    };
+  if (afterSchemas === null)
+    return {
+      ...empty,
+      ok: false,
+      unexpected: [],
+      reasons: ['the post-test schema inventory is missing or unreadable'],
+    };
+  const applied = schemaList(input.after?.appliedMigrations) ?? [];
+  const reasons: string[] = [];
+  if (beforeSchemas.length)
+    reasons.push(
+      `the database was not a clean baseline: ${beforeSchemas.sort().join(', ')}`,
+    );
+
+  const allowed: string[] = [];
+  const unexpected: string[] = [];
+  for (const schema of [...afterSchemas].sort()) {
+    const required = Object.prototype.hasOwnProperty.call(
+      APPLICATION_SCHEMAS,
+      schema,
+    )
+      ? APPLICATION_SCHEMAS[schema]
+      : undefined;
+    if (required === undefined) {
+      unexpected.push(schema);
+      continue;
+    }
+    if (applied.includes(required)) allowed.push(schema);
+    else {
+      // The schema exists but the migration that owns it did not run, so
+      // something else created it. That is exactly what the census is for.
+      unexpected.push(schema);
+      reasons.push(
+        `the schema ${schema} exists without evidence that migration ${required} was applied`,
+      );
+    }
+  }
+  const unexplained = unexpected.filter(
+    (schema) =>
+      !Object.prototype.hasOwnProperty.call(APPLICATION_SCHEMAS, schema),
+  );
+  if (unexplained.length)
+    reasons.push(
+      `${String(unexplained.length)} schema(s) leaked during the run: ${unexplained.join(', ')}`,
+    );
+  return { ok: reasons.length === 0, reasons, allowed, unexpected };
+}
+
+/**
  * One Docker CLI invocation, normalised so the four outcomes can be told
  * apart: it answered, it answered with an error, it was killed, or it never
  * ran. The original shape kept only `status`, which is precisely why a CLI
@@ -478,6 +592,12 @@ export interface DisposableCluster {
   /** Counts schemas that no test created. */
   census(): Promise<number>;
   /**
+   * Names those schemas, alongside the migrations the database records as
+   * applied. A count alone cannot tell an application schema that an approved
+   * migration created from a scratch schema a test forgot to drop.
+   */
+  schemaInventory(): Promise<SchemaInventory>;
+  /**
    * Authorized teardown. Returns removal evidence in which `containerRemoved`
    * and `volumeRemoved` mean VERIFIED absence, never merely "docker did not
    * say otherwise".
@@ -865,6 +985,38 @@ export async function startDisposableCluster(): Promise<DisposableCluster> {
               and nspname not in ('information_schema', 'public')`,
         );
         return result.rows[0]?.count ?? -1;
+      } finally {
+        await pool.end();
+      }
+    },
+    schemaInventory: async () => {
+      const pool = new Pool({ connectionString: testUrl, max: 1 });
+      try {
+        const schemas = await pool.query<{ nspname: string }>(
+          `select nspname from pg_namespace
+            where nspname not like 'pg_%'
+              and nspname not in ('information_schema', 'public')
+            order by nspname`,
+        );
+        // The migration history lives in `public` and exists only once some
+        // test has migrated the database itself. Its absence is normal and
+        // means no application schema can be justified.
+        const present = await pool.query(
+          `select 1 from pg_tables
+            where schemaname = 'public' and tablename = 'kysely_migration'`,
+        );
+        const appliedMigrations =
+          present.rowCount === 0
+            ? []
+            : (
+                await pool.query<{ name: string }>(
+                  'select name from kysely_migration order by name',
+                )
+              ).rows.map((row) => row.name);
+        return {
+          schemas: schemas.rows.map((row) => row.nspname),
+          appliedMigrations,
+        };
       } finally {
         await pool.end();
       }

@@ -117,6 +117,7 @@ function effects(overrides: Record<string, unknown> = {}) {
   let secret: string | null = null;
   let lock: Record<string, unknown> | null = null;
   let fixtureArguments: { url: string; nonce: string } | null = null;
+  let migrationArguments: { url: string; nonce: string } | null = null;
   const base = {
     calls,
     testRole: 'reqro_test_user',
@@ -155,8 +156,11 @@ function effects(overrides: Record<string, unknown> = {}) {
       count('listAppliedMigrations');
       return [];
     },
-    applyMigrations: async () => {
+    applyMigrations: async (url: string, nonce: string) => {
       count('applyMigrations');
+      // Recorded so a test can prove the migration process is handed the
+      // nonce it needs to re-prove the destination for itself.
+      migrationArguments = { url, nonce };
       return { applied: [...INVENTORY], error: null };
     },
     applyFixtures: async (url: string, nonce: string) => {
@@ -224,6 +228,7 @@ function effects(overrides: Record<string, unknown> = {}) {
     _secret: () => secret,
     _lock: () => lock,
     _fixtureArguments: () => fixtureArguments,
+    _migrationArguments: () => migrationArguments,
     _setStored: (value: Record<string, unknown> | null) => {
       stored = value;
     },
@@ -906,6 +911,17 @@ test('F067 the fixture step reuses seed:development and weakens no guard', async
   // No persistent database is ever named as a target.
   assert.equal(/DATABASE_URL\s*[:=]\s*['"][^'"]*reqro_dev/.test(text), false);
   assert.equal(text.includes('reqro_dev'), false);
+});
+
+test('F067 the migration step is handed this run nonce and runs under tsx', async () => {
+  const { runStart } = await orchestrator();
+  const mock = effects();
+  const result = await runStart(mock, { inventory: INVENTORY });
+  assert.equal(result.state, 'active');
+  const handed = mock._migrationArguments();
+  assert.ok(handed !== null);
+  assert.equal(handed.nonce, NONCE);
+  assert.equal(handed.url, URL_STRING);
 });
 
 test('F067 the fixture step is handed this run nonce so it can prove the destination itself', async () => {

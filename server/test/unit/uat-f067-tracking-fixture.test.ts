@@ -67,6 +67,8 @@ const emptySnapshot: FixtureSnapshot = {
   roleMatches: false,
   rolePermissions: [],
   assignmentPresent: false,
+  assignmentActive: false,
+  assignmentMatches: false,
   requestsPresent: [],
   activityPresent: [],
   operationalPresent: [],
@@ -81,6 +83,8 @@ const fullSnapshot: FixtureSnapshot = {
   roleMatches: true,
   rolePermissions: [...FIXTURE_PERMISSIONS],
   assignmentPresent: true,
+  assignmentActive: true,
+  assignmentMatches: true,
   requestsPresent: REQUEST_IDS,
   activityPresent: REQUEST_IDS,
   operationalPresent: REQUEST_IDS,
@@ -560,15 +564,104 @@ void test('F067 the synthetic staff identity is created unauthenticated and no E
   assert.ok(!CLI_SOURCE.includes('StaffAccessGuard'));
 });
 
-void test('F067 the fixture only inserts; it never updates, deletes or truncates', () => {
+void test('F067 the fixture never deletes, truncates or alters, and updates one column of one row', () => {
   for (const forbidden of [
-    'updateTable(',
     'deleteFrom(',
     'truncate',
     'drop table',
     'alter table',
   ])
     assert.ok(!FIXTURE_SOURCE.includes(forbidden), forbidden);
+  // Exactly one update exists: reactivating the fixture's own role
+  // assignment, which an insert cannot do because the row already occupies
+  // the primary key. It is scoped to that key and to `active` alone.
+  const updates = FIXTURE_SOURCE.match(/\.updateTable\('([a-z_]+)'\)/g) ?? [];
+  assert.deepEqual(updates, [".updateTable('staff_role_assignment')"]);
+  assert.ok(FIXTURE_SOURCE.includes('.set({ active: true })'));
+  assert.ok(
+    !/\.set\(\{[^}]*permission/s.test(FIXTURE_SOURCE),
+    'no update may touch a permission',
+  );
+});
+
+void test('F067 the existing role assignment is read by its real primary key, with no status predicate', () => {
+  // The primary key is (staff_identity_id, role_id). Reading only active rows
+  // would report an inactive assignment as absent and the plan would then
+  // attempt an insert the key refuses.
+  const read =
+    /selectFrom\('staff_role_assignment'\)[\s\S]{0,400}?executeTakeFirst\(\)/.exec(
+      FIXTURE_SOURCE,
+    );
+  assert.ok(read, 'the assignment read was not found');
+  assert.ok(read[0].includes("'staff_identity_id', '=',"));
+  assert.ok(read[0].includes("'role_id', '=',"));
+  assert.ok(
+    !read[0].includes("'active', '=', true"),
+    'the assignment read must not filter on active',
+  );
+  assert.ok(read[0].includes("'active'"), 'activity is selected as a fact');
+});
+
+void test('F067 an absent role assignment is created and an active one is left alone', () => {
+  const absent = planFixtureWrites(emptySnapshot);
+  assert.equal(absent.createAssignment, true);
+  assert.equal(absent.reactivateAssignment, false);
+  const active = planFixtureWrites(fullSnapshot);
+  assert.equal(active.createAssignment, false);
+  assert.equal(active.reactivateAssignment, false);
+  assert.equal(active.changed, false);
+});
+
+void test('F067 an inactive role assignment is reactivated in place, never duplicated', () => {
+  const plan = planFixtureWrites({
+    ...fullSnapshot,
+    assignmentPresent: true,
+    assignmentActive: false,
+  });
+  assert.equal(plan.ok, true);
+  // No insert: the primary key is already taken by the inactive row.
+  assert.equal(plan.createAssignment, false);
+  assert.equal(plan.reactivateAssignment, true);
+  // Reactivation is a change, so the run must not report itself a no-op.
+  assert.equal(plan.changed, true);
+  // Nothing else is planned, and no permission is added.
+  assert.equal(plan.grantPermissions.length, 0);
+  assert.equal(plan.referenceAllocations, 0);
+  assert.equal(plan.createRequests.length, 0);
+  assert.equal(plan.createUpdates.length, 0);
+  assert.equal(plan.createStaff, false);
+  assert.equal(plan.createRole, false);
+});
+
+void test('F067 reactivating twice settles: the second plan is a no-op', () => {
+  const inactive = planFixtureWrites({
+    ...fullSnapshot,
+    assignmentActive: false,
+  });
+  assert.equal(inactive.reactivateAssignment, true);
+  // After the update the snapshot reads active again, so idempotency holds.
+  const settled = planFixtureWrites({
+    ...fullSnapshot,
+    assignmentActive: true,
+  });
+  assert.equal(settled.reactivateAssignment, false);
+  assert.equal(settled.changed, false);
+});
+
+void test('F067 an assignment belonging to another Organization is refused, not reactivated', () => {
+  const plan = planFixtureWrites({
+    ...fullSnapshot,
+    assignmentActive: false,
+    assignmentMatches: false,
+  });
+  assert.equal(plan.ok, false);
+  assert.equal(plan.reactivateAssignment, false);
+  assert.equal(plan.createAssignment, false);
+  assert.equal(plan.changed, false);
+  assert.ok(
+    plan.reasons.some((reason) => reason.includes('another Organization')),
+    plan.reasons.join('; '),
+  );
 });
 
 void test('F067 the destination is proven before the first write and the census read after the last', () => {
