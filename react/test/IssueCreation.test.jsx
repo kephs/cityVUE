@@ -52,7 +52,14 @@ async function setup({
     ),
     patch: vi.fn(),
   };
-  const user = userEvent.setup(),
+  // This dialog is one large controlled form, so every keystroke re-renders
+  // it. userEvent's default `delay: 0` additionally yields to the macrotask
+  // queue between characters, which measured ~42ms per character here and
+  // left the longest flow (85 typed characters) only ~8% inside the 5s
+  // default. `delay: null` dispatches the same per-character event sequence
+  // without that artificial wait. The debounced Category lookup is driven by
+  // its own `userEvent.setup()` below and is deliberately left untouched.
+  const user = userEvent.setup({ delay: null }),
     onDenied = vi.fn();
   render(
     <MemoryRouter>
