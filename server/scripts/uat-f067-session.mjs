@@ -551,6 +551,101 @@ export function evaluateSecretFileRequest({
   };
 }
 
+/**
+ * The exclusive-lock verdict.
+ *
+ * Two invocations must never operate on one session, and a crashed process
+ * must not leave a lock that silently authorizes the next caller. A held lock
+ * refuses. A lock whose owning process is gone is reported as `stale` and
+ * still refuses: clearing it is a human decision, because "the pid is gone"
+ * does not prove the container and database it was mid-way through touching
+ * are in a known state. Anything unreadable is `ambiguous`, which also
+ * refuses -- every outcome here except `free` is fail-closed.
+ */
+export function evaluateLock({
+  lock,
+  pidAlive,
+  now,
+  staleAfterMs = 86_400_000,
+}) {
+  if (lock === null || lock === undefined)
+    return { state: 'free', ok: true, reasons: [] };
+  if (typeof lock !== 'object' || Array.isArray(lock))
+    return {
+      state: 'ambiguous',
+      ok: false,
+      reasons: ['the lock file could not be parsed'],
+    };
+  if (!Number.isInteger(lock.pid) || lock.pid <= 0)
+    return {
+      state: 'ambiguous',
+      ok: false,
+      reasons: ['the lock file records no usable process id'],
+    };
+  const acquired = Date.parse(String(lock.acquiredAt));
+  if (!Number.isFinite(acquired))
+    return {
+      state: 'ambiguous',
+      ok: false,
+      reasons: ['the lock file records no valid acquisition time'],
+    };
+  if (pidAlive === true) {
+    const age = (now instanceof Date ? now.getTime() : Date.now()) - acquired;
+    return {
+      state: 'held',
+      ok: false,
+      reasons: [
+        `another F067 session command (pid ${String(lock.pid)}) holds the lock, acquired ${String(Math.max(0, Math.round(age / 1000)))}s ago`,
+      ],
+    };
+  }
+  if (pidAlive !== false)
+    return {
+      state: 'ambiguous',
+      ok: false,
+      reasons: [
+        'whether the lock owner is still running could not be determined',
+      ],
+    };
+  return {
+    state: 'stale',
+    ok: false,
+    reasons: [
+      `the lock was held by pid ${String(lock.pid)}, which is gone; the session it was operating on is in an unverified state and must be inspected with status before the lock is cleared`,
+      ...(Number.isFinite(staleAfterMs) && Date.now() - acquired > staleAfterMs
+        ? ['the lock is older than the staleness horizon']
+        : []),
+    ],
+  };
+}
+
+/**
+ * Whether a recorded session conflicts with starting a new one. A session
+ * still holding a resource must be ended, not silently replaced, or its
+ * container and volume would be orphaned.
+ */
+export function evaluateSessionConflict(record) {
+  if (record === null || record === undefined) return { ok: true, reasons: [] };
+  const verdict = evaluateSessionRecord(record);
+  if (!verdict.ok)
+    // A corrupt record may still describe a real container, so it blocks a
+    // new session rather than being discarded.
+    return {
+      ok: false,
+      reasons: [
+        'an unusable session record exists; it may still describe a live container, so it must be resolved before a new session starts',
+        ...verdict.reasons,
+      ],
+    };
+  if (verdict.state === 'ended') return { ok: true, reasons: [] };
+  return {
+    ok: false,
+    reasons: [
+      `a session is already recorded in state ${verdict.state}; end it before starting another`,
+    ],
+  };
+}
+
 /** The status report. Built from the record alone, which never holds a secret. */
 export function describeSession(record, { identityRefusal, fixtures } = {}) {
   const session = evaluateSessionRecord(record);
@@ -713,22 +808,27 @@ async function main(argv = process.argv.slice(2)) {
       for (const reason of described.reasons) errOut(`  - ${reason}`);
       return 1;
     }
-    for (const line of described.lines) out(line);
     const inventory = evaluateMigrationInventory({
       required,
       expected: record.migrations,
       applied: null,
     });
+    // Readiness is never asserted from the record alone: the recorded
+    // container is re-inspected and, when the session secret is available,
+    // in-band database identity is confirmed too. Live effects are built only
+    // once a record exists, so a no-session status touches nothing.
+    const { runStatus } = await import('./uat-f067-orchestrator.mjs');
+    const { createLiveEffects } = await import('./uat-f067-effects.mjs');
+    const effects = await createLiveEffects({ serverRoot: SERVER_ROOT });
+    const result = await runStatus(effects, { inventory: required });
+    for (const line of result.lines ?? described.lines) out(line);
     out(
       `source inventory     ${inventory.ok ? 'matches this session' : 'DIVERGED'}`,
     );
     for (const reason of inventory.reasons) errOut(`  - ${reason}`);
-    // Readiness is never asserted from a record alone. Confirming the live
-    // instance needs a connection, which `status` deliberately does not make.
-    out(
-      'readiness            not asserted; run a verified start --confirm session to establish it',
-    );
-    return inventory.ok ? 0 : 1;
+    out(`state                ${String(result.state)}`);
+    for (const reason of result.reasons ?? []) errOut(`  - ${reason}`);
+    return result.ok && inventory.ok ? 0 : 1;
   }
 
   if (mode === '--dry-run') {
@@ -773,18 +873,35 @@ async function main(argv = process.argv.slice(2)) {
     return inventory.ok ? 0 : 1;
   }
 
-  // --confirm. This milestone authorizes no container creation, migration,
-  // seeding or removal, so the harness refuses rather than carrying it out.
-  // The refusal is the safety property: an unauthorized session cannot
-  // provision or destroy anything, and the dry-run path above is the only
-  // thing the implementation milestone exercises.
-  errOut(
-    `${command} --confirm requires an authorized F067 UAT session. This build performs no container, migration, seeding, fixture or removal operation.`,
-  );
-  errOut(
-    'Re-run with --dry-run to see the exact plan, or obtain authorization for a live session.',
-  );
-  return 3;
+  // --confirm. The orchestration is implemented, but reaching it requires an
+  // explicit out-of-band authorization variable. Without it the harness
+  // refuses: that refusal, not the absence of code, is what keeps an
+  // unauthorized invocation from provisioning or destroying anything.
+  if (process.env.REQRO_F067_UAT_AUTHORIZED !== 'true') {
+    errOut(
+      `${command} --confirm requires an authorized F067 UAT session. Set REQRO_F067_UAT_AUTHORIZED=true only under explicit authorization; this build performs no container, migration, seeding, fixture or removal operation without it.`,
+    );
+    errOut(
+      'Re-run with --dry-run to see the exact plan, or obtain authorization for a live session.',
+    );
+    return 3;
+  }
+
+  const { runStart, runEnd } = await import('./uat-f067-orchestrator.mjs');
+  const { createLiveEffects } = await import('./uat-f067-effects.mjs');
+  const effects = await createLiveEffects({ serverRoot: SERVER_ROOT });
+  const result =
+    command === 'start'
+      ? await runStart(effects, { inventory: required })
+      : await runEnd(effects);
+  for (const reason of result.reasons ?? []) errOut(`  - ${reason}`);
+  if (!result.ok) {
+    errOut(`${command}: ${String(result.state).toUpperCase()}`);
+    return 1;
+  }
+  out(`${command}: ${String(result.state)}`);
+  if (result.windowsCaveat) out(`note  ${String(result.windowsCaveat)}`);
+  return 0;
 }
 
 export { main };
