@@ -30,7 +30,7 @@ import {
   SESSION_FILE,
   UAT_ENV_FILE,
   UAT_DATABASE,
-} from './uat-f067-session.mjs';
+} from './uat-f067-session-core.mjs';
 
 const LOCK_FILE = resolve(dirname(SESSION_FILE), 'uat-f067-session.lock');
 

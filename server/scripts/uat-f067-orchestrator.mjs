@@ -1,7 +1,7 @@
 /**
  * F067 — live orchestration for the isolated interactive UAT session.
  *
- * The verdicts live in `uat-f067-session.mjs`; this file sequences them and
+ * The verdicts live in `uat-f067-session-core.mjs`; this file sequences them and
  * performs the effects. Every effect is injected, so the complete
  * start-to-active and active-to-ended lifecycles are exercised offline
  * against deterministic mocks: no Docker daemon, no PostgreSQL server and no
@@ -36,7 +36,7 @@ import {
   evaluateSecretFileRequest,
   prepareSessionRecord,
   redactUrl,
-} from './uat-f067-session.mjs';
+} from './uat-f067-session-core.mjs';
 
 /** A phase failure carries the state the session should be recorded in. */
 function failure(state, reasons) {
