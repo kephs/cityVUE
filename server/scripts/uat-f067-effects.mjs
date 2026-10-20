@@ -38,6 +38,50 @@ function dockerRun(args, timeout = 120_000) {
   return spawnSync('docker', args, { encoding: 'utf8', timeout });
 }
 
+/**
+ * The live fixture census, used identically after provisioning and during
+ * `status`, so a session cannot be reported ready by one measurement and
+ * unready by another.
+ *
+ * `trackingManageGrants` counts active staff assignments to active roles that
+ * carry `service_request.tracking.manage`. That is the shape the authorization
+ * layer actually reads, so a role that exists without an assignment, or an
+ * assignment to a deactivated role, is correctly counted as no grant.
+ */
+async function fixtureCensus(url) {
+  const { Pool } = await import('pg');
+  const pool = new Pool({ connectionString: url, max: 2 });
+  const visible =
+    "m.direction='outbound' and m.channel='portal' and m.delivery_state='recorded'";
+  try {
+    const count = async (sql) =>
+      Number((await pool.query(sql)).rows[0]?.n ?? 0);
+    return {
+      organizations: await count('select count(*)::int n from organization'),
+      serviceDefinitions: await count(
+        'select count(*)::int n from service_definition',
+      ),
+      staffIdentities: await count(
+        'select count(*)::int n from staff_identity where active',
+      ),
+      residentVisibleUpdates: await count(
+        `select count(*)::int n from request_communication m where ${visible}`,
+      ),
+      publicRequestsWithUpdates: await count(
+        `select count(*)::int n from service_request r where r.audience='public' and exists(select 1 from request_communication m where m.organization_id=r.organization_id and m.service_request_id=r.id and ${visible})`,
+      ),
+      publicRequestsWithoutUpdates: await count(
+        `select count(*)::int n from service_request r where r.audience='public' and not exists(select 1 from request_communication m where m.organization_id=r.organization_id and m.service_request_id=r.id and ${visible})`,
+      ),
+      trackingManageGrants: await count(
+        "select count(*)::int n from staff_role_assignment a join role on role.organization_id=a.organization_id and role.id=a.role_id join role_permission p on p.organization_id=a.organization_id and p.role_id=a.role_id where a.active and role.active and p.permission_key='service_request.tracking.manage'",
+      ),
+    };
+  } finally {
+    await pool.end();
+  }
+}
+
 export async function createLiveEffects({ serverRoot }) {
   const distTest = resolve(serverRoot, 'dist-test', 'test');
   const load = async (file) => {
@@ -158,97 +202,62 @@ export async function createLiveEffects({ serverRoot }) {
     /**
      * Synthetic fixtures, disposable-only.
      *
-     * `seed:development` is reused unchanged: it reads DATABASE_URL rather
-     * than pinning a target, so pointing it at the disposable URL needs no
-     * change to it and no weakening of `assertDevelopmentDatabaseUrl`. It
-     * provisions the Organization, catalog and a staff identity.
+     * Two steps, both reused rather than reimplemented.
      *
-     * It creates no service_request or request_communication rows and grants
-     * no `service_request.tracking.manage`, so the census below is honest
-     * about what is missing and `evaluateFixtureReadiness` refuses rather
-     * than reporting a session ready for tracking UAT. Supplying those rows
-     * is a separately authorized bounded addition; fabricating their SQL here
-     * without a live schema to verify it against is exactly what this
-     * harness should not do.
+     * `seed:development` runs unchanged: it reads DATABASE_URL rather than
+     * pinning a target, so pointing it at the disposable URL needs no change
+     * to it and no weakening of `assertDevelopmentDatabaseUrl`. It provisions
+     * the Organization, catalog and development staff.
+     *
+     * `uat-f067-tracking-fixture-cli.ts` then adds what resident tracking UAT
+     * needs and seeding does not create: two PUBLIC Service Requests, the
+     * resident-visible portal updates on one of them, and a narrowly scoped
+     * role carrying `service_request.view` and
+     * `service_request.tracking.manage`. It receives this session's nonce and
+     * the disposable role, and refuses to write unless the server itself
+     * reports both back, so it cannot reach a persistent database even if
+     * DATABASE_URL named one.
+     *
+     * No credential is issued and no Entra identity is bound; issuance stays
+     * with the existing staff endpoint under its own authorization.
      */
-    applyFixtures: async (url) => {
-      const seeded = spawnSync(
-        process.execPath,
-        [
-          resolve(serverRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
-          'src/database/seed-development.ts',
-        ],
-        {
-          cwd: serverRoot,
-          encoding: 'utf8',
-          timeout: 300_000,
-          env: { ...process.env, DATABASE_URL: url, TEST_DATABASE_URL: url },
-        },
-      );
+    applyFixtures: async (url, nonce) => {
+      const tsx = (script, env) =>
+        spawnSync(
+          process.execPath,
+          [
+            resolve(serverRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+            script,
+          ],
+          {
+            cwd: serverRoot,
+            encoding: 'utf8',
+            timeout: 300_000,
+            env: { ...process.env, ...env },
+          },
+        );
+      const seeded = tsx('src/database/seed-development.ts', {
+        DATABASE_URL: url,
+        TEST_DATABASE_URL: url,
+      });
       if (seeded.status !== 0)
         throw new Error(
           `seed:development failed with status ${String(seeded.status)}`,
         );
-      const { Pool } = await import('pg');
-      const pool = new Pool({ connectionString: url, max: 2 });
-      try {
-        const count = async (sql) =>
-          Number((await pool.query(sql)).rows[0]?.n ?? 0);
-        return {
-          organizations: await count(
-            'select count(*)::int n from organization',
-          ),
-          serviceDefinitions: await count(
-            'select count(*)::int n from service_definition',
-          ),
-          staffIdentities: await count(
-            'select count(*)::int n from staff_identity',
-          ),
-          residentVisibleUpdates: await count(
-            "select count(*)::int n from request_communication where direction='outbound' and channel='portal' and delivery_state='recorded'",
-          ),
-          publicRequestsWithUpdates: await count(
-            "select count(*)::int n from service_request r where r.audience='public' and exists(select 1 from request_communication m where m.service_request_id=r.id and m.direction='outbound' and m.channel='portal' and m.delivery_state='recorded')",
-          ),
-          publicRequestsWithoutUpdates: await count(
-            "select count(*)::int n from service_request r where r.audience='public' and not exists(select 1 from request_communication m where m.service_request_id=r.id and m.direction='outbound' and m.channel='portal' and m.delivery_state='recorded')",
-          ),
-        };
-      } finally {
-        await pool.end();
-      }
+      const provisioned = tsx('src/database/uat-f067-tracking-fixture-cli.ts', {
+        DATABASE_URL: url,
+        TEST_DATABASE_URL: url,
+        REQRO_F067_UAT_DISPOSABLE_NONCE: nonce,
+        REQRO_F067_UAT_DISPOSABLE_ROLE: TEST_ROLE,
+      });
+      if (provisioned.status !== 0)
+        throw new Error(
+          `the F067 tracking fixture failed with status ${String(provisioned.status)}`,
+        );
+      return fixtureCensus(url);
     },
 
-    censusFixtures: async (url) => {
-      const { Pool } = await import('pg');
-      const pool = new Pool({ connectionString: url, max: 2 });
-      try {
-        const count = async (sql) =>
-          Number((await pool.query(sql)).rows[0]?.n ?? 0);
-        return {
-          organizations: await count(
-            'select count(*)::int n from organization',
-          ),
-          serviceDefinitions: await count(
-            'select count(*)::int n from service_definition',
-          ),
-          staffIdentities: await count(
-            'select count(*)::int n from staff_identity',
-          ),
-          residentVisibleUpdates: await count(
-            "select count(*)::int n from request_communication where direction='outbound' and channel='portal' and delivery_state='recorded'",
-          ),
-          publicRequestsWithUpdates: await count(
-            "select count(*)::int n from service_request r where r.audience='public' and exists(select 1 from request_communication m where m.service_request_id=r.id and m.direction='outbound' and m.channel='portal' and m.delivery_state='recorded')",
-          ),
-          publicRequestsWithoutUpdates: await count(
-            "select count(*)::int n from service_request r where r.audience='public' and not exists(select 1 from request_communication m where m.service_request_id=r.id and m.direction='outbound' and m.channel='portal' and m.delivery_state='recorded')",
-          ),
-        };
-      } finally {
-        await pool.end();
-      }
-    },
+    censusFixtures: (url) => fixtureCensus(url),
 
     inspectContainer: (containerId) => {
       const probe = inspect(containerId);

@@ -217,7 +217,9 @@ export async function runStart(effects, { inventory }) {
 
     let fixtures;
     try {
-      fixtures = await effects.applyFixtures(url);
+      // The nonce goes with it: the fixture process proves the destination
+      // independently by reading this value back from the server in band.
+      fixtures = await effects.applyFixtures(url, cluster.nonce);
     } catch (error) {
       await teardown(effects, cluster.containerId, cluster.nonce);
       return failure('failed', [

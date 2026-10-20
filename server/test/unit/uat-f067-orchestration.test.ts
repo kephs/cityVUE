@@ -85,6 +85,7 @@ const READY_CENSUS = {
   publicRequestsWithUpdates: 1,
   publicRequestsWithoutUpdates: 1,
   residentVisibleUpdates: 3,
+  trackingManageGrants: 1,
   staffIdentities: 1,
 };
 
@@ -115,6 +116,7 @@ function effects(overrides: Record<string, unknown> = {}) {
   let stored: Record<string, unknown> | null = null;
   let secret: string | null = null;
   let lock: Record<string, unknown> | null = null;
+  let fixtureArguments: { url: string; nonce: string } | null = null;
   const base = {
     calls,
     testRole: 'reqro_test_user',
@@ -157,8 +159,11 @@ function effects(overrides: Record<string, unknown> = {}) {
       count('applyMigrations');
       return { applied: [...INVENTORY], error: null };
     },
-    applyFixtures: async () => {
+    applyFixtures: async (url: string, nonce: string) => {
       count('applyFixtures');
+      // Recorded so a test can prove the fixture process is handed the nonce
+      // it needs to verify the destination for itself.
+      fixtureArguments = { url, nonce };
       return { ...READY_CENSUS };
     },
     censusFixtures: async () => {
@@ -218,6 +223,7 @@ function effects(overrides: Record<string, unknown> = {}) {
     _stored: () => stored,
     _secret: () => secret,
     _lock: () => lock,
+    _fixtureArguments: () => fixtureArguments,
     _setStored: (value: Record<string, unknown> | null) => {
       stored = value;
     },
@@ -900,4 +906,29 @@ test('F067 the fixture step reuses seed:development and weakens no guard', async
   // No persistent database is ever named as a target.
   assert.equal(/DATABASE_URL\s*[:=]\s*['"][^'"]*reqro_dev/.test(text), false);
   assert.equal(text.includes('reqro_dev'), false);
+});
+
+test('F067 the fixture step is handed this run nonce so it can prove the destination itself', async () => {
+  const { runStart } = await orchestrator();
+  const mock = effects();
+  const result = await runStart(mock, { inventory: INVENTORY });
+  assert.equal(result.state, 'active');
+  const handed = mock._fixtureArguments();
+  assert.ok(handed !== null);
+  assert.equal(handed.nonce, NONCE);
+  assert.equal(handed.url, URL_STRING);
+});
+
+test('F067 the fixture step invokes the F067 tracking fixture with the nonce and the disposable role', async () => {
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(resolve(scripts, 'uat-f067-effects.mjs'), 'utf8');
+  assert.ok(text.includes('src/database/uat-f067-tracking-fixture-cli.ts'));
+  assert.ok(text.includes('REQRO_F067_UAT_DISPOSABLE_NONCE: nonce'));
+  assert.ok(text.includes('REQRO_F067_UAT_DISPOSABLE_ROLE: TEST_ROLE'));
+  // The grant the UAT scenario needs is measured, not assumed.
+  assert.ok(text.includes('trackingManageGrants'));
+  assert.ok(text.includes("permission_key='service_request.tracking.manage'"));
+  // Still no credential issuance anywhere in the effects.
+  assert.equal(text.includes('request_tracking_credential'), false);
+  assert.equal(text.includes('requester-tracking/issue'), false);
 });

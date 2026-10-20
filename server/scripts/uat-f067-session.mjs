@@ -444,12 +444,18 @@ export function evaluateFixtureReadiness(counts) {
   const reasons = [];
   if (counts === null || typeof counts !== 'object')
     return { ok: false, reasons: ['no fixture census was supplied'] };
+  // `trackingManageGrants` is part of readiness because the UAT scenario is
+  // not reachable without it: a staff operator cannot issue the tracking
+  // credential the resident experience depends on. It counts an effective
+  // grant -- an active assignment to an active role carrying the permission --
+  // rather than the mere existence of a role.
   const need = {
     organizations: 1,
     serviceDefinitions: 1,
     publicRequestsWithUpdates: 1,
     publicRequestsWithoutUpdates: 1,
     residentVisibleUpdates: 1,
+    trackingManageGrants: 1,
     staffIdentities: 1,
   };
   for (const [key, minimum] of Object.entries(need)) {
