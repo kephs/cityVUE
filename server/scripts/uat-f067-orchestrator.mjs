@@ -67,7 +67,14 @@ async function verifyTarget(
       `instance evidence could not be collected: ${redactUrl(error?.message ?? error)}`,
     ]);
   }
-  const identityRefusal = effects.refuseUnlessDisposable(evidence);
+  // The fresh check precedes migrations; every later check follows them. The
+  // phase only selects which rule applies -- it accepts nothing by itself. In
+  // the `migrated` rule an application schema passes solely because the live
+  // history read on this same connection records its creating migration, and
+  // every other schema still refuses.
+  const identityRefusal = effects.refuseUnlessDisposable(evidence, {
+    phase: requireFresh ? 'fresh' : 'migrated',
+  });
   let applied = null;
   if (requireFresh) {
     try {

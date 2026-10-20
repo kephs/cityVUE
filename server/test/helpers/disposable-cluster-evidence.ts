@@ -78,7 +78,89 @@ export interface DisposableSqlFacts {
   readonly postmasterStart: Date | null;
   /** Schemas in the test database that this run did not create. */
   readonly unexpectedSchemaCount: number | null;
+  /**
+   * Those same schemas by name, read from the connected server. A count can
+   * say only that something is there; the post-migration check has to know
+   * what, so an application schema is never mistaken for a leak and a leak is
+   * never hidden behind one. `null` when the inventory could not be read.
+   */
+  readonly schemas: readonly string[] | null;
+  /**
+   * Migration names recorded in `public.kysely_migration` on the connected
+   * server, `[]` when that table does not exist yet, `null` when unreadable.
+   * This, and only this, is evidence that a migration ran: not the session
+   * record, not the caller, not a phase flag.
+   */
+  readonly appliedMigrations: readonly string[] | null;
 }
+
+/**
+ * Schemas the application's own migrations create, mapped to the migration
+ * that creates each one. The single source of this policy: the post-migration
+ * identity check and the run-level schema census both classify through
+ * `classifyApplicationSchemas`, so they cannot drift apart.
+ *
+ * Migration 51 runs `create schema if not exists reqro_integration_api` and is
+ * the only migration in the repository that creates a schema. The allowance
+ * is narrow by construction: one name, no pattern or prefix, and conditional
+ * on the creating migration appearing in the live applied history.
+ */
+export const APPLICATION_SCHEMAS: Readonly<Record<string, string>> =
+  Object.freeze({
+    reqro_integration_api: '20261023000000-add-integration-worker-function-api',
+  });
+
+export interface ApplicationSchemaClassification {
+  /** Application schemas whose creating migration is recorded as applied. */
+  readonly allowed: readonly string[];
+  /** Application schemas present without that evidence. */
+  readonly unjustified: readonly {
+    readonly schema: string;
+    readonly migration: string;
+  }[];
+  /** Everything that is not an application schema at all. */
+  readonly foreign: readonly string[];
+}
+
+/**
+ * Sorts observed schemas against the application-schema policy. Pure. An
+ * application schema counts as allowed only when the migration that creates
+ * it is in `appliedMigrations`; otherwise something else created it.
+ */
+export function classifyApplicationSchemas(
+  schemas: readonly string[],
+  appliedMigrations: readonly string[],
+): ApplicationSchemaClassification {
+  const allowed: string[] = [];
+  const unjustified: { schema: string; migration: string }[] = [];
+  const foreign: string[] = [];
+  for (const schema of [...schemas].sort()) {
+    const migration = Object.prototype.hasOwnProperty.call(
+      APPLICATION_SCHEMAS,
+      schema,
+    )
+      ? APPLICATION_SCHEMAS[schema]
+      : undefined;
+    if (migration === undefined) foreign.push(schema);
+    else if (appliedMigrations.includes(migration)) allowed.push(schema);
+    else unjustified.push({ schema, migration });
+  }
+  return { allowed, unjustified, foreign };
+}
+
+/**
+ * Which state the disposable database is expected to be in.
+ *
+ * `fresh` is the precondition before any migration: no non-system schema and
+ * no migration history at all, so even an application schema refuses -- a
+ * fresh database that already holds one was not fresh.
+ *
+ * `migrated` is every check after migrations have run. It does not relax
+ * anything by itself: an application schema is accepted only when the live
+ * history on the same connection records its creating migration, and every
+ * other schema still refuses.
+ */
+export type DisposablePhase = 'fresh' | 'migrated';
 
 export interface DisposableMount {
   readonly type: string;
@@ -125,8 +207,18 @@ export interface DisposableEvidence {
  */
 export function refuseUnlessDisposable(
   evidence: DisposableEvidence,
+  options: { readonly phase?: DisposablePhase } = {},
 ): string | null {
   const { url, sql, container, expected } = evidence;
+  // Defaults to the strict precondition, so every existing caller keeps the
+  // exact behaviour it had. An unrecognised phase refuses rather than
+  // degrading to either rule.
+  // Read as `unknown`: the orchestrator calling this is plain JavaScript, so
+  // the type does not bind it, and the check below is a real runtime guard.
+  const requested: unknown = options.phase ?? 'fresh';
+  if (requested !== 'fresh' && requested !== 'migrated')
+    return `the verification phase ${JSON.stringify(requested)} is not recognised`;
+  const phase: DisposablePhase = requested;
 
   // The expectations themselves must be complete. An empty nonce would
   // otherwise compare equal to an absent server setting and pass.
@@ -176,13 +268,48 @@ export function refuseUnlessDisposable(
   if (sql.postmasterStart.getTime() < expected.harnessEpoch.getTime())
     return 'the server started before this harness run, so it is not ours';
 
-  // 6. A fresh database, never an inherited backlog.
+  // 6. Schema state, judged by phase and always from live facts.
   if (sql.unexpectedSchemaCount === null)
     return 'the unexpected-schema census is missing';
-  if (sql.unexpectedSchemaCount !== 0)
-    return `the database already holds ${String(
-      sql.unexpectedSchemaCount,
-    )} unexpected schema(s), so it is not a clean disposable baseline`;
+  if (phase === 'fresh') {
+    // A fresh database, never an inherited backlog -- unchanged. Any
+    // non-system schema refuses here, application schemas included.
+    if (sql.unexpectedSchemaCount !== 0)
+      return `the database already holds ${String(
+        sql.unexpectedSchemaCount,
+      )} unexpected schema(s), so it is not a clean disposable baseline`;
+    // And no migration history: a database that has already been migrated is
+    // not a fresh one, whatever its schemas look like.
+    if (sql.appliedMigrations === null)
+      return 'the applied-migration history could not be read';
+    if (sql.appliedMigrations.length !== 0)
+      return `the database already records ${String(
+        sql.appliedMigrations.length,
+      )} applied migration(s), so it is not a clean disposable baseline`;
+  } else {
+    // After migrations. Names, not a count, decide -- and both must be
+    // readable and agree, so nothing can hide behind the other.
+    if (sql.schemas === null) return 'the schema inventory could not be read';
+    if (sql.appliedMigrations === null)
+      return 'the applied-migration history could not be read';
+    if (sql.schemas.length !== sql.unexpectedSchemaCount)
+      return `the schema inventory names ${String(
+        sql.schemas.length,
+      )} schema(s) but the census counted ${String(
+        sql.unexpectedSchemaCount,
+      )}, so the evidence is contradictory`;
+    const classified = classifyApplicationSchemas(
+      sql.schemas,
+      sql.appliedMigrations,
+    );
+    const unjustified = classified.unjustified[0];
+    if (unjustified !== undefined)
+      return `the schema ${unjustified.schema} exists without evidence that migration ${unjustified.migration} was applied`;
+    if (classified.foreign.length)
+      return `the database holds ${String(
+        classified.foreign.length,
+      )} unexpected schema(s): ${classified.foreign.join(', ')}`;
+  }
 
   // 7-12. Out-of-band evidence. Absence refuses: an instance that Docker
   // cannot account for is exactly the managed-database case being excluded.
@@ -454,11 +581,29 @@ export async function collectDisposableEvidence(
             current_setting('reqro.disposable_nonce', true) nonce,
             pg_postmaster_start_time() started`,
   );
-  const census = await admin.query<{ count: number }>(
-    `select count(*)::int count from pg_namespace
+  // Names, not just a count: one query, so the count and the inventory are
+  // the same observation and cannot disagree through a race.
+  const inventory = await admin.query<{ nspname: string }>(
+    `select nspname from pg_namespace
       where nspname not like 'pg_%'
-        and nspname not in ('information_schema', 'public')`,
+        and nspname not in ('information_schema', 'public')
+      order by nspname`,
   );
+  // The applied history on THIS connection. It is the only accepted evidence
+  // that a migration ran. A missing table means none has; a failing query
+  // throws and the caller treats the instance as unverifiable.
+  const historyPresent = await admin.query<{ present: boolean }>(
+    `select to_regclass('public.kysely_migration') is not null as present`,
+  );
+  const appliedMigrations =
+    historyPresent.rows[0]?.present === true
+      ? (
+          await admin.query<{ name: string }>(
+            'select name from public.kysely_migration order by name',
+          )
+        ).rows.map((entry) => entry.name)
+      : [];
+  const schemas = inventory.rows.map((entry) => entry.nspname);
   const row = facts.rows[0];
   return {
     url: {
@@ -475,7 +620,9 @@ export async function collectDisposableEvidence(
         row?.started === null || row?.started === undefined
           ? null
           : new Date(row.started),
-      unexpectedSchemaCount: census.rows[0]?.count ?? null,
+      unexpectedSchemaCount: schemas.length,
+      schemas,
+      appliedMigrations,
     },
     container: inspectContainer(expected.containerId),
     expected,

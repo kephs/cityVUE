@@ -118,6 +118,8 @@ function effects(overrides: Record<string, unknown> = {}) {
   let lock: Record<string, unknown> | null = null;
   let fixtureArguments: { url: string; nonce: string } | null = null;
   let migrationArguments: { url: string; nonce: string } | null = null;
+  /** Every phase the identity check was asked for, in call order. */
+  const phases: (string | undefined)[] = [];
   const base = {
     calls,
     testRole: 'reqro_test_user',
@@ -147,8 +149,12 @@ function effects(overrides: Record<string, unknown> = {}) {
       count('collectEvidence');
       return { url: URL_FACTS };
     },
-    refuseUnlessDisposable: () => {
+    refuseUnlessDisposable: (
+      _evidence: unknown,
+      options: { phase?: string } = {},
+    ) => {
       count('refuseUnlessDisposable');
+      phases.push(options.phase);
       return null;
     },
     expectationsFromRecord: async () => ({ database: 'reqro_f0592_test' }),
@@ -229,6 +235,7 @@ function effects(overrides: Record<string, unknown> = {}) {
     _lock: () => lock,
     _fixtureArguments: () => fixtureArguments,
     _migrationArguments: () => migrationArguments,
+    _phases: () => [...phases],
     _setStored: (value: Record<string, unknown> | null) => {
       stored = value;
     },
@@ -947,4 +954,111 @@ test('F067 the fixture step invokes the F067 tracking fixture with the nonce and
   // Still no credential issuance anywhere in the effects.
   assert.equal(text.includes('request_tracking_credential'), false);
   assert.equal(text.includes('requester-tracking/issue'), false);
+});
+
+// --- fresh versus post-migration identity ----------------------------------
+
+test('F067 the first identity check is fresh and the pre-fixture recheck is post-migration', async () => {
+  // The live run applied all sixty migrations and then refused its own
+  // pre-fixture recheck, because every check demanded a schema-free
+  // database. The two checks must ask for different rules.
+  const { runStart } = await orchestrator();
+  const mock = effects();
+  const result = await runStart(mock, { inventory: INVENTORY });
+  assert.equal(result.state, 'active');
+  assert.deepEqual(mock._phases(), ['fresh', 'migrated']);
+  // And the order is the safe one: fresh before any migration, the
+  // post-migration recheck after migrations and before fixtures.
+  assert.equal(mock.calls.applyMigrations, 1);
+  assert.equal(mock.calls.applyFixtures, 1);
+});
+
+test('F067 a refused post-migration identity stops fixtures before any write', async () => {
+  const { runStart } = await orchestrator();
+  const seen: (string | undefined)[] = [];
+  const mock = effects({
+    refuseUnlessDisposable: (
+      _evidence: unknown,
+      options: { phase?: string } = {},
+    ) => {
+      seen.push(options.phase);
+      // The fresh precondition passes; the live post-migration evidence does
+      // not -- exactly the case of an application schema with no recorded
+      // creating migration.
+      return options.phase === 'migrated'
+        ? 'the schema reqro_integration_api exists without evidence that migration 20261023000000-add-integration-worker-function-api was applied'
+        : null;
+    },
+  });
+  const result = await runStart(mock, { inventory: INVENTORY });
+  assert.equal(result.ok, false);
+  assert.deepEqual(seen, ['fresh', 'migrated']);
+  // Migrations ran, so this is specifically the post-migration recheck...
+  assert.equal(mock.calls.applyMigrations, 1);
+  // ...and nothing after it wrote anything.
+  assert.equal(mock.calls.applyFixtures, undefined);
+  assert.equal(mock.calls.writeSecret, undefined);
+  assert.ok(
+    result.reasons.some((reason: string) =>
+      reason.includes('without evidence that migration'),
+    ),
+    result.reasons.join('; '),
+  );
+  // The container this attempt created is torn down, not left running.
+  assert.equal(mock.calls.removeContainerAndVolume, 1);
+});
+
+test('F067 a refused fresh identity stops before any migration', async () => {
+  const { runStart } = await orchestrator();
+  const mock = effects({
+    refuseUnlessDisposable: (
+      _evidence: unknown,
+      options: { phase?: string } = {},
+    ) =>
+      options.phase === 'fresh'
+        ? 'the database already holds 1 unexpected schema(s), so it is not a clean disposable baseline'
+        : null,
+  });
+  const result = await runStart(mock, { inventory: INVENTORY });
+  assert.equal(result.ok, false);
+  assert.equal(mock.calls.applyMigrations, undefined);
+  assert.equal(mock.calls.applyFixtures, undefined);
+  assert.equal(mock.calls.removeContainerAndVolume, 1);
+});
+
+test('F067 status verifies a live session with the post-migration rule', async () => {
+  const { runStart, runStatus } = await orchestrator();
+  const first = effects();
+  await runStart(first, { inventory: INVENTORY });
+  // A fresh effects object models a new process: only the record and the
+  // secret survive, exactly as the cross-process lifecycle test does.
+  const second = effects();
+  second._setStored(storedOf(first));
+  second._setSecret(first._secret());
+  const status = await runStatus(second, { inventory: INVENTORY });
+  assert.equal(status.ok, true);
+  assert.equal(status.state, 'active');
+  // A session that is already migrated must not be judged against the fresh
+  // precondition, or `status` could never report one as ready.
+  assert.deepEqual(second._phases(), ['migrated']);
+});
+
+test('F067 the orchestrator selects a phase but never supplies migration evidence', async () => {
+  // The predicate's only evidence of an applied migration is the live history
+  // inside the collected evidence. The orchestrator passes a phase and
+  // nothing else, so neither the session record nor the expected inventory
+  // can be presented as proof that a migration ran.
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(
+    resolve(scripts, 'uat-f067-orchestrator.mjs'),
+    'utf8',
+  );
+  const call = /refuseUnlessDisposable\(evidence, \{([^}]*)\}\)/.exec(text);
+  assert.ok(call, 'the identity call was not found');
+  assert.match(
+    call[1] ?? '',
+    /^\s*phase: requireFresh \? 'fresh' : 'migrated',\s*$/,
+  );
+  for (const forbidden of ['appliedMigrations', 'migrations', 'record'])
+    assert.ok(!(call[1] ?? '').includes(forbidden), forbidden);
 });

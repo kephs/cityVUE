@@ -3,6 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { Pool } from 'pg';
 import {
+  APPLICATION_SCHEMAS,
+  classifyApplicationSchemas,
   refuseUnlessOwnedCleanupTarget,
   type DisposableExpectations,
 } from './disposable-cluster-evidence.js';
@@ -80,27 +82,18 @@ export const DENIED_VOLUMES = [
 ] as const;
 
 /**
- * Schemas the application's own migrations create, mapped to the migration
- * that creates each one.
+ * The application-schema policy, re-exported from the evidence module where
+ * it is defined. It lives there because this module imports that one: the
+ * post-migration identity check and this run-level census must classify
+ * through one policy, and defining it here would have required the evidence
+ * module to import back into this one.
  *
- * The schema census exists to catch a test that left a scratch schema behind.
- * It predates any test applying the complete migration sequence, so it treated
- * every non-system schema as a leak. Migration 51 runs
- * `create schema if not exists reqro_integration_api` — it is the only
- * migration in the repository that creates a schema — so once a test migrates
- * the disposable database itself, that schema legitimately exists.
- *
- * The allowance is deliberately narrow in three ways: it names one schema
- * rather than a prefix or pattern; it is conditional on the database recording
- * the exact migration that creates it as applied; and it grants nothing to any
- * other schema. A scratch schema is still a leak, and this schema without its
- * migration is still a leak, because then something other than that migration
- * created it.
+ * The census exists to catch a test that left a scratch schema behind. It
+ * predates any test applying the complete migration sequence, so it treated
+ * every non-system schema as a leak, including `reqro_integration_api`, which
+ * migration 51 creates by design.
  */
-export const APPLICATION_SCHEMAS: Readonly<Record<string, string>> =
-  Object.freeze({
-    reqro_integration_api: '20261023000000-add-integration-worker-function-api',
-  });
+export { APPLICATION_SCHEMAS };
 
 /** Observed schemas, with the migration history that may justify them. */
 export interface SchemaInventory {
@@ -159,37 +152,22 @@ export function evaluateSchemaCensus(input: {
       `the database was not a clean baseline: ${beforeSchemas.sort().join(', ')}`,
     );
 
-  const allowed: string[] = [];
-  const unexpected: string[] = [];
-  for (const schema of [...afterSchemas].sort()) {
-    const required = Object.prototype.hasOwnProperty.call(
-      APPLICATION_SCHEMAS,
-      schema,
-    )
-      ? APPLICATION_SCHEMAS[schema]
-      : undefined;
-    if (required === undefined) {
-      unexpected.push(schema);
-      continue;
-    }
-    if (applied.includes(required)) allowed.push(schema);
-    else {
-      // The schema exists but the migration that owns it did not run, so
-      // something else created it. That is exactly what the census is for.
-      unexpected.push(schema);
-      reasons.push(
-        `the schema ${schema} exists without evidence that migration ${required} was applied`,
-      );
-    }
-  }
-  const unexplained = unexpected.filter(
-    (schema) =>
-      !Object.prototype.hasOwnProperty.call(APPLICATION_SCHEMAS, schema),
-  );
-  if (unexplained.length)
+  // The same classifier the post-migration identity check uses.
+  const classified = classifyApplicationSchemas(afterSchemas, applied);
+  for (const { schema, migration } of classified.unjustified)
+    // The schema exists but the migration that owns it did not run, so
+    // something else created it. That is exactly what the census is for.
     reasons.push(
-      `${String(unexplained.length)} schema(s) leaked during the run: ${unexplained.join(', ')}`,
+      `the schema ${schema} exists without evidence that migration ${migration} was applied`,
     );
+  if (classified.foreign.length)
+    reasons.push(
+      `${String(classified.foreign.length)} schema(s) leaked during the run: ${classified.foreign.join(', ')}`,
+    );
+  const allowed = [...classified.allowed];
+  const unexpected = [...afterSchemas]
+    .sort()
+    .filter((schema) => !allowed.includes(schema));
   return { ok: reasons.length === 0, reasons, allowed, unexpected };
 }
 
