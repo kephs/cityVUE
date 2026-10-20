@@ -486,6 +486,8 @@ test('F067 fixture readiness requires every scenario the UAT plan exercises', as
     residentVisibleUpdates: 3,
     trackingManageGrants: 1,
     staffIdentities: 1,
+    trackingStaffAuthorized: 1,
+    trackingStaffScopedRequests: 2,
   };
   assert.equal(evaluateFixtureReadiness(complete).ok, true);
   assert.equal(evaluateFixtureReadiness(null).ok, false);

@@ -69,6 +69,10 @@ const emptySnapshot: FixtureSnapshot = {
   assignmentPresent: false,
   assignmentActive: false,
   assignmentMatches: false,
+  membershipPresent: false,
+  membershipActive: false,
+  membershipMatches: false,
+  unexpectedMemberships: 0,
   requestsPresent: [],
   activityPresent: [],
   operationalPresent: [],
@@ -85,6 +89,10 @@ const fullSnapshot: FixtureSnapshot = {
   assignmentPresent: true,
   assignmentActive: true,
   assignmentMatches: true,
+  membershipPresent: true,
+  membershipActive: true,
+  membershipMatches: true,
+  unexpectedMemberships: 0,
   requestsPresent: REQUEST_IDS,
   activityPresent: REQUEST_IDS,
   operationalPresent: REQUEST_IDS,
@@ -272,6 +280,8 @@ const catalog = (overrides: Record<string, unknown> = {}) => ({
   defaultPriority: 'medium',
   versionStatus: 'published',
   trackingPolicyPresent: true,
+  categoryDepartmentId: '20000000-0000-4000-8000-000000000001',
+  categoryDivisionId: null,
   ...overrides,
 });
 
@@ -292,6 +302,12 @@ void test('F067 each missing catalog prerequisite is named rather than summarise
     [{ versionStatus: 'draft' }, 'not published'],
     [{ defaultPriority: null }, 'priority'],
     [{ trackingPolicyPresent: false }, 'request_tracking_policy'],
+    [{ categoryDepartmentId: null }, 'no Department'],
+    [{ categoryDepartmentId: '' }, 'no Department'],
+    [
+      { categoryDivisionId: '22000000-0000-4000-8000-000000000001' },
+      'Division membership',
+    ],
   ];
   for (const [override, fragment] of cases) {
     const verdict = evaluateCatalogPrerequisites(catalog(override));
@@ -323,6 +339,8 @@ void test('F067 an empty database plans every record and exactly two reference a
   assert.equal(plan.createStaff, true);
   assert.equal(plan.createRole, true);
   assert.equal(plan.createAssignment, true);
+  assert.equal(plan.createMembership, true);
+  assert.equal(plan.reactivateMembership, false);
   assert.deepEqual([...plan.grantPermissions], [...FIXTURE_PERMISSIONS]);
   assert.deepEqual([...plan.createRequests], REQUEST_IDS);
   assert.deepEqual([...plan.createActivity], REQUEST_IDS);
@@ -343,6 +361,8 @@ void test('F067 a second run plans nothing and allocates no reference', () => {
   assert.equal(plan.createStaff, false);
   assert.equal(plan.createRole, false);
   assert.equal(plan.createAssignment, false);
+  assert.equal(plan.createMembership, false);
+  assert.equal(plan.reactivateMembership, false);
   for (const list of [
     plan.grantPermissions,
     plan.createRequests,
@@ -481,6 +501,8 @@ void test('F067 the census requirements are derived from the manifest', () => {
     residentVisibleUpdates: 2,
     trackingManageGrants: 1,
     staffIdentities: 1,
+    trackingStaffAuthorized: 1,
+    trackingStaffScopedRequests: 2,
   });
   assert.equal(fixtureUpdateKeys().length, 2);
 });
@@ -564,7 +586,7 @@ void test('F067 the synthetic staff identity is created unauthenticated and no E
   assert.ok(!CLI_SOURCE.includes('StaffAccessGuard'));
 });
 
-void test('F067 the fixture never deletes, truncates or alters, and updates one column of one row', () => {
+void test('F067 the fixture never deletes, truncates or alters, and updates only its own two activity flags', () => {
   for (const forbidden of [
     'deleteFrom(',
     'truncate',
@@ -572,12 +594,17 @@ void test('F067 the fixture never deletes, truncates or alters, and updates one 
     'alter table',
   ])
     assert.ok(!FIXTURE_SOURCE.includes(forbidden), forbidden);
-  // Exactly one update exists: reactivating the fixture's own role
-  // assignment, which an insert cannot do because the row already occupies
-  // the primary key. It is scoped to that key and to `active` alone.
+  // Exactly two updates exist: reactivating the fixture's own role assignment
+  // and its own Department membership, which an insert cannot do because the
+  // row already occupies the primary key. Each is scoped to that key and to
+  // `active` alone, and no other column is ever set.
   const updates = FIXTURE_SOURCE.match(/\.updateTable\('([a-z_]+)'\)/g) ?? [];
-  assert.deepEqual(updates, [".updateTable('staff_role_assignment')"]);
-  assert.ok(FIXTURE_SOURCE.includes('.set({ active: true })'));
+  assert.deepEqual(updates, [
+    ".updateTable('staff_role_assignment')",
+    ".updateTable('staff_department_membership')",
+  ]);
+  const sets = FIXTURE_SOURCE.match(/\.set\(\{[^}]*\}\)/g) ?? [];
+  assert.deepEqual(sets, ['.set({ active: true })', '.set({ active: true })']);
   assert.ok(
     !/\.set\(\{[^}]*permission/s.test(FIXTURE_SOURCE),
     'no update may touch a permission',
@@ -719,6 +746,8 @@ void test('F067 the fixture reuses the existing reference allocator rather than 
 
 void test('F067 the fixture derives the catalog instead of hardcoding Category or priority values', () => {
   for (const forbidden of [
+    '20000000-0000-4000-8000',
+    '22000000-0000-4000-8000',
     '30000000-0000-4000-8000',
     '40000000-0000-4000-8000',
     '50000000-0000-4000-8000',
