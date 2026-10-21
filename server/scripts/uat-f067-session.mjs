@@ -28,9 +28,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { Buffer } from 'node:buffer';
 import { pathToFileURL } from 'node:url';
 
 import {
+  BIND_AUTHORIZATION_ENV,
   SERVER_ROOT,
   SESSION_FILE,
   describeSession,
@@ -76,12 +78,44 @@ const USAGE = `F067 isolated interactive UAT session harness
   start  --dry-run | --confirm   provision a disposable PostgreSQL session
   status                         report session identity and readiness
   end    --dry-run | --confirm   targeted teardown with verified absence
+  bind-identity --dry-run | --plan | --confirm
+                                 bind one Entra development identity to the
+                                 fixture's synthetic staff identity
 
 --dry-run prints the plan and touches nothing. --confirm performs the
-operation and requires a separately authorized session. No tracking
-credential is ever issued by this harness, and F065 automatic issuance is
-never enabled by it.
+operation and requires a separately authorized session. bind-identity --plan
+verifies everything read-only; its --confirm also requires
+${BIND_AUTHORIZATION_ENV}=true. The Entra tenant and object ID are read from
+standard input, never from arguments. No tracking credential is ever issued
+by this harness, and F065 automatic issuance is never enabled by it.
 `;
+
+/**
+ * The operator's Entra identity, from standard input only: two prompts on a
+ * terminal, or piped input otherwise. Never an argument, so never in a shell
+ * history or a process listing.
+ */
+async function readBindingInput() {
+  if (process.stdin.isTTY) {
+    const { createInterface } = await import('node:readline/promises');
+    const prompt = createInterface({
+      input: process.stdin,
+      output: process.stderr,
+    });
+    try {
+      const tenant = await prompt.question('Entra tenant ID: ');
+      const object = await prompt.question(
+        'Entra user object ID (from the directory record): ',
+      );
+      return `${tenant}\n${object}`;
+    } finally {
+      prompt.close();
+    }
+  }
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
+}
 
 async function main(argv = process.argv.slice(2)) {
   const out = (text) => process.stdout.write(`${redactUrl(text)}\n`);
@@ -92,12 +126,19 @@ async function main(argv = process.argv.slice(2)) {
     out(USAGE);
     return 0;
   }
-  if (!['start', 'status', 'end'].includes(command)) {
+  if (!['start', 'status', 'end', 'bind-identity'].includes(command)) {
     errOut(`unknown command ${String(command)}`);
     out(USAGE);
     return 2;
   }
-  if (
+  if (command === 'bind-identity') {
+    if (!['--dry-run', '--plan', '--confirm'].includes(mode ?? '')) {
+      errOut(
+        'bind-identity requires an explicit --dry-run, --plan or --confirm',
+      );
+      return 2;
+    }
+  } else if (
     command !== 'status' &&
     !['--dry-run', '--confirm'].includes(mode ?? '')
   ) {
@@ -106,6 +147,63 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   const required = readMigrationInventory();
+
+  if (command === 'bind-identity') {
+    if (mode === '--dry-run') {
+      out('bind-identity: dry run — nothing was read, connected or written.');
+      out(`  session file       ${SESSION_FILE}`);
+      out(
+        '  would then         require an ACTIVE session, a protected secret file, the',
+      );
+      out(
+        '                     disposable-instance proof and the recorded migration history,',
+      );
+      out(
+        "                     then bind the operator's Entra identity to the fixture",
+      );
+      out(
+        '                     staff identity only while it is unbound, in one transaction.',
+      );
+      return 0;
+    }
+    if (process.env.REQRO_F067_UAT_AUTHORIZED !== 'true') {
+      errOut(
+        `bind-identity ${mode} requires an authorized F067 UAT session (REQRO_F067_UAT_AUTHORIZED=true); nothing was read.`,
+      );
+      return 3;
+    }
+    if (
+      mode === '--confirm' &&
+      process.env[BIND_AUTHORIZATION_ENV] !== 'true'
+    ) {
+      errOut(
+        `bind-identity --confirm also requires ${BIND_AUTHORIZATION_ENV}=true; nothing was read or written.`,
+      );
+      return 3;
+    }
+    const input = await readBindingInput();
+    const { runBindIdentity } = await import('./uat-f067-orchestrator.mjs');
+    const { createLiveEffects } = await import('./uat-f067-effects.mjs');
+    const effects = await createLiveEffects({ serverRoot: SERVER_ROOT });
+    const result = await runBindIdentity(effects, {
+      inventory: required,
+      mode: mode === '--confirm' ? 'confirm' : 'plan',
+      input,
+    });
+    for (const reason of result.reasons ?? []) errOut(`  - ${reason}`);
+    if (!result.ok) {
+      errOut(`bind-identity: ${String(result.state).toUpperCase()}`);
+      return 1;
+    }
+    const binding = result.binding ?? {};
+    out(`bind-identity: ${String(binding.action)}`);
+    out(`  staff identity     ${String(binding.staffId)}`);
+    out(`  Entra tenant       ${String(binding.tenant)}`);
+    out(`  Entra object       ${String(binding.object)}`);
+    out(`  changed            ${String(binding.changed)}`);
+    out('  credentials issued 0');
+    return 0;
+  }
 
   if (command === 'status') {
     const record = loadRecord();

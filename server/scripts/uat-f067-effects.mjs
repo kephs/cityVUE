@@ -19,6 +19,7 @@ import {
   openSync,
   readFileSync,
   rmSync,
+  statSync,
   unlinkSync,
   writeSync,
   closeSync,
@@ -32,9 +33,82 @@ import {
   UAT_DATABASE,
   UAT_DEVELOPMENT_ORGANIZATION_ID,
   UAT_FIXTURE_STAFF_ID,
+  BIND_AUTHORIZATION_ENV,
   buildSeedEnvironment,
   classifySubprocessFailure,
+  parseIcaclsEntries,
 } from './uat-f067-session-core.mjs';
+
+export const BINDING_SCRIPT = 'src/database/uat-f067-identity-binding-cli.ts';
+
+/**
+ * The identity-binding subprocess, through an injected `run`.
+ *
+ * `run(script, env, args, stdin)` returns a `spawnSync` result. The Entra
+ * identity travels only on stdin, never in `env` or `args`, so it cannot
+ * appear in a process listing or a shell history. The binding switch is set
+ * explicitly in the child, `true` only for an authorized `confirm` and empty
+ * otherwise, so an inherited value can never authorize a write by itself.
+ */
+export function runIdentityBindingSubprocess({
+  url,
+  nonce,
+  role,
+  mode,
+  input,
+  migrations,
+  expectedTenantId,
+  bindAuthorized,
+  run,
+}) {
+  const env = {
+    DATABASE_URL: url,
+    TEST_DATABASE_URL: url,
+    REQRO_F067_UAT_DISPOSABLE_NONCE: nonce,
+    REQRO_F067_UAT_DISPOSABLE_ROLE: role,
+    ENTRA_TENANT_ID: String(expectedTenantId ?? ''),
+    REQRO_F067_UAT_EXPECTED_MIGRATIONS: JSON.stringify(migrations ?? []),
+    [BIND_AUTHORIZATION_ENV]:
+      mode === 'confirm' && bindAuthorized === true ? 'true' : '',
+  };
+  const result = run(
+    BINDING_SCRIPT,
+    env,
+    [mode === 'confirm' ? '--confirm' : '--plan'],
+    JSON.stringify({ tenantId: input?.tenantId, objectId: input?.objectId }),
+  );
+  const verdict = classifySubprocessFailure('the identity binding', result);
+  if (!verdict.ok) {
+    // The binding's own refusals are fixed sentences without identifiers; any
+    // other failure is reported only through the sanitized classification.
+    const last = String(result?.stderr ?? '')
+      .trim()
+      .split(/\r?\n/)
+      .pop();
+    let refused = null;
+    try {
+      const parsed = JSON.parse(last ?? '');
+      if (typeof parsed?.refused === 'string') refused = parsed.refused;
+    } catch {
+      refused = null;
+    }
+    return { ok: false, reason: refused ?? verdict.message };
+  }
+  let report;
+  try {
+    report = JSON.parse(
+      String(result?.stdout ?? '')
+        .trim()
+        .split(/\r?\n/)
+        .pop() ?? '',
+    );
+  } catch {
+    report = null;
+  }
+  if (report === null || typeof report !== 'object')
+    return { ok: false, reason: 'the identity binding produced no report' };
+  return { ok: true, report };
+}
 
 const LOCK_FILE = resolve(dirname(SESSION_FILE), 'uat-f067-session.lock');
 
@@ -171,6 +245,8 @@ export async function createLiveEffects({ serverRoot }) {
     // the session at all, so it is never implied by --confirm.
     secretWriteAuthorized:
       process.env.REQRO_F067_UAT_SECRET_AUTHORIZED === 'true',
+    // Binding a person to a staff identity is a third, separate decision.
+    bindAuthorized: process.env[BIND_AUTHORIZATION_ENV] === 'true',
     now: () => new Date(),
     dockerAvailable,
 
@@ -328,6 +404,59 @@ export async function createLiveEffects({ serverRoot }) {
     },
 
     censusFixtures: (url) => fixtureCensus(url),
+
+    /**
+     * The secret file's actual ACL, read-only. On Windows `icacls` reports
+     * what the file grants, including inherited entries, which the file mode
+     * cannot express. A probe that fails returns null, which refuses.
+     */
+    secretAcl: async () => {
+      if (process.platform !== 'win32') {
+        try {
+          return { platform: 'posix', mode: statSync(UAT_ENV_FILE).mode };
+        } catch {
+          return null;
+        }
+      }
+      const probe = spawnSync('icacls', [UAT_ENV_FILE], {
+        encoding: 'utf8',
+        timeout: 30_000,
+      });
+      if (probe.error || probe.status !== 0) return null;
+      return {
+        platform: 'windows',
+        owner: `${process.env.USERDOMAIN ?? ''}\\${process.env.USERNAME ?? ''}`,
+        entries: parseIcaclsEntries(probe.stdout, UAT_ENV_FILE),
+      };
+    },
+
+    applyIdentityBinding: async ({ url, nonce, mode, input, migrations }) =>
+      runIdentityBindingSubprocess({
+        url,
+        nonce,
+        role: TEST_ROLE,
+        mode,
+        input,
+        migrations,
+        expectedTenantId: process.env.ENTRA_TENANT_ID,
+        bindAuthorized: process.env[BIND_AUTHORIZATION_ENV] === 'true',
+        run: (script, env, args, stdin) =>
+          spawnSync(
+            process.execPath,
+            [
+              resolve(serverRoot, 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+              script,
+              ...args,
+            ],
+            {
+              cwd: serverRoot,
+              encoding: 'utf8',
+              timeout: 120_000,
+              env: { ...process.env, ...env },
+              input: stdin,
+            },
+          ),
+      }),
 
     inspectContainer: (containerId) => {
       const probe = inspect(containerId);

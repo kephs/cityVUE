@@ -888,6 +888,163 @@ export function classifySubprocessFailure(step, result) {
   };
 }
 
+// --- staff identity binding ------------------------------------------------
+
+/**
+ * The binding's own authorization switch. The session switch lets the harness
+ * reach the database at all; binding a person to a staff identity is a
+ * separate decision, so it needs this one as well and is never implied.
+ */
+export const BIND_AUTHORIZATION_ENV = 'REQRO_F067_UAT_BIND_AUTHORIZED';
+
+/**
+ * The migration state a binding requires: the source inventory still matches
+ * what this session recorded, and the live history is exactly that inventory.
+ * Unlike `evaluateMigrationInventory`, an applied history is expected here.
+ */
+export function evaluateAppliedMigrations({ required, expected, applied }) {
+  const inventory = evaluateMigrationInventory({
+    required,
+    expected,
+    applied: null,
+  });
+  const reasons = [...inventory.reasons];
+  if (!Array.isArray(expected))
+    reasons.push('the session recorded no migration inventory');
+  if (!Array.isArray(applied))
+    reasons.push('the applied migration history could not be read');
+  else if (
+    Array.isArray(expected) &&
+    (applied.length !== expected.length ||
+      [...applied].sort().some((name, i) => name !== [...expected].sort()[i]))
+  )
+    reasons.push(
+      `the database records ${String(applied.length)} applied migration(s), which is not the ${String(expected.length)} this session recorded`,
+    );
+  return { ok: reasons.length === 0, reasons };
+}
+
+/**
+ * Parses `icacls <file>` output into access entries. The first entry shares a
+ * line with the file path, which is removed by exact prefix rather than
+ * guessed at, so a path containing spaces cannot be read as a principal. A
+ * line that is not a whole `principal:(flags)` entry is skipped.
+ */
+export function parseIcaclsEntries(text, path) {
+  const entries = [];
+  const prefix = String(path ?? '');
+  for (const raw of String(text ?? '').split(/\r?\n/)) {
+    const line =
+      prefix && raw.startsWith(prefix) ? raw.slice(prefix.length) : raw;
+    const match = /^([^:]+):((?:\([A-Z]+(?:,[A-Z]+)*\))+)$/.exec(line.trim());
+    if (!match) continue;
+    const principal = match[1].trim();
+    const flags = match[2].match(/\(([A-Z,]+)\)/g) ?? [];
+    entries.push({
+      principal,
+      inherited: flags.includes('(I)'),
+      deny: flags.includes('(DENY)'),
+    });
+  }
+  return entries;
+}
+
+/**
+ * The session secret is acceptable only when its ACL names exactly the owner,
+ * SYSTEM and Administrators, explicitly. An inherited entry is refused even
+ * when its principal is allowed: the parent can change after this check, which
+ * is precisely how a sandbox group was found reading it once already. On a
+ * POSIX host the file mode must grant nothing to group or others.
+ */
+export function evaluateSecretAcl(facts) {
+  if (facts === null || typeof facts !== 'object')
+    return { ok: false, reasons: ['the secret file ACL could not be read'] };
+  if (facts.platform === 'posix') {
+    return Number.isInteger(facts.mode) && (facts.mode & 0o077) === 0
+      ? { ok: true, reasons: [] }
+      : {
+          ok: false,
+          reasons: ['the secret file grants access to group or others'],
+        };
+  }
+  const owner = String(facts.owner ?? '').toLowerCase();
+  const allowed = new Set([
+    'nt authority\\system',
+    'builtin\\administrators',
+    owner,
+  ]);
+  const entries = Array.isArray(facts.entries) ? facts.entries : [];
+  const reasons = [];
+  if (!owner) reasons.push('the current Windows account could not be named');
+  if (entries.length === 0)
+    reasons.push('the secret file ACL has no readable entries');
+  for (const entry of entries) {
+    const principal = String(entry?.principal ?? '').toLowerCase();
+    if (entry?.inherited)
+      reasons.push(
+        `the secret file inherits an entry for ${String(entry?.principal)}; inheritance must be disabled`,
+      );
+    else if (!allowed.has(principal))
+      reasons.push(
+        `the secret file grants access to ${String(entry?.principal)}, which is not the owner, SYSTEM or Administrators`,
+      );
+  }
+  if (
+    owner &&
+    !entries.some(
+      (entry) => String(entry?.principal ?? '').toLowerCase() === owner,
+    )
+  )
+    reasons.push('the secret file grants nothing to its owner');
+  return { ok: reasons.length === 0, reasons };
+}
+
+/** A GUID as the operator may type it, or null. Never echoed back. */
+const GUID_INPUT =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Parses the operator's identity input: one JSON object with `tenantId` and
+ * `objectId`, or two lines in that order. Values are shape-checked only; the
+ * binding process validates them against the API's tenant. Reasons never
+ * contain the values themselves.
+ */
+export function parseBindingInput(text) {
+  const raw = String(text ?? '').trim();
+  let tenantId;
+  let objectId;
+  if (raw.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(raw);
+      tenantId = parsed?.tenantId;
+      objectId = parsed?.objectId;
+    } catch {
+      return { ok: false, reasons: ['the identity input is not valid JSON'] };
+    }
+  } else {
+    const lines = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length !== 2)
+      return {
+        ok: false,
+        reasons: [
+          'the identity input must be the tenant ID and the object ID, one per line',
+        ],
+      };
+    [tenantId, objectId] = lines;
+  }
+  const reasons = [];
+  if (typeof tenantId !== 'string' || !GUID_INPUT.test(tenantId))
+    reasons.push('the Entra tenant ID is missing or not a GUID');
+  if (typeof objectId !== 'string' || !GUID_INPUT.test(objectId))
+    reasons.push('the Entra user object ID is missing or not a GUID');
+  return reasons.length
+    ? { ok: false, reasons }
+    : { ok: true, reasons: [], input: { tenantId, objectId } };
+}
+
 // --- locations -------------------------------------------------------------
 // Path computation only. Resolving a path touches no filesystem, so these
 // remain side-effect-free and the modules that write to them keep the I/O.

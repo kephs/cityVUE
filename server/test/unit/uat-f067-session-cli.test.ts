@@ -321,3 +321,45 @@ void test('F067 the core module is free of side effects', () => {
   assert.ok(!/\bawait\b/.test(code), 'no await in the core module');
   assert.ok(!/\basync\b/.test(code), 'no async function in the core module');
 });
+
+// --- bind-identity gates, through the real entry ------------------------------
+
+const NO_SWITCHES = {
+  REQRO_F067_UAT_AUTHORIZED: '',
+  REQRO_F067_UAT_BIND_AUTHORIZED: '',
+};
+
+void test('F067 bind-identity requires an explicit mode and creates nothing', () => {
+  const none = run(['bind-identity'], NO_SWITCHES);
+  assertSettled(none, 'bind-identity');
+  assert.equal(none.status, 2);
+  const unknown = run(['bind-identity', '--force'], NO_SWITCHES);
+  assert.equal(unknown.status, 2);
+  assert.equal(existsSync(SESSION_FILE), false);
+  assert.equal(existsSync(SECRET_FILE), false);
+});
+
+void test('F067 bind-identity --dry-run reads, connects and writes nothing', () => {
+  const dry = run(['bind-identity', '--dry-run'], NO_SWITCHES);
+  assertSettled(dry, 'bind-identity --dry-run');
+  assert.equal(dry.status, 0);
+  assert.match(dry.stdout, /nothing was read, connected or written/);
+  assert.equal(existsSync(SESSION_FILE), false);
+});
+
+void test('F067 bind-identity live modes refuse without their switches, before reading anything', () => {
+  const plan = run(['bind-identity', '--plan'], NO_SWITCHES);
+  assertSettled(plan, 'bind-identity --plan');
+  assert.equal(plan.status, 3);
+  assert.match(plan.stderr, /requires an authorized F067 UAT session/);
+  // The session switch alone never authorizes a binding write.
+  const confirm = run(['bind-identity', '--confirm'], {
+    ...NO_SWITCHES,
+    REQRO_F067_UAT_AUTHORIZED: 'true',
+  });
+  assertSettled(confirm, 'bind-identity --confirm');
+  assert.equal(confirm.status, 3);
+  assert.match(confirm.stderr, /REQRO_F067_UAT_BIND_AUTHORIZED=true/);
+  assert.equal(existsSync(SESSION_FILE), false);
+  assert.equal(existsSync(SECRET_FILE), false);
+});

@@ -44,6 +44,11 @@ import type { StaffAccess } from '../../src/auth/auth.types.js';
 import { RequestTrackingRepository } from '../../src/service-request/request-tracking.repository.js';
 import { staffRequestScope } from '../../src/service-request/staff-request-scope.js';
 import {
+  createBindingStore,
+  executeIdentityBinding,
+  type BindingStore,
+} from '../../src/database/uat-f067-identity-binding.js';
+import {
   FIXTURE_PERMISSIONS,
   FIXTURE_REQUIREMENTS,
   censusTrackingUatFixture,
@@ -1398,6 +1403,238 @@ test(
               (row) => row.permission_key === 'service_request.tracking.manage',
             ),
           );
+        },
+      );
+
+      // --- 9. guarded identity binding -------------------------------------
+      // Fictional identifiers only. Each subtest leaves the fixture identity
+      // unbound except the binding run itself, which is undone at the end.
+
+      const BIND_TENANT = '11111111-2222-4333-8444-555555555555';
+      const BIND_OBJECT = '66666666-7777-4888-9999-aaaaaaaaaaaa';
+      const OTHER_OBJECT = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
+      const appliedNames = async () =>
+        (
+          await sql<{
+            name: string;
+          }>`select name from kysely_migration order by name`.execute(db)
+        ).rows.map((row) => row.name);
+      const bindWith = async (
+        options: {
+          mode: 'plan' | 'confirm';
+          objectId?: string;
+        },
+        wrap: (store: BindingStore, trx: unknown) => BindingStore = (s) => s,
+      ) => {
+        const expectedMigrations = await appliedNames();
+        return db.transaction().execute((trx) =>
+          executeIdentityBinding(
+            wrap(
+              createBindingStore(trx, {
+                url,
+                expectedNonce: sessionNonce,
+                expectedRole: TEST_ROLE,
+              }),
+              trx,
+            ),
+            {
+              mode: options.mode,
+              tenantId: BIND_TENANT,
+              objectId: options.objectId ?? BIND_OBJECT,
+              expectedTenantId: BIND_TENANT,
+              expectedMigrations,
+            },
+          ),
+        );
+      };
+      const fixtureRow = () =>
+        db
+          .selectFrom('staff_identity')
+          .selectAll()
+          .where('id', '=', trackingUatFixture.staffId)
+          .executeTakeFirstOrThrow();
+      const guardedCounts = async () =>
+        (
+          await sql<Record<string, number>>`select
+            (select count(*)::int from staff_role_assignment) assignments,
+            (select count(*)::int from role_permission) permissions,
+            (select count(*)::int from staff_department_membership) departments,
+            (select count(*)::int from staff_division_membership) divisions,
+            (select count(*)::int from request_tracking_credential) credentials,
+            (select count(*)::int from staff_identity) staff`.execute(db)
+        ).rows[0];
+
+      await t.test(
+        'identity binding: plan reports the bind and writes nothing',
+        async () => {
+          const report = await bindWith({ mode: 'plan' });
+          assert.equal(report.action, 'planned');
+          assert.equal(report.changed, false);
+          const row = await fixtureRow();
+          assert.equal(row.entra_tenant_id, null);
+          assert.equal(row.entra_object_id, null);
+        },
+      );
+
+      await t.test(
+        'identity binding: a pair held by another staff identity is refused',
+        async () => {
+          const otherStaffId = '90000000-0000-4000-8000-000000000168';
+          await db
+            .insertInto('staff_identity')
+            .values({
+              id: otherStaffId,
+              organization_id: SEED.organizationId,
+              entra_tenant_id: BIND_TENANT,
+              entra_object_id: BIND_OBJECT,
+              display_name: 'Synthetic Bound Operator',
+              email: 'bound.operator@example.test',
+              active: true,
+            })
+            .execute();
+          try {
+            await assert.rejects(
+              bindWith({ mode: 'confirm' }),
+              /already bound to another staff identity/,
+            );
+            const row = await fixtureRow();
+            assert.equal(row.entra_object_id, null);
+          } finally {
+            await db
+              .deleteFrom('staff_identity')
+              .where('id', '=', otherStaffId)
+              .execute();
+          }
+        },
+      );
+
+      await t.test(
+        'identity binding: a concurrent change fails the conditional update and rolls back',
+        async () => {
+          await assert.rejects(
+            bindWith({ mode: 'confirm' }, (store, trx) => ({
+              ...store,
+              // Simulate another writer binding the row between plan and write.
+              bind: async (identity) => {
+                await (trx as typeof db)
+                  .updateTable('staff_identity')
+                  .set({
+                    entra_tenant_id: BIND_TENANT,
+                    entra_object_id: OTHER_OBJECT,
+                  })
+                  .where('id', '=', trackingUatFixture.staffId)
+                  .execute();
+                return store.bind(identity);
+              },
+            })),
+            /changed 0 row\(s\)/,
+          );
+          // The whole transaction, including the simulated writer, rolled back.
+          const row = await fixtureRow();
+          assert.equal(row.entra_tenant_id, null);
+          assert.equal(row.entra_object_id, null);
+        },
+      );
+
+      await t.test(
+        'identity binding: a disturbed guarded state rolls back a successful update',
+        async () => {
+          let reads = 0;
+          await assert.rejects(
+            bindWith({ mode: 'confirm' }, (store) => ({
+              ...store,
+              readGuardedState: async () => {
+                const state = await store.readGuardedState();
+                reads++;
+                return reads === 2
+                  ? { ...state, rolePermissions: state.rolePermissions + 1 }
+                  : state;
+              },
+            })),
+            /disturbed rolePermissions/,
+          );
+          const row = await fixtureRow();
+          assert.equal(row.entra_object_id, null);
+        },
+      );
+
+      await t.test(
+        'identity binding: confirm binds exactly the two columns and preserves everything else',
+        async () => {
+          const before = await fixtureRow();
+          const countsBefore = await guardedCounts();
+          const reachBefore = await fixtureReach();
+          try {
+            const report = await bindWith({ mode: 'confirm' });
+            assert.equal(report.action, 'bound');
+            assert.equal(report.changed, true);
+            assert.equal(report.credentialsIssued, 0);
+            const after = await fixtureRow();
+            assert.equal(after.entra_tenant_id, BIND_TENANT);
+            assert.equal(after.entra_object_id, BIND_OBJECT);
+            for (const column of [
+              'organization_id',
+              'display_name',
+              'email',
+              'active',
+            ] as const)
+              assert.equal(after[column], before[column], column);
+            assert.equal(
+              after.created_at.valueOf(),
+              before.created_at.valueOf(),
+            );
+            assert.deepEqual(await guardedCounts(), countsBefore);
+            assert.deepEqual(await fixtureReach(), reachBefore);
+            // The database's own uniqueness backs the plan's check.
+            await assert.rejects(
+              db
+                .insertInto('staff_identity')
+                .values({
+                  id: '90000000-0000-4000-8000-000000000169',
+                  organization_id: SEED.organizationId,
+                  entra_tenant_id: BIND_TENANT,
+                  entra_object_id: BIND_OBJECT,
+                  display_name: 'Synthetic Duplicate',
+                  email: 'duplicate@example.test',
+                  active: true,
+                })
+                .execute(),
+              (error: unknown) =>
+                (error as { code?: unknown }).code === '23505',
+            );
+
+            // An identical repeat is a verified no-op: no update runs.
+            const repeat = await bindWith({ mode: 'confirm' });
+            assert.equal(repeat.action, 'already-bound');
+            assert.equal(repeat.changed, false);
+            const settled = await fixtureRow();
+            assert.equal(
+              settled.updated_at.valueOf(),
+              after.updated_at.valueOf(),
+            );
+
+            // A different identity is never written over the existing one.
+            await assert.rejects(
+              bindWith({ mode: 'confirm', objectId: OTHER_OBJECT }),
+              /already bound to a different Entra identity/,
+            );
+            assert.equal((await fixtureRow()).entra_object_id, BIND_OBJECT);
+            assert.equal(
+              (await guardedCounts())?.credentials,
+              0,
+              'no tracking credential exists',
+            );
+          } finally {
+            // Restore the fixture's deliberately unbound state.
+            await db
+              .updateTable('staff_identity')
+              .set({ entra_tenant_id: null, entra_object_id: null })
+              .where('id', '=', trackingUatFixture.staffId)
+              .execute();
+          }
+          const restored = await fixtureRow();
+          assert.equal(restored.entra_tenant_id, null);
+          assert.equal(restored.entra_object_id, null);
         },
       );
     } finally {
