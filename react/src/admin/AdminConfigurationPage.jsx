@@ -16,6 +16,7 @@ import ParticipationSetup from "./ParticipationSetup.jsx";
 import IssueConfiguration from "./IssueConfiguration.jsx";
 import AccessDiscovery from "./AccessDiscovery.jsx";
 import ResidentExperienceEditor from "./ResidentExperienceEditor.jsx";
+import DepartmentsConfiguration from "./DepartmentsConfiguration.jsx";
 
 const sections = [
   ["", "Overview"],
@@ -25,6 +26,7 @@ const sections = [
   ["status", "Configuration Status"],
   ["access", "Access & Permissions"],
   ["resident-experience", "Resident Experience"],
+  ["departments", "Departments"],
 ];
 function Values({ items }) {
   return (
@@ -197,7 +199,7 @@ export function AdminConfiguration({ client, displayName }) {
             <h1 tabIndex="-1" ref={heading}>
               {title || "Administration page not found"}
             </h1>
-            {section !== "issues" && section !== "access" && (
+            {!["issues", "access", "departments"].includes(section) && (
               <p>
                 {section === "participation"
                   ? "Configure optional service-participation information for new requests."
@@ -219,6 +221,8 @@ export function AdminConfiguration({ client, displayName }) {
                   Retry configuration
                 </button>
               </div>
+            ) : section === "departments" ? (
+              <DepartmentsConfiguration />
             ) : section === "resident-experience" ? (
               <ResidentExperienceEditor client={client} />
             ) : section === "access" ? (
