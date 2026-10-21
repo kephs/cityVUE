@@ -143,3 +143,76 @@ Exact source/test file allocation:
 - `server/test/unit/admin-department-http.test.ts`
 - `server/test/database/admin-department.integration.test.ts`
 - This feature record and `docs/features/README.md`.
+
+## Offline schema lifecycle correction
+
+The follow-up inspection corrected an overstatement in the preflight diagnosis:
+source-file presence did not prove execution of the worker API migration. The
+registry E2E fixture enumerated compiled migrations and called `up()` directly;
+it did not write `kysely_migration`. The current test compilation omitted four
+migrations deliberately applied by other suites through source-rewriting helpers:
+`20261018000000`, `20261019000000`, `20261023000000` and `20261026000000`.
+Consequently, that compiled inventory omitted required hardening/worker functions.
+If stale compiled output supplied those migrations, their literal `public`
+references could fail in the isolated fixture, and the worker migration could
+create `reqro_integration_api` outside the original teardown scope. No database
+execution or observed leak is claimed by this offline investigation.
+
+Option A (targeted fixture ownership and cleanup) is selected. The fixture now
+plans all source migrations in order and uses the existing rewrite helpers for
+those exact four migrations, regardless of stale compiled copies. Missing ordinary
+compiled migrations and unknown compiled entries fail before migration execution.
+An execution receipt is appended only after each migration transaction completes;
+source inventory alone is never treated as execution evidence.
+
+Before writing, the fixture verifies the existing disposable container/nonce and
+database evidence. It requires zero non-system schemas and atomically creates two
+unique namespaces, `registry_e2e_<uuid>` and its `_api` companion, without adopting
+existing schemas. A successful creation transaction records both names, OIDs and
+owners. Teardown rechecks the complete inventory against that receipt and drops
+only the matching pair, API first, then verifies an empty inventory. Missing,
+changed, ambiguous or unexpected ownership fails closed without issuing cleanup
+against those objects. Nested finalizers close resources even on setup or teardown
+failure; a partial migration failure still leaves the creation receipt available
+for targeted cleanup. CASCADE is confined to these newly created fixture schemas.
+The runner executes database/E2E files serially; other suites use their own schemas
+and do not depend on this pair. Unknown leftovers remain a failure, not adopted data.
+
+The F067 precedent at `d53db569414c862cb073dad4fac220d5adfef2f1` was inspected
+through Git objects only. Its exact application-schema classifier requires recorded
+migration evidence and rejects unexpected/unproven schemas. Option B would require
+a new trustworthy evidence channel for this direct-`up()` fixture, which has no
+migration ledger. Targeted isolation avoids that shared-runner expansion.
+
+The shared runner, evidence manifest construction, mandatory tiers and exact
+container/anonymous-volume cleanup checks are unchanged. Final PASS still requires
+a zero-to-zero census and every other validation requirement. Offline regressions
+cover ownership rejection, scoped SQL/transaction intent, complete migration plans,
+malformed receipts, rewritten SQL, leak verdicts and required tiers/cleanup. These
+recorders do not prove PostgreSQL DDL semantics. Department application code,
+authorization and production migrations are unchanged.
+
+The approved single disposable PostgreSQL run remains unspent. Real PostgreSQL
+migration, registry E2E and Department integration validation require separate
+execution authorization; this correction does not establish their success.
+
+Correction validation: `npm run test:compile` passed (exit 0). The focused
+compiled unit invocation covering schema lifecycle, disposable runner/identity/
+cleanup, registry tenant resolution and Department administration passed **204/204**
+(exit 0). The full backend unit tier (`node --test` from
+`server/dist-test/test/unit`) passed **1202/1202**, zero failures, cancellations,
+skips or TODOs (exit 0); focused coverage is included, not added to that total.
+The new schema lifecycle file contributes 21 tests and the verdict file adds two.
+
+The first focused invocation passed 175/176 and failed one newly written diagnostic
+assertion: growth reports an exact `schema(s) leaked` count, whereas the assertion
+expected the census-change diagnostic used for shrinkage. It was corrected to
+check the existing exact leak diagnostic; runner behavior was not changed. Initial
+lint reported seven new test-style issues (void-arrow expressions and non-null
+assertions), corrected without relaxing behavior. A transient file lock interrupted
+one edit; its retry succeeded. These intermediate results remain recorded and are
+not represented as passing invocations.
+
+Final `npm run typecheck`, `npm run build` and `npm run lint` all passed (each
+exit 0). Scoped Prettier and Git whitespace checks passed. No application source,
+production migration, shared runner, dependency or configuration file changed.
