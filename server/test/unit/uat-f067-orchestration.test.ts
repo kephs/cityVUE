@@ -1116,3 +1116,205 @@ test('F067 the orchestrator selects a phase but never supplies migration evidenc
   for (const forbidden of ['appliedMigrations', 'migrations', 'record'])
     assert.ok(!(call[1] ?? '').includes(forbidden), forbidden);
 });
+
+// --- bind-identity -----------------------------------------------------------
+
+interface BindOutcome {
+  ok: boolean;
+  state: string;
+  reasons: string[];
+  binding?: Record<string, unknown>;
+}
+const bindModule = async () =>
+  (await import(
+    pathToFileURL(resolve(scripts, 'uat-f067-orchestrator.mjs')).href
+  )) as {
+    runBindIdentity: (
+      effects: unknown,
+      options: { inventory: string[]; mode: string; input: unknown },
+    ) => Promise<BindOutcome>;
+  };
+/** Fictional identifiers; no real tenant or user appears in any test. */
+const BIND_INPUT = JSON.stringify({
+  tenantId: '11111111-2222-4333-8444-555555555555',
+  objectId: '66666666-7777-4888-9999-aaaaaaaaaaaa',
+});
+
+/** An ACTIVE mock session, with the binding effects in place. */
+async function activeForBinding(overrides: Record<string, unknown> = {}) {
+  const { runStart } = await orchestrator();
+  const mock = effects();
+  const started = await runStart(mock, { inventory: INVENTORY });
+  assert.equal(started.state, 'active');
+  const bindCalls: Record<string, unknown>[] = [];
+  Object.assign(
+    mock,
+    {
+      bindAuthorized: true,
+      listAppliedMigrations: async () => [...INVENTORY],
+      secretAcl: async () => ({ platform: 'posix', mode: 0o100600 }),
+      applyIdentityBinding: async (args: Record<string, unknown>) => {
+        bindCalls.push(args);
+        return {
+          ok: true,
+          report: {
+            action: args.mode === 'confirm' ? 'bound' : 'planned',
+            changed: args.mode === 'confirm',
+          },
+        };
+      },
+    },
+    overrides,
+  );
+  return { mock, bindCalls };
+}
+
+test('F067 bind-identity hands the verified session to the binding process in plan and confirm', async () => {
+  const { runBindIdentity } = await bindModule();
+  for (const mode of ['plan', 'confirm']) {
+    const { mock, bindCalls } = await activeForBinding();
+    const result = await runBindIdentity(mock, {
+      inventory: INVENTORY,
+      mode,
+      input: BIND_INPUT,
+    });
+    assert.equal(result.ok, true, result.reasons.join('; '));
+    assert.equal(result.state, 'active');
+    assert.equal(bindCalls.length, 1);
+    const call = bindCalls[0];
+    assert.ok(call);
+    assert.equal(call.url, URL_STRING);
+    assert.equal(call.nonce, NONCE);
+    assert.equal(call.mode, mode);
+    assert.deepEqual(call.migrations, INVENTORY);
+    assert.deepEqual(call.input, JSON.parse(BIND_INPUT));
+    // The lock is taken for the binding and always released.
+    assert.equal(mock._lock(), null);
+  }
+});
+
+test('F067 bind-identity confirm without its own authorization does nothing', async () => {
+  const { runBindIdentity } = await bindModule();
+  const { mock, bindCalls } = await activeForBinding({ bindAuthorized: false });
+  const locks = mock.calls.acquireLock ?? 0;
+  const result = await runBindIdentity(mock, {
+    inventory: INVENTORY,
+    mode: 'confirm',
+    input: BIND_INPUT,
+  });
+  assert.equal(result.ok, false);
+  assert.ok(
+    result.reasons.some((r) => r.includes('its own explicit authorization')),
+  );
+  assert.equal(bindCalls.length, 0);
+  assert.equal(mock.calls.acquireLock ?? 0, locks, 'no lock was taken');
+  const invalid = await runBindIdentity(mock, {
+    inventory: INVENTORY,
+    mode: 'force',
+    input: BIND_INPUT,
+  });
+  assert.equal(invalid.ok, false);
+  assert.equal(bindCalls.length, 0);
+});
+
+test('F067 bind-identity refuses without an ACTIVE, usable session', async () => {
+  const { runBindIdentity } = await bindModule();
+  const empty = effects();
+  const none = await runBindIdentity(empty, {
+    inventory: INVENTORY,
+    mode: 'plan',
+    input: BIND_INPUT,
+  });
+  assert.equal(none.ok, false);
+  assert.equal(empty.calls.acquireLock, undefined);
+
+  const { mock, bindCalls } = await activeForBinding();
+  await mock.writeSession({ ...mock._stored(), state: 'fixture-ready' });
+  const notActive = await runBindIdentity(mock, {
+    inventory: INVENTORY,
+    mode: 'confirm',
+    input: BIND_INPUT,
+  });
+  assert.equal(notActive.ok, false);
+  assert.ok(notActive.reasons.some((r) => r.includes('not active')));
+  assert.equal(bindCalls.length, 0);
+});
+
+test('F067 bind-identity refuses every failed gate before starting the binding process', async () => {
+  const { runBindIdentity } = await bindModule();
+  const gates: [Record<string, unknown>, RegExp][] = [
+    [
+      { secretAcl: async () => ({ platform: 'posix', mode: 0o100644 }) },
+      /secret file is not protected/,
+    ],
+    [{ secretAcl: async () => null }, /secret file is not protected/],
+    [
+      {
+        refuseUnlessDisposable: () =>
+          'the container ID does not match the one created by this run',
+      },
+      /container ID does not match/,
+    ],
+    [
+      { listAppliedMigrations: async () => INVENTORY.slice(1) },
+      /applied migration/,
+    ],
+    [
+      {
+        listAppliedMigrations: async () => {
+          throw new Error(`connect ${URL_STRING}`);
+        },
+      },
+      /could not be read/,
+    ],
+  ];
+  for (const [override, reason] of gates) {
+    const { mock, bindCalls } = await activeForBinding(override);
+    const result = await runBindIdentity(mock, {
+      inventory: INVENTORY,
+      mode: 'confirm',
+      input: BIND_INPUT,
+    });
+    assert.equal(result.ok, false);
+    assert.ok(
+      result.reasons.some((r) => reason.test(r)),
+      result.reasons.join('; '),
+    );
+    assert.equal(bindCalls.length, 0);
+    assert.equal(mock._lock(), null, 'the lock is released on refusal');
+    assert.equal(JSON.stringify(result.reasons).includes('S3cret'), false);
+  }
+});
+
+test('F067 bind-identity refuses malformed identity input and never echoes it', async () => {
+  const { runBindIdentity } = await bindModule();
+  for (const input of ['', 'not-a-guid\nalso-not', '{"tenantId":"x"}']) {
+    const { mock, bindCalls } = await activeForBinding();
+    const result = await runBindIdentity(mock, {
+      inventory: INVENTORY,
+      mode: 'confirm',
+      input,
+    });
+    assert.equal(result.ok, false);
+    assert.equal(bindCalls.length, 0);
+    assert.equal(JSON.stringify(result).includes('not-a-guid'), false);
+  }
+});
+
+test('F067 bind-identity reports a failed binding process as a failure, redacted', async () => {
+  const { runBindIdentity } = await bindModule();
+  const { mock } = await activeForBinding({
+    applyIdentityBinding: async () => ({
+      ok: false,
+      reason: `Binding refused: target changed at ${URL_STRING}`,
+    }),
+  });
+  const result = await runBindIdentity(mock, {
+    inventory: INVENTORY,
+    mode: 'confirm',
+    input: BIND_INPUT,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(JSON.stringify(result.reasons).includes('S3cret'), false);
+  assert.equal(mock._lock(), null);
+});

@@ -25,15 +25,18 @@
 import {
   UAT_DATABASE,
   describeSession,
+  evaluateAppliedMigrations,
   evaluateCleanupOutcome,
   evaluateDisposableTarget,
   evaluateFixtureReadiness,
   evaluateLock,
   evaluateMigrationInventory,
   evaluateRecovery,
+  evaluateSecretAcl,
   evaluateSessionConflict,
   evaluateSessionRecord,
   evaluateSecretFileRequest,
+  parseBindingInput,
   prepareSessionRecord,
   redactUrl,
 } from './uat-f067-session-core.mjs';
@@ -457,6 +460,105 @@ export async function runEnd(effects) {
       state: 'ended',
       reasons: removed.verified ? [] : removed.reasons,
       verified: removed.verified === true,
+    };
+  } finally {
+    await effects.releaseLock();
+  }
+}
+
+/**
+ * `bind-identity`: bind one Entra development identity to the fixture's
+ * synthetic staff identity on this session's database.
+ *
+ * Every gate runs before the identity is even read: an exclusive lock, an
+ * ACTIVE and valid session record, a protected secret file, the full
+ * disposable-instance proof (`verifyTarget`, as before any write), and a live
+ * migration history equal to what the session recorded. Only then is the
+ * binding process started, which proves the destination again in band and
+ * writes inside one transaction. `plan` reads and reports; `confirm` writes
+ * and requires the binding's own authorization. No credential is issued.
+ */
+export async function runBindIdentity(effects, { inventory, mode, input }) {
+  if (mode !== 'plan' && mode !== 'confirm')
+    return failure('failed', ['the binding mode must be plan or confirm']);
+  if (mode === 'confirm' && effects.bindAuthorized !== true)
+    return failure('failed', [
+      'binding an identity requires its own explicit authorization',
+    ]);
+
+  const lock = evaluateLock({
+    lock: await effects.readLock(),
+    pidAlive: await effects.lockOwnerAlive(),
+    now: effects.now(),
+  });
+  if (!lock.ok)
+    return failure(lock.state === 'held' ? 'active' : 'unknown', lock.reasons);
+  const record = await effects.readSession();
+  const session = evaluateSessionRecord(record);
+  if (!session.ok)
+    return failure('unknown', [
+      'no usable session record; an identity can only be bound to an active session',
+      ...session.reasons,
+    ]);
+  if (session.state !== 'active')
+    return failure(session.state, [
+      `the session is ${session.state}, not active; nothing is bound`,
+    ]);
+
+  if (!(await effects.acquireLock()))
+    return failure('unknown', [
+      'the session lock could not be acquired exclusively',
+    ]);
+  try {
+    const acl = evaluateSecretAcl(await effects.secretAcl());
+    if (!acl.ok)
+      return failure('failed', [
+        'the session secret file is not protected',
+        ...acl.reasons,
+      ]);
+    const url = await effects.readSecretUrl();
+    const verified = await verifyTarget(effects, {
+      record,
+      expectations: await effects.expectationsFromRecord(record),
+      url,
+      expectedInventory: inventory,
+      requireFresh: false,
+    });
+    if (!verified.ok) return failure(verified.state, verified.reasons);
+    let applied;
+    try {
+      applied = await effects.listAppliedMigrations(url);
+    } catch (error) {
+      return failure('unknown', [
+        `the applied-migration history could not be read: ${redactUrl(error?.message ?? error)}`,
+      ]);
+    }
+    const migrations = evaluateAppliedMigrations({
+      required: inventory,
+      expected: record.migrations,
+      applied,
+    });
+    if (!migrations.ok) return failure('failed', migrations.reasons);
+
+    const parsed = parseBindingInput(input);
+    if (!parsed.ok) return failure('failed', parsed.reasons);
+
+    const outcome = await effects.applyIdentityBinding({
+      url,
+      nonce: record.nonce,
+      mode,
+      input: parsed.input,
+      migrations: record.migrations,
+    });
+    if (!outcome?.ok)
+      return failure('failed', [
+        redactUrl(outcome?.reason ?? 'the binding process did not succeed'),
+      ]);
+    return {
+      ok: true,
+      state: 'active',
+      reasons: [],
+      binding: outcome.report,
     };
   } finally {
     await effects.releaseLock();
