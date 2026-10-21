@@ -16,7 +16,7 @@ import ParticipationSetup from "./ParticipationSetup.jsx";
 import IssueConfiguration from "./IssueConfiguration.jsx";
 import AccessDiscovery from "./AccessDiscovery.jsx";
 import ResidentExperienceEditor from "./ResidentExperienceEditor.jsx";
-import DepartmentsConfiguration from "./DepartmentsConfiguration.jsx";
+import DepartmentWorkspace from "./DepartmentWorkspace.jsx";
 
 const sections = [
   ["", "Overview"],
@@ -40,7 +40,12 @@ function Values({ items }) {
     </dl>
   );
 }
-export function AdminConfiguration({ client, displayName }) {
+export function AdminConfiguration({
+  client,
+  displayName,
+  departmentAuthorizationContext = client,
+  departmentAuthorizationReady = true,
+}) {
   const staffName =
     typeof displayName === "string" && displayName.trim()
       ? displayName.trim()
@@ -243,7 +248,11 @@ export function AdminConfiguration({ client, displayName }) {
                 </button>
               </div>
             ) : section === "departments" ? (
-              <DepartmentsConfiguration />
+              <DepartmentWorkspace
+                client={client}
+                authorizationContext={departmentAuthorizationContext}
+                authorizationReady={departmentAuthorizationReady}
+              />
             ) : section === "resident-experience" ? (
               <ResidentExperienceEditor client={client} />
             ) : section === "access" ? (
@@ -441,6 +450,8 @@ export default function AdminConfigurationPage() {
             key={auth.account?.homeAccountId || "staff"}
             client={client}
             displayName={auth.displayName}
+            departmentAuthorizationContext={auth}
+            departmentAuthorizationReady={!auth.error}
           />
         )}
       </StaffRouteGuard>

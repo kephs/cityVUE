@@ -109,3 +109,5 @@ Other historical specifications remain in this directory. New features should li
 - [F056.1 — Issue Management Scalability & UX](F056-1-issue-management-scalability-ux.md): bounded summary discovery and searchable templates; [validation record](F056-1-implementation-report.md).
 
 [F056.2B — Issue availability and external handling](F056-2B-issue-availability-external-handling.md): implemented and validated locally; [validation record](F056-2B-implementation-report.md) and [security review](F056-2B-security-review.md). No push or deployment.
+
+- [F069.2 — Gated Department read-only frontend](F069-2-department-read-ui.md): isolated offline foundation, disabled by default; authenticated UAT and activation remain separately authorized.
