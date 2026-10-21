@@ -9,6 +9,9 @@ export const departmentStatuses = ["active", "inactive", "archived"];
 export const statusLabel = (status) =>
   status.charAt(0).toUpperCase() + status.slice(1);
 
+export const relationshipCount = (count, singular, plural) =>
+  `${count} ${count === 1 ? singular : plural}`;
+
 export function createDepartmentPreview() {
   return [
     {

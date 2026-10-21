@@ -7,6 +7,7 @@ import {
   departmentDraft,
   departmentErrors,
   departmentStatuses,
+  relationshipCount,
   statusLabel,
 } from "./departmentPreview.js";
 import "./issueWorkspace.css";
@@ -323,9 +324,18 @@ export default function DepartmentsConfiguration({
                   </div>
                   <p>{record.description || "No description provided."}</p>
                   <p className="text-body-secondary">
-                    {record.divisions.length} divisions ·{" "}
-                    {record.categories.length} categories · Display order{" "}
-                    {record.displayOrder}
+                    {relationshipCount(
+                      record.divisions.length,
+                      "division",
+                      "divisions",
+                    )}{" "}
+                    ·{" "}
+                    {relationshipCount(
+                      record.categories.length,
+                      "category",
+                      "categories",
+                    )}{" "}
+                    · Display order {record.displayOrder}
                   </p>
                   <div className="d-flex flex-wrap gap-2">
                     <button
@@ -406,7 +416,10 @@ export default function DepartmentsConfiguration({
                   Up to 200 characters. Names must be unique within this
                   fictional preview.
                 </small>
-                <span id="department-name-error" className="text-danger">
+                <span
+                  id="department-name-error"
+                  className="department-field-error"
+                >
                   {errors.name}
                 </span>
                 <label htmlFor="department-description">Description</label>
@@ -438,7 +451,10 @@ export default function DepartmentsConfiguration({
                     </option>
                   ))}
                 </select>
-                <span id="department-status-error" className="text-danger">
+                <span
+                  id="department-status-error"
+                  className="department-field-error"
+                >
                   {errors.status}
                 </span>
                 <label htmlFor="department-order">Display order</label>
@@ -460,7 +476,10 @@ export default function DepartmentsConfiguration({
                 <small id="department-order-help">
                   Lower numbers appear first in display-order sorting.
                 </small>
-                <span id="department-order-error" className="text-danger">
+                <span
+                  id="department-order-error"
+                  className="department-field-error"
+                >
                   {errors.displayOrder}
                 </span>
               </div>

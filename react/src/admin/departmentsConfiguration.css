@@ -1,3 +1,20 @@
+.departments-workspace .btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+.departments-workspace .btn-outline-secondary {
+  --bs-btn-color: var(--bs-body-color);
+  --bs-btn-border-color: var(--bs-secondary-color);
+  --bs-btn-hover-color: var(--bs-body-color);
+  --bs-btn-hover-bg: var(--bs-secondary-bg);
+  --bs-btn-hover-border-color: var(--bs-secondary-color);
+  --bs-btn-active-color: var(--bs-body-color);
+  --bs-btn-active-bg: var(--bs-secondary-bg);
+  --bs-btn-active-border-color: var(--bs-secondary-color);
+}
+.department-field-error {
+  color: var(--bs-danger-text-emphasis);
+}
 .department-boundary {
   padding: 1rem 1.25rem;
   border: 1px solid var(--bs-primary-border-subtle);

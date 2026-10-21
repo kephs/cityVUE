@@ -429,3 +429,114 @@ test("browser route navigation requires a deliberate discard of a dirty draft", 
     await screen.findByRole("heading", { name: "Elsewhere" }),
   ).toBeInTheDocument();
 });
+
+test.each([
+  [0, "0 divisions · 0 categories"],
+  [1, "1 division · 1 category"],
+  [2, "2 divisions · 2 categories"],
+])(
+  "relationship summaries use the correct wording for %s items",
+  async (count, label) => {
+    await preview({
+      previewFactory: () => [
+        {
+          id: "fictional-count",
+          name: "Fictional Count",
+          description: "",
+          status: "inactive",
+          displayOrder: 0,
+          divisions: Array.from({ length: count }, (_, id) => ({ id })),
+          categories: Array.from({ length: count }, (_, id) => ({ id })),
+        },
+      ],
+    });
+    expect(screen.getByText(`${label} · Display order 0`)).toBeInTheDocument();
+  },
+);
+
+test.each([
+  [400, 600, 80],
+  [600, 600, 0],
+  [0, 600, 0],
+])(
+  "Departments visibility adjusts only a visible overflowing nav (%s/%s)",
+  async (height, total, expected) => {
+    vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(
+      function () {
+        return this.id === "configuration-navigation" ? height : 0;
+      },
+    );
+    vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(
+      function () {
+        return this.id === "configuration-navigation" ? total : 0;
+      },
+    );
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function () {
+        if (this.id === "configuration-navigation")
+          return { top: 100, bottom: 100 + height };
+        if (this.getAttribute("href") === "/admin/departments") {
+          const offset = document.getElementById(
+            "configuration-navigation",
+          ).scrollTop;
+          return { top: 530 - offset, bottom: 580 - offset };
+        }
+        return { top: 0, bottom: 0 };
+      },
+    );
+    const scrollPage = vi.spyOn(window, "scrollTo");
+    admin({ get: vi.fn().mockResolvedValue(snapshot) });
+    await screen.findByText("Department directory not connected");
+    const nav = screen.getByRole("navigation", {
+      name: "Administration sections",
+    });
+    expect(nav.scrollTop).toBe(expected);
+    expect(
+      screen.getByRole("heading", { name: "Departments", exact: true }),
+    ).toHaveFocus();
+    expect(
+      screen.getByRole("button", {
+        name: "Administration sections",
+        exact: true,
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(scrollPage).not.toHaveBeenCalled();
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(nav.scrollTop).toBe(expected);
+  },
+);
+
+test("only entering Departments reveals its link, including after resizing", async () => {
+  let height = 600;
+  vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(
+    function () {
+      return this.id === "configuration-navigation" ? height : 0;
+    },
+  );
+  vi.spyOn(Element.prototype, "scrollHeight", "get").mockReturnValue(600);
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+    function () {
+      if (this.id === "configuration-navigation")
+        return { top: 100, bottom: 100 + height };
+      const offset =
+        document.getElementById("configuration-navigation")?.scrollTop ?? 0;
+      return { top: 530 - offset, bottom: 580 - offset };
+    },
+  );
+  admin({ get: vi.fn().mockResolvedValue(snapshot) }, "/admin");
+  await screen.findByText("Configuration at a glance");
+  const nav = screen.getByRole("navigation", {
+    name: "Administration sections",
+  });
+  expect(nav.scrollTop).toBe(0);
+  await userEvent.click(
+    screen.getByRole("link", { name: "Departments", exact: true }),
+  );
+  await screen.findByText("Department directory not connected");
+  height = 400;
+  act(() => window.dispatchEvent(new Event("resize")));
+  expect(nav.scrollTop).toBe(80);
+  expect(
+    screen.getByRole("heading", { name: "Departments", exact: true }),
+  ).toHaveFocus();
+});

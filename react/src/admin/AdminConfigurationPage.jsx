@@ -61,6 +61,7 @@ export function AdminConfiguration({ client, displayName }) {
   const areaPage = 1;
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationButton = useRef(null);
+  const navigation = useRef(null);
   const closeNavigation = () => {
     setNavigationOpen(false);
     navigationButton.current?.focus();
@@ -94,6 +95,25 @@ export function AdminConfiguration({ client, displayName }) {
   }, [client, attempt, issuePage, areaPage, section]);
   const current = state?.client === client ? state : null,
     data = current?.data;
+  useEffect(() => {
+    if (section !== "departments") return;
+    const revealDepartment = () => {
+      const nav = navigation.current;
+      const active = nav?.querySelector('[aria-current="page"]');
+      if (!active || !nav.clientHeight || nav.scrollHeight <= nav.clientHeight)
+        return;
+      const viewport = nav.getBoundingClientRect();
+      const item = active.getBoundingClientRect();
+      // Scroll only this navigation region; preserve page position and focus.
+      if (item.bottom > viewport.bottom)
+        nav.scrollTop += item.bottom - viewport.bottom;
+      else if (item.top < viewport.top)
+        nav.scrollTop += item.top - viewport.top;
+    };
+    revealDepartment();
+    window.addEventListener("resize", revealDepartment);
+    return () => window.removeEventListener("resize", revealDepartment);
+  }, [section, data, navigationOpen]);
   const refresh = () => {
     setState(null);
     setAttempt((n) => n + 1);
@@ -159,6 +179,7 @@ export function AdminConfiguration({ client, displayName }) {
             }
           >
             <nav
+              ref={navigation}
               id="configuration-navigation"
               aria-label="Administration sections"
             >
