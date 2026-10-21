@@ -6,6 +6,7 @@ import { configureApplication } from './bootstrap.js';
 import type { AppConfiguration } from './config/configuration.js';
 import { PinoLoggerService } from './common/logging/pino-logger.service.js';
 import { servingStartupFailure } from './config/serving-environment.js';
+import { listenApplication } from './config/listen-address.js';
 
 async function bootstrap(): Promise<void> {
   // Configuration can fail before the DI logger exists. Route that failure
@@ -18,9 +19,11 @@ async function bootstrap(): Promise<void> {
 
   const config = app.get(ConfigService<AppConfiguration, true>);
   const logger = app.get(PinoLoggerService);
-  const port = config.get('app.port', { infer: true });
-  await app.listen(port);
-  logger.logger.info({ port }, 'CityVUE API started');
+  const listening = await listenApplication(app, {
+    port: config.get('app.port', { infer: true }),
+    environment: config.get('app.environment', { infer: true }),
+  });
+  logger.logger.info(listening, 'CityVUE API started');
 }
 
 void bootstrap().catch((error: unknown) => {
