@@ -433,6 +433,13 @@ export function evaluateCleanupOutcome(result) {
     : { ok: false, state: 'failed', reasons };
 }
 
+/** The fixture's own staff identity, whose authority and scope readiness
+ * measures. Mirrors `trackingUatFixture.staffId`; a test holds them equal. */
+export const UAT_FIXTURE_STAFF_ID = '90000000-0000-4000-8000-000000000067';
+/** The fixture's PUBLIC requests that identity must be able to reach. Mirrors
+ * the manifest's request count; a test holds them equal. */
+export const UAT_FIXTURE_REQUEST_COUNT = 2;
+
 /**
  * Fixture readiness. A container existing proves nothing about whether the
  * UAT scenarios can actually be exercised, so readiness is expressed in terms
@@ -447,6 +454,12 @@ export function evaluateFixtureReadiness(counts) {
   // credential the resident experience depends on. It counts an effective
   // grant -- an active assignment to an active role carrying the permission --
   // rather than the mere existence of a role.
+  //
+  // A grant is still not reach. `trackingStaffAuthorized` requires the
+  // fixture's own identity to hold both permissions, and
+  // `trackingStaffScopedRequests` requires its own active memberships to bring
+  // every fixture request into `staffRequestScope`; another staff member's
+  // grant or membership satisfies neither.
   const need = {
     organizations: 1,
     serviceDefinitions: 1,
@@ -455,6 +468,8 @@ export function evaluateFixtureReadiness(counts) {
     residentVisibleUpdates: 1,
     trackingManageGrants: 1,
     staffIdentities: 1,
+    trackingStaffAuthorized: 1,
+    trackingStaffScopedRequests: UAT_FIXTURE_REQUEST_COUNT,
   };
   for (const [key, minimum] of Object.entries(need)) {
     const value = counts[key];

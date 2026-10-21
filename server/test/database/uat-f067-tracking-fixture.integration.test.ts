@@ -36,8 +36,13 @@ import {
   TEST_DATABASE,
   TEST_ROLE,
 } from '../helpers/f0592-disposable-cluster.js';
-import { effectivePermissionContributions } from '../../src/auth/effective-permissions.js';
+import {
+  effectivePermissionContributions,
+  effectivePermissions,
+} from '../../src/auth/effective-permissions.js';
+import type { StaffAccess } from '../../src/auth/auth.types.js';
 import { RequestTrackingRepository } from '../../src/service-request/request-tracking.repository.js';
+import { staffRequestScope } from '../../src/service-request/staff-request-scope.js';
 import {
   FIXTURE_PERMISSIONS,
   FIXTURE_REQUIREMENTS,
@@ -593,6 +598,75 @@ test(
           }),
         );
 
+      /**
+       * The fixture identity's PUBLIC reach, through the real
+       * `staffRequestScope` query. Permissions come from the real
+       * effective-permission query and memberships are loaded exactly as
+       * `resolveRequestAuthority` loads them: active rows in the Organization.
+       * This exercises the scope rule only. The identity is deliberately left
+       * unauthenticated (no tenant or object ID), so nothing here stands in
+       * for an Entra sign-in or for `StaffAccessGuard`.
+       */
+      const fixtureReach = async (): Promise<string[]> => {
+        const staffId = trackingUatFixture.staffId;
+        const permissions = await effectivePermissions(
+          db,
+          SEED.organizationId,
+          staffId,
+        );
+        const departments = await db
+          .selectFrom('staff_department_membership')
+          .select('department_id')
+          .where('organization_id', '=', SEED.organizationId)
+          .where('staff_identity_id', '=', staffId)
+          .where('active', '=', true)
+          .execute();
+        const divisions = await db
+          .selectFrom('staff_division_membership')
+          .select('division_id')
+          .where('organization_id', '=', SEED.organizationId)
+          .where('staff_identity_id', '=', staffId)
+          .where('active', '=', true)
+          .execute();
+        const access: StaffAccess = {
+          tenantId: null,
+          objectId: null,
+          staffIdentityId: staffId,
+          organizationId: SEED.organizationId,
+          displayName: trackingUatFixture.staffDisplayName,
+          scopes: [],
+          permissions,
+          departmentIds: departments.map((row) => row.department_id),
+          divisionIds: divisions.map((row) => row.division_id),
+          development: false,
+        };
+        const rows = await staffRequestScope(db, access)
+          .where('request.audience', '=', 'public')
+          .select('request.id')
+          .orderBy('request.id')
+          .execute();
+        return rows.map((row) => row.id);
+      };
+      /** Every Department membership the fixture identity holds, any state. */
+      const fixtureMemberships = () =>
+        db
+          .selectFrom('staff_department_membership')
+          .selectAll()
+          .where('staff_identity_id', '=', trackingUatFixture.staffId)
+          .execute();
+      const setFixtureMembershipActive = (active: boolean) =>
+        db
+          .updateTable('staff_department_membership')
+          .set({ active })
+          .where('staff_identity_id', '=', trackingUatFixture.staffId)
+          .where('department_id', '=', SEED.departmentId)
+          .execute();
+      const readCensus = () =>
+        db.transaction().execute((trx) => censusTrackingUatFixture(trx));
+      const fixtureRequestIds = trackingUatFixture.requests
+        .map((request) => request.id)
+        .sort();
+
       let first: Awaited<ReturnType<typeof provision>>;
       await t.test(
         'the first fixture run provisions every required record',
@@ -620,6 +694,12 @@ test(
           );
           assert.equal(first.census.trackingManageGrants, 1);
           assert.equal(first.census.staffIdentities, 1);
+          assert.equal(first.plan.createMembership, true);
+          assert.equal(first.census.trackingStaffAuthorized, 1);
+          assert.equal(
+            first.census.trackingStaffScopedRequests,
+            FIXTURE_REQUIREMENTS.trackingStaffScopedRequests,
+          );
         },
       );
 
@@ -945,6 +1025,8 @@ test(
           assert.equal(second.plan.createStaff, false);
           assert.equal(second.plan.createRole, false);
           assert.equal(second.plan.createAssignment, false);
+          assert.equal(second.plan.createMembership, false);
+          assert.equal(second.plan.reactivateMembership, false);
           assert.equal(second.plan.grantPermissions.length, 0);
           assert.equal(second.plan.createRequests.length, 0);
           assert.equal(second.plan.createUpdates.length, 0);
@@ -976,6 +1058,8 @@ test(
             activities: number;
             operational: number;
             sequences: number;
+            memberships: number;
+            divisionMemberships: number;
           }>`select
             (select count(*)::int from service_request) requests,
             (select count(*)::int from request_communication) updates,
@@ -986,7 +1070,9 @@ test(
             (select count(*)::int from location) locations,
             (select count(*)::int from activity) activities,
             (select count(*)::int from request_operational_activity) operational,
-            (select coalesce(max(last_value),0)::int from service_request_reference_sequence) sequences
+            (select coalesce(max(last_value),0)::int from service_request_reference_sequence) sequences,
+            (select count(*)::int from staff_department_membership) memberships,
+            (select count(*)::int from staff_division_membership) "divisionMemberships"
           `.execute(db);
           assert.deepEqual(counts.rows[0], {
             requests: 2,
@@ -1000,7 +1086,188 @@ test(
             operational: 2,
             // Unchanged: the second run allocated nothing.
             sequences: 2,
+            // Still exactly the one membership, and no Division membership.
+            memberships: 1,
+            divisionMemberships: 0,
           });
+        },
+      );
+
+      // --- 8. Department scope ---------------------------------------------
+
+      await t.test(
+        'the fixture identity holds exactly one active Department membership that reaches both PUBLIC requests',
+        async () => {
+          const memberships = await fixtureMemberships();
+          assert.equal(memberships.length, 1);
+          const membership = memberships[0];
+          assert.ok(membership);
+          assert.equal(membership.organization_id, SEED.organizationId);
+          assert.equal(
+            membership.staff_identity_id,
+            trackingUatFixture.staffId,
+          );
+          // The Department the requests' Category belongs to.
+          assert.equal(membership.department_id, SEED.departmentId);
+          assert.equal(membership.active, true);
+          const categories = await db
+            .selectFrom('service_request as request')
+            .innerJoin('category', 'category.id', 'request.category_id')
+            .select([
+              'request.routed_department_id',
+              'category.department_id',
+              'category.division_id',
+            ])
+            .where('request.id', 'in', fixtureRequestIds)
+            .execute();
+          assert.equal(categories.length, fixtureRequestIds.length);
+          for (const row of categories) {
+            assert.equal(row.routed_department_id, null);
+            assert.equal(row.department_id, membership.department_id);
+            assert.equal(row.division_id, null);
+          }
+          // The real primary key refuses a second row for the same pair.
+          await assert.rejects(
+            db
+              .insertInto('staff_department_membership')
+              .values({
+                organization_id: SEED.organizationId,
+                staff_identity_id: trackingUatFixture.staffId,
+                department_id: SEED.departmentId,
+                active: true,
+              })
+              .execute(),
+            (error: unknown) => (error as { code?: unknown }).code === '23505',
+          );
+          assert.equal((await fixtureMemberships()).length, 1);
+          // No Division membership was needed or written.
+          const divisions = await db
+            .selectFrom('staff_division_membership')
+            .select('division_id')
+            .where('staff_identity_id', '=', trackingUatFixture.staffId)
+            .execute();
+          assert.equal(divisions.length, 0);
+          // Both requests are inside the real request-scope query.
+          assert.deepEqual(await fixtureReach(), fixtureRequestIds);
+          const census = await readCensus();
+          assert.equal(census.trackingStaffAuthorized, 1);
+          assert.equal(
+            census.trackingStaffScopedRequests,
+            fixtureRequestIds.length,
+          );
+        },
+      );
+
+      await t.test(
+        'an inactive Department membership refuses readiness and is reactivated in place',
+        async () => {
+          const [before] = await fixtureMemberships();
+          assert.ok(before);
+          await setFixtureMembershipActive(false);
+          try {
+            // The grant is intact but the reach is gone, in both measures.
+            assert.deepEqual(await fixtureReach(), []);
+            const degraded = await readCensus();
+            assert.equal(degraded.trackingStaffAuthorized, 1);
+            assert.equal(degraded.trackingStaffScopedRequests, 0);
+            assert.deepEqual(evaluateFixtureCensus(degraded).reasons, [
+              `expected at least ${String(FIXTURE_REQUIREMENTS.trackingStaffScopedRequests)} trackingStaffScopedRequests, got 0`,
+            ]);
+
+            const repaired = await provision();
+            assert.equal(repaired.changed, true);
+            assert.equal(repaired.plan.createMembership, false);
+            assert.equal(repaired.plan.reactivateMembership, true);
+            // Nothing else moves: no grant, assignment, request or reference.
+            assert.equal(repaired.plan.reactivateAssignment, false);
+            assert.equal(repaired.plan.createAssignment, false);
+            assert.equal(repaired.plan.grantPermissions.length, 0);
+            assert.equal(repaired.plan.referenceAllocations, 0);
+            assert.equal(repaired.plan.createRequests.length, 0);
+            assert.deepEqual(evaluateFixtureCensus(repaired.census), {
+              ok: true,
+              reasons: [],
+            });
+          } finally {
+            // Restore even when an assertion above failed, so no later
+            // subtest inherits an inactive membership.
+            await setFixtureMembershipActive(true);
+          }
+          // In place: the same single row, active again, never re-created.
+          const after = await fixtureMemberships();
+          assert.equal(after.length, 1);
+          assert.equal(after[0]?.active, true);
+          assert.equal(after[0].department_id, before.department_id);
+          assert.equal(after[0].organization_id, before.organization_id);
+          assert.equal(
+            after[0].created_at.valueOf(),
+            before.created_at.valueOf(),
+          );
+          assert.deepEqual(await fixtureReach(), fixtureRequestIds);
+          // And a further run settles back to a no-op.
+          const settled = await provision();
+          assert.equal(settled.changed, false);
+          assert.equal(settled.plan.reactivateMembership, false);
+          assert.equal(settled.plan.createMembership, false);
+        },
+      );
+
+      await t.test(
+        "another staff identity's membership cannot satisfy the fixture's readiness",
+        async () => {
+          const otherStaffId = '90000000-0000-4000-8000-000000000167';
+          await setFixtureMembershipActive(false);
+          try {
+            await db
+              .insertInto('staff_identity')
+              .values({
+                id: otherStaffId,
+                organization_id: SEED.organizationId,
+                entra_object_id: null,
+                display_name: 'Synthetic Other Operator',
+                email: 'other.operator@example.test',
+                active: true,
+              })
+              .execute();
+            await db
+              .insertInto('staff_department_membership')
+              .values({
+                organization_id: SEED.organizationId,
+                staff_identity_id: otherStaffId,
+                department_id: SEED.departmentId,
+                active: true,
+              })
+              .execute();
+            // The Department is covered by someone, just not the fixture.
+            const census = await readCensus();
+            assert.equal(census.trackingStaffAuthorized, 1);
+            assert.equal(census.trackingStaffScopedRequests, 0);
+            assert.deepEqual(evaluateFixtureCensus(census).reasons, [
+              `expected at least ${String(FIXTURE_REQUIREMENTS.trackingStaffScopedRequests)} trackingStaffScopedRequests, got 0`,
+            ]);
+            assert.deepEqual(await fixtureReach(), []);
+          } finally {
+            await db
+              .deleteFrom('staff_department_membership')
+              .where('staff_identity_id', '=', otherStaffId)
+              .execute();
+            await db
+              .deleteFrom('staff_identity')
+              .where('id', '=', otherStaffId)
+              .execute();
+            await setFixtureMembershipActive(true);
+          }
+          // Restored exactly: one staff identity, one membership, ready.
+          const rows = await sql<{ staff: number; memberships: number }>`select
+            (select count(*)::int from staff_identity) staff,
+            (select count(*)::int from staff_department_membership) memberships
+          `.execute(db);
+          assert.deepEqual(rows.rows[0], { staff: 1, memberships: 1 });
+          assert.deepEqual(evaluateFixtureCensus(await readCensus()), {
+            ok: true,
+            reasons: [],
+          });
+          assert.deepEqual(await fixtureReach(), fixtureRequestIds);
         },
       );
 
@@ -1091,10 +1358,19 @@ test(
             degraded.residentVisibleUpdates,
             FIXTURE_REQUIREMENTS.residentVisibleUpdates,
           );
+          // The fixture identity's own authority is gone too, and its reach
+          // is not: Department scope does not depend on the role.
+          assert.equal(degraded.trackingStaffAuthorized, 0);
+          assert.equal(
+            degraded.trackingStaffScopedRequests,
+            FIXTURE_REQUIREMENTS.trackingStaffScopedRequests,
+          );
           const refusal = evaluateFixtureCensus(degraded);
           assert.equal(refusal.ok, false);
+          // Exactly these two, in requirement order; anything else is a bug.
           assert.deepEqual(refusal.reasons, [
             'expected at least 1 trackingManageGrants, got 0',
+            'expected at least 1 trackingStaffAuthorized, got 0',
           ]);
           // The real authorization query agrees: no effective grant remains.
           const none = await effectivePermissionContributions(

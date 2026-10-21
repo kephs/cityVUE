@@ -87,6 +87,8 @@ const READY_CENSUS = {
   residentVisibleUpdates: 3,
   trackingManageGrants: 1,
   staffIdentities: 1,
+  trackingStaffAuthorized: 1,
+  trackingStaffScopedRequests: 2,
 };
 
 const URL_FACTS = {

@@ -31,6 +31,7 @@ import {
   UAT_ENV_FILE,
   UAT_DATABASE,
   UAT_DEVELOPMENT_ORGANIZATION_ID,
+  UAT_FIXTURE_STAFF_ID,
   buildSeedEnvironment,
   classifySubprocessFailure,
 } from './uat-f067-session-core.mjs';
@@ -94,8 +95,8 @@ async function fixtureCensus(url) {
   const visible =
     "m.direction='outbound' and m.channel='portal' and m.delivery_state='recorded'";
   try {
-    const count = async (sql) =>
-      Number((await pool.query(sql)).rows[0]?.n ?? 0);
+    const count = async (sql, params = []) =>
+      Number((await pool.query(sql, params)).rows[0]?.n ?? 0);
     return {
       organizations: await count('select count(*)::int n from organization'),
       serviceDefinitions: await count(
@@ -115,6 +116,16 @@ async function fixtureCensus(url) {
       ),
       trackingManageGrants: await count(
         "select count(*)::int n from staff_role_assignment a join role on role.organization_id=a.organization_id and role.id=a.role_id join role_permission p on p.organization_id=a.organization_id and p.role_id=a.role_id where a.active and role.active and p.permission_key='service_request.tracking.manage'",
+      ),
+      // The fixture identity's own authority and reach, measured with the
+      // rules authorization applies, independently of the fixture's census.
+      trackingStaffAuthorized: await count(
+        "select count(*)::int n from staff_identity s join organization o on o.id=s.organization_id where s.id=$1 and s.active and o.status='active' and (select count(distinct p.permission_key) from staff_role_assignment a join role on role.organization_id=a.organization_id and role.id=a.role_id join role_permission p on p.organization_id=a.organization_id and p.role_id=a.role_id where a.organization_id=s.organization_id and a.staff_identity_id=s.id and a.active and role.active and p.permission_key in ('service_request.view','service_request.tracking.manage'))=2 and not exists(select 1 from staff_department_membership m where m.staff_identity_id=s.id and m.organization_id<>s.organization_id) and not exists(select 1 from staff_division_membership m where m.staff_identity_id=s.id and m.organization_id<>s.organization_id)",
+        [UAT_FIXTURE_STAFF_ID],
+      ),
+      trackingStaffScopedRequests: await count(
+        "select count(*)::int n from service_request r join category c on c.organization_id=r.organization_id and c.id=r.category_id join staff_identity s on s.organization_id=r.organization_id and s.id=$1 where r.audience='public' and coalesce(r.routed_department_id, c.department_id) in (select m.department_id from staff_department_membership m where m.organization_id=r.organization_id and m.staff_identity_id=s.id and m.active) and ((case when r.routed_department_id is null then c.division_id else r.routed_division_id end) is null or (case when r.routed_department_id is null then c.division_id else r.routed_division_id end) in (select m.division_id from staff_division_membership m where m.organization_id=r.organization_id and m.staff_identity_id=s.id and m.active))",
+        [UAT_FIXTURE_STAFF_ID],
       ),
     };
   } finally {

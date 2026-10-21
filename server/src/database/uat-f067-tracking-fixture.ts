@@ -30,6 +30,11 @@
  * completed rather than duplicated, and a fixture row that exists with
  * unexpected content is refused instead of adopted or repaired.
  *
+ * **Scope is granted, not just permission.** `staffRequestScope` admits no
+ * request for a staff identity without an active Department membership, so the
+ * fixture also writes the one membership covering its own requests, and
+ * readiness measures that the fixture identity can actually reach them.
+ *
  * No credential is issued, no Entra identity is bound and no authorization
  * guard is bypassed. The synthetic staff identity is created unauthenticated
  * on purpose: `StaffAccessGuard` admits the tracking controller only on a real
@@ -266,6 +271,12 @@ export interface FixtureCatalogFacts {
   readonly defaultPriority: unknown;
   readonly versionStatus: unknown;
   readonly trackingPolicyPresent: unknown;
+  /** The Category's Department. The fixture requests are never routed, so
+   * this is the Department `staffRequestScope` matches them against. */
+  readonly categoryDepartmentId: unknown;
+  /** The Category's Division, which must be null: a Division would require a
+   * Division membership, and the fixture grants none. */
+  readonly categoryDivisionId: unknown;
 }
 export interface Verdict {
   readonly ok: boolean;
@@ -320,6 +331,17 @@ export function evaluateCatalogPrerequisites(
     reasons.push(
       'the Organization has no request_tracking_policy row, so the F065 migration did not reach this database',
     );
+  if (
+    typeof facts.categoryDepartmentId !== 'string' ||
+    facts.categoryDepartmentId.trim() === ''
+  )
+    reasons.push(
+      `the ${trackingUatFixture.serviceKey} Category has no Department, so no staff scope can cover its requests`,
+    );
+  if (facts.categoryDivisionId !== null)
+    reasons.push(
+      `the ${trackingUatFixture.serviceKey} Category carries a Division, which would require a Division membership the fixture does not grant`,
+    );
   return { ok: reasons.length === 0, reasons };
 }
 
@@ -340,6 +362,18 @@ export interface FixtureSnapshot {
   readonly assignmentPresent: boolean;
   readonly assignmentActive: boolean;
   readonly assignmentMatches: boolean;
+  /**
+   * The Department membership, read by its real primary key,
+   * `(staff_identity_id, department_id)`, again with no status predicate.
+   * `staffRequestScope` admits nothing for a staff identity without an active
+   * membership, so the role grant alone never reaches a request.
+   */
+  readonly membershipPresent: boolean;
+  readonly membershipActive: boolean;
+  readonly membershipMatches: boolean;
+  /** Any other Department or Division membership the fixture identity holds.
+   * The fixture creates exactly one, so another means something else wrote it. */
+  readonly unexpectedMemberships: number;
   readonly requestsPresent: readonly string[];
   readonly activityPresent: readonly string[];
   readonly operationalPresent: readonly string[];
@@ -353,9 +387,12 @@ export interface FixturePlan {
   readonly createRole: boolean;
   readonly grantPermissions: readonly string[];
   readonly createAssignment: boolean;
-  /** An existing assignment that is merely inactive is reactivated in place,
-   * which is the only update this fixture performs. */
+  /** An existing assignment that is merely inactive is reactivated in place. */
   readonly reactivateAssignment: boolean;
+  readonly createMembership: boolean;
+  /** Likewise for the Department membership. These two reactivations are the
+   * only updates this fixture performs. */
+  readonly reactivateMembership: boolean;
   readonly createRequests: readonly string[];
   readonly createActivity: readonly string[];
   readonly createOperational: readonly string[];
@@ -390,6 +427,8 @@ export function planFixtureWrites(
     grantPermissions: [] as readonly string[],
     createAssignment: false,
     reactivateAssignment: false,
+    createMembership: false,
+    reactivateMembership: false,
     createRequests: [] as readonly string[],
     createActivity: [] as readonly string[],
     createOperational: [] as readonly string[],
@@ -429,6 +468,18 @@ export function planFixtureWrites(
     reasons.push(
       'the fixture role assignment exists against another Organization; no adoption or repair is permitted',
     );
+  if (snapshot.membershipPresent && !snapshot.membershipMatches)
+    reasons.push(
+      'the fixture Department membership exists against another Organization; no adoption or repair is permitted',
+    );
+  if (
+    typeof snapshot.unexpectedMemberships !== 'number' ||
+    !Number.isInteger(snapshot.unexpectedMemberships) ||
+    snapshot.unexpectedMemberships !== 0
+  )
+    reasons.push(
+      'the synthetic staff identity holds a Department or Division membership the fixture did not create; its scope would be broader than planned',
+    );
   if (reasons.length) return { ...empty, ok: false, reasons };
 
   const ids = trackingUatFixture.requests.map((request) => request.id);
@@ -453,6 +504,11 @@ export function planFixtureWrites(
   const createAssignment = !snapshot.assignmentPresent;
   const reactivateAssignment =
     snapshot.assignmentPresent && !snapshot.assignmentActive;
+  // The membership's primary key is `(staff_identity_id, department_id)`; the
+  // same reasoning applies, and the update touches `active` alone.
+  const createMembership = !snapshot.membershipPresent;
+  const reactivateMembership =
+    snapshot.membershipPresent && !snapshot.membershipActive;
   return {
     ok: true,
     reasons: [],
@@ -461,6 +517,8 @@ export function planFixtureWrites(
     grantPermissions,
     createAssignment,
     reactivateAssignment,
+    createMembership,
+    reactivateMembership,
     createRequests,
     createActivity,
     createOperational,
@@ -472,6 +530,8 @@ export function planFixtureWrites(
       createRole ||
       createAssignment ||
       reactivateAssignment ||
+      createMembership ||
+      reactivateMembership ||
       grantPermissions.length > 0 ||
       createRequests.length > 0 ||
       createActivity.length > 0 ||
@@ -498,6 +558,20 @@ export const FIXTURE_REQUIREMENTS = {
   residentVisibleUpdates: fixtureUpdateKeys().length,
   trackingManageGrants: 1,
   staffIdentities: 1,
+  /**
+   * 1 when the fixture's own staff identity is active in the Organization and
+   * effectively holds both `FIXTURE_PERMISSIONS` through an active assignment
+   * to an active role, and holds no membership in another Organization.
+   * Another staff member's grant never satisfies it.
+   */
+  trackingStaffAuthorized: 1,
+  /**
+   * The fixture's PUBLIC requests that the fixture staff identity's own
+   * active memberships bring into `staffRequestScope`. A role grant without a
+   * covering Department membership reaches none of them, which is exactly the
+   * gap this count closes.
+   */
+  trackingStaffScopedRequests: trackingUatFixture.requests.length,
 } as const;
 
 export type FixtureCensusKey = keyof typeof FIXTURE_REQUIREMENTS;
@@ -556,6 +630,32 @@ export async function readTargetFacts(
   };
 }
 
+/**
+ * The Department and Division of the fixture's Category, read through the
+ * same Service Definition the requests are written against. Both the
+ * prerequisites and the snapshot use it, so the membership the plan checks is
+ * the one the requests will actually need.
+ */
+async function readCategoryScope(
+  trx: Trx,
+): Promise<{ departmentId: string | null; divisionId: string | null }> {
+  const row = await trx
+    .selectFrom('service_definition as definition')
+    .innerJoin('category', (join) =>
+      join
+        .onRef('category.id', '=', 'definition.category_id')
+        .onRef('category.organization_id', '=', 'definition.organization_id'),
+    )
+    .select(['category.department_id', 'category.division_id'])
+    .where('definition.organization_id', '=', trackingUatFixture.organizationId)
+    .where('definition.service_key', '=', trackingUatFixture.serviceKey)
+    .executeTakeFirst();
+  return {
+    departmentId: row?.department_id ?? null,
+    divisionId: row?.division_id ?? null,
+  };
+}
+
 async function readCatalog(trx: Trx): Promise<FixtureCatalogFacts> {
   const organization = await trx
     .selectFrom('organization')
@@ -588,6 +688,7 @@ async function readCatalog(trx: Trx): Promise<FixtureCatalogFacts> {
     .select('organization_id')
     .where('organization_id', '=', trackingUatFixture.organizationId)
     .executeTakeFirst();
+  const scope = await readCategoryScope(trx);
   return {
     organizationStatus: organization?.status ?? null,
     organizationName: organization?.name ?? null,
@@ -599,6 +700,8 @@ async function readCatalog(trx: Trx): Promise<FixtureCatalogFacts> {
     defaultPriority: version?.default_priority ?? null,
     versionStatus: version?.version_status ?? null,
     trackingPolicyPresent: policy !== undefined,
+    categoryDepartmentId: scope.departmentId,
+    categoryDivisionId: scope.divisionId,
   };
 }
 
@@ -628,6 +731,29 @@ async function readSnapshot(trx: Trx): Promise<FixtureSnapshot> {
     .select(['role_id', 'active', 'organization_id'])
     .where('staff_identity_id', '=', trackingUatFixture.staffId)
     .where('role_id', '=', trackingUatFixture.roleId)
+    .executeTakeFirst();
+  // By the membership's real primary key, `(staff_identity_id, department_id)`,
+  // with no status or Organization predicate, so an inactive or misplaced row
+  // is seen rather than mistaken for an absent one.
+  const { departmentId } = await readCategoryScope(trx);
+  const membership = departmentId
+    ? await trx
+        .selectFrom('staff_department_membership')
+        .select(['active', 'organization_id'])
+        .where('staff_identity_id', '=', trackingUatFixture.staffId)
+        .where('department_id', '=', departmentId)
+        .executeTakeFirst()
+    : undefined;
+  let others = trx
+    .selectFrom('staff_department_membership')
+    .select(sql<number>`count(*)::int`.as('n'))
+    .where('staff_identity_id', '=', trackingUatFixture.staffId);
+  if (departmentId) others = others.where('department_id', '<>', departmentId);
+  const otherDepartments = await others.executeTakeFirst();
+  const divisions = await trx
+    .selectFrom('staff_division_membership')
+    .select(sql<number>`count(*)::int`.as('n'))
+    .where('staff_identity_id', '=', trackingUatFixture.staffId)
     .executeTakeFirst();
   const requests = await trx
     .selectFrom('service_request')
@@ -679,6 +805,10 @@ async function readSnapshot(trx: Trx): Promise<FixtureSnapshot> {
     assignmentPresent: assignment !== undefined,
     assignmentActive: assignment?.active === true,
     assignmentMatches: assignment?.organization_id === organizationId,
+    membershipPresent: membership !== undefined,
+    membershipActive: membership?.active === true,
+    membershipMatches: membership?.organization_id === organizationId,
+    unexpectedMemberships: (otherDepartments?.n ?? 0) + (divisions?.n ?? 0),
     requestsPresent: requests.map((row) => row.id),
     activityPresent: activity.map((row) => row.service_request_id),
     operationalPresent: operational.map((row) => row.service_request_id),
@@ -689,14 +819,30 @@ async function readSnapshot(trx: Trx): Promise<FixtureSnapshot> {
   };
 }
 
+/**
+ * Readiness is measured with the rules authorization itself applies, for the
+ * fixture's own staff identity only. Effective permissions mirror
+ * `effectivePermissionContributions`: an active assignment to an active role.
+ * Request scope mirrors `staffRequestScope`: the request's Department,
+ * `coalesce(routed_department_id, category.department_id)`, must be one of the
+ * identity's active memberships, and its Division must be null or one of its
+ * active Division memberships. The session harness measures the same two facts
+ * independently in `uat-f067-effects.mjs`.
+ */
 async function readCensus(trx: Trx): Promise<Record<FixtureCensusKey, number>> {
   const organizationId = trackingUatFixture.organizationId;
+  const staffId = trackingUatFixture.staffId;
+  const requestIds = sql.join(
+    trackingUatFixture.requests.map((request) => request.id),
+  );
   const counts = await sql<{
     with_updates: number;
     without_updates: number;
     updates: number;
     grants: number;
     staff: number;
+    staff_authorized: number;
+    scoped_requests: number;
   }>`
     select
       (select count(*)::int from service_request r where r.organization_id=${organizationId}
@@ -717,7 +863,31 @@ async function readCensus(trx: Trx): Promise<Record<FixtureCensusKey, number>> {
         where a.organization_id=${organizationId} and a.active and role.active
           and p.permission_key='service_request.tracking.manage') as grants,
       (select count(*)::int from staff_identity s where s.organization_id=${organizationId}
-        and s.id=${trackingUatFixture.staffId} and s.active) as staff
+        and s.id=${trackingUatFixture.staffId} and s.active) as staff,
+      (select count(*)::int from staff_identity s
+        join organization o on o.id=s.organization_id
+        where s.id=${staffId} and s.organization_id=${organizationId} and s.active
+          and o.status='active'
+          and (select count(distinct p.permission_key) from staff_role_assignment a
+            join role on role.organization_id=a.organization_id and role.id=a.role_id
+            join role_permission p on p.organization_id=a.organization_id and p.role_id=a.role_id
+            where a.organization_id=s.organization_id and a.staff_identity_id=s.id
+              and a.active and role.active
+              and p.permission_key in ('service_request.view','service_request.tracking.manage'))=2
+          and not exists(select 1 from staff_department_membership m
+            where m.staff_identity_id=s.id and m.organization_id<>s.organization_id)
+          and not exists(select 1 from staff_division_membership m
+            where m.staff_identity_id=s.id and m.organization_id<>s.organization_id)) as staff_authorized,
+      (select count(*)::int from service_request r
+        join category c on c.organization_id=r.organization_id and c.id=r.category_id
+        where r.organization_id=${organizationId} and r.audience='public' and r.id in (${requestIds})
+          and coalesce(r.routed_department_id, c.department_id) in (
+            select m.department_id from staff_department_membership m
+            where m.organization_id=r.organization_id and m.staff_identity_id=${staffId} and m.active)
+          and ((case when r.routed_department_id is null then c.division_id else r.routed_division_id end) is null
+            or (case when r.routed_department_id is null then c.division_id else r.routed_division_id end) in (
+              select m.division_id from staff_division_membership m
+              where m.organization_id=r.organization_id and m.staff_identity_id=${staffId} and m.active))) as scoped_requests
   `.execute(trx);
   const row = counts.rows[0];
   // Each column is cast to `int` in SQL, so the driver returns a number.
@@ -728,6 +898,8 @@ async function readCensus(trx: Trx): Promise<Record<FixtureCensusKey, number>> {
     residentVisibleUpdates: row?.updates ?? 0,
     trackingManageGrants: row?.grants ?? 0,
     staffIdentities: row?.staff ?? 0,
+    trackingStaffAuthorized: row?.staff_authorized ?? 0,
+    trackingStaffScopedRequests: row?.scoped_requests ?? 0,
   };
 }
 
@@ -782,6 +954,7 @@ export async function provisionTrackingUatFixture(
   const categoryId = String(catalog.categoryId);
   const priority = String(catalog.defaultPriority);
   const zone = String(catalog.businessTimezone);
+  const departmentId = String(catalog.categoryDepartmentId);
 
   await lockAuthorizationWriter(trx, organizationId);
   const plan = planFixtureWrites(await readSnapshot(trx));
@@ -851,6 +1024,29 @@ export async function provisionTrackingUatFixture(
       .set({ active: true })
       .where('staff_identity_id', '=', trackingUatFixture.staffId)
       .where('role_id', '=', trackingUatFixture.roleId)
+      .where('organization_id', '=', organizationId)
+      .execute();
+  // The one Department membership that brings the fixture's own requests into
+  // `staffRequestScope`. No Division membership is written: the prerequisites
+  // already refused a Category that carries a Division.
+  if (plan.createMembership)
+    await trx
+      .insertInto('staff_department_membership')
+      .values({
+        organization_id: organizationId,
+        staff_identity_id: trackingUatFixture.staffId,
+        department_id: departmentId,
+        active: true,
+      })
+      .execute();
+  else if (plan.reactivateMembership)
+    // Scoped to this one primary key and to `active` alone, exactly like the
+    // assignment above: no other membership or Department is touched.
+    await trx
+      .updateTable('staff_department_membership')
+      .set({ active: true })
+      .where('staff_identity_id', '=', trackingUatFixture.staffId)
+      .where('department_id', '=', departmentId)
       .where('organization_id', '=', organizationId)
       .execute();
 
