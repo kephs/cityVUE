@@ -207,3 +207,19 @@ test("light and dark semantic text pairs meet 4.5:1 contrast", () => {
     }
   }
 });
+
+test("global minimum widths yield to a narrower content viewport without hiding overflow", () => {
+  const css = readFileSync("react/src/styles.css", "utf8");
+  for (const selector of [/body\s*\{([^}]+)\}/, /\.app-shell\s*\{([^}]+)\}/]) {
+    const rule = css.match(selector)[1];
+    expect(rule).toMatch(/min-width:\s*min\(320px,\s*100%\)/);
+    expect(rule).not.toMatch(/overflow(?:-x)?:\s*(hidden|clip)/);
+  }
+  const department = readFileSync(
+    "react/src/admin/departmentReadOnly.css",
+    "utf8",
+  );
+  expect(department).toMatch(/overflow-wrap:\s*anywhere/);
+  expect(department).toMatch(/min-height:\s*44px/);
+  expect(department).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\)/);
+});
