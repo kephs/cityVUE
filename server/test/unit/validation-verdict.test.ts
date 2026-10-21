@@ -2059,3 +2059,57 @@ test('a null cleanup result maps to a null teardown section', async () => {
   assert.deepEqual(verdict.reasons, []);
   assert.equal(verdict.ok, true);
 });
+
+test('registry cleanup census and captured evidence agree on final pass or leak failure', async () => {
+  const { evaluateRun } = await launcher();
+  // Fabricated offline facts, not a claim of PostgreSQL execution.
+  for (const after of [0, 1, 2]) {
+    const census = { before: 0, after };
+    const captured = {
+      ...census,
+      cleanBaseline: true,
+      leaked: after,
+      noLeak: after === 0,
+    };
+    const result = evaluateRun(
+      runInput({ census, capture: captureInput({ census: captured }) }),
+    );
+    assert.equal(result.ok, captured.noLeak);
+    assert.equal(captured.leaked, census.after - census.before);
+    if (after > 0)
+      assert.ok(
+        result.reasons.some(
+          (reason) =>
+            reason === String(after) + ' schema(s) leaked during the run',
+        ),
+      );
+  }
+});
+
+test('registry clean census does not excuse missing tiers, identity or cleanup evidence', async () => {
+  const { evaluateRun } = await launcher();
+  for (const overrides of [
+    { tiers: [] },
+    { tiers: [{ ok: true, tier: 'database', reasons: [] }] },
+    { tiers: [{ ok: true, tier: 'e2e', reasons: [] }] },
+    { evidence: { verified: false, refusal: 'identity not proven' } },
+    {
+      teardown: {
+        refusal: null,
+        containerRemoved: false,
+        volumeRemoved: true,
+        volumeName: 'a'.repeat(64),
+      },
+    },
+    {
+      teardown: {
+        refusal: null,
+        containerRemoved: true,
+        volumeRemoved: false,
+        volumeName: 'a'.repeat(64),
+      },
+    },
+    { census: { before: 0, after: null } },
+  ])
+    assert.equal(evaluateRun(runInput(overrides)).ok, false);
+});

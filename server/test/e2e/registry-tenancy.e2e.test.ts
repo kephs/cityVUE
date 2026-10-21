@@ -1,10 +1,16 @@
 import 'reflect-metadata';
+import {
+  createRegistrySchemas,
+  cleanupRegistrySchemas,
+  type RegistrySchemaReceipt,
+} from '../helpers/registry-schema-lifecycle.js';
+import { applyRegistryMigrations } from '../helpers/registry-migrations.js';
+import { assertDisposableCluster } from '../helpers/disposable-cluster-evidence.js';
+
 import assert from 'node:assert/strict';
 import test, { after, before } from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { readdir } from 'node:fs/promises';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
 import request from 'supertest';
@@ -42,6 +48,7 @@ let app: INestApplication | undefined;
 let db: Kysely<DatabaseSchema> | undefined;
 let admin: Pool | undefined;
 let schema = '';
+let schemaReceipt: RegistrySchemaReceipt | undefined;
 let a: Seeded | undefined;
 let b: Seeded | undefined;
 let previous: Record<string, string | undefined> = {};
@@ -57,11 +64,12 @@ before(async () => {
     (await admin.query('select current_database() db,current_user usr')).rows,
     [{ db: 'reqro_f0592_test', usr: 'reqro_test_user' }],
   );
+  await assertDisposableCluster(admin, url);
   schema = `registry_e2e_${randomUUID().replaceAll('-', '')}`;
   await admin.query(
     'create extension if not exists pgcrypto with schema public',
   );
-  await admin.query(`create schema "${schema}"`);
+
   db = new Kysely<DatabaseSchema>({
     dialect: new PostgresDialect({
       pool: new Pool({
@@ -72,15 +80,8 @@ before(async () => {
     }),
   });
   const database = db;
-  const folder = path.resolve(__dirname, '../../migrations');
-  for (const file of (await readdir(folder))
-    .filter((name) => name.endsWith('.js'))
-    .sort()) {
-    const migration = (await import(
-      pathToFileURL(path.join(folder, file)).href
-    )) as { up: (db: Kysely<DatabaseSchema>) => Promise<void> };
-    await database.transaction().execute(migration.up);
-  }
+  schemaReceipt = await createRegistrySchemas(database, schema);
+  await applyRegistryMigrations(database, schema);
 
   async function seed(label: string, hostname: string): Promise<Seeded> {
     const org = randomUUID(),
@@ -293,18 +294,25 @@ before(async () => {
 });
 
 after(async () => {
-  if (app) await app.close();
-  if (db) await db.destroy();
-  if (admin) {
-    if (schema) {
-      assert.match(schema, /^registry_e2e_[a-f0-9]{32}$/);
-      await admin.query(`drop schema "${schema}" cascade`);
+  try {
+    if (app) await app.close();
+  } finally {
+    try {
+      if (db && schemaReceipt) await cleanupRegistrySchemas(db, schemaReceipt);
+    } finally {
+      try {
+        if (db) await db.destroy();
+      } finally {
+        try {
+          if (admin) await admin.end();
+        } finally {
+          for (const [key, value] of Object.entries(previous))
+            if (value === undefined) process.env[key] = '';
+            else process.env[key] = value;
+        }
+      }
     }
-    await admin.end();
   }
-  for (const [key, value] of Object.entries(previous))
-    if (value === undefined) process.env[key] = '';
-    else process.env[key] = value;
 });
 
 test(

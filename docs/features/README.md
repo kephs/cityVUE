@@ -1,5 +1,7 @@
 # Reqro Feature Records
 
+[F069.1 — Department administration read API foundation](F069-1-department-read-api.md): isolated backend-only protected reads; PostgreSQL execution and frontend integration remain deferred.
+
 [F069 — Departments Administration UI foundation](F069-departments-administration-ui.md): frontend-only fictional preview within authorized Administration; live Department APIs and persistent changes remain unavailable. Validation is recorded in the feature record.
 
 Current documentation state: [F058.4 — Delivered-work documentation and governance reconciliation](F058-4-delivered-work-documentation-reconciliation.md) records the verified as-built F058 state. **F058 is DELIVERED and synchronized on `main`.** `main` and `origin/main` are both `36f13d8a17f9c9e1defbceae82cb5d1cfdc85454` and there is **no outstanding unsynchronized feature work**. The F058 records below retain their original checkpoint statuses and evidence as historical fact; each carries a short current-state reconciliation line. **Do not read `not committed`, `not pushed`, `Synchronization is not authorized` or `Stop for manual visual review` in those records as current state.**
