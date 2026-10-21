@@ -179,7 +179,18 @@ function Directory({ client, onDenied }) {
     [attempt, setAttempt] = useState(0),
     [selected, setSelected] = useState(null);
   const opener = useRef(null),
-    heading = useRef(null);
+    heading = useRef(null),
+    restoreFocus = useRef(false);
+  useEffect(() => {
+    if (selected !== null || !restoreFocus.current) return;
+    restoreFocus.current = false;
+    // Run after the removed native dialog has completed its cleanup.
+    // A replaced or revoked session unmounts this effect with the directory.
+    const target = opener.current?.isConnected
+      ? opener.current
+      : heading.current;
+    if (target?.isConnected) target.focus();
+  }, [selected]);
   const load = useMemo(
     () => (signal) => reader.departments(query, signal),
     [reader, query, attempt],
@@ -188,8 +199,8 @@ function Directory({ client, onDenied }) {
   const change = (patch) =>
     setQuery((previous) => ({ ...previous, ...patch, page: 1 }));
   const close = () => {
+    restoreFocus.current = true;
     setSelected(null);
-    (opener.current?.isConnected ? opener.current : heading.current)?.focus();
   };
   return (
     <section

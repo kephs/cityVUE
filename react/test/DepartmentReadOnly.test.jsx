@@ -496,3 +496,84 @@ test("live responsive styles retain single-column layout, wrapping and minimum t
   expect(shared).toContain("min-width: 44px");
   expect(shared).toContain(":focus-visible");
 });
+
+for (const method of ["Escape", "Close"])
+  test(`restores the keyboard opener after dialog removal using ${method}`, async () => {
+    render(<DepartmentReadOnly client={clientFor()} />);
+    const opener = await screen.findByRole("button", {
+      name: "View " + record.name,
+    });
+    opener.focus();
+    await userEvent.keyboard("{Enter}");
+    await within(screen.getByRole("dialog")).findByText(record.name);
+    const focus = vi.spyOn(opener, "focus").mockImplementation(() => {
+      expect(document.querySelector("dialog")).toBeNull();
+      HTMLElement.prototype.focus.call(opener);
+    });
+    if (method === "Escape")
+      fireEvent(
+        screen.getByRole("dialog"),
+        new Event("cancel", { bubbles: false, cancelable: true }),
+      );
+    else
+      await userEvent.click(
+        screen.getByRole("button", { name: "Close configuration" }),
+      );
+    await waitFor(() => expect(opener).toHaveFocus());
+    expect(focus).toHaveBeenCalledTimes(1);
+    focus.mockRestore();
+    await userEvent.tab();
+    expect(opener).not.toHaveFocus();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+test("restores the directory heading when a refreshed page removes the opener", async () => {
+  const client = clientFor();
+  render(<DepartmentReadOnly client={client} />);
+  const opener = await screen.findByRole("button", {
+    name: "View " + record.name,
+  });
+  await userEvent.click(opener);
+  await within(screen.getByRole("dialog")).findByText(record.name);
+  client.get.mockResolvedValue(page([]));
+  fireEvent.click(screen.getByRole("button", { name: "Refresh Departments" }));
+  await waitFor(() => expect(opener.isConnected).toBe(false));
+  fireEvent(
+    screen.getByRole("dialog"),
+    new Event("cancel", { bubbles: false, cancelable: true }),
+  );
+  await waitFor(() =>
+    expect(
+      screen.getByRole("heading", { name: "Department directory" }),
+    ).toHaveFocus(),
+  );
+});
+
+for (const change of ["replacement", "revocation"])
+  test(`does not restore focus to the old opener after authorization ${change}`, async () => {
+    vi.stubEnv("VITE_DEPARTMENT_READ_ENABLED", "true");
+    const client = clientFor();
+    const context = {};
+    const view = render(
+      <DepartmentWorkspace client={client} authorizationContext={context} />,
+    );
+    const opener = await screen.findByRole("button", {
+      name: "View " + record.name,
+    });
+    await userEvent.click(opener);
+    await within(screen.getByRole("dialog")).findByText(record.name);
+    const focus = vi.spyOn(opener, "focus");
+    view.rerender(
+      <DepartmentWorkspace
+        client={client}
+        authorizationContext={change === "replacement" ? {} : context}
+        authorizationReady={change !== "revocation"}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(opener.isConnected).toBe(false);
+    expect(focus).not.toHaveBeenCalled();
+    focus.mockRestore();
+  });
