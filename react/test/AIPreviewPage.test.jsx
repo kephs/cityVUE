@@ -12,7 +12,7 @@ vi.mock('../src/config/runtimeConfig.js', () => ({ readResidentIntakeConfig: vi.
 vi.mock('../src/ai/aiRepository.js', () => ({ loadAIWorkspace: vi.fn() }));
 vi.mock('@azure/msal-react', () => ({
     MsalProvider: ({ children }) => children,
-    useMsal: () => ({ accounts: [], instance: { getActiveAccount: () => identity.account } })
+    useMsal: () => ({ inProgress: "none", accounts: [], instance: { getActiveAccount: () => identity.account, addEventCallback: () => "preview", removeEventCallback: () => {} } })
 }));
 let router;
 beforeAll(async () => {
