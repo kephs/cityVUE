@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { assertClientServingConfig } from "./src/config/servingConfig.mjs";
+import { developmentCallbackMode } from "./src/config/developmentCallback.mjs";
 
 export const privateFileDeny = [
   // Retain Vite's default sensitive-file protection when extending this list.
@@ -30,6 +31,11 @@ export default defineConfig({
         // Vite has loaded mode-specific files and applied process environment
         // precedence. Validate exactly the public values embedded in the build.
         assertClientServingConfig(config.env);
+        if (developmentCallbackMode(config.env) && config.command !== "serve") {
+          throw new Error(
+            "Development authentication callbacks require the Vite development server.",
+          );
+        }
       },
     },
   ],

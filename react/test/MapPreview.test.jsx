@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import CityVUEMap from '../src/map/CityVUEMap.jsx';
 import { setWorkerUrl } from 'maplibre-gl';
@@ -161,6 +161,7 @@ test('API mode authenticates the protected request without a browser Organizatio
     renderApi(repository);
     expect(await screen.findByRole('button', { name: /Protected request/ })).toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledWith('http://localhost:3000/api/v1/geospatial', expect.objectContaining({ headers: { Accept: 'application/json', Authorization: 'Bearer fictional-test-token' }, signal: expect.any(AbortSignal) }));
+    await waitFor(() => expect(maps.instances).toHaveLength(1));
     expect(maps.instances[0].options.style.sources.boundary.data.features[0].geometry.type).toBe('Polygon');
     expect(maps.instances[0].options.style.sources.requests.data.features[0].properties.title).toBe('Protected request');
     expect(screen.queryByText(/SYNTHETIC TEST DATA/)).not.toBeInTheDocument();
@@ -259,6 +260,7 @@ test('sign-out unmounts already rendered protected data immediately', async () =
     const repository = apiRepository(async () => reply(200, apiData()));
     const view = renderApi(repository);
     expect(await screen.findByRole('button', { name: /Protected request/ })).toBeInTheDocument();
+    await waitFor(() => expect(maps.instances).toHaveLength(1));
     const map = maps.instances[0];
     auth.isAuthenticated = false;
     view.rerender(<ThemeProvider><MapPreviewPage repository={repository} /></ThemeProvider>);

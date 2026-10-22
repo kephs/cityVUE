@@ -1,5 +1,7 @@
+import { developmentCallbackMode } from "./developmentCallback.mjs";
 /** Public build settings only. This profile is not an Organization selector. */
 export function assertClientServingConfig(environment) {
+  developmentCallbackMode(environment);
   const profile = String(
     environment?.VITE_CITYVUE_DEPLOYMENT_PROFILE || "development",
   ).trim();

@@ -6,6 +6,7 @@ import App from "./App.jsx";
 import NotFoundPage from "../pages/NotFoundPage.jsx";
 import { AuthRoot } from "../auth/AuthContext.jsx";
 import StaffRouteGuard from "../auth/StaffRouteGuard.jsx";
+import SignedOutPage from "../auth/SignedOutPage.jsx";
 
 const StaffRequestsPage = lazy(
   () => import("../staff/requests/StaffRequestsPage.jsx"),
@@ -48,6 +49,7 @@ function redirectLegacyReport({ request }) {
 }
 
 const router = createBrowserRouter([
+  { path: "/auth/signed-out", element: <SignedOutPage /> },
   {
     path: "/admin/:section?",
     element: (

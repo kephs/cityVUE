@@ -13,12 +13,28 @@ const msal = vi.hoisted(() => {
     InteractionRequiredAuthError,
     instance: {},
     accounts: [],
+    inProgress: "none",
+    events: new Map(),
     constructor: vi.fn(),
     provider: vi.fn(),
   };
 });
 vi.mock("@azure/msal-browser", () => ({
   BrowserCacheLocation: { SessionStorage: "sessionStorage" },
+  InteractionStatus: {
+    None: "none",
+    Startup: "startup",
+    HandleRedirect: "handleRedirect",
+    Logout: "logout",
+  },
+  EventType: {
+    ACTIVE_ACCOUNT_CHANGED: "activeAccountChanged",
+    LOGIN_FAILURE: "loginFailure",
+    LOGIN_SUCCESS: "loginSuccess",
+    LOGOUT_FAILURE: "logoutFailure",
+    LOGOUT_START: "logoutStart",
+    LOGOUT_SUCCESS: "logoutSuccess",
+  },
   InteractionRequiredAuthError: msal.InteractionRequiredAuthError,
   PublicClientApplication: function (config) {
     msal.constructor(config);
@@ -31,7 +47,11 @@ vi.mock("@azure/msal-react", () => ({
     msal.provider(instance);
     return children;
   },
-  useMsal: () => ({ instance: msal.instance, accounts: msal.accounts }),
+  useMsal: () => ({
+    instance: msal.instance,
+    accounts: msal.accounts,
+    inProgress: msal.inProgress,
+  }),
 }));
 const config = {
   webClientId: "synthetic-client",
@@ -46,7 +66,14 @@ function Probe() {
 beforeEach(() => {
   vi.clearAllMocks();
   msal.accounts = [];
+  msal.inProgress = "none";
+  msal.events.clear();
   msal.instance = {
+    addEventCallback: vi.fn((cb) => {
+      msal.events.set("event", cb);
+      return "event";
+    }),
+    removeEventCallback: vi.fn((id) => msal.events.delete(id)),
     getActiveAccount: vi.fn(() => null),
     setActiveAccount: vi.fn(),
     loginRedirect: vi.fn().mockResolvedValue(undefined),
@@ -193,4 +220,244 @@ test("interaction-required failure is propagated without an automatic interactiv
   );
   expect(msal.instance.loginRedirect).not.toHaveBeenCalled();
   expect(msal.instance.logoutRedirect).not.toHaveBeenCalled();
+});
+
+test("factory wires the F067 bridge without changing authority, scope handling or cache", () => {
+  vi.stubEnv("DEV", true);
+  vi.stubEnv("VITE_ENTRA_DEVELOPMENT_CALLBACK_MODE", "f067-bridge");
+  createMsalInstance(config, "http://localhost:5174");
+  expect(msal.constructor.mock.calls[0][0]).toEqual({
+    auth: {
+      clientId: config.webClientId,
+      authority: "https://login.microsoftonline.com/synthetic-tenant",
+      redirectUri: "http://localhost:5174/redirect.html",
+      postLogoutRedirectUri: "http://localhost:5174/auth/signed-out",
+    },
+    cache: { cacheLocation: "sessionStorage" },
+  });
+  expect(() => createMsalInstance(config, "http://localhost:5173")).toThrow(
+    /origin/,
+  );
+});
+
+test.each(["startup", "handleRedirect"])(
+  "%s does not mount application children or expose a token provider",
+  async (state) => {
+    msal.inProgress = state;
+    msal.accounts = [{ homeAccountId: "cached" }];
+    const child = vi.fn(() => null);
+    const Child = child;
+    const view = render(
+      <AuthRoot>
+        <Child />
+      </AuthRoot>,
+    );
+    expect(view.getByRole("status")).toHaveTextContent(
+      "Checking staff session",
+    );
+    expect(child).not.toHaveBeenCalled();
+    await expect(getStaffAccessToken()).rejects.toThrow(
+      "staff-authentication-required",
+    );
+  },
+);
+
+test("ongoing interaction and double clicks cannot launch duplicate authentication", async () => {
+  msal.inProgress = "login";
+  const view = render(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  await act(async () => {
+    await auth.signIn();
+    await auth.signOut();
+  });
+  expect(msal.instance.loginRedirect).not.toHaveBeenCalled();
+  expect(msal.instance.logoutRedirect).not.toHaveBeenCalled();
+  msal.inProgress = "none";
+  view.rerender(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  let finish;
+  msal.instance.loginRedirect.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  let pending;
+  await act(async () => {
+    pending = auth.signIn();
+    await auth.signIn();
+  });
+  expect(msal.instance.loginRedirect).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    finish();
+    await pending;
+  });
+});
+
+test("callback failure is sanitized, removes protected state, and unregisters its listener", async () => {
+  msal.accounts = [{ homeAccountId: "cached" }];
+  const view = render(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  await act(async () => {
+    msal.events.get("event")({
+      eventType: "loginFailure",
+      error: new Error("PRIVATE_RESPONSE"),
+    });
+  });
+  expect(auth.isAuthenticated).toBe(false);
+  expect(auth.error).toBe("Sign-in was not completed. Please try again.");
+  expect(auth.error).not.toContain("PRIVATE");
+  await expect(getStaffAccessToken()).rejects.toThrow(
+    "staff-authentication-required",
+  );
+  expect(msal.instance.loginRedirect).not.toHaveBeenCalled();
+  await act(async () => {
+    msal.events.get("event")({ eventType: "loginSuccess" });
+  });
+  expect(auth.isAuthenticated).toBe(true);
+  expect(auth.error).toBeNull();
+  view.unmount();
+  expect(msal.events.size).toBe(0);
+});
+
+test("cancelled login and failed logout do not retry or expose raw errors", async () => {
+  msal.instance.loginRedirect.mockRejectedValue(
+    new Error("user_cancelled PRIVATE"),
+  );
+  msal.instance.logoutRedirect.mockRejectedValue(new Error("PRIVATE_LOGOUT"));
+  msal.accounts = [{ homeAccountId: "cached" }];
+  render(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  await act(async () => {
+    await auth.signIn();
+  });
+  expect(auth.error).toBe("Sign-in was not completed. Please try again.");
+  await act(async () => {
+    await auth.signOut();
+  });
+  expect(auth.isAuthenticated).toBe(false);
+  expect(auth.error).toBe("Sign-out was not completed. Please try again.");
+  await expect(getStaffAccessToken()).rejects.toThrow(
+    "staff-authentication-required",
+  );
+  expect(msal.instance.loginRedirect).toHaveBeenCalledTimes(1);
+  expect(msal.instance.logoutRedirect).toHaveBeenCalledTimes(1);
+});
+
+test("sign-out invalidates an already pending token result", async () => {
+  msal.accounts = [{ homeAccountId: "cached" }];
+  let resolveToken;
+  msal.instance.acquireTokenSilent.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveToken = resolve;
+      }),
+  );
+  render(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  const pending = getStaffAccessToken();
+  const rejected = expect(pending).rejects.toThrow(
+    "staff-authentication-required",
+  );
+  await act(async () => {
+    await auth.signOut();
+    resolveToken({ accessToken: "stale-token" });
+  });
+  await rejected;
+});
+
+test("old account callbacks and pending requests cannot provide tokens after account replacement", async () => {
+  const first = { homeAccountId: "first" };
+  msal.accounts = [first];
+  let complete;
+  msal.instance.acquireTokenSilent.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  );
+  const view = render(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  const oldProvider = auth.getAccessToken;
+  const pending = oldProvider();
+  const rejected = expect(pending).rejects.toThrow(
+    "staff-authentication-required",
+  );
+  msal.accounts = [{ homeAccountId: "second" }];
+  view.rerender(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  await expect(oldProvider()).rejects.toThrow("staff-authentication-required");
+  await act(async () => {
+    complete({ accessToken: "stale" });
+  });
+  await rejected;
+});
+
+test("unrelated rerenders do not invalidate a token for the same cached account", async () => {
+  const active = {
+    homeAccountId: "same",
+    tenantId: "tenant",
+    localAccountId: "local",
+  };
+  msal.instance.getActiveAccount.mockImplementation(() => ({ ...active }));
+  let complete;
+  msal.instance.acquireTokenSilent.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  );
+  const view = render(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  const pending = getStaffAccessToken();
+  view.rerender(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  await act(async () => {
+    complete({ accessToken: "current" });
+  });
+  await expect(pending).resolves.toBe("current");
+});
+
+test("active-account events invalidate a previous session even when the accounts list is unchanged", async () => {
+  let active = { homeAccountId: "first" };
+  msal.instance.getActiveAccount.mockImplementation(() => active);
+  render(
+    <AuthRoot>
+      <Probe />
+    </AuthRoot>,
+  );
+  const previous = auth.getAccessToken;
+  active = { homeAccountId: "second" };
+  await act(async () => {
+    msal.events.get("event")({ eventType: "activeAccountChanged" });
+  });
+  expect(auth.account.homeAccountId).toBe("second");
+  await expect(previous()).rejects.toThrow("staff-authentication-required");
 });
